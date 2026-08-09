@@ -1,0 +1,47 @@
+# Dependencies and build outputs
+node_modules/
+dist/
+build/
+coverage/
+.turbo/
+.cache/
+*.tsbuildinfo
+
+# Local runtime data
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+logs/
+exports/
+secrets/
+
+# Environment and credentials
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+
+# Generated release artifacts
+release/
+artifacts/acceptance/*/
+*.zip
+*.tar.gz
+*.tgz
+*.exe
+
+# Editor and OS noise
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+
+# Test scratch
+.tmp/
+tmp/
+temp/
+
