@@ -35,6 +35,7 @@ export default tseslint.config(
       "build/",
       "coverage/",
       ".turbo/",
+      "**/dist/",
       "**/*.js",
       "**/*.mjs",
       "**/*.cjs",
