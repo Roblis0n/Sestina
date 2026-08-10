@@ -108,7 +108,7 @@ export const BoundarySchema = z.object({
   kind: BoundaryKindSchema,
   severity: BoundarySeveritySchema,
   statement: z.string().min(1).max(3000),
-  normalizedRule: z.record(z.unknown()).optional(),
+  normalizedRule: z.record(z.string(), z.unknown()).optional(),
   source: BoundarySourceSchema,
   owner: BoundaryOwnerSchema,
   overridable: z.boolean(),

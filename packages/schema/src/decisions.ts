@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { DecisionIdSchema, EventIdSchema, TaskIdSchema } from "./ids.js";
 import { TimestampSchema, ActorProvenanceSchema, DegradationStateSchema } from "./common.js";
-import { BoundarySchema } from "./contracts.js";
 
 // ── Judge Actions ──
 export const JudgeActionSchema = z.enum([

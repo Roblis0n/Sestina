@@ -1,12 +1,12 @@
 import { z } from "zod";
-import { SestinaErrorCodeSchema } from "./errors.js";
+import { SestinaErrorCode } from "./errors.js";
 
 // ── Client Role ──
 export const ClientRoleSchema = z.enum(["hook", "mcp", "cli", "desktop"]);
 export type ClientRole = z.infer<typeof ClientRoleSchema>;
 
 // ── RPC Envelopes ──
-export function createRpcRequestSchema<T extends z.ZodTypeAny>(paramsSchema: T) {
+export function createRpcRequestSchema<T extends z.ZodType>(paramsSchema: T) {
   return z.object({
     jsonrpc: z.literal("2.0"),
     id: z.string(),
@@ -15,12 +15,12 @@ export function createRpcRequestSchema<T extends z.ZodTypeAny>(paramsSchema: T) 
     meta: z.object({
       clientRole: ClientRoleSchema,
       clientVersion: z.string(),
-      timestamp: z.string().datetime(),
+      timestamp: z.iso.datetime(),
     }),
   });
 }
 
-export function createRpcSuccessSchema<T extends z.ZodTypeAny>(resultSchema: T) {
+export function createRpcSuccessSchema<T extends z.ZodType>(resultSchema: T) {
   return z.object({
     jsonrpc: z.literal("2.0"),
     id: z.string(),
@@ -36,7 +36,7 @@ export const RpcFailureSchema = z.object({
   jsonrpc: z.literal("2.0"),
   id: z.string(),
   error: z.object({
-    code: SestinaErrorCodeSchema,
+    code: z.enum(SestinaErrorCode),
     message: z.string(),
     data: z.unknown().optional(),
   }),
@@ -55,7 +55,7 @@ export const RpcRequestSchema = z.object({
   meta: z.object({
     clientRole: ClientRoleSchema,
     clientVersion: z.string(),
-    timestamp: z.string().datetime(),
+    timestamp: z.iso.datetime(),
   }),
 });
 export type RpcRequest = z.infer<typeof RpcRequestSchema>;
@@ -72,12 +72,12 @@ export const RpcSuccessSchema = z.object({
 export type RpcSuccess = z.infer<typeof RpcSuccessSchema>;
 
 // ── Stream Envelope ──
-export function createStreamEnvelopeSchema<T extends z.ZodTypeAny>(eventSchema: T) {
+export function createStreamEnvelopeSchema<T extends z.ZodType>(eventSchema: T) {
   return z.object({
     streamId: z.string(),
     sequence: z.number().int().nonnegative(),
     event: eventSchema,
-    timestamp: z.string().datetime(),
+    timestamp: z.iso.datetime(),
   });
 }
 
@@ -85,7 +85,7 @@ export const StreamEnvelopeSchema = z.object({
   streamId: z.string(),
   sequence: z.number().int().nonnegative(),
   event: z.unknown(),
-  timestamp: z.string().datetime(),
+  timestamp: z.iso.datetime(),
 });
 export type StreamEnvelope = z.infer<typeof StreamEnvelopeSchema>;
 

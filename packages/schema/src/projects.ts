@@ -18,7 +18,7 @@ export const SestinaProjectSchema = z.object({
   description: z.string().max(2000).optional(),
   bindings: z.array(ProjectRootBindingSchema),
   status: z.enum(["active", "archived"]),
-  defaultTaskTemplate: z.record(z.unknown()).optional(),
+  defaultTaskTemplate: z.record(z.string(), z.unknown()).optional(),
   privacyProfile: z.string().optional(),
   providerProfile: z.string().optional(),
   createdAt: TimestampSchema,

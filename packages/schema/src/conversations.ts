@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { ConversationIdSchema, ProjectIdSchema, TaskIdSchema } from "./ids.js";
-import { TimestampSchema, ActorProvenanceSchema } from "./common.js";
+import { TimestampSchema } from "./common.js";
 
 // ── Conversation Type ──
 export const ConversationTypeSchema = z.enum([
@@ -40,7 +40,7 @@ export type ContextRefType = z.infer<typeof ContextRefTypeSchema>;
 export const ContextRefSchema = z.object({
   refType: ContextRefTypeSchema,
   refId: z.string(),
-  snapshot: z.record(z.unknown()).optional(),
+  snapshot: z.record(z.string(), z.unknown()).optional(),
   resolvedAt: TimestampSchema.optional(),
   resolutionStatus: z.enum(["current", "stale", "missing"]),
 });
@@ -72,7 +72,7 @@ export type GovernanceActionKind = z.infer<typeof GovernanceActionKindSchema>;
 
 export const GovernanceActionProposalSchema = z.object({
   kind: GovernanceActionKindSchema,
-  params: z.record(z.unknown()),
+  params: z.record(z.string(), z.unknown()),
   previewHash: z.string().optional(),
 });
 export type GovernanceActionProposal = z.infer<

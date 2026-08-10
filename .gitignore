@@ -33,6 +33,9 @@ artifacts/acceptance/*/
 *.tgz
 *.exe
 
+# Historical research material (not part of workspace)
+OpenMythos-main (1)/
+
 # Editor and OS noise
 .DS_Store
 Thumbs.db

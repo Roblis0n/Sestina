@@ -167,12 +167,12 @@ describe("Errors", () => {
     });
 
     it("rejects unknown codes via nativeEnum", () => {
-      const schema = z.nativeEnum(SestinaErrorCode);
+      const schema = z.enum(SestinaErrorCode);
       expect(schema.safeParse("not_a_real_code").success).toBe(false);
     });
 
     it("accepts valid codes via nativeEnum", () => {
-      const schema = z.nativeEnum(SestinaErrorCode);
+      const schema = z.enum(SestinaErrorCode);
       expect(schema.safeParse(SestinaErrorCode.task_not_found).success).toBe(true);
       expect(schema.safeParse(SestinaErrorCode.internal_error).success).toBe(true);
     });

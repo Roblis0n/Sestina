@@ -35,6 +35,22 @@ const EXCLUDE_DIRS = new Set([
   "coverage",
   ".turbo",
   ".git",
+  "docs",
+  "scripts",
+]);
+
+// Files at the repo root to exclude (historical materials, config files)
+const EXCLUDE_ROOT_FILES = new Set([
+  "handoff.md",
+  "方案详解.md",
+  "未决.md",
+  "招募合作者-未决.md",
+  "结果.md",
+  "HANDOFF-FOR-CLAUDE-CODE.md",
+  "HANDOFF-FOR-NEXT-CONVERSATION.md",
+  "package.json",
+  "pnpm-lock.yaml",
+  "pnpm-workspace.yaml",
 ]);
 
 // File extensions to scan
@@ -77,6 +93,10 @@ function findFiles(dir, results = []) {
 
   for (const entry of entries) {
     const fullPath = join(dir, entry.name);
+    // Skip excluded root-level historical files
+    if (dir === ROOT && entry.isFile() && EXCLUDE_ROOT_FILES.has(entry.name)) {
+      continue;
+    }
     if (entry.isDirectory()) {
       findFiles(fullPath, results);
     } else if (entry.isFile() && SCAN_EXTENSIONS.has(extname(entry.name))) {

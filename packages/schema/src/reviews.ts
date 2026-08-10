@@ -68,7 +68,7 @@ export const ReviewActionSchema = z.object({
   action: ReviewActionTypeSchema,
   reason: z.string(),
   newFacts: z.array(SituationAssertionSchema).optional(),
-  contractPatch: z.record(z.unknown()).optional(),
+  contractPatch: z.record(z.string(), z.unknown()).optional(),
   overrideProposal: OverrideGrantSchema.optional(),
   newDecision: DecisionSchema.optional(),
   performedBy: ActorProvenanceSchema,

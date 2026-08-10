@@ -18,7 +18,7 @@ export const ProviderConfigSchema = z.object({
     .regex(/^[a-z][a-z0-9-]*$/),
   type: ProviderTypeSchema,
   model: z.string(),
-  baseUrl: z.string().url().optional(),
+  baseUrl: z.url().optional(),
   apiKeyEnvVar: z.string(),
   maxTokens: z.number().int().positive().optional(),
   temperature: z.number().min(0).max(2).optional(),
@@ -51,9 +51,9 @@ export const ProjectConfigSchema = z.object({
   defaultProvider: z.string().optional(),
   capture: CaptureConfigSchema,
   rules: z.object({
-    hard: z.array(z.record(z.unknown())),
-    soft: z.array(z.record(z.unknown())),
-    open: z.array(z.record(z.unknown())),
+    hard: z.array(z.record(z.string(), z.unknown())),
+    soft: z.array(z.record(z.string(), z.unknown())),
+    open: z.array(z.record(z.string(), z.unknown())),
   }),
   autoAttach: z.boolean(),
 });
@@ -61,8 +61,8 @@ export type ProjectConfig = z.infer<typeof ProjectConfigSchema>;
 
 // ── Host Defaults ──
 export const HostDefaultsSchema = z.object({
-  codex: z.record(z.unknown()).optional(),
-  claude: z.record(z.unknown()).optional(),
+  codex: z.record(z.string(), z.unknown()).optional(),
+  claude: z.record(z.string(), z.unknown()).optional(),
 });
 export type HostDefaults = z.infer<typeof HostDefaultsSchema>;
 
@@ -99,7 +99,7 @@ export const EffectiveConfigSchema = z.object({
     urgentOnly: z.boolean(),
   }),
   hostDefaults: HostDefaultsSchema,
-  projectOverrides: z.record(z.unknown()).optional(),
+  projectOverrides: z.record(z.string(), z.unknown()).optional(),
   degradation: z.boolean(),
   missingFields: z.array(z.string()),
 });

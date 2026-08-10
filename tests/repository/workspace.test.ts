@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parse as parseYaml } from "node:yaml";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..", "..");
@@ -23,9 +22,9 @@ function parsePnpmWorkspace(): string[] {
       continue;
     }
     if (inPackages) {
-      const match = line.match(/^\s*-\s*"([^"]+)"/);
-      if (match) {
-        packages.push(match[1]!);
+      const match = /^\s*-\s*"([^"]+)"/.exec(line);
+      if (match?.[1]) {
+        packages.push(match[1]);
       }
       // Stop at next top-level key
       if (line.trim() && !line.startsWith(" ") && !line.startsWith("\t") && !line.startsWith("-")) {

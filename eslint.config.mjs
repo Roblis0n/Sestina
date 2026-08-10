@@ -43,4 +43,12 @@ export default tseslint.config(
       "release/",
     ],
   },
+  {
+    // vitest.workspace.ts uses defineWorkspace which is deprecated in vitest 3.x
+    // but remains the plan-specified API for workspace configuration
+    files: ["vitest.workspace.ts"],
+    rules: {
+      "@typescript-eslint/no-deprecated": "off",
+    },
+  },
 );

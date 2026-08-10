@@ -45,7 +45,7 @@ export type ActorProvenance = z.infer<typeof ActorProvenanceSchema>;
 export const PreviewConfirmationSchema = z.object({
   previewHash: z.string(),
   confirmedBy: ActorProvenanceSchema,
-  confirmedAt: z.string().datetime(),
+  confirmedAt: z.iso.datetime(),
 });
 export type PreviewConfirmation = z.infer<typeof PreviewConfirmationSchema>;
 
@@ -53,12 +53,12 @@ export type PreviewConfirmation = z.infer<typeof PreviewConfirmationSchema>;
 export const DegradationStateSchema = z.object({
   level: z.enum(["full", "degraded", "emergency"]),
   missingCapabilities: z.array(z.string()),
-  since: z.string().datetime(),
+  since: z.iso.datetime(),
 });
 export type DegradationState = z.infer<typeof DegradationStateSchema>;
 
 // ── Timestamp ──
-export const TimestampSchema = z.string().datetime();
+export const TimestampSchema = z.iso.datetime();
 export type Timestamp = z.infer<typeof TimestampSchema>;
 
 export function nowUTC(): string {

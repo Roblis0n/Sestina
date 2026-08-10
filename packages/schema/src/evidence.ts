@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { TaskIdSchema, ProjectIdSchema } from "./ids.js";
-import { TimestampSchema, ActorProvenanceSchema } from "./common.js";
+import { TimestampSchema } from "./common.js";
 import { DriftClassSchema } from "./decisions.js";
 
 // ── Evidence ──
@@ -145,7 +145,7 @@ export const SituationAssertionSchema = z.object({
   taskId: TaskIdSchema.optional(),
   kind: AssertionKindSchema,
   statement: z.string().min(1).max(3000),
-  sourceRefs: z.array(z.record(z.unknown())), // Full ContextRef in conversations.ts
+  sourceRefs: z.array(z.record(z.string(), z.unknown())), // Full ContextRef in conversations.ts
   confidence: z.number().min(0).max(1).optional(),
   limitations: z.array(z.string()),
   status: AssertionStatusSchema,

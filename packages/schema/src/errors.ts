@@ -126,7 +126,7 @@ export class SestinaError extends Error {
     super(message);
     this.name = "SestinaError";
     this.code = code;
-    this.status = status ?? STATUS_MAP[code] ?? 500;
+    this.status = status ?? (STATUS_MAP[code] || 500);
     this.details = details;
   }
 
@@ -149,7 +149,7 @@ export function isSestinaError(value: unknown): value is SestinaError {
 // ── Zod schema for serialization/deserialization ──
 export const errorSchema = z.object({
   name: z.literal("SestinaError"),
-  code: z.nativeEnum(SestinaErrorCode),
+  code: z.enum(SestinaErrorCode),
   message: z.string(),
   status: z.number().int(),
   details: z.unknown().optional(),
