@@ -22,8 +22,8 @@
  *  10. No unexpanded variables in release/artifacts/packaging manifests
  */
 
-import { readFileSync, readdirSync, statSync, existsSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
-import { resolve, relative, dirname, basename, isAbsolute } from "node:path";
+import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
+import { resolve, relative, dirname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // ── CLI: parse --root ──
@@ -164,18 +164,22 @@ function relativeImportEscapesPackage(importingFileRel, importSpec, pkgRootRel) 
   const fileDir = dirname(resolve(ROOT, importingFileRel));
   const resolved = resolve(fileDir, importSpec);
   const pkgRoot = resolve(ROOT, pkgRootRel);
-  // If it's a directory, add /index to check
-  const candidates = [resolved, `${resolved}.ts`, `${resolved}.tsx`, `${resolved}.js`,
-    `${resolved}/index.ts`, `${resolved}/index.tsx`, `${resolved}/index.js`];
+  // Use path.relative to determine whether `resolved` stays inside `pkgRoot`.
+  // If the result starts with `..`, the import escapes the package boundary.
+  const rel = relative(pkgRoot, resolved);
+  if (rel.startsWith(".." + sep) || rel === "..") return true;
+  // Also check common extension / index resolutions
+  const candidates = [
+    `${resolved}.ts`, `${resolved}.tsx`, `${resolved}.js`,
+    `${resolved}/index.ts`, `${resolved}/index.tsx`, `${resolved}/index.js`,
+  ];
   for (const c of candidates) {
-    if (existsSync(c) && !c.startsWith(pkgRoot + "/") && c !== pkgRoot &&
-        !c.startsWith(pkgRoot.replace(/\\/g, "/") + "/")) {
-      // Resolved path is outside the package root — escape!
-      return true;
+    if (existsSync(c)) {
+      const relC = relative(pkgRoot, c);
+      if (relC.startsWith(".." + sep) || relC === "..") return true;
     }
   }
-  // Simplest check: does the resolved path stay under pkgRoot?
-  return !resolved.startsWith(pkgRoot) && resolved !== pkgRoot;
+  return false;
 }
 
 // ── Collect all package directories from packages/, apps/, integrations/ ──

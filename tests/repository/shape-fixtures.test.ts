@@ -93,6 +93,46 @@ function createValidPackage(root: string, pkgDir: string, pkgName: string, index
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Positive fixture tests — legal imports must pass (exit 0)
+// ═══════════════════════════════════════════════════════════════════════════
+
+describe("check-repository-shape positive fixtures", () => {
+  it("P1. accepts extensionless package-local import (./helper → helper.ts)", () => {
+    const r = runShapeCheck("pos-local", (root) => {
+      const dir = join(root, "packages", "foo");
+      mkdirSync(join(dir, "src"), { recursive: true });
+      writeFileSync(join(dir, "package.json"), JSON.stringify({
+        name: "@sestina/foo",
+        exports: { ".": "./src/index.ts" },
+      }));
+      writeFileSync(join(dir, "src", "helper.ts"), "export const helper = 1;\n");
+      writeFileSync(join(dir, "src", "index.ts"),
+        'import { helper } from "./helper";\nexport { helper };\n');
+    });
+    expect(r.exitCode).toBe(0);
+  });
+
+  it("P2. accepts relative import within same package (../shared/helper)", () => {
+    const r = runShapeCheck("pos-shared", (root) => {
+      const dir = join(root, "packages", "bar");
+      mkdirSync(join(dir, "src", "sub"), { recursive: true });
+      mkdirSync(join(dir, "src", "shared"), { recursive: true });
+      writeFileSync(join(dir, "package.json"), JSON.stringify({
+        name: "@sestina/bar",
+        exports: { ".": "./src/index.ts" },
+      }));
+      writeFileSync(join(dir, "src", "index.ts"),
+        'export { sub } from "./sub/module";\n');
+      writeFileSync(join(dir, "src", "sub", "module.ts"),
+        'import { shared } from "../shared/helper";\nexport const sub = shared;\n');
+      writeFileSync(join(dir, "src", "shared", "helper.ts"),
+        "export const shared = 1;\n");
+    });
+    expect(r.exitCode).toBe(0);
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Negative fixture tests — each creates a minimal repo with ONE violation
 // ═══════════════════════════════════════════════════════════════════════════
 
