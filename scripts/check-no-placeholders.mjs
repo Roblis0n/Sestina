@@ -10,8 +10,18 @@ import { resolve, relative, join, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { dirname } from "node:path";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(__dirname, "..");
+// ── CLI: parse --root ──
+const ARGV = process.argv.slice(2);
+let ROOT = null;
+for (let i = 0; i < ARGV.length; i++) {
+  if (ARGV[i] === "--root" && i + 1 < ARGV.length) {
+    ROOT = resolve(ARGV[i + 1]);
+    break;
+  }
+}
+if (!ROOT) {
+  ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+}
 
 // Patterns to search for (case-insensitive).  Order matches the spec.
 const PATTERNS = [
@@ -132,21 +142,36 @@ function main() {
       continue;
     }
 
+    // Pre-compute positions of "check-no-placeholders" to detect overlap
+    const cnpPositions = [];
+    if (content.includes("check-no-placeholders")) {
+      const cnpRegex = /check-no-placeholders/gi;
+      let cnpMatch;
+      while ((cnpMatch = cnpRegex.exec(content)) !== null) {
+        // Record the span of "placeholder" within "check-no-placeholders": chars 9-20
+        cnpPositions.push({ start: cnpMatch.index + 9, end: cnpMatch.index + 20 });
+      }
+    }
+
     for (const { name, regex } of PATTERNS) {
       regex.lastIndex = 0; // reset global regex state
       let match;
       while ((match = regex.exec(content)) !== null) {
         const line = lineNumber(content, match.index);
         const text = match[0];
-        // Skip false positives: "placeholder" inside "check-no-placeholders" references
-        if (name === "PLACEHOLDER" && /check-no-placeholders/i.test(text)) {
-          continue;
+
+        // For the PLACEHOLDER pattern: only skip the specific "placeholder"
+        // substring that is inside "check-no-placeholders". Other occurrences
+        // of PLACEHOLDER on the same line (or nearby) must still be caught.
+        if (name === "PLACEHOLDER") {
+          const mStart = match.index;
+          const mEnd = match.index + text.length;
+          const overlapsCnp = cnpPositions.some(
+            (pos) => mStart < pos.end && mEnd > pos.start,
+          );
+          if (overlapsCnp) continue;
         }
-        // Get the full line for additional context checks
-        const fullLine = content.split("\n")[line - 1] ?? "";
-        if (name === "PLACEHOLDER" && /check-no-placeholders/i.test(fullLine)) {
-          continue;
-        }
+
         // file path (repo-relative), line number, matched text
         console.error(`${relative(ROOT, file)}:${line}: ${text}`);
         findings++;

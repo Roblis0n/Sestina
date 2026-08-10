@@ -6,28 +6,40 @@
  * Validates the Sestina monorepo structure.
  * Exit 0 on pass, exit 1 on any failure (errors to stderr).
  *
+ * Usage: node scripts/check-repository-shape.mjs [--root <path>]
+ *
  * Checks performed:
  *   1. Root config files exist
  *   2. pnpm-workspace.yaml declares the three required globs
  *   3. packages/, apps/, integrations/ directories exist
- *   4. No package in apps/ or integrations/ imports from another app/integration
- *   5. OpenMythos-main (1)/ is NOT listed as a workspace package
- *   6. Every subdirectory under packages/ has a package.json whose name starts with @sestina/
+ *   4. No cross-imports between apps and integrations
+ *   5. OpenMythos-main (1)/ is NOT in workspace
+ *   6. Every package directory has valid @sestina/* package.json
+ *   7. Public entry points exist with real exports
+ *   8. Cross-package imports only reference full package names (no subpaths);
+ *      relative imports must not escape the package root
+ *   9. Renderer must not depend on core/storage/secrets/providers
+ *  10. No unexpanded variables in release/artifacts/packaging manifests
  */
 
-import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
-import { resolve, basename, dirname } from "node:path";
+import { readFileSync, readdirSync, statSync, existsSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { resolve, relative, dirname, basename, isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// ---------------------------------------------------------------------------
-// Resolve the repository root (two levels up from this script)
-// ---------------------------------------------------------------------------
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(__dirname, "..");
+// ── CLI: parse --root ──
+const ARGV = process.argv.slice(2);
+let ROOT = null;
+for (let i = 0; i < ARGV.length; i++) {
+  if (ARGV[i] === "--root" && i + 1 < ARGV.length) {
+    ROOT = resolve(ARGV[i + 1]);
+    break;
+  }
+}
+if (!ROOT) {
+  ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+}
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+// ── Helpers ──
 let errors = 0;
 
 function err(msg) {
@@ -39,433 +51,438 @@ function ok(msg) {
   process.stderr.write(`[OK]   ${msg}\n`);
 }
 
-function fileExists(relativePath) {
-  return existsSync(resolve(ROOT, relativePath));
+function fileExists(relPath) {
+  return existsSync(resolve(ROOT, relPath));
 }
 
+// ── YAML parsing (pnpm-workspace.yaml) ──
 function readYamlWorkspace() {
-  const raw = readFileSync(resolve(ROOT, "pnpm-workspace.yaml"), "utf8");
+  const yamlPath = resolve(ROOT, "pnpm-workspace.yaml");
+  if (!existsSync(yamlPath)) return [];
+  const raw = readFileSync(yamlPath, "utf8");
   const lines = raw.split("\n").filter((l) => {
-    const trimmed = l.trim();
-    return trimmed.length > 0 && !trimmed.startsWith("#");
+    const t = l.trim();
+    return t.length > 0 && !t.startsWith("#");
   });
-
-  // Collect quoted strings in the `packages:` array
   const globs = [];
   let inPackages = false;
   for (const line of lines) {
     const trimmed = line.trim();
-    // Top-level keys start at column 0 (no leading whitespace)
     if (/^\S/.test(line)) {
-      if (trimmed.startsWith("packages:")) {
-        inPackages = true;
-      } else {
-        inPackages = false; // another top-level key — stop collecting
-      }
+      inPackages = trimmed.startsWith("packages:");
       continue;
     }
     if (inPackages) {
-      const match = trimmed.match(/^-\s*["'](.+?)["']/);
-      if (match) {
-        globs.push(match[1]);
-      }
+      const m = trimmed.match(/^-\s*["'](.+?)["']/);
+      if (m) globs.push(m[1]);
     }
   }
   return globs;
 }
 
-function dirsUnder(relativePath) {
-  const full = resolve(ROOT, relativePath);
+// ── Directory listing ──
+function dirsUnder(relPath) {
+  const full = resolve(ROOT, relPath);
   if (!existsSync(full)) return [];
-  return readdirSync(full, { withFileTypes: true })
-    .filter((d) => d.isDirectory())
-    .map((d) => d.name);
+  try {
+    return readdirSync(full, { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .map((d) => d.name);
+  } catch {
+    return [];
+  }
 }
 
-/**
- * Walk a directory tree, yielding every file path (relative to ROOT, posix-style).
- * Skips common build output and dependency directories.
- */
-const WALK_SKIP_DIRS = new Set([
+// ── Package metadata ──
+function readPackageJson(relDir) {
+  const pj = resolve(ROOT, relDir, "package.json");
+  if (!existsSync(pj)) return null;
+  try { return JSON.parse(readFileSync(pj, "utf8")); } catch { return null; }
+}
+
+function readPackageName(relDir) {
+  const pj = readPackageJson(relDir);
+  return pj?.name || null;
+}
+
+// ── File walking ──
+const WALK_SKIP = new Set([
   "node_modules", "dist", "build", "coverage", ".turbo", ".git",
   "OpenMythos-main (1)",
 ]);
 
-function* walkFiles(relativeDir) {
-  const full = resolve(ROOT, relativeDir);
+function* walkFiles(relDir) {
+  const full = resolve(ROOT, relDir);
   if (!existsSync(full)) return;
-  // Check if this directory itself should be skipped
-  const baseName = relativeDir.split(/[/\\]/).pop();
-  if (baseName && WALK_SKIP_DIRS.has(baseName)) return;
-
+  const base = relDir.split(/[/\\]/).pop();
+  if (base && WALK_SKIP.has(base)) return;
   let entries;
-  try {
-    entries = readdirSync(full, { withFileTypes: true });
-  } catch {
-    return; // permission errors, etc.
-  }
-  for (const entry of entries) {
-    if (entry.isDirectory()) {
-      if (WALK_SKIP_DIRS.has(entry.name)) continue;
-      yield* walkFiles(`${relativeDir}/${entry.name}`);
-    } else if (entry.isFile()) {
-      yield `${relativeDir}/${entry.name}`;
+  try { entries = readdirSync(full, { withFileTypes: true }); } catch { return; }
+  for (const e of entries) {
+    if (e.isDirectory()) {
+      if (WALK_SKIP.has(e.name)) continue;
+      yield* walkFiles(`${relDir}/${e.name}`);
+    } else if (e.isFile()) {
+      yield `${relDir}/${e.name}`;
     }
   }
 }
 
-/**
- * Extract bare-specifier imports from a TS/JS file.
- * Very simple: matches lines like `import ... from '...'` or `from "..."`.
- */
-function extractImports(filePath) {
+// ── Import extraction (static, side-effect, dynamic, export-from) ──
+// Captures:
+//   import 'foo'          → side-effect
+//   import x from 'foo'   → static
+//   import('foo')         → dynamic
+//   export * from 'foo'   → re-export
+//   export { x } from 'foo' → re-export
+function extractImports(fileRel) {
+  const full = resolve(ROOT, fileRel);
   try {
-    const src = readFileSync(resolve(ROOT, filePath), "utf8");
-    const regex = /from\s+['"]([^'"]+)['"]|import\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
-    const deps = new Set();
-    let m;
-    while ((m = regex.exec(src)) !== null) {
-      const spec = m[1] || m[2];
-      if (spec) deps.add(spec);
+    const src = readFileSync(full, "utf8");
+    const specs = new Set();
+    // Side-effect import: import "..." or import '...'
+    for (const m of src.matchAll(/import\s+['"]([^'"]+)['"]\s*;?/g)) {
+      if (m[1]) specs.add(m[1]);
     }
-    return deps;
+    // Static import / export-from: from "..."
+    for (const m of src.matchAll(/from\s+['"]([^'"]+)['"]/g)) {
+      if (m[1]) specs.add(m[1]);
+    }
+    // Dynamic import: import("...") or import('...')
+    for (const m of src.matchAll(/import\s*\(\s*['"]([^'"]+)['"]\s*\)/g)) {
+      if (m[1]) specs.add(m[1]);
+    }
+    return specs;
   } catch {
-    return new Set(); // binary file, permission error, directory, etc.
+    return new Set();
   }
 }
 
-// ---------------------------------------------------------------------------
-// Check 1 — root config files
-// ---------------------------------------------------------------------------
-const REQUIRED_ROOT_FILES = [
-  "package.json",
-  "pnpm-workspace.yaml",
-  "tsconfig.base.json",
-  "vitest.workspace.ts",
-  "eslint.config.mjs",
-  ".npmrc",
-  ".node-version",
-];
+// ── Resolve relative import to absolute path, detect if it escapes package ──
+function relativeImportEscapesPackage(importingFileRel, importSpec, pkgRootRel) {
+  if (!importSpec.startsWith(".")) return false; // not a relative import
+  const fileDir = dirname(resolve(ROOT, importingFileRel));
+  const resolved = resolve(fileDir, importSpec);
+  const pkgRoot = resolve(ROOT, pkgRootRel);
+  // If it's a directory, add /index to check
+  const candidates = [resolved, `${resolved}.ts`, `${resolved}.tsx`, `${resolved}.js`,
+    `${resolved}/index.ts`, `${resolved}/index.tsx`, `${resolved}/index.js`];
+  for (const c of candidates) {
+    if (existsSync(c) && !c.startsWith(pkgRoot + "/") && c !== pkgRoot &&
+        !c.startsWith(pkgRoot.replace(/\\/g, "/") + "/")) {
+      // Resolved path is outside the package root — escape!
+      return true;
+    }
+  }
+  // Simplest check: does the resolved path stay under pkgRoot?
+  return !resolved.startsWith(pkgRoot) && resolved !== pkgRoot;
+}
 
+// ── Collect all package directories from packages/, apps/, integrations/ ──
+function collectAllPackageDirs() {
+  const result = [];
+  for (const category of ["packages", "apps", "integrations"]) {
+    const dirs = dirsUnder(category);
+    for (const d of dirs) {
+      const pkgDir = `${category}/${d}`;
+      const name = readPackageName(pkgDir);
+      if (name) {
+        result.push({ dir: pkgDir, name, category });
+      }
+    }
+  }
+  return result;
+}
+
+// ── Build map from package name → package root directory ──
+function buildPackageMap(allPkgs) {
+  const map = new Map();
+  for (const p of allPkgs) {
+    map.set(p.name, p);
+  }
+  return map;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Check 1 — Root config files
+// ═══════════════════════════════════════════════════════════════════════════
 process.stderr.write("=== Check 1: Root config files ===\n");
+const REQUIRED_ROOT_FILES = [
+  "package.json", "pnpm-workspace.yaml", "tsconfig.base.json",
+  "vitest.workspace.ts", "eslint.config.mjs", ".npmrc", ".node-version",
+];
 for (const f of REQUIRED_ROOT_FILES) {
-  if (fileExists(f)) {
-    ok(f);
-  } else {
-    err(`Missing root config file: ${f}`);
-  }
+  fileExists(f) ? ok(f) : err(`Missing root config file: ${f}`);
 }
 
-// ---------------------------------------------------------------------------
-// Check 2 — pnpm-workspace.yaml declares the correct globs
-// ---------------------------------------------------------------------------
+// ═══════════════════════════════════════════════════════════════════════════
+// Check 2 — pnpm-workspace.yaml globs
+// ═══════════════════════════════════════════════════════════════════════════
 process.stderr.write("\n=== Check 2: pnpm-workspace.yaml globs ===\n");
 const REQUIRED_GLOBS = ["packages/*", "apps/*", "integrations/*"];
-
 let workspaceGlobs = [];
 if (fileExists("pnpm-workspace.yaml")) {
   workspaceGlobs = readYamlWorkspace();
   for (const g of REQUIRED_GLOBS) {
-    if (workspaceGlobs.includes(g)) {
-      ok(`workspace glob declared: ${g}`);
-    } else {
-      err(`Missing workspace glob: ${g}`);
-    }
+    workspaceGlobs.includes(g) ? ok(`workspace glob declared: ${g}`) : err(`Missing workspace glob: ${g}`);
   }
 } else {
-  // Already reported in check 1
   err("Cannot read pnpm-workspace.yaml (file missing)");
 }
 
-// ---------------------------------------------------------------------------
-// Check 3 — directories exist
-// ---------------------------------------------------------------------------
+// ═══════════════════════════════════════════════════════════════════════════
+// Check 3 — Required directories
+// ═══════════════════════════════════════════════════════════════════════════
 process.stderr.write("\n=== Check 3: Required directories ===\n");
-const REQUIRED_DIRS = ["packages", "apps", "integrations"];
-
-for (const d of REQUIRED_DIRS) {
+for (const d of ["packages", "apps", "integrations"]) {
   const full = resolve(ROOT, d);
   if (existsSync(full) && statSync(full).isDirectory()) {
     ok(`${d}/ exists`);
   } else {
-    if (existsSync(full)) {
-      err(`${d}/ exists but is not a directory`);
-    } else {
-      err(`${d}/ directory is missing`);
-    }
+    err(`${d}/ directory is missing`);
   }
 }
 
-// ---------------------------------------------------------------------------
-// Check 4 — No cross-imports between apps and integrations
-// ---------------------------------------------------------------------------
+// ═══════════════════════════════════════════════════════════════════════════
+// Check 4 — Cross-imports between apps/integrations
+// ═══════════════════════════════════════════════════════════════════════════
 process.stderr.write("\n=== Check 4: Cross-imports between apps/integrations ===\n");
+const allPkgs = collectAllPackageDirs();
+const pkgMap = buildPackageMap(allPkgs);
 
-// Collect the package names declared in apps/ and integrations/
-function readPackageName(dir) {
-  const pj = resolve(ROOT, dir, "package.json");
-  if (!existsSync(pj)) return null;
-  try {
-    const json = JSON.parse(readFileSync(pj, "utf8"));
-    return json.name || null;
-  } catch {
-    return null;
-  }
-}
-
-const appDirs = dirsUnder("apps");
-const integrationDirs = dirsUnder("integrations");
-
-// Build a map of import-spec → which package it belongs to
-const appNames = new Map(); // package-name → directory-basename
-const integrationNames = new Map();
-
-for (const d of appDirs) {
-  const name = readPackageName(`apps/${d}`);
-  if (name) appNames.set(name, d);
-}
-for (const d of integrationDirs) {
-  const name = readPackageName(`integrations/${d}`);
-  if (name) integrationNames.set(name, d);
-}
-
-function checkCrossImports(categoryDir, categoryLabel, siblingNames, ownNames) {
-  const dirs = dirsUnder(categoryDir);
+function checkCategoryCrossImports(catDir, catLabel, otherNames) {
+  const dirs = dirsUnder(catDir);
   for (const d of dirs) {
-    const packageDir = `${categoryDir}/${d}`;
-    for (const fileRel of walkFiles(packageDir)) {
-      if (!/\.(ts|tsx|js|jsx|mjs|cjs|mts|cts)$/.test(fileRel)) continue;
-      const imports = extractImports(fileRel);
-      for (const imp of imports) {
-        // Only care about bare specifiers that match a sibling package name
-        if (siblingNames.has(imp)) {
-          // Also disallow importing your own package name (sanity check)
-          const ownName = readPackageName(packageDir);
-          if (imp === ownName) continue; // self-import is fine
-
-          err(
-            `${fileRel} imports "${imp}" — cross-import between ${categoryLabel} packages is forbidden`
-          );
+    const pkgDir = `${catDir}/${d}`;
+    const ownName = readPackageName(pkgDir);
+    for (const f of walkFiles(pkgDir)) {
+      if (!/\.(ts|tsx|js|jsx|mjs|cjs|mts|cts)$/.test(f)) continue;
+      for (const imp of extractImports(f)) {
+        if (otherNames.has(imp) && imp !== ownName) {
+          err(`${f} imports "${imp}" — cross-import between ${catLabel} packages is forbidden`);
         }
       }
     }
   }
 }
 
-const allAppNamesSet = new Set(appNames.keys());
-const allIntegrationNamesSet = new Set(integrationNames.keys());
+const appNames = new Set();
+const integrationNames = new Set();
+for (const p of allPkgs) {
+  if (p.category === "apps") appNames.add(p.name);
+  else if (p.category === "integrations") integrationNames.add(p.name);
+}
 
-checkCrossImports("apps", "apps/", allIntegrationNamesSet, appNames);
-checkCrossImports("integrations", "integrations/", allAppNamesSet, integrationNames);
+checkCategoryCrossImports("apps", "apps/", integrationNames);
+checkCategoryCrossImports("apps", "apps/", appNames);
+checkCategoryCrossImports("integrations", "integrations/", appNames);
+checkCategoryCrossImports("integrations", "integrations/", integrationNames);
 
-// Also check that no two apps import each other, and no two integrations import each other
-checkCrossImports("apps", "apps/", allAppNamesSet, appNames);
-checkCrossImports("integrations", "integrations/", allIntegrationNamesSet, integrationNames);
-
-if (appDirs.length === 0 && integrationDirs.length === 0) {
+if (dirsUnder("apps").length === 0 && dirsUnder("integrations").length === 0) {
   ok("No app or integration packages to check for cross-imports");
 }
 
-// ---------------------------------------------------------------------------
-// Check 5 — OpenMythos-main (1)/ is NOT a workspace package
-// ---------------------------------------------------------------------------
+// ═══════════════════════════════════════════════════════════════════════════
+// Check 5 — OpenMythos exclusion
+// ═══════════════════════════════════════════════════════════════════════════
 process.stderr.write("\n=== Check 5: OpenMythos-main (1)/ exclusion ===\n");
-
-const FORBIDDEN_OPENMYTHOS = "OpenMythos-main (1)";
-
-// Check that no workspace glob matches it, and that the directory itself is not
-// explicitly listed if it exists.
-if (existsSync(resolve(ROOT, FORBIDDEN_OPENMYTHOS))) {
-  // Walk each workspace glob and see if it expands to include the forbidden dir
-  // Because apps/* and packages/* would not match "OpenMythos-main (1)" literally,
-  // we simply check if the forbidden name appears as a workspace entry.
+const FORBIDDEN = "OpenMythos-main (1)";
+if (existsSync(resolve(ROOT, FORBIDDEN))) {
   const found = workspaceGlobs.some((g) => {
-    // Check if removing wildcard and trailing /* yields a prefix that matches
     const prefix = g.replace(/\*+$/, "").replace(/\/$/, "");
-    const fullForbidden = resolve(ROOT, FORBIDDEN_OPENMYTHOS);
-    const fullPrefix = resolve(ROOT, prefix);
-    try {
-      // If the forbidden dir is inside a workspace-globbed directory
-      return fullForbidden.startsWith(fullPrefix);
-    } catch {
-      return false;
-    }
+    try { return resolve(ROOT, FORBIDDEN).startsWith(resolve(ROOT, prefix)); } catch { return false; }
   });
-
-  if (found) {
-    // More precise check: the dir is NOT inside the workspace directories
-    // Actually the real concern is that it shouldn't be a workspace package.
-    // Check: is it inside packages/, apps/, or integrations/?
-    err(
-      `"${FORBIDDEN_OPENMYTHOS}/" should not be a workspace package, but it matches a workspace glob`
-    );
-  } else {
-    ok(`"${FORBIDDEN_OPENMYTHOS}/" is not a workspace package`);
-  }
+  found ? err(`"${FORBIDDEN}/" should not be a workspace package`) : ok(`"${FORBIDDEN}/" is not a workspace package`);
 } else {
-  ok(`"${FORBIDDEN_OPENMYTHOS}/" does not exist (no issue)`);
+  ok(`"${FORBIDDEN}/" does not exist (no issue)`);
 }
 
-// ---------------------------------------------------------------------------
-// Check 6 — packages/*/package.json must have name starting with @sestina/
-// ---------------------------------------------------------------------------
+// ═══════════════════════════════════════════════════════════════════════════
+// Check 6 — @sestina/ package naming
+// ═══════════════════════════════════════════════════════════════════════════
 process.stderr.write("\n=== Check 6: @sestina/ package naming ===\n");
-
-const packageDirs = dirsUnder("packages");
-
-if (packageDirs.length === 0) {
+const pkgsDirs = dirsUnder("packages");
+if (pkgsDirs.length === 0) {
   err("No packages found under packages/");
 } else {
-  for (const d of packageDirs) {
-    const pjPath = resolve(ROOT, "packages", d, "package.json");
-    if (!existsSync(pjPath)) {
-      err(`packages/${d}/ missing package.json`);
-      continue;
-    }
-    let pkg;
-    try {
-      pkg = JSON.parse(readFileSync(pjPath, "utf8"));
-    } catch (e) {
-      err(`packages/${d}/package.json is not valid JSON: ${e.message}`);
-      continue;
-    }
-    if (!pkg.name) {
-      err(`packages/${d}/package.json has no "name" field`);
-    } else if (!pkg.name.startsWith("@sestina/")) {
-      err(
-        `packages/${d}/package.json name is "${pkg.name}" — must start with @sestina/`
-      );
+  for (const d of pkgsDirs) {
+    const pj = readPackageJson(`packages/${d}`);
+    if (!pj) { err(`packages/${d}/ missing or invalid package.json`); continue; }
+    if (!pj.name) { err(`packages/${d}/package.json has no "name" field`); continue; }
+    if (!pj.name.startsWith("@sestina/")) {
+      err(`packages/${d}/package.json name is "${pj.name}" — must start with @sestina/`);
     } else {
-      ok(`${pkg.name}`);
+      ok(pj.name);
     }
   }
 }
 
-// ---------------------------------------------------------------------------
-// Check 7 — Public entry points (index.ts with exports)
-// ---------------------------------------------------------------------------
+// ═══════════════════════════════════════════════════════════════════════════
+// Check 7 — Public entry points (real exports + package.json exports field)
+// ═══════════════════════════════════════════════════════════════════════════
 process.stderr.write("\n=== Check 7: Public exports ===\n");
 
-for (const d of packageDirs) {
-  const indexPath = resolve(ROOT, "packages", d, "src", "index.ts");
+// Detect real export keyword (not just "export" inside a comment or string)
+function hasRealExports(content) {
+  // Remove block comments
+  const noBlockComments = content.replace(/\/\*[\s\S]*?\*\//g, "");
+  // Remove line comments
+  const lines = noBlockComments.split("\n");
+  const noComments = lines.map((l) => {
+    const commentIdx = l.indexOf("//");
+    return commentIdx >= 0 ? l.slice(0, commentIdx) : l;
+  }).join("\n");
+  // Remove string literals (simple heuristic: anything between quotes)
+  const noStrings = noComments.replace(/'[^']*'/g, "").replace(/"[^"]*"/g, "").replace(/`[^`]*`/g, "");
+  // Now check for real export keyword
+  return /\bexport\b/.test(noStrings);
+}
+
+for (const pkg of dirsUnder("packages")) {
+  const pkgDir = `packages/${pkg}`;
+  const pj = readPackageJson(pkgDir);
+  if (!pj) continue;
+
+  // A. Verify src/index.ts exists with real exports
+  const indexPath = resolve(ROOT, pkgDir, "src", "index.ts");
   if (!existsSync(indexPath)) {
-    err(`packages/${d}/ missing public entry point src/index.ts`);
+    err(`${pkgDir}/ missing public entry point src/index.ts`);
     continue;
   }
-  try {
-    const content = readFileSync(indexPath, "utf8");
-    if (!/export/.test(content)) {
-      err(`packages/${d}/src/index.ts exists but has no export statements`);
-    } else {
-      ok(`packages/${d} has public exports`);
-    }
-  } catch (e) {
-    err(`packages/${d}/src/index.ts cannot be read: ${e.message}`);
+  const content = readFileSync(indexPath, "utf8");
+  if (!hasRealExports(content)) {
+    err(`${pkgDir}/src/index.ts has no real export statements (comment-only "export" not accepted)`);
+  } else {
+    ok(`${pkgDir} has real public exports in src/index.ts`);
   }
-}
 
-// ---------------------------------------------------------------------------
-// Check 8 — No deep cross-package source path imports
-// ---------------------------------------------------------------------------
-process.stderr.write("\n=== Check 8: Cross-package deep imports ===\n");
-
-// Build set of @sestina/* package names
-const sestinaPackageNames = new Set();
-for (const d of packageDirs) {
-  const name = readPackageName(`packages/${d}`);
-  if (name) sestinaPackageNames.add(name);
-}
-
-let deepImportFound = false;
-for (const d of packageDirs) {
-  const pkgName = readPackageName(`packages/${d}`);
-  for (const fileRel of walkFiles(`packages/${d}`)) {
-    const imports = extractImports(fileRel);
-    for (const imp of imports) {
-      if (!imp.startsWith("@sestina/")) continue;
-      if (imp === pkgName) continue; // self-reference OK
-      // Cross-package imports must NOT use deep paths
-      if (/^@sestina\/[^/]+\/(src|dist|test)\//.test(imp)) {
-        err(
-          `${fileRel} imports "${imp}" — cross-package imports must use public entry point, not deep paths`
-        );
-        deepImportFound = true;
+  // B. Verify package.json exports field points to public entry
+  if (!pj.exports) {
+    err(`${pkgDir}/package.json missing "exports" field`);
+  } else if (typeof pj.exports === "string") {
+    // Single export
+    if (!pj.exports.endsWith("src/index.ts") && !pj.exports.endsWith("src/index.js")) {
+      err(`${pkgDir}/package.json exports "${pj.exports}" does not point to src/index`);
+    }
+  } else if (typeof pj.exports === "object") {
+    const dot = pj.exports["."];
+    if (!dot) {
+      err(`${pkgDir}/package.json exports missing "." entry`);
+    } else {
+      const dotPath = typeof dot === "string" ? dot : (dot?.import || dot?.require || dot?.default || "");
+      if (dotPath && !dotPath.includes("src/index")) {
+        err(`${pkgDir}/package.json exports "." → "${dotPath}" does not point to src/index`);
       }
     }
   }
 }
-if (!deepImportFound) {
-  ok("No deep cross-package source imports detected");
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Check 8 — Cross-package imports: no subpaths, no relative escapes
+// ═══════════════════════════════════════════════════════════════════════════
+process.stderr.write("\n=== Check 8: Cross-package boundary violations ===\n");
+
+const allPkgDirs = collectAllPackageDirs();
+const allNames = new Set(allPkgDirs.map((p) => p.name));
+let boundaryErrors = 0;
+
+for (const pkg of allPkgDirs) {
+  for (const fileRel of walkFiles(pkg.dir)) {
+    if (!/\.(ts|tsx|js|jsx|mjs|cjs|mts|cts)$/.test(fileRel)) continue;
+    const imports = extractImports(fileRel);
+
+    for (const imp of imports) {
+      // ── Cross-package bare specifier checks ──
+      if (imp.startsWith("@sestina/")) {
+        // Self-reference is fine
+        if (imp === pkg.name) continue;
+
+        // Does it reference a known package?
+        const slashIdx = imp.indexOf("/", "@sestina/".length);
+        if (slashIdx >= 0) {
+          // imp has a subpath: @sestina/foo/sub/path
+          const targetPkg = "@sestina/" + imp.slice("@sestina/".length, slashIdx);
+          if (allNames.has(targetPkg)) {
+            // Known package with subpath — FORBIDDEN
+            err(`${fileRel} imports "${imp}" — cross-package imports must use only the package name (no subpaths). Use "${targetPkg}" instead.`);
+            boundaryErrors++;
+          }
+          // Unknown package — fall through to general check
+        }
+        // Exact package name match is fine
+      }
+
+      // ── Relative imports that cross package roots ──
+      if (imp.startsWith(".")) {
+        if (relativeImportEscapesPackage(fileRel, imp, pkg.dir)) {
+          err(`${fileRel} imports "${imp}" — relative import escapes package root "${pkg.dir}"`);
+          boundaryErrors++;
+        }
+      }
+    }
+  }
 }
 
-// ---------------------------------------------------------------------------
-// Check 9 — Renderer must not depend on core/storage/secrets/providers
-// ---------------------------------------------------------------------------
+if (boundaryErrors === 0) {
+  ok("No cross-package boundary violations detected");
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Check 9 — Renderer dependency restrictions
+// ═══════════════════════════════════════════════════════════════════════════
 process.stderr.write("\n=== Check 9: Renderer dependency restrictions ===\n");
 
 const FORBIDDEN_RENDERER_DEPS = [
-  "@sestina/core",
-  "@sestina/storage",
-  "@sestina/secrets",
-  "@sestina/providers",
+  "@sestina/core", "@sestina/storage", "@sestina/secrets", "@sestina/providers",
 ];
 
-// Check packages/ for renderer directories
-function checkRendererRestrictions(baseDir, label) {
-  if (!existsSync(baseDir)) return;
-  for (const fileRel of walkFiles(baseDir)) {
-    // Only files in renderer paths
+let rendererErrors = 0;
+for (const pkg of allPkgDirs) {
+  for (const fileRel of walkFiles(pkg.dir)) {
     if (!/[\/\\]renderer[\/\\]/.test(fileRel)) continue;
-    const imports = extractImports(fileRel);
-    for (const imp of imports) {
+    if (!/\.(ts|tsx|js|jsx|mjs|cjs|mts|cts)$/.test(fileRel)) continue;
+    for (const imp of extractImports(fileRel)) {
       for (const forbidden of FORBIDDEN_RENDERER_DEPS) {
         if (imp === forbidden || imp.startsWith(forbidden + "/")) {
-          err(
-            `${label}/${fileRel} imports "${imp}" — renderer must not depend on ${forbidden}`
-          );
+          err(`${pkg.dir}/${fileRel} imports "${imp}" — renderer must not depend on ${forbidden}`);
+          rendererErrors++;
         }
       }
     }
   }
 }
 
-checkRendererRestrictions(resolve(ROOT, "packages"), "packages");
-checkRendererRestrictions(resolve(ROOT, "apps"), "apps");
-
-if (!existsSync(resolve(ROOT, "apps/desktop/renderer")) &&
-    !Array.from(walkFiles("packages")).some((f) => /[\/\\]renderer[\/\\]/.test(f))) {
-  ok("No renderer directories to check");
+if (rendererErrors === 0) {
+  ok("No renderer dependency violations detected");
 }
 
-// ---------------------------------------------------------------------------
-// Check 10 — No unexpanded variables in release/artifacts directories
-// ---------------------------------------------------------------------------
+// ═══════════════════════════════════════════════════════════════════════════
+// Check 10 — No unexpanded variables in release/artifacts/packaging
+// ═══════════════════════════════════════════════════════════════════════════
 process.stderr.write("\n=== Check 10: Unexpanded variables ===\n");
 
 const UNEXPANDED_PATTERNS = [
-  /\$\{[A-Z_]+\}/,      // ${VAR_NAME}
-  /\{\{.*?\}\}/,         // {{ template_var }}
-  /<%.*?%>/,             // <% template %>
+  /\$\{[A-Z_]+\}/,
+  /\{\{.*?\}\}/,
+  /<%.*?%>/,
 ];
 
+let unexpandedErrors = 0;
 function checkUnexpanded(dirRel) {
-  const dirFull = resolve(ROOT, dirRel);
-  if (!existsSync(dirFull)) return;
+  if (!existsSync(resolve(ROOT, dirRel))) return;
   for (const fileRel of walkFiles(dirRel)) {
-    // Only check config/manifest-like files
     if (!/\.(json|ya?ml|xml|toml|nsh|plist|desktop|cfg|ini|template)$/.test(fileRel)) continue;
     try {
       const content = readFileSync(resolve(ROOT, fileRel), "utf8");
-      for (const pattern of UNEXPANDED_PATTERNS) {
-        const match = pattern.exec(content);
-        if (match) {
-          err(`${fileRel} contains unexpanded variable: ${match[0]}`);
-          break; // one match per file is enough
+      for (const p of UNEXPANDED_PATTERNS) {
+        const m = p.exec(content);
+        if (m) {
+          err(`${fileRel} contains unexpanded variable: ${m[0]}`);
+          unexpandedErrors++;
+          break;
         }
       }
-    } catch {
-      // binary file or permission error — skip
-    }
+    } catch { /* skip */ }
   }
 }
 
@@ -473,15 +490,13 @@ checkUnexpanded("release");
 checkUnexpanded("artifacts");
 checkUnexpanded("packaging");
 
-if (!existsSync(resolve(ROOT, "release")) &&
-    !existsSync(resolve(ROOT, "artifacts")) &&
-    !existsSync(resolve(ROOT, "packaging"))) {
-  ok("No release/artifacts directories to check for unexpanded variables");
+if (unexpandedErrors === 0) {
+  ok("No unexpanded variables detected in release/artifacts/packaging");
 }
 
-// ---------------------------------------------------------------------------
+// ═══════════════════════════════════════════════════════════════════════════
 // Summary
-// ---------------------------------------------------------------------------
+// ═══════════════════════════════════════════════════════════════════════════
 process.stderr.write("\n========================================\n");
 if (errors > 0) {
   process.stderr.write(`[RESULT] ${errors} error(s) found\n`);

@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync, existsSync, writeFileSync, unlinkSync } from "node:fs";
 import { resolve, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { execSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..", "..");
@@ -351,10 +351,13 @@ describe("No-placeholders check", () => {
       const content = "// TODO: implement this properly\nexport const x = 1;\n";
       writeFileSync(testFile, content, "utf-8");
 
-      // Run the script — it should exit 1 because of TODO in .tmp-test-placeholder.ts
-      expect(() => {
-        execSync(`node "${scriptPath}"`, { cwd: REPO_ROOT, encoding: "utf-8", shell: "bash" });
-      }).toThrow();
+      // Run the script via spawnSync (cross-platform, no shell dependency)
+      const result = spawnSync(process.execPath, [scriptPath, "--root", REPO_ROOT], {
+        encoding: "utf-8",
+      });
+      // Script must exit non-zero because it found TODO in .tmp-test-placeholder.ts
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toMatch(/TODO/);
     } finally {
       try { unlinkSync(testFile); } catch { /* ok */ }
     }
