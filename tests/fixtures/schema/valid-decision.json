@@ -1,0 +1,22 @@
+{
+  "decisionId": "01JQXYZABCDEFGHJKMNPQRS06",
+  "eventId": "01JQXYZABCDEFGHJKMNPQRS03",
+  "taskId": "01JQXYZABCDEFGHJKMNPQRS02",
+  "category": "block",
+  "riskLevel": 3,
+  "reasonCode": "forbidden_action",
+  "reason": "Writing report.md would overwrite an existing verified deliverable without evidence of review",
+  "boundaryIds": ["B-001"],
+  "ruleFindingIds": ["RULE_SCOPE_WRITE_PROTECTED"],
+  "recoverySteps": [
+    "If this is an intentional update, provide the evidence of review first",
+    "Save to a temporary path and request deliverable status change"
+  ],
+  "userDecisionNeeded": true,
+  "overridable": true,
+  "judge": {
+    "status": "not_needed"
+  },
+  "contractVersion": 1,
+  "createdAt": "2026-08-10T10:05:00.150Z"
+}

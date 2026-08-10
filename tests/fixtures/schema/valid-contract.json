@@ -1,0 +1,116 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractId": "01JQXYZABCDEFGHJKMNPQRS01",
+  "taskId": "01JQXYZABCDEFGHJKMNPQRS02",
+  "version": 1,
+  "status": "active",
+  "title": "Research climate data anomalies",
+  "objective": {
+    "primary": "Identify and characterize temperature anomalies in the provided dataset",
+    "rationale": "Validate sensor calibration before field deployment",
+    "priority": "high",
+    "successSignal": "Anomaly report with statistical confidence intervals"
+  },
+  "deliverables": [
+    {
+      "deliverableId": "D-001",
+      "description": "Statistical summary of detected anomalies",
+      "acceptanceChecks": [
+        "All anomalies must have p < 0.05",
+        "Report must include methodology section"
+      ],
+      "required": true,
+      "status": "not_started",
+      "evidenceRefs": []
+    }
+  ],
+  "scope": {
+    "in": [
+      {
+        "statement": "Analyze only the provided CSV dataset",
+        "source": "user prompt",
+        "appliesTo": {
+          "paths": ["data/sensor_2024.csv"]
+        },
+        "readonly": true,
+        "writable": false,
+        "outbound": false,
+        "confidence": 1.0,
+        "invalidationConditions": []
+      }
+    ],
+    "out": [
+      {
+        "statement": "Do not access external climate databases",
+        "source": "user directive",
+        "appliesTo": {},
+        "readonly": false,
+        "writable": false,
+        "outbound": true,
+        "confidence": 1.0,
+        "invalidationConditions": []
+      }
+    ]
+  },
+  "boundaries": [
+    {
+      "boundaryId": "B-001",
+      "kind": "scope",
+      "severity": "hard",
+      "statement": "Do not send sensor data to any external service",
+      "source": {
+        "type": "user_directive",
+        "confidence": 1.0
+      },
+      "owner": "user",
+      "overridable": false,
+      "appliesTo": {
+        "hosts": ["codex", "claude_code"],
+        "exceptWhen": []
+      },
+      "confidence": 1.0,
+      "status": "active",
+      "validFrom": "2026-08-10T00:00:00.000Z"
+    }
+  ],
+  "evidencePolicy": {
+    "requireSourceForClaims": true,
+    "minEvidenceLevel": "reference",
+    "allowUserTestimony": true
+  },
+  "authority": {
+    "executorCanChooseMethods": true,
+    "executorCanProposeScope": true,
+    "executorCanSelfReview": false,
+    "overridesRequireUserConfirmation": true
+  },
+  "budgets": {
+    "maxToolCallsPerTask": 200,
+    "maxProviderCallsPerTask": 20
+  },
+  "stopConditions": [
+    {
+      "condition": "All deliverables completed and verified",
+      "isMet": false,
+      "evidenceRequired": true
+    }
+  ],
+  "assumptions": [
+    {
+      "statement": "CSV data is properly formatted with UTC timestamps",
+      "source": "user statement",
+      "confidence": 0.9,
+      "status": "active"
+    }
+  ],
+  "correctionRefs": [],
+  "sourceRefs": [
+    {
+      "ref": "User initial prompt",
+      "type": "user_message",
+      "excerpt": "Analyze the sensor data for temperature anomalies"
+    }
+  ],
+  "createdAt": "2026-08-10T10:00:00.000Z",
+  "updatedAt": "2026-08-10T10:00:00.000Z"
+}

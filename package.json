@@ -1,0 +1,36 @@
+{
+  "name": "sestina",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local-first, cross-Codex-and-Claude-Code, real-time reasoning boundary governance Agent",
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "packageManager": "pnpm@11.21.0",
+  "scripts": {
+    "build": "pnpm --recursive build",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "test:integration": "vitest run --project integration",
+    "test:ipc": "vitest run --project ipc",
+    "test:desktop": "vitest run --project desktop",
+    "test:e2e": "vitest run --project e2e",
+    "eval:locked": "vitest run --project eval",
+    "typecheck": "tsc --build",
+    "lint": "eslint . --max-warnings 0",
+    "lint:fix": "eslint . --fix",
+    "docs:check": "node scripts/check-doc-links.mjs && node scripts/check-no-placeholders.mjs",
+    "release:check": "node scripts/verify-release.mjs",
+    "repo:check": "node scripts/check-repository-shape.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.0.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.0.0",
+    "typescript": "^5.8.0",
+    "typescript-eslint": "^8.66.0",
+    "vitest": "^3.0.0"
+  }
+}
