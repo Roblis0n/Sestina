@@ -18,10 +18,12 @@
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",
     "docs:check": "node scripts/check-doc-links.mjs",
-    "release:check": "pnpm lint && pnpm typecheck && pnpm test && pnpm docs:check && node scripts/check-no-placeholders.mjs"
+    "release:check": "pnpm lint && pnpm typecheck && pnpm test && pnpm docs:check && node scripts/check-no-placeholders.mjs",
+    "repo:check": "node scripts/check-repository-shape.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.62.1",
     "@types/node": "^24.0.0",
     "eslint": "^9.0.0",
     "prettier": "^3.0.0",

@@ -84,17 +84,32 @@ function dirsUnder(relativePath) {
 
 /**
  * Walk a directory tree, yielding every file path (relative to ROOT, posix-style).
+ * Skips common build output and dependency directories.
  */
+const WALK_SKIP_DIRS = new Set([
+  "node_modules", "dist", "build", "coverage", ".turbo", ".git",
+  "OpenMythos-main (1)",
+]);
+
 function* walkFiles(relativeDir) {
   const full = resolve(ROOT, relativeDir);
   if (!existsSync(full)) return;
-  const entries = readdirSync(full, { withFileTypes: true });
+  // Check if this directory itself should be skipped
+  const baseName = relativeDir.split(/[/\\]/).pop();
+  if (baseName && WALK_SKIP_DIRS.has(baseName)) return;
+
+  let entries;
+  try {
+    entries = readdirSync(full, { withFileTypes: true });
+  } catch {
+    return; // permission errors, etc.
+  }
   for (const entry of entries) {
-    const rel = `${relativeDir}/${entry.name}`;
     if (entry.isDirectory()) {
-      yield* walkFiles(rel);
-    } else {
-      yield rel;
+      if (WALK_SKIP_DIRS.has(entry.name)) continue;
+      yield* walkFiles(`${relativeDir}/${entry.name}`);
+    } else if (entry.isFile()) {
+      yield `${relativeDir}/${entry.name}`;
     }
   }
 }
@@ -104,15 +119,19 @@ function* walkFiles(relativeDir) {
  * Very simple: matches lines like `import ... from '...'` or `from "..."`.
  */
 function extractImports(filePath) {
-  const src = readFileSync(resolve(ROOT, filePath), "utf8");
-  const regex = /from\s+['"]([^'"]+)['"]|import\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
-  const deps = new Set();
-  let m;
-  while ((m = regex.exec(src)) !== null) {
-    const spec = m[1] || m[2];
-    if (spec) deps.add(spec);
+  try {
+    const src = readFileSync(resolve(ROOT, filePath), "utf8");
+    const regex = /from\s+['"]([^'"]+)['"]|import\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
+    const deps = new Set();
+    let m;
+    while ((m = regex.exec(src)) !== null) {
+      const spec = m[1] || m[2];
+      if (spec) deps.add(spec);
+    }
+    return deps;
+  } catch {
+    return new Set(); // binary file, permission error, directory, etc.
   }
-  return deps;
 }
 
 // ---------------------------------------------------------------------------
@@ -320,6 +339,144 @@ if (packageDirs.length === 0) {
       ok(`${pkg.name}`);
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Check 7 — Public entry points (index.ts with exports)
+// ---------------------------------------------------------------------------
+process.stderr.write("\n=== Check 7: Public exports ===\n");
+
+for (const d of packageDirs) {
+  const indexPath = resolve(ROOT, "packages", d, "src", "index.ts");
+  if (!existsSync(indexPath)) {
+    err(`packages/${d}/ missing public entry point src/index.ts`);
+    continue;
+  }
+  try {
+    const content = readFileSync(indexPath, "utf8");
+    if (!/export/.test(content)) {
+      err(`packages/${d}/src/index.ts exists but has no export statements`);
+    } else {
+      ok(`packages/${d} has public exports`);
+    }
+  } catch (e) {
+    err(`packages/${d}/src/index.ts cannot be read: ${e.message}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Check 8 — No deep cross-package source path imports
+// ---------------------------------------------------------------------------
+process.stderr.write("\n=== Check 8: Cross-package deep imports ===\n");
+
+// Build set of @sestina/* package names
+const sestinaPackageNames = new Set();
+for (const d of packageDirs) {
+  const name = readPackageName(`packages/${d}`);
+  if (name) sestinaPackageNames.add(name);
+}
+
+let deepImportFound = false;
+for (const d of packageDirs) {
+  const pkgName = readPackageName(`packages/${d}`);
+  for (const fileRel of walkFiles(`packages/${d}`)) {
+    const imports = extractImports(fileRel);
+    for (const imp of imports) {
+      if (!imp.startsWith("@sestina/")) continue;
+      if (imp === pkgName) continue; // self-reference OK
+      // Cross-package imports must NOT use deep paths
+      if (/^@sestina\/[^/]+\/(src|dist|test)\//.test(imp)) {
+        err(
+          `${fileRel} imports "${imp}" — cross-package imports must use public entry point, not deep paths`
+        );
+        deepImportFound = true;
+      }
+    }
+  }
+}
+if (!deepImportFound) {
+  ok("No deep cross-package source imports detected");
+}
+
+// ---------------------------------------------------------------------------
+// Check 9 — Renderer must not depend on core/storage/secrets/providers
+// ---------------------------------------------------------------------------
+process.stderr.write("\n=== Check 9: Renderer dependency restrictions ===\n");
+
+const FORBIDDEN_RENDERER_DEPS = [
+  "@sestina/core",
+  "@sestina/storage",
+  "@sestina/secrets",
+  "@sestina/providers",
+];
+
+// Check packages/ for renderer directories
+function checkRendererRestrictions(baseDir, label) {
+  if (!existsSync(baseDir)) return;
+  for (const fileRel of walkFiles(baseDir)) {
+    // Only files in renderer paths
+    if (!/[\/\\]renderer[\/\\]/.test(fileRel)) continue;
+    const imports = extractImports(fileRel);
+    for (const imp of imports) {
+      for (const forbidden of FORBIDDEN_RENDERER_DEPS) {
+        if (imp === forbidden || imp.startsWith(forbidden + "/")) {
+          err(
+            `${label}/${fileRel} imports "${imp}" — renderer must not depend on ${forbidden}`
+          );
+        }
+      }
+    }
+  }
+}
+
+checkRendererRestrictions(resolve(ROOT, "packages"), "packages");
+checkRendererRestrictions(resolve(ROOT, "apps"), "apps");
+
+if (!existsSync(resolve(ROOT, "apps/desktop/renderer")) &&
+    !Array.from(walkFiles("packages")).some((f) => /[\/\\]renderer[\/\\]/.test(f))) {
+  ok("No renderer directories to check");
+}
+
+// ---------------------------------------------------------------------------
+// Check 10 — No unexpanded variables in release/artifacts directories
+// ---------------------------------------------------------------------------
+process.stderr.write("\n=== Check 10: Unexpanded variables ===\n");
+
+const UNEXPANDED_PATTERNS = [
+  /\$\{[A-Z_]+\}/,      // ${VAR_NAME}
+  /\{\{.*?\}\}/,         // {{ template_var }}
+  /<%.*?%>/,             // <% template %>
+];
+
+function checkUnexpanded(dirRel) {
+  const dirFull = resolve(ROOT, dirRel);
+  if (!existsSync(dirFull)) return;
+  for (const fileRel of walkFiles(dirRel)) {
+    // Only check config/manifest-like files
+    if (!/\.(json|ya?ml|xml|toml|nsh|plist|desktop|cfg|ini|template)$/.test(fileRel)) continue;
+    try {
+      const content = readFileSync(resolve(ROOT, fileRel), "utf8");
+      for (const pattern of UNEXPANDED_PATTERNS) {
+        const match = pattern.exec(content);
+        if (match) {
+          err(`${fileRel} contains unexpanded variable: ${match[0]}`);
+          break; // one match per file is enough
+        }
+      }
+    } catch {
+      // binary file or permission error — skip
+    }
+  }
+}
+
+checkUnexpanded("release");
+checkUnexpanded("artifacts");
+checkUnexpanded("packaging");
+
+if (!existsSync(resolve(ROOT, "release")) &&
+    !existsSync(resolve(ROOT, "artifacts")) &&
+    !existsSync(resolve(ROOT, "packaging"))) {
+  ok("No release/artifacts directories to check for unexpanded variables");
 }
 
 // ---------------------------------------------------------------------------

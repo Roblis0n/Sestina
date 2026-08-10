@@ -27,7 +27,7 @@ const PATTERNS = [
   { name: '"TBD"',      regex: /TBD/gi },
 ];
 
-// Directories to exclude
+// Directories to exclude (specs, test code, build outputs)
 const EXCLUDE_DIRS = new Set([
   "node_modules",
   "dist",
@@ -36,10 +36,10 @@ const EXCLUDE_DIRS = new Set([
   ".turbo",
   ".git",
   "docs",
-  "scripts",
+  "tests",
 ]);
 
-// Files at the repo root to exclude (historical materials, config files)
+// Files at the repo root to exclude (historical materials)
 const EXCLUDE_ROOT_FILES = new Set([
   "handoff.md",
   "方案详解.md",
@@ -48,10 +48,11 @@ const EXCLUDE_ROOT_FILES = new Set([
   "结果.md",
   "HANDOFF-FOR-CLAUDE-CODE.md",
   "HANDOFF-FOR-NEXT-CONVERSATION.md",
-  "package.json",
   "pnpm-lock.yaml",
-  "pnpm-workspace.yaml",
 ]);
+
+// Path to this script itself — never scan it
+const SELF_PATH = fileURLToPath(import.meta.url);
 
 // File extensions to scan
 const SCAN_EXTENSIONS = new Set([
@@ -70,6 +71,10 @@ const SCAN_EXTENSIONS = new Set([
  */
 function isExcluded(dirPath) {
   const parts = dirPath.split(/[/\\]/);
+  // Check if this is a package test directory: packages/<name>/test/
+  const normalized = dirPath.replace(/\\/g, "/");
+  if (/packages\/[^/]+\/test(\/|$)/.test(normalized)) return true;
+
   for (const part of parts) {
     if (EXCLUDE_DIRS.has(part)) return true;
     if (part === "OpenMythos-main (1)") return true;
@@ -100,6 +105,8 @@ function findFiles(dir, results = []) {
     if (entry.isDirectory()) {
       findFiles(fullPath, results);
     } else if (entry.isFile() && SCAN_EXTENSIONS.has(extname(entry.name))) {
+      // Skip this script itself
+      if (fullPath === SELF_PATH) continue;
       results.push(fullPath);
     }
   }
@@ -131,6 +138,15 @@ function main() {
       while ((match = regex.exec(content)) !== null) {
         const line = lineNumber(content, match.index);
         const text = match[0];
+        // Skip false positives: "placeholder" inside "check-no-placeholders" references
+        if (name === "PLACEHOLDER" && /check-no-placeholders/i.test(text)) {
+          continue;
+        }
+        // Get the full line for additional context checks
+        const fullLine = content.split("\n")[line - 1] ?? "";
+        if (name === "PLACEHOLDER" && /check-no-placeholders/i.test(fullLine)) {
+          continue;
+        }
         // file path (repo-relative), line number, matched text
         console.error(`${relative(ROOT, file)}:${line}: ${text}`);
         findings++;
