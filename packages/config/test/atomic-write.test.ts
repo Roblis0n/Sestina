@@ -188,8 +188,9 @@ describe("Atomic write", () => {
     // Verify backup content matches original
     const backupFile = backupFiles[0];
     expect(backupFile).toBeDefined();
+    if (!backupFile) throw new Error("backup file missing");
     const backupContent: Record<string, unknown> = JSON.parse(
-      readFileSync(resolve(tmpBase, backupFile!), "utf8"),
+      readFileSync(resolve(tmpBase, backupFile), "utf8"),
     ) as Record<string, unknown>;
     expect(backupContent.version).toBe(0);
   });

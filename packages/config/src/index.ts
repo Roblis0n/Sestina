@@ -6,6 +6,6 @@ export { previewConfigChange } from "./preview.js";
 export type { PreviewResult, PreviewOptions, ConfigDiffEntry } from "./preview.js";
 export { applyConfirmedConfigChange } from "./atomic-write.js";
 export type { WriteConfirmation } from "./atomic-write.js";
-export { watchEffectiveConfig } from "./watch.js";
-export type { ConfigChangeCallback, ConfigErrorCallback, ConfigWatchError } from "./watch.js";
+export { watchEffectiveConfig, createRealWatcher } from "./watch.js";
+export type { ConfigChangeCallback, ConfigErrorCallback, ConfigWatchError, FsWatcher } from "./watch.js";
 export { parseEnvConfig } from "./env.js";
