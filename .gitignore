@@ -16,6 +16,8 @@ coverage/
 logs/
 exports/
 secrets/
+!packages/secrets/
+!tests/fixtures/secrets/
 
 # Environment and credentials
 .env

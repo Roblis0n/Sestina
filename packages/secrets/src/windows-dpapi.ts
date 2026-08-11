@@ -1,0 +1,224 @@
+/**
+ * Windows DPAPI backend — CurrentUser scope only.
+ *
+ * Uses @primno/dpapi (prebuilt native addon wrapping CryptProtectData /
+ * CryptUnprotectData from Crypt32.dll).
+ *
+ * Each entry is individually DPAPI-encrypted and persisted to a JSON
+ * vault file on disk, so secrets (including control tokens) survive
+ * process restarts.
+ *
+ * Invariants:
+ * - Only CurrentUser scope (NEVER LocalMachine).
+ * - Runtime guard rejects any non-CurrentUser scope.
+ * - Verifies round-trip on first use (smoke test).
+ * - On-disk vault contains only DPAPI-encrypted blobs (no plaintext).
+ */
+import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { dirname } from "node:path";
+import { homedir } from "node:os";
+import type { SecretBackend, SecretBackendStatus, DPAPIProvider } from "./port.js";
+
+// ── Vault path ──
+
+function defaultVaultPath(): string {
+  const base = process.env.LOCALAPPDATA ?? process.env.APPDATA ?? homedir();
+  return `${base}/Sestina/secrets/vault.json`;
+}
+
+// ── Lazy native loader ──
+
+interface DPAPINative {
+  isPlatformSupported: boolean;
+  Dpapi: {
+    protectData(
+      data: Uint8Array,
+      optionalEntropy: Uint8Array | null,
+      scope: "CurrentUser" | "LocalMachine",
+    ): Uint8Array;
+    unprotectData(
+      data: Uint8Array,
+      optionalEntropy: Uint8Array | null,
+      scope: "CurrentUser" | "LocalMachine",
+    ): Uint8Array;
+  };
+}
+
+let dpapiNative: DPAPINative | null = null;
+let loadAttempted = false;
+let loadError: string | undefined;
+
+async function getDPAPI(): Promise<DPAPINative | null> {
+  if (loadAttempted) return dpapiNative;
+  loadAttempted = true;
+  try {
+    const mod = await import("@primno/dpapi");
+    const native = mod as unknown as {
+      default?: DPAPINative;
+      isPlatformSupported?: boolean;
+      Dpapi?: DPAPINative["Dpapi"];
+    };
+    dpapiNative = {
+      isPlatformSupported: native.isPlatformSupported ?? false,
+      Dpapi: native.Dpapi ?? native.default?.Dpapi ?? {
+        protectData: () => {
+          throw new Error("DPAPI not available");
+        },
+        unprotectData: () => {
+          throw new Error("DPAPI not available");
+        },
+      },
+    };
+    if (!dpapiNative.isPlatformSupported) {
+      loadError =
+        "DPAPI platform not supported (non-Windows or unsupported arch)";
+      dpapiNative = null;
+    }
+    return dpapiNative;
+  } catch (err) {
+    loadError =
+      err instanceof Error
+        ? err.message
+        : "DPAPI native module failed to load";
+    return null;
+  }
+}
+
+// ── DPAPI provider (wraps native module) ──
+
+function guardScope(scope: string): asserts scope is "CurrentUser" {
+  if (scope !== "CurrentUser") {
+    throw new Error(
+      "Only CurrentUser DPAPI scope is supported. LocalMachine is rejected.",
+    );
+  }
+}
+
+export function createWindowsDPAPIProvider(): DPAPIProvider {
+  return {
+    async protect(data: Buffer, scope: "CurrentUser"): Promise<Buffer> {
+      guardScope(scope);
+      const dpapi = await getDPAPI();
+      if (!dpapi) {
+        throw new Error(`DPAPI unavailable: ${loadError ?? "unknown error"}`);
+      }
+      const result = dpapi.Dpapi.protectData(data, null, scope);
+      return Buffer.from(result);
+    },
+    async unprotect(data: Buffer, scope: "CurrentUser"): Promise<Buffer> {
+      guardScope(scope);
+      const dpapi = await getDPAPI();
+      if (!dpapi) {
+        throw new Error(`DPAPI unavailable: ${loadError ?? "unknown error"}`);
+      }
+      const result = dpapi.Dpapi.unprotectData(data, null, scope);
+      return Buffer.from(result);
+    },
+  };
+}
+
+// ── Disk-persisted vault ──
+
+function loadVault(path: string): Map<string, string> {
+  try {
+    if (!existsSync(path)) return new Map();
+    const raw = readFileSync(path, "utf8");
+    const parsed = JSON.parse(raw) as Record<string, string>;
+    return new Map(Object.entries(parsed));
+  } catch {
+    return new Map();
+  }
+}
+
+function saveVault(path: string, store: Map<string, string>): void {
+  const dir = dirname(path);
+  mkdirSync(dir, { recursive: true });
+  const obj: Record<string, string> = {};
+  for (const [k, v] of store) {
+    obj[k] = v;
+  }
+  writeFileSync(path, JSON.stringify(obj), "utf8");
+}
+
+// ── Backend factory ──
+
+export function createWindowsDPAPIBackend(
+  dpapi?: DPAPIProvider,
+  vaultPath?: string,
+): SecretBackend {
+  const provider = dpapi ?? createWindowsDPAPIProvider();
+  const path = vaultPath ?? defaultVaultPath();
+
+  // Load persisted vault on creation
+  const store = loadVault(path);
+
+  // Smoke test on first use
+  let smokePassed = false;
+  let smokeError: string | undefined;
+
+  async function runSmoke(): Promise<void> {
+    if (smokePassed) return;
+    try {
+      const testValue = `dpapi-smoke-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const encrypted = await provider.protect(
+        Buffer.from(testValue, "utf8"),
+        "CurrentUser",
+      );
+      const decrypted = await provider.unprotect(encrypted, "CurrentUser");
+      if (decrypted.toString("utf8") !== testValue) {
+        throw new Error("DPAPI round-trip mismatch");
+      }
+      smokePassed = true;
+    } catch (err) {
+      smokeError =
+        err instanceof Error ? err.message : "DPAPI smoke test failed";
+      throw err;
+    }
+  }
+
+  return {
+    async get(ref: string): Promise<string | undefined> {
+      await runSmoke();
+      const encryptedHex = store.get(ref);
+      if (!encryptedHex) return undefined;
+      const decrypted = await provider.unprotect(
+        Buffer.from(encryptedHex, "hex"),
+        "CurrentUser",
+      );
+      return decrypted.toString("utf8");
+    },
+
+    async set(ref: string, value: string): Promise<void> {
+      await runSmoke();
+      const encrypted = await provider.protect(
+        Buffer.from(value, "utf8"),
+        "CurrentUser",
+      );
+      store.set(ref, encrypted.toString("hex"));
+      saveVault(path, store);
+    },
+
+    delete(ref: string): Promise<void> {
+      store.delete(ref);
+      saveVault(path, store);
+      return Promise.resolve();
+    },
+
+    describe(ref: string): Promise<{ configured: boolean }> {
+      return Promise.resolve({ configured: store.has(ref) });
+    },
+
+    async health(): Promise<SecretBackendStatus> {
+      try {
+        await runSmoke();
+        return { available: true, backend: "dpapi" };
+      } catch {
+        return {
+          available: false,
+          backend: "none",
+          reason: smokeError ?? "DPAPI is not available on this system",
+        };
+      }
+    },
+  };
+}
