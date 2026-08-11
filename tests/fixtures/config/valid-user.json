@@ -1,0 +1,32 @@
+{
+  "defaultProvider": "openai-main",
+  "providers": [
+    {
+      "providerId": "openai-main",
+      "type": "openai",
+      "model": "gpt-5.6",
+      "apiKeyEnvVar": "OPENAI_API_KEY",
+      "timeoutMs": 8000
+    }
+  ],
+  "capture": {
+    "hostContentLevel": "governance_only",
+    "retentionDays": 90,
+    "hostTextEnabled": false,
+    "excludePatterns": []
+  },
+  "privacy": {
+    "networkDefault": "deny_unless_provider_enabled",
+    "retentionDays": 90,
+    "autoCleanup": true
+  },
+  "notifications": {
+    "osEnabled": true,
+    "feedEnabled": true,
+    "urgentOnly": false
+  },
+  "runtime": {
+    "autoStart": true
+  },
+  "hostDefaults": {}
+}

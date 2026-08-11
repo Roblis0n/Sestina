@@ -1,0 +1,17 @@
+{
+  "projectId": "01JQXYZABCDEFGHJKMNPQRS04",
+  "workRoots": ["/project/data"],
+  "defaultProvider": "openai-main",
+  "capture": {
+    "hostContentLevel": "summary",
+    "retentionDays": 30,
+    "hostTextEnabled": true,
+    "excludePatterns": ["**/secret/**"]
+  },
+  "rules": {
+    "hard": [],
+    "soft": [],
+    "open": []
+  },
+  "autoAttach": true
+}

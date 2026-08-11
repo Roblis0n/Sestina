@@ -1,0 +1,114 @@
+import { createHash } from "node:crypto";
+import { resolve, isAbsolute, basename, extname, posix, win32 } from "node:path";
+
+export interface SestinaPaths {
+  dataDir: string;
+  configDir: string;
+  configFile: string;
+}
+
+const isWindows = (p: NodeJS.Platform): boolean => p === "win32";
+const isMac = (p: NodeJS.Platform): boolean => p === "darwin";
+
+export function resolvePlatformPaths(
+  env: Record<string, string | undefined>,
+  platform: NodeJS.Platform,
+): SestinaPaths {
+  // Check explicit overrides first
+  const dataOverride = env.SESTINA_DATA_DIR;
+  const configOverride = env.SESTINA_CONFIG_DIR;
+
+  // Reject ambiguous SESTINA_HOME
+  if (env.SESTINA_HOME !== undefined && !dataOverride && !configOverride) {
+    // SESTINA_HOME is rejected; fall through to platform defaults
+  }
+
+  let dataDir: string;
+  let configDir: string;
+
+  if (dataOverride) {
+    validateDirectoryPath(dataOverride, "SESTINA_DATA_DIR");
+    dataDir = resolve(dataOverride);
+  } else {
+    dataDir = resolvePlatformDataDir(env, platform);
+  }
+
+  if (configOverride) {
+    validateDirectoryPath(configOverride, "SESTINA_CONFIG_DIR");
+    configDir = resolve(configOverride);
+  } else {
+    configDir = resolvePlatformConfigDir(env, platform);
+  }
+
+  // Normalize Windows paths
+  if (isWindows(platform)) {
+    dataDir = normalizeWindowsPath(dataDir);
+    configDir = normalizeWindowsPath(configDir);
+  }
+
+  return { dataDir, configDir, configFile: resolve(configDir, "config.json") };
+}
+
+function resolvePlatformDataDir(
+  env: Record<string, string | undefined>,
+  platform: NodeJS.Platform,
+): string {
+  if (isWindows(platform)) {
+    const localAppData = env.LOCALAPPDATA ?? env.APPDATA ?? "";
+    if (!localAppData) throw new Error("LOCALAPPDATA not available for Windows path resolution");
+    return win32.resolve(localAppData, "Sestina", "data");
+  }
+  if (isMac(platform)) {
+    const home = env.HOME ?? "";
+    if (!home) throw new Error("HOME not available for macOS path resolution");
+    return posix.join(home, "Library", "Application Support", "Sestina", "data");
+  }
+  // Linux
+  const xdgDataHome = env.XDG_DATA_HOME;
+  const home = env.HOME ?? "";
+  if (xdgDataHome) return posix.join(xdgDataHome, "sestina");
+  return posix.join(home, ".local", "share", "sestina");
+}
+
+function resolvePlatformConfigDir(
+  env: Record<string, string | undefined>,
+  platform: NodeJS.Platform,
+): string {
+  if (isWindows(platform)) {
+    const localAppData = env.LOCALAPPDATA ?? env.APPDATA ?? "";
+    if (!localAppData) throw new Error("LOCALAPPDATA not available for Windows path resolution");
+    return win32.resolve(localAppData, "Sestina", "config");
+  }
+  if (isMac(platform)) {
+    const home = env.HOME ?? "";
+    if (!home) throw new Error("HOME not available for macOS path resolution");
+    return posix.join(home, "Library", "Application Support", "Sestina", "config");
+  }
+  // Linux
+  const xdgConfigHome = env.XDG_CONFIG_HOME;
+  const home = env.HOME ?? "";
+  if (xdgConfigHome) return posix.join(xdgConfigHome, "sestina");
+  return posix.join(home, ".config", "sestina");
+}
+
+function validateDirectoryPath(
+  dirPath: string,
+  variableName: string,
+): void {
+  if (!isAbsolute(dirPath)) {
+    throw new Error(`${variableName} must be an absolute path: ${dirPath}`);
+  }
+  // Reject paths that look like files
+  const ext = extname(basename(dirPath));
+  if (ext && ext.length > 0 && ext.length < 10) {
+    throw new Error(`${variableName} must be a directory path, not a file: ${dirPath}`);
+  }
+}
+
+function normalizeWindowsPath(p: string): string {
+  return p.replace(/\//g, "\\");
+}
+
+export function hashPath(path: string): string {
+  return createHash("sha256").update(path).digest("hex");
+}
