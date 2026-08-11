@@ -1,53 +1,94 @@
-import { watch } from "node:fs";
-import { readFileSync, existsSync } from "node:fs";
+import { watch, readFileSync, existsSync } from "node:fs";
 import type { EffectiveConfig } from "@sestina/schema";
 import { EffectiveConfigSchema } from "@sestina/schema";
 
+export interface ConfigWatchError {
+  filePath: string;
+  message: string;
+  fieldErrors?: string[];
+}
+
 export type ConfigChangeCallback = (config: EffectiveConfig) => void;
+export type ConfigErrorCallback = (error: ConfigWatchError) => void;
 
 export function watchEffectiveConfig(
   configPath: string,
   onChange: ConfigChangeCallback,
+  onError?: ConfigErrorCallback,
 ): () => void {
-  // Load initial config if it exists
-  if (existsSync(configPath)) {
-    try {
-      const raw: Record<string, unknown> = JSON.parse(readFileSync(configPath, "utf8")) as Record<string, unknown>;
-      const parsed = EffectiveConfigSchema.safeParse(raw);
-      if (parsed.success) {
-        // Initial config loaded successfully, but not calling onChange
-        // since caller should already have the initial state
-      }
-    } catch {
-      // Will use builtin defaults until valid config arrives
-    }
-  }
-
-  // Debounce timer to handle rapid writes
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-  const watcher = watch(configPath, (eventType) => {
-    if (eventType !== "change") return;
-
+  function attemptReload(): void {
     // Debounce rapid successive events
     if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(() => {
       debounceTimer = null;
       try {
-        const raw: Record<string, unknown> = JSON.parse(readFileSync(configPath, "utf8")) as Record<string, unknown>;
+        if (!existsSync(configPath)) return;
+        const raw: Record<string, unknown> = JSON.parse(
+          readFileSync(configPath, "utf8"),
+        ) as Record<string, unknown>;
         const parsed = EffectiveConfigSchema.safeParse(raw);
         if (parsed.success) {
           onChange(parsed.data);
+        } else if (onError) {
+          const fieldErrors = parsed.error.issues.map(
+            (issue) => `${issue.path.join(".")}: ${issue.message}`,
+          );
+          onError({
+            filePath: configPath,
+            message: "Config validation failed; keeping last-known-good",
+            fieldErrors,
+          });
         }
-        // Invalid config: keep last-known-good, don't call onChange
-      } catch {
-        // Invalid JSON: keep last-known-good
+      } catch (err) {
+        if (onError) {
+          onError({
+            filePath: configPath,
+            message: `Config parse error: ${err instanceof Error ? err.message : String(err)}; keeping last-known-good`,
+          });
+        }
       }
-    }, 100);
-  });
+    }, 150);
+  }
+
+  let watcher: ReturnType<typeof watch> | null = null;
+
+  function startWatcher(): void {
+    try {
+      if (watcher) watcher.close();
+
+      if (!existsSync(configPath)) {
+        // File does not exist yet; retry after delay
+        setTimeout(startWatcher, 1000);
+        return;
+      }
+
+      watcher = watch(configPath, () => {
+        attemptReload();
+      });
+
+      watcher.on("error", (err) => {
+        if (onError) {
+          onError({
+            filePath: configPath,
+            message: `File watcher error: ${err.message}`,
+          });
+        }
+        // Restart watcher after error
+        watcher?.close();
+        setTimeout(startWatcher, 1000);
+      });
+    } catch {
+      // File may not exist; retry later
+      setTimeout(startWatcher, 1000);
+    }
+  }
+
+  startWatcher();
 
   return () => {
     if (debounceTimer) clearTimeout(debounceTimer);
-    watcher.close();
+    if (watcher) watcher.close();
   };
 }

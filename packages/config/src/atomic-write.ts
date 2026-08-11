@@ -1,7 +1,7 @@
-import { writeFileSync, renameSync, readFileSync, existsSync, unlinkSync } from "node:fs";
+import { writeFileSync, renameSync, readFileSync, existsSync, unlinkSync, copyFileSync } from "node:fs";
 import { dirname, resolve as pathResolve } from "node:path";
-import { randomUUID } from "node:crypto";
-import { SestinaErrorCode, SestinaError } from "@sestina/schema";
+import { createHash, randomUUID } from "node:crypto";
+import { SestinaErrorCode, SestinaError, ActorProvenanceSchema } from "@sestina/schema";
 
 export interface WriteConfirmation {
   previewHash: string;
@@ -19,11 +19,30 @@ export function applyConfirmedConfigChange(
   newContent: unknown,
   confirmation: WriteConfirmation,
 ): void {
-  // Validate direct user provenance
+  // Validate provenance shape and rules
+  const provenanceResult = ActorProvenanceSchema.safeParse(confirmation.provenance);
+  if (!provenanceResult.success) {
+    throw new SestinaError(
+      SestinaErrorCode.insufficient_confirmation_source,
+      `Invalid provenance: ${provenanceResult.error.message}`,
+    );
+  }
+
   if (!confirmation.provenance.directUser) {
     throw new SestinaError(
       SestinaErrorCode.direct_user_confirmation_required,
       "Config changes require direct user confirmation",
+    );
+  }
+
+  // Verify previewHash matches content
+  const actualHash = createHash("sha256")
+    .update(JSON.stringify({ content: newContent, expectedVersion: confirmation.expectedVersion }))
+    .digest("hex");
+  if (actualHash !== confirmation.previewHash) {
+    throw new SestinaError(
+      SestinaErrorCode.preview_changed,
+      "Config content does not match preview hash",
     );
   }
 
@@ -51,20 +70,26 @@ export function applyConfirmedConfigChange(
   if (!existsSync(dir)) {
     throw new SestinaError(
       SestinaErrorCode.internal_error,
-      `Config directory does not exist: ${dir}`,
+      "Config directory does not exist",
     );
   }
 
   const content = JSON.stringify(newContent, null, 2);
   const tmpPath = pathResolve(dir, `.config-tmp-${randomUUID()}`);
+  const backupPath = pathResolve(dir, `.config-backup-${randomUUID()}`);
 
   try {
+    // Create backup of current config before overwrite
+    if (existsSync(targetPath)) {
+      copyFileSync(targetPath, backupPath);
+    }
+
     // Write to temp file
     writeFileSync(tmpPath, content, { encoding: "utf8", flush: true });
 
     // Atomic rename
     renameSync(tmpPath, targetPath);
-  } catch (err) {
+  } catch {
     // Clean up temp file on failure
     try {
       if (existsSync(tmpPath)) unlinkSync(tmpPath);
@@ -74,7 +99,7 @@ export function applyConfirmedConfigChange(
 
     throw new SestinaError(
       SestinaErrorCode.internal_error,
-      `Failed to write config: ${err instanceof Error ? err.message : String(err)}`,
+      "Failed to write config",
     );
   }
 }

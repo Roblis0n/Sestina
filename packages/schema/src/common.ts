@@ -38,7 +38,10 @@ export const ActorProvenanceSchema = z.object({
   channel: z.enum(["desktop", "host", "mcp", "cli", "runtime"]),
   directUser: z.boolean(),
   challengeId: z.string().max(128).optional(),
-});
+}).refine(
+  (data) => !data.directUser || data.actor === "user",
+  { message: "directUser must imply actor === 'user'" },
+);
 export type ActorProvenance = z.infer<typeof ActorProvenanceSchema>;
 
 // ── Preview Confirmation ──

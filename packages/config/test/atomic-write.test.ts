@@ -1,7 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { readFileSync, writeFileSync, rmSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
+import { createHash } from "node:crypto";
 import { applyConfirmedConfigChange } from "../src/index.js";
+
+function computeHash(content: unknown, expectedVersion: number): string {
+  return createHash("sha256")
+    .update(JSON.stringify({ content, expectedVersion }))
+    .digest("hex");
+}
 
 describe("Atomic write", () => {
   const tmpBase = resolve(import.meta.dirname, "../../../.tmp-config-tests");
@@ -33,6 +40,7 @@ describe("Atomic write", () => {
     };
 
     const newContent = { version: 1 };
+    confirmation.previewHash = computeHash(newContent, confirmation.expectedVersion);
     applyConfirmedConfigChange(target, newContent, confirmation);
 
     const data: Record<string, unknown> = JSON.parse(readFileSync(target, "utf8")) as Record<string, unknown>;
@@ -44,8 +52,9 @@ describe("Atomic write", () => {
     const initial = JSON.stringify({ key: "original" });
     writeFileSync(target, initial, "utf8");
 
+    const newContent2 = { key: "updated" };
     const confirmation = {
-      previewHash: "b".repeat(64),
+      previewHash: computeHash(newContent2, 0),
       expectedVersion: 0 as const,
       provenance: {
         actor: "user" as const,
@@ -57,7 +66,7 @@ describe("Atomic write", () => {
     // Point to a non-existent directory to test failure recovery
     const badTarget = resolve(tmpBase, "nonexistent-dir", "config.json");
     expect(() =>
-      { applyConfirmedConfigChange(badTarget, { key: "updated" }, confirmation); },
+      { applyConfirmedConfigChange(badTarget, newContent2, confirmation); },
     ).toThrow();
 
     // Original file should still be intact

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { resolve, isAbsolute, basename, extname, posix, win32 } from "node:path";
+import { resolve, isAbsolute, basename, posix, win32 } from "node:path";
 
 export interface SestinaPaths {
   dataDir: string;
@@ -20,7 +20,9 @@ export function resolvePlatformPaths(
 
   // Reject ambiguous SESTINA_HOME
   if (env.SESTINA_HOME !== undefined && !dataOverride && !configOverride) {
-    // SESTINA_HOME is rejected; fall through to platform defaults
+    throw new Error(
+      "SESTINA_HOME is ambiguous; use SESTINA_DATA_DIR and/or SESTINA_CONFIG_DIR instead.",
+    );
   }
 
   let dataDir: string;
@@ -65,8 +67,9 @@ function resolvePlatformDataDir(
   }
   // Linux
   const xdgDataHome = env.XDG_DATA_HOME;
-  const home = env.HOME ?? "";
   if (xdgDataHome) return posix.join(xdgDataHome, "sestina");
+  const home = env.HOME ?? "";
+  if (!home) throw new Error("HOME not available for Linux path resolution");
   return posix.join(home, ".local", "share", "sestina");
 }
 
@@ -86,22 +89,36 @@ function resolvePlatformConfigDir(
   }
   // Linux
   const xdgConfigHome = env.XDG_CONFIG_HOME;
-  const home = env.HOME ?? "";
   if (xdgConfigHome) return posix.join(xdgConfigHome, "sestina");
-  return posix.join(home, ".config", "sestina");
+  const home2 = env.HOME ?? "";
+  if (!home2) throw new Error("HOME not available for Linux path resolution");
+  return posix.join(home2, ".config", "sestina");
 }
+
+const WINDOWS_DEVICE_NAMES = new Set([
+  "CON", "PRN", "AUX", "NUL",
+  "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+  "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+]);
 
 function validateDirectoryPath(
   dirPath: string,
   variableName: string,
 ): void {
+  // Reject path traversal attempts
+  if (dirPath.includes("..")) {
+    throw new Error(`${variableName} must not contain path traversal segments: ${dirPath}`);
+  }
+
+  // Reject Windows device paths (check before isAbsolute since "NUL" is not absolute)
+  const base = basename(dirPath).toUpperCase();
+  const nameWithoutExt = base.includes(".") ? base.split(".")[0] : base;
+  if (nameWithoutExt && WINDOWS_DEVICE_NAMES.has(nameWithoutExt)) {
+    throw new Error(`${variableName} must not be a reserved device name: ${dirPath}`);
+  }
+
   if (!isAbsolute(dirPath)) {
     throw new Error(`${variableName} must be an absolute path: ${dirPath}`);
-  }
-  // Reject paths that look like files
-  const ext = extname(basename(dirPath));
-  if (ext && ext.length > 0 && ext.length < 10) {
-    throw new Error(`${variableName} must be a directory path, not a file: ${dirPath}`);
   }
 }
 

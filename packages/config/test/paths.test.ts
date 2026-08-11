@@ -52,9 +52,28 @@ describe("Platform paths", () => {
     const env: Record<string, string | undefined> = {
       SESTINA_HOME: "/custom/sestina",
     };
-    // Should NOT use SESTINA_HOME, fall back to platform defaults
-    const paths = resolvePlatformPaths(env, "linux");
-    expect(paths.dataDir).not.toContain("SESTINA_HOME");
-    expect(paths.dataDir).toContain(".local/share/sestina");
+    // Should throw on SESTINA_HOME
+    expect(() => resolvePlatformPaths(env, "linux")).toThrow(
+      "SESTINA_HOME is ambiguous",
+    );
+  });
+
+  it("rejects path traversal segments in data dir", () => {
+    const env: Record<string, string | undefined> = {
+      SESTINA_DATA_DIR: "/home/user/../../etc",
+    };
+    expect(() => resolvePlatformPaths(env, "linux")).toThrow(
+      "must not contain path traversal",
+    );
+  });
+
+  it("rejects Windows device names as data dir", () => {
+    const env: Record<string, string | undefined> = {
+      LOCALAPPDATA: "C:\\Users\\test\\AppData\\Local",
+      SESTINA_DATA_DIR: "NUL",
+    };
+    expect(() => resolvePlatformPaths(env, "win32")).toThrow(
+      "reserved device name",
+    );
   });
 });

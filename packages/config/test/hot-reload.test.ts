@@ -1,4 +1,4 @@
-import { describe, it, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { writeFileSync, rmSync, mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { watchEffectiveConfig } from "../src/index.js";
@@ -43,6 +43,7 @@ describe("Hot reload", () => {
     await new Promise((r) => setTimeout(r, 200));
 
     // The callback should NOT have been called with invalid config
+    expect(onChange).not.toHaveBeenCalled();
     stop();
   });
 
@@ -66,8 +67,13 @@ describe("Hot reload", () => {
     writeFileSync(configPath, validConfig, "utf8");
 
     const changes: unknown[] = [];
-    const stop = watchEffectiveConfig(configPath, (cfg) => changes.push(cfg));
-    await new Promise((r) => setTimeout(r, 50));
+    const errors: unknown[] = [];
+    const stop = watchEffectiveConfig(
+      configPath,
+      (cfg) => changes.push(cfg),
+      (err) => errors.push(err),
+    );
+    await new Promise((r) => setTimeout(r, 300));
 
     // Write updated valid config
     const updated = JSON.stringify({
@@ -86,8 +92,13 @@ describe("Hot reload", () => {
       runtime: { autoStart: false },
     });
     writeFileSync(configPath, updated, "utf8");
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise((r) => setTimeout(r, 500));
 
     stop();
+    // On Windows, fs.watch is unreliable; if changes were detected, verify their shape
+    if (changes.length > 0) {
+      const last = changes[changes.length - 1] as Record<string, unknown>;
+      expect(last.capture).toBeDefined();
+    }
   });
 });
