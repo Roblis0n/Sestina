@@ -1,4 +1,5 @@
 import { watch, readFileSync, existsSync } from "node:fs";
+import { dirname, basename } from "node:path";
 import type { EffectiveConfig } from "@sestina/schema";
 import { EffectiveConfigSchema } from "@sestina/schema";
 
@@ -11,22 +12,23 @@ export interface ConfigWatchError {
 export type ConfigChangeCallback = (config: EffectiveConfig) => void;
 export type ConfigErrorCallback = (error: ConfigWatchError) => void;
 
-/** Injectable filesystem watcher interface — swap for fake in tests. */
+/** Injectable filesystem watcher — swap for fake in tests. */
 export interface FsWatcher {
-  onEvent: (handler: (eventType: "change" | "rename") => void) => void;
+  /** Register a handler for filesystem events. Receives (filename, eventType). */
+  onEvent: (handler: (filename: string, eventType: "change" | "rename") => void) => void;
   onError: (handler: (err: Error) => void) => void;
   close: () => void;
 }
 
-/** Create a real fs.watch-based watcher. */
+/** Create a real watcher on the parent directory. */
 export function createRealWatcher(filePath: string): FsWatcher {
-  const w = watch(filePath, (eventType) => {
-    if (eventType === "change" || (eventType as string) === "rename") {
-      for (const h of changeHandlers) h(eventType);
-    }
-  });
-  const changeHandlers: ((eventType: "change" | "rename") => void)[] = [];
+  const dir = dirname(filePath);
+  const changeHandlers: ((filename: string, eventType: "change" | "rename") => void)[] = [];
   const errorHandlers: ((err: Error) => void)[] = [];
+
+  const w = watch(dir, (eventType, filename) => {
+    for (const h of changeHandlers) h(filename ?? "", eventType);
+  });
   w.on("error", (err) => { for (const h of errorHandlers) h(err); });
   return {
     onEvent(handler) { changeHandlers.push(handler); },
@@ -36,11 +38,9 @@ export function createRealWatcher(filePath: string): FsWatcher {
 }
 
 /**
- * Watch a config file using event-driven fs.watch (no polling).
- * Uses last-known-good: invalid config keeps previous state, valid triggers onChange.
- * Validation errors reported via onError.
- *
- * @param watcherFactory - injected factory; use createRealWatcher in production, fake in tests
+ * Watch a config file via its parent directory (handles atomic replace,
+ * delete/recreate, and ignores unrelated files). Event-driven — no polling.
+ * Uses last-known-good: invalid config triggers onError, not onChange.
  */
 export function watchEffectiveConfig(
   configPath: string,
@@ -48,6 +48,10 @@ export function watchEffectiveConfig(
   onError?: ConfigErrorCallback,
   watcherFactory: (path: string) => FsWatcher = createRealWatcher,
 ): () => void {
+  let stopped = false;
+  let fsWatcher: FsWatcher | null = null;
+  const targetName = basename(configPath);
+
   const reload = (): void => {
     try {
       if (!existsSync(configPath)) return;
@@ -59,36 +63,35 @@ export function watchEffectiveConfig(
         const fieldErrors = parsed.error.issues.map(
           (issue) => `${issue.path.join(".")}: ${issue.message}`,
         );
-        onError({ filePath: configPath, message: "Config validation failed; keeping last-known-good", fieldErrors });
+        onError({
+          filePath: configPath,
+          message: "Config validation failed; keeping last-known-good",
+          fieldErrors,
+        });
       }
     } catch (err) {
       if (onError) {
-        onError({ filePath: configPath, message: `Config error: ${err instanceof Error ? err.message : String(err)}; keeping last-known-good` });
+        onError({
+          filePath: configPath,
+          message: `Config error: ${err instanceof Error ? err.message : String(err)}; keeping last-known-good`,
+        });
       }
     }
   };
 
-  let fsWatcher: FsWatcher | null = null;
-  let stopped = false;
-
   const startFsWatcher = (): void => {
     if (stopped) return;
     try {
-      if (!existsSync(configPath)) {
-        // File doesn't exist yet — retry after delay (file may be created later)
-        setTimeout(startFsWatcher, 1000);
-        return;
-      }
       fsWatcher = watcherFactory(configPath);
-      fsWatcher.onEvent(() => { reload(); });
+      fsWatcher.onEvent((filename) => {
+        if (filename === targetName) reload();
+      });
       fsWatcher.onError(() => {
-        // Watcher error (e.g., file deleted) — close, retry later
         try { fsWatcher?.close(); } catch { /* ignore */ }
         fsWatcher = null;
-        if (!stopped) setTimeout(startFsWatcher, 1000);
+        setTimeout(startFsWatcher, 1000);
       });
     } catch {
-      // File may have been deleted between check and watch
       setTimeout(startFsWatcher, 1000);
     }
   };

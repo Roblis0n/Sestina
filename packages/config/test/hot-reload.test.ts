@@ -5,22 +5,24 @@ import type { FsWatcher } from "../src/index.js";
 import { watchEffectiveConfig } from "../src/index.js";
 import type { EffectiveConfig } from "@sestina/schema";
 
-// ── Fake watcher for deterministic cross-platform testing ──
+// ── Fake directory-based watcher for deterministic testing ──
 
 interface FakeWatcher extends FsWatcher {
-  _emitEvent(eventType: "change" | "rename"): void;
+  _emit(filename: string, eventType: "change" | "rename"): void;
   _emitError(err: Error): void;
 }
 
 function createFakeWatcher(): FakeWatcher {
-  const eventHandlers: ((e: "change" | "rename") => void)[] = [];
+  const eventHandlers: ((filename: string, eventType: "change" | "rename") => void)[] = [];
   const errorHandlers: ((err: Error) => void)[] = [];
   return {
     onEvent(handler) { eventHandlers.push(handler); },
     onError(handler) { errorHandlers.push(handler); },
     close() { eventHandlers.length = 0; errorHandlers.length = 0; },
-    _emitEvent(eventType) { for (const h of eventHandlers) h(eventType); },
-    _emitError(err) { for (const h of errorHandlers) h(err); },
+    _emit(filename: string, eventType: "change" | "rename") {
+      for (const h of eventHandlers) h(filename, eventType);
+    },
+    _emitError(err: Error) { for (const h of errorHandlers) h(err); },
   };
 }
 
@@ -39,6 +41,12 @@ function writeValidConfig(path: string, overrides: Record<string, unknown> = {})
   writeFileSync(path, JSON.stringify(config), "utf8");
 }
 
+function firstArg(fn: ReturnType<typeof vi.fn>): unknown {
+  const call = fn.mock.calls[0];
+  if (!call) throw new Error("Expected mock to have been called at least once");
+  return call[0];
+}
+
 // ── Tests ──
 
 describe("watchEffectiveConfig", () => {
@@ -47,198 +55,162 @@ describe("watchEffectiveConfig", () => {
   beforeEach(() => {
     rmSync(tmpBase, { recursive: true, force: true });
     mkdirSync(tmpBase, { recursive: true });
-    vi.useFakeTimers();
   });
 
   afterEach(() => {
-    vi.useRealTimers();
     rmSync(tmpBase, { recursive: true, force: true });
   });
 
-  it("emits onChange when file is written, and stop() prevents further callbacks", () => {
+  it("fires onChange when file is written", () => {
     const configPath = resolve(tmpBase, "config.json");
     writeValidConfig(configPath);
-
     const fakeWatcher = createFakeWatcher();
     const onChange = vi.fn();
     const onError = vi.fn();
 
     const stop = watchEffectiveConfig(configPath, onChange, onError, () => fakeWatcher);
+    fakeWatcher._emit("config.json", "change");
 
-    // watcher should have been created
-    expect(fakeWatcher).toBeDefined();
-
-    // Simulate a file change event
-    fakeWatcher._emitEvent("change");
     expect(onChange).toHaveBeenCalledTimes(1);
     expect(onError).not.toHaveBeenCalled();
-
-    const newConfig = onChange.mock.calls[0][0] as EffectiveConfig;
-    expect(newConfig.capture.hostContentLevel).toBe("governance_only");
-
-    // Stop — should prevent further events
+    expect((firstArg(onChange) as EffectiveConfig).capture.hostContentLevel).toBe("governance_only");
     stop();
-    fakeWatcher._emitEvent("change");
-    expect(onChange).toHaveBeenCalledTimes(1); // no additional call
   });
 
-  it("calls onError and keeps last-known-good when invalid JSON is written", () => {
+  it("fires onChange on atomic rename (temp-write-then-rename)", () => {
     const configPath = resolve(tmpBase, "config.json");
     writeValidConfig(configPath);
+    const fakeWatcher = createFakeWatcher();
+    const onChange = vi.fn();
 
+    const stop = watchEffectiveConfig(configPath, onChange, undefined, () => fakeWatcher);
+    fakeWatcher._emit("config.json", "rename");
+
+    expect(onChange).toHaveBeenCalledTimes(1);
+    stop();
+  });
+
+  it("survives delete and fires onChange on recreate", () => {
+    const configPath = resolve(tmpBase, "config.json");
+    writeValidConfig(configPath);
     const fakeWatcher = createFakeWatcher();
     const onChange = vi.fn();
     const onError = vi.fn();
 
     const stop = watchEffectiveConfig(configPath, onChange, onError, () => fakeWatcher);
-
-    // Initial change loads valid config
-    fakeWatcher._emitEvent("change");
-    expect(onChange).toHaveBeenCalledTimes(1);
-    onChange.mockClear();
-
-    // Write invalid JSON
-    writeFileSync(configPath, "not valid json {{{", "utf8");
-    fakeWatcher._emitEvent("change");
-
-    // onChange should NOT fire for invalid config
+    rmSync(configPath);
+    fakeWatcher._emit("config.json", "rename");
     expect(onChange).not.toHaveBeenCalled();
-    // onError should fire
-    expect(onError).toHaveBeenCalledTimes(1);
-    const errArg = onError.mock.calls[0][0] as { message: string };
-    expect(errArg.message).toContain("keeping last-known-good");
 
-    stop();
-  });
-
-  it("calls onError with field errors when schema validation fails", () => {
-    const configPath = resolve(tmpBase, "config.json");
-    writeValidConfig(configPath);
-
-    const fakeWatcher = createFakeWatcher();
-    const onChange = vi.fn();
-    const onError = vi.fn();
-
-    const stop = watchEffectiveConfig(configPath, onChange, onError, () => fakeWatcher);
-
-    // Initial load
-    fakeWatcher._emitEvent("change");
-    onChange.mockClear();
-
-    // Write config with missing required field (no privacy section)
-    writeFileSync(configPath, JSON.stringify({ capture: { hostContentLevel: "governance_only", retentionDays: 90, hostTextEnabled: false, excludePatterns: [] } }), "utf8");
-    fakeWatcher._emitEvent("change");
-
-    expect(onChange).not.toHaveBeenCalled();
-    expect(onError).toHaveBeenCalledTimes(1);
-    const errArg2 = onError.mock.calls[0][0] as { fieldErrors?: string[] };
-    expect(errArg2.fieldErrors).toBeDefined();
-    if (errArg2.fieldErrors) {
-      expect(errArg2.fieldErrors.length).toBeGreaterThan(0);
-    }
-
-    stop();
-  });
-
-  it("recovers from watcher error by restarting", () => {
-    const configPath = resolve(tmpBase, "config.json");
-    writeValidConfig(configPath);
-
-    const fakeWatcher = createFakeWatcher();
-    const onChange = vi.fn();
-    const onError = vi.fn();
-
-    // track watcher creations
-    let creations = 0;
-    const factory = (): FsWatcher => {
-      creations++;
-      return fakeWatcher;
-    };
-
-    const stop = watchEffectiveConfig(configPath, onChange, onError, factory);
-    expect(creations).toBe(1);
-
-    // Simulate watcher error (e.g., file deleted)
-    fakeWatcher._emitError(new Error("ENOENT"));
-    // After error, the watcher should attempt restart (setTimeout)
-    vi.advanceTimersByTime(1100);
-    // Should have created a new watcher
-    expect(creations).toBe(2);
-
-    // After restart, events should still work
-    fakeWatcher._emitEvent("change");
-    expect(onChange).toHaveBeenCalled();
-
-    stop();
-  });
-
-  it("handles file not existing at startup, then appearing later", () => {
-    const configPath = resolve(tmpBase, "config.json");
-    // File does NOT exist initially
-
-    const fakeWatcher = createFakeWatcher();
-    const onChange = vi.fn();
-
-    let creations = 0;
-    const factory = (): FsWatcher => {
-      creations++;
-      return fakeWatcher;
-    };
-
-    const stop = watchEffectiveConfig(configPath, onChange, undefined, factory);
-
-    // No file → watcher retries (setTimeout)
-    expect(creations).toBe(0); // startFsWatcher called setTimeout, not create
-
-    // Create the file and advance timer
-    writeValidConfig(configPath);
-    vi.advanceTimersByTime(1100);
-
-    // Now watcher should be created
-    expect(creations).toBe(1);
-
-    // Simulate change
-    fakeWatcher._emitEvent("change");
-    expect(onChange).toHaveBeenCalledTimes(1);
-
-    stop();
-  });
-
-  it("returns last-known-good via onChange after valid update, then preserves it through invalid update", () => {
-    const configPath = resolve(tmpBase, "config.json");
-    writeValidConfig(configPath);
-
-    const fakeWatcher = createFakeWatcher();
-    const onChange = vi.fn();
-    const onError = vi.fn();
-
-    const stop = watchEffectiveConfig(configPath, onChange, onError, () => fakeWatcher);
-
-    // Load initial
-    fakeWatcher._emitEvent("change");
-    expect(onChange).toHaveBeenCalledTimes(1);
-    const first = onChange.mock.calls[0][0] as EffectiveConfig;
-    expect(first.capture.hostContentLevel).toBe("governance_only");
-    onChange.mockClear();
-
-    // Write updated valid config
     writeValidConfig(configPath, {
       capture: { hostContentLevel: "summary", retentionDays: 30, hostTextEnabled: true, excludePatterns: [] },
     });
-    fakeWatcher._emitEvent("change");
+    fakeWatcher._emit("config.json", "change");
 
     expect(onChange).toHaveBeenCalledTimes(1);
-    const updated = onChange.mock.calls[0][0] as EffectiveConfig;
-    expect(updated.capture.hostContentLevel).toBe("summary");
+    expect((firstArg(onChange) as EffectiveConfig).capture.hostContentLevel).toBe("summary");
+    stop();
+  });
+
+  it("ignores events for unrelated files in the same directory", () => {
+    const configPath = resolve(tmpBase, "config.json");
+    writeValidConfig(configPath);
+    const fakeWatcher = createFakeWatcher();
+    const onChange = vi.fn();
+
+    const stop = watchEffectiveConfig(configPath, onChange, undefined, () => fakeWatcher);
+    fakeWatcher._emit("other-file.log", "change");
+    fakeWatcher._emit("unrelated.json", "rename");
+
+    expect(onChange).not.toHaveBeenCalled();
+    stop();
+  });
+
+  it("recovers from watcher error and continues working", () => {
+    vi.useFakeTimers();
+    const configPath = resolve(tmpBase, "config.json");
+    writeValidConfig(configPath);
+    const fakeWatcher = createFakeWatcher();
+    const onChange = vi.fn();
+
+    let creations = 0;
+    const factory = (): FsWatcher => { creations++; return fakeWatcher; };
+
+    const stop = watchEffectiveConfig(configPath, onChange, undefined, factory);
+    expect(creations).toBe(1);
+
+    fakeWatcher._emitError(new Error("EPERM"));
+    vi.advanceTimersByTime(1100);
+    expect(creations).toBe(2);
+
+    fakeWatcher._emit("config.json", "change");
+    expect(onChange).toHaveBeenCalledTimes(1);
+
+    stop();
+    vi.useRealTimers();
+  });
+
+  it("stop() prevents any further callbacks", () => {
+    const configPath = resolve(tmpBase, "config.json");
+    writeValidConfig(configPath);
+    const fakeWatcher = createFakeWatcher();
+    const onChange = vi.fn();
+
+    const stop = watchEffectiveConfig(configPath, onChange, undefined, () => fakeWatcher);
+    fakeWatcher._emit("config.json", "change");
+    expect(onChange).toHaveBeenCalledTimes(1);
+
+    stop();
+    fakeWatcher._emit("config.json", "change");
+    fakeWatcher._emit("config.json", "rename");
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls onError and does NOT call onChange when invalid JSON is written", () => {
+    const configPath = resolve(tmpBase, "config.json");
+    writeValidConfig(configPath);
+    const fakeWatcher = createFakeWatcher();
+    const onChange = vi.fn();
+    const onError = vi.fn();
+
+    const stop = watchEffectiveConfig(configPath, onChange, onError, () => fakeWatcher);
+    fakeWatcher._emit("config.json", "change");
+    expect(onChange).toHaveBeenCalledTimes(1);
     onChange.mockClear();
 
-    // Now write invalid JSON — last-known-good should be preserved (no onChange call)
-    writeFileSync(configPath, "garbage {{{", "utf8");
-    fakeWatcher._emitEvent("change");
+    writeFileSync(configPath, "not valid json {{{", "utf8");
+    fakeWatcher._emit("config.json", "change");
 
     expect(onChange).not.toHaveBeenCalled();
     expect(onError).toHaveBeenCalledTimes(1);
+    expect(firstArg(onError).message).toContain("keeping last-known-good");
+    stop();
+  });
 
+  it("calls onError with fieldErrors when schema validation fails", () => {
+    const configPath = resolve(tmpBase, "config.json");
+    writeValidConfig(configPath);
+    const fakeWatcher = createFakeWatcher();
+    const onChange = vi.fn();
+    const onError = vi.fn();
+
+    const stop = watchEffectiveConfig(configPath, onChange, onError, () => fakeWatcher);
+    fakeWatcher._emit("config.json", "change");
+    onChange.mockClear();
+
+    writeFileSync(configPath, JSON.stringify({
+      capture: { hostContentLevel: "governance_only", retentionDays: 90, hostTextEnabled: false, excludePatterns: [] },
+    }), "utf8");
+    fakeWatcher._emit("config.json", "change");
+
+    expect(onChange).not.toHaveBeenCalled();
+    expect(onError).toHaveBeenCalledTimes(1);
+    const err = firstArg(onError) as { fieldErrors?: string[] };
+    expect(err.fieldErrors).toBeDefined();
+    const ferr = err.fieldErrors;
+    if (ferr) {
+      expect(ferr.length).toBeGreaterThan(0);
+    }
     stop();
   });
 });
