@@ -1,0 +1,9 @@
+{
+  "previewHash": "not-a-valid-sha256-hash",
+  "expectedVersion": 1,
+  "provenance": {
+    "actor": "user",
+    "channel": "desktop",
+    "directUser": true
+  }
+}

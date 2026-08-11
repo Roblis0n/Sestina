@@ -51,6 +51,9 @@ export enum SestinaErrorCode {
   database_corrupt = "database_corrupt",
   database_readonly = "database_readonly",
   disk_full = "disk_full",
+  storage_busy = "storage_busy",
+  secure_storage_unavailable = "secure_storage_unavailable",
+  project_mismatch = "project_mismatch",
 
   // Validation
   validation_failed = "validation_failed",
@@ -101,6 +104,9 @@ const STATUS_MAP: Record<SestinaErrorCode, number> = {
   [SestinaErrorCode.database_corrupt]: 500,
   [SestinaErrorCode.database_readonly]: 503,
   [SestinaErrorCode.disk_full]: 507,
+  [SestinaErrorCode.storage_busy]: 503,
+  [SestinaErrorCode.secure_storage_unavailable]: 503,
+  [SestinaErrorCode.project_mismatch]: 400,
   [SestinaErrorCode.validation_failed]: 400,
   [SestinaErrorCode.limit_exceeded]: 413,
   [SestinaErrorCode.idempotency_violation]: 409,

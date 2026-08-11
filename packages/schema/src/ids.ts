@@ -11,6 +11,14 @@ export const ID_SCHEMA = z
 // Crockford base32 alphabet (excludes I, L, O, U)
 const CROCKFORD_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
+function crockfordChar(index: number): string {
+  const char = CROCKFORD_ALPHABET[index];
+  if (char === undefined) {
+    throw new Error(`Invalid Crockford index: ${index}`);
+  }
+  return char;
+}
+
 export function generateId(): string {
   // Use crypto.randomUUID() as the randomness source, then convert
   // the UUID's 16 bytes (128 bits) into 26 Crockford base32 characters.
@@ -30,13 +38,13 @@ export function generateId(): string {
 
     while (bits >= 5) {
       bits -= 5;
-      result += CROCKFORD_ALPHABET[(value >> bits) & 0x1f]!;
+      result += crockfordChar((value >> bits) & 0x1f);
     }
   }
 
   // Handle remaining bits
   if (bits > 0) {
-    result += CROCKFORD_ALPHABET[(value << (5 - bits)) & 0x1f]!;
+    result += crockfordChar((value << (5 - bits)) & 0x1f);
   }
 
   // Ensure exactly 26 characters

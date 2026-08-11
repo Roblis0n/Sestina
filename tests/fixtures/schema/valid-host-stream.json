@@ -1,0 +1,13 @@
+{
+  "streamEventId": "52Z3VSKCJ14F9D1N4E5Q1WX5MC",
+  "sessionId": "5A86VWS1MD4MX66HAJXYY3RW3M",
+  "sequence": 1,
+  "eventType": "tool_start",
+  "content": "Agent is about to call write_file",
+  "toolName": "write_file",
+  "metadata": { "host": "codex" },
+  "sourceCapability": "codex_hook_v1",
+  "occurredAt": "2026-08-10T10:05:00.010Z",
+  "gapBefore": false,
+  "gapAfter": false
+}

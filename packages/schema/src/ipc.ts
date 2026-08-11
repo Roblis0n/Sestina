@@ -13,9 +13,12 @@ export function createRpcRequestSchema<T extends z.ZodType>(paramsSchema: T) {
     method: z.string(),
     params: paramsSchema,
     meta: z.object({
+      protocolVersion: z.literal("1.0.0"),
       clientRole: ClientRoleSchema,
       clientVersion: z.string(),
       timestamp: z.iso.datetime(),
+      deadlineMs: z.number().int().positive().max(30000),
+      maxResponseBytes: z.number().int().positive().max(1_048_576),
     }),
   });
 }
@@ -26,6 +29,7 @@ export function createRpcSuccessSchema<T extends z.ZodType>(resultSchema: T) {
     id: z.string(),
     result: resultSchema,
     meta: z.object({
+      protocolVersion: z.literal("1.0.0"),
       serverVersion: z.string(),
       processingMs: z.number().nonnegative(),
     }),
@@ -41,6 +45,7 @@ export const RpcFailureSchema = z.object({
     data: z.unknown().optional(),
   }),
   meta: z.object({
+    protocolVersion: z.literal("1.0.0"),
     serverVersion: z.string(),
   }),
 });
@@ -53,9 +58,12 @@ export const RpcRequestSchema = z.object({
   method: z.string(),
   params: z.unknown().optional(),
   meta: z.object({
+    protocolVersion: z.literal("1.0.0"),
     clientRole: ClientRoleSchema,
     clientVersion: z.string(),
     timestamp: z.iso.datetime(),
+    deadlineMs: z.number().int().positive().max(30000),
+    maxResponseBytes: z.number().int().positive().max(1_048_576),
   }),
 });
 export type RpcRequest = z.infer<typeof RpcRequestSchema>;
@@ -65,6 +73,7 @@ export const RpcSuccessSchema = z.object({
   id: z.string(),
   result: z.unknown(),
   meta: z.object({
+    protocolVersion: z.literal("1.0.0"),
     serverVersion: z.string(),
     processingMs: z.number().nonnegative(),
   }),
@@ -90,70 +99,15 @@ export const StreamEnvelopeSchema = z.object({
 export type StreamEnvelope = z.infer<typeof StreamEnvelopeSchema>;
 
 // ── RPC Method Names ──
-export const RPC_METHODS = [
-  // System
-  "health",
-  "handshake",
-  "capabilities",
-
-  // Projects
-  "project.list",
-  "project.get",
-  "project.create",
-  "project.update",
-  "project.archive",
-
-  // Tasks
-  "task.list",
-  "task.get",
-  "task.create",
-  "task.update",
-  "task.attach_session",
-
-  // Contracts
-  "contract.get",
-  "contract.update",
-  "contract.diff",
-  "contract.patch",
-
-  // Decisions
-  "decision.get",
-  "decision.list",
-  "decision.trace",
-  "decision.reevaluate",
-  "decision.override",
-
-  // Evidence
-  "evidence.record",
-  "evidence.list",
-  "claim.record",
-  "claim.list",
-  "correction.record",
-
-  // Governance Chat
-  "chat.send",
-  "chat.history",
-  "chat.confirm_action",
-
-  // Reviews
-  "review.list",
-  "review.get",
-  "review.resolve",
-
-  // Config
-  "config.get",
-  "config.update",
-  "config.preview",
-
-  // Privacy & Data
-  "privacy.preview",
-  "privacy.cleanup",
-  "export.task",
-  "export.project",
-
-  // Provider
-  "provider.test",
-] as const;
-
-export const RpcMethodSchema = z.enum(RPC_METHODS);
+export const RpcMethodSchema = z.enum([
+  "runtime.health", "event.submit", "task.resolve",
+  "project.list", "project.get", "project.create", "project.update", "project.archive",
+  "conversation.list", "conversation.get", "conversation.send", "conversation.archive",
+  "contract.get", "contract.proposePatch", "contract.applyConfirmedPatch",
+  "decision.get", "decision.explain", "decision.reevaluate",
+  "review.list", "review.get", "review.resolve",
+  "override.propose", "override.confirm", "override.revoke",
+  "privacy.preview", "config.getEffective", "config.proposeChange",
+  "config.applyConfirmedChange", "stream.subscribe",
+]);
 export type RpcMethod = z.infer<typeof RpcMethodSchema>;

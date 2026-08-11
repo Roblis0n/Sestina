@@ -1,0 +1,30 @@
+{
+  "packetId": "HRJ8YNQT9X5F13MJ3REF83JXYR",
+  "projectId": "JGP7HHVP7X6E3F3PBJ2RHB7YJW",
+  "taskId": "RCDW1C3BMD01S9BBS2NY3CEVDR",
+  "messages": [
+    {
+      "role": "user",
+      "body": "User asked to analyze sensor data",
+      "timestamp": "2026-08-10T12:00:00.000Z"
+    }
+  ],
+  "relevantDecisions": [
+    {
+      "decisionId": "33G0R2J5TS2ZN1Z42ME80RK5AM",
+      "category": "block",
+      "reason": "Writing to protected output path",
+      "createdAt": "2026-08-10T10:05:00.150Z"
+    }
+  ],
+  "contractSummary": "Research climate data anomalies",
+  "openReviews": ["CMWAZSQ0TH1AQ79DMWP31WZ23W"],
+  "contextRefs": [
+    {
+      "refType": "task",
+      "refId": "RCDW1C3BMD01S9BBS2NY3CEVDR",
+      "resolutionStatus": "current"
+    }
+  ],
+  "constraints": ["Must complete within budget limits"]
+}

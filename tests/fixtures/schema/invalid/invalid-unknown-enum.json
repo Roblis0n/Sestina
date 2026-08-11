@@ -1,0 +1,15 @@
+{
+  "schemaVersion": "1.0.0",
+  "eventId": "8HT53PHSA568S13F6PME9XEZBW",
+  "idempotencyKey": "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+  "eventType": "nonexistent_event",
+  "host": "codex",
+  "projectId": "JGP7HHVP7X6E3F3PBJ2RHB7YJW",
+  "taskId": "RCDW1C3BMD01S9BBS2NY3CEVDR",
+  "sessionId": "5A86VWS1MD4MX66HAJXYY3RW3M",
+  "occurredAt": "2026-08-10T10:05:00.000Z",
+  "receivedAt": "2026-08-10T10:05:00.050Z",
+  "bypass": false,
+  "privacyClass": "internal",
+  "rawPayloadHash": "sha256:test123"
+}

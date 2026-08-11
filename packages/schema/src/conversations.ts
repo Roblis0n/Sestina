@@ -94,7 +94,7 @@ export const ConversationMessageSchema = z.object({
   messageId: z.string(),
   conversationId: ConversationIdSchema,
   role: MessageRoleSchema,
-  body: z.string(),
+  body: z.string().max(25000),
   answerBasis: AnswerBasisSchema.optional(),
   contextRefs: z.array(ContextRefSchema),
   proposedAction: GovernanceActionProposalSchema.optional(),

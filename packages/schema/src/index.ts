@@ -13,9 +13,11 @@ export * from "./contracts.js";
 export * from "./events.js";
 export * from "./decisions.js";
 export * from "./evidence.js";
+export * from "./assertions.js";
 export * from "./conversations.js";
 export * from "./reviews.js";
 export * from "./observability.js";
+export * from "./providers.js";
 export * from "./config.js";
 
 // IPC

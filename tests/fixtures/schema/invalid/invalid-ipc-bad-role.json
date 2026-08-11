@@ -1,0 +1,13 @@
+{
+  "jsonrpc": "2.0",
+  "id": "req-1",
+  "method": "project.list",
+  "meta": {
+    "protocolVersion": "1.0.0",
+    "clientRole": "admin",
+    "clientVersion": "0.1.0",
+    "timestamp": "2026-08-10T12:00:00.000Z",
+    "deadlineMs": 5000,
+    "maxResponseBytes": 262144
+  }
+}

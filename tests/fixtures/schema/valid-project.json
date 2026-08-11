@@ -1,0 +1,16 @@
+{
+  "projectId": "JGP7HHVP7X6E3F3PBJ2RHB7YJW",
+  "name": "Climate Data Research",
+  "description": "Analyzing sensor data for temperature anomalies",
+  "bindings": [
+    {
+      "rootPath": "/home/user/projects/climate-research",
+      "label": "main workspace",
+      "establishedAt": "2026-08-10T10:00:00.000Z",
+      "fingerprint": "abc123def456"
+    }
+  ],
+  "status": "active",
+  "createdAt": "2026-08-10T10:00:00.000Z",
+  "updatedAt": "2026-08-10T12:00:00.000Z"
+}

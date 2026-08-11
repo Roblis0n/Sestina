@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { TaskIdSchema, ProjectIdSchema } from "./ids.js";
+import { TaskIdSchema } from "./ids.js";
 import { TimestampSchema } from "./common.js";
 import { DriftClassSchema } from "./decisions.js";
 
@@ -120,39 +120,15 @@ export const CorrectionSchema = z.object({
 });
 export type Correction = z.infer<typeof CorrectionSchema>;
 
-// ── Situation Assertion ──
-export const AssertionKindSchema = z.enum([
-  "confirmed_fact",
-  "reported_fact",
-  "inference",
-  "assumption",
-  "unknown",
-  "unavailable",
-]);
-export type AssertionKind = z.infer<typeof AssertionKindSchema>;
-
-export const AssertionStatusSchema = z.enum([
-  "active",
-  "disputed",
-  "superseded",
-  "expired",
-]);
-export type AssertionStatus = z.infer<typeof AssertionStatusSchema>;
-
-export const SituationAssertionSchema = z.object({
-  assertionId: z.string(),
-  projectId: ProjectIdSchema,
-  taskId: TaskIdSchema.optional(),
-  kind: AssertionKindSchema,
-  statement: z.string().min(1).max(3000),
-  sourceRefs: z.array(z.record(z.string(), z.unknown())), // Full ContextRef in conversations.ts
-  confidence: z.number().min(0).max(1).optional(),
-  limitations: z.array(z.string()),
-  status: AssertionStatusSchema,
-  validFrom: TimestampSchema,
-  validUntil: TimestampSchema.optional(),
-});
-export type SituationAssertion = z.infer<typeof SituationAssertionSchema>;
+// Re-exports from assertions.ts
+export {
+  AssertionKindSchema,
+  type AssertionKind,
+  AssertionStatusSchema,
+  type AssertionStatus,
+  SituationAssertionSchema,
+  type SituationAssertion,
+} from "./assertions.js";
 
 // ── Completion Facts ──
 export const CompletionFactsSchema = z.object({

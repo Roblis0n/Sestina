@@ -1,0 +1,16 @@
+{
+  "boundaryId": "B-001",
+  "kind": "scope",
+  "severity": "hard",
+  "statement": "Test boundary with invalid confidence",
+  "source": {
+    "type": "user_directive",
+    "confidence": null
+  },
+  "owner": "user",
+  "overridable": false,
+  "appliesTo": {},
+  "confidence": null,
+  "status": "active",
+  "validFrom": "2026-08-10T00:00:00.000Z"
+}

@@ -34,18 +34,18 @@ export type PrivacyClass = z.infer<typeof PRIVACY_CLASS_SCHEMA>;
 
 // ── Actor Provenance ──
 export const ActorProvenanceSchema = z.object({
-  source: z.enum(["user", "agent", "hook", "import", "system"]),
-  sessionId: z.string().optional(),
-  verified: z.boolean(),
-  challenge: z.string().optional(),
+  actor: z.enum(["user", "agent", "system", "hook", "cli"]),
+  channel: z.enum(["desktop", "host", "mcp", "cli", "runtime"]),
+  directUser: z.boolean(),
+  challengeId: z.string().max(128).optional(),
 });
 export type ActorProvenance = z.infer<typeof ActorProvenanceSchema>;
 
 // ── Preview Confirmation ──
 export const PreviewConfirmationSchema = z.object({
-  previewHash: z.string(),
-  confirmedBy: ActorProvenanceSchema,
-  confirmedAt: z.iso.datetime(),
+  previewHash: z.string().regex(/^[a-f0-9]{64}$/),
+  expectedVersion: z.number().int().nonnegative(),
+  provenance: ActorProvenanceSchema,
 });
 export type PreviewConfirmation = z.infer<typeof PreviewConfirmationSchema>;
 

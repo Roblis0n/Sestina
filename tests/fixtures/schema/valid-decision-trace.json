@@ -1,0 +1,35 @@
+{
+  "traceId": "K7R62NN4SH5WHBZZE2PP4S88J0",
+  "decisionId": "33G0R2J5TS2ZN1Z42ME80RK5AM",
+  "eventId": "8HT53PHSA568S13F6PME9XEZBW",
+  "stages": [
+    {
+      "stage": "received",
+      "status": "completed",
+      "startedAt": "2026-08-10T10:05:00.100Z",
+      "completedAt": "2026-08-10T10:05:00.105Z",
+      "limitations": []
+    },
+    {
+      "stage": "normalized",
+      "status": "completed",
+      "input": { "eventType": "pre_tool" },
+      "output": { "normalizedAction": "write_file" },
+      "startedAt": "2026-08-10T10:05:00.105Z",
+      "completedAt": "2026-08-10T10:05:00.120Z",
+      "confidence": 1.0,
+      "limitations": ["Normalization based on tool name mapping only"]
+    },
+    {
+      "stage": "local_evaluating",
+      "status": "completed",
+      "startedAt": "2026-08-10T10:05:00.120Z",
+      "completedAt": "2026-08-10T10:05:00.140Z",
+      "confidence": 0.95,
+      "limitations": ["Local evaluation without external judge"]
+    }
+  ],
+  "totalProcessingMs": 50,
+  "visibleToUser": true,
+  "limitations": ["Trace does not include judge round-trip timing"]
+}

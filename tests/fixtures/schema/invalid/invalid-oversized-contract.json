@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "1.0.0",
+  "contractId": "BKFMM71QZ50CK8746787ZBQ8GW",
+  "taskId": "RCDW1C3BMD01S9BBS2NY3CEVDR",
+  "version": 1,
+  "status": "active",
+  "title": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+  "objective": {
+    "primary": "Test oversized title",
+    "priority": "low"
+  },
+  "deliverables": [],
+  "scope": {
+    "in": [],
+    "out": []
+  },
+  "boundaries": [],
+  "evidencePolicy": {
+    "requireSourceForClaims": false,
+    "minEvidenceLevel": "none",
+    "allowUserTestimony": true
+  },
+  "authority": {
+    "executorCanChooseMethods": true,
+    "executorCanProposeScope": true,
+    "executorCanSelfReview": false,
+    "overridesRequireUserConfirmation": true
+  },
+  "budgets": {},
+  "stopConditions": [],
+  "assumptions": [],
+  "correctionRefs": [],
+  "sourceRefs": [],
+  "createdAt": "2026-08-10T10:00:00.000Z",
+  "updatedAt": "2026-08-10T10:00:00.000Z"
+}

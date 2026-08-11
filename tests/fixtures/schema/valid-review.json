@@ -1,0 +1,22 @@
+{
+  "reviewId": "CMWAZSQ0TH1AQ79DMWP31WZ23W",
+  "projectId": "JGP7HHVP7X6E3F3PBJ2RHB7YJW",
+  "taskId": "RCDW1C3BMD01S9BBS2NY3CEVDR",
+  "trigger": "overridable_block",
+  "title": "Review write_file block decision",
+  "description": "The agent was blocked from writing to report.md. User review is needed to determine if this is intentional.",
+  "requiredDecision": "Allow or deny the write operation to report.md",
+  "availableActions": ["accept", "reject", "modify", "defer"],
+  "decisionRef": "33G0R2J5TS2ZN1Z42ME80RK5AM",
+  "contextRefs": [
+    {
+      "refType": "decision",
+      "refId": "33G0R2J5TS2ZN1Z42ME80RK5AM",
+      "resolutionStatus": "current"
+    }
+  ],
+  "status": "open",
+  "priority": 2,
+  "openedAt": "2026-08-10T10:05:00.200Z",
+  "version": 1
+}
