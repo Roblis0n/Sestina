@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { resolve, isAbsolute, basename, posix, win32 } from "node:path";
+import { SestinaErrorCode, SestinaError } from "@sestina/schema";
 
 export interface SestinaPaths {
   dataDir: string;
@@ -20,7 +21,8 @@ export function resolvePlatformPaths(
 
   // Reject ambiguous SESTINA_HOME
   if (env.SESTINA_HOME !== undefined && !dataOverride && !configOverride) {
-    throw new Error(
+    throw new SestinaError(
+      SestinaErrorCode.validation_failed,
       "SESTINA_HOME is ambiguous; use SESTINA_DATA_DIR and/or SESTINA_CONFIG_DIR instead.",
     );
   }
@@ -57,19 +59,19 @@ function resolvePlatformDataDir(
 ): string {
   if (isWindows(platform)) {
     const localAppData = env.LOCALAPPDATA ?? env.APPDATA ?? "";
-    if (!localAppData) throw new Error("LOCALAPPDATA not available for Windows path resolution");
+    if (!localAppData) throw new SestinaError(SestinaErrorCode.validation_failed,"LOCALAPPDATA not available for Windows path resolution");
     return win32.resolve(localAppData, "Sestina", "data");
   }
   if (isMac(platform)) {
     const home = env.HOME ?? "";
-    if (!home) throw new Error("HOME not available for macOS path resolution");
+    if (!home) throw new SestinaError(SestinaErrorCode.validation_failed,"HOME not available for macOS path resolution");
     return posix.join(home, "Library", "Application Support", "Sestina", "data");
   }
   // Linux
   const xdgDataHome = env.XDG_DATA_HOME;
   if (xdgDataHome) return posix.join(xdgDataHome, "sestina");
   const home = env.HOME ?? "";
-  if (!home) throw new Error("HOME not available for Linux path resolution");
+  if (!home) throw new SestinaError(SestinaErrorCode.validation_failed,"HOME not available for Linux path resolution");
   return posix.join(home, ".local", "share", "sestina");
 }
 
@@ -79,19 +81,19 @@ function resolvePlatformConfigDir(
 ): string {
   if (isWindows(platform)) {
     const localAppData = env.LOCALAPPDATA ?? env.APPDATA ?? "";
-    if (!localAppData) throw new Error("LOCALAPPDATA not available for Windows path resolution");
+    if (!localAppData) throw new SestinaError(SestinaErrorCode.validation_failed,"LOCALAPPDATA not available for Windows path resolution");
     return win32.resolve(localAppData, "Sestina", "config");
   }
   if (isMac(platform)) {
     const home = env.HOME ?? "";
-    if (!home) throw new Error("HOME not available for macOS path resolution");
+    if (!home) throw new SestinaError(SestinaErrorCode.validation_failed,"HOME not available for macOS path resolution");
     return posix.join(home, "Library", "Application Support", "Sestina", "config");
   }
   // Linux
   const xdgConfigHome = env.XDG_CONFIG_HOME;
   if (xdgConfigHome) return posix.join(xdgConfigHome, "sestina");
   const home2 = env.HOME ?? "";
-  if (!home2) throw new Error("HOME not available for Linux path resolution");
+  if (!home2) throw new SestinaError(SestinaErrorCode.validation_failed,"HOME not available for Linux path resolution");
   return posix.join(home2, ".config", "sestina");
 }
 
@@ -107,18 +109,18 @@ function validateDirectoryPath(
 ): void {
   // Reject path traversal attempts
   if (dirPath.includes("..")) {
-    throw new Error(`${variableName} must not contain path traversal segments: ${dirPath}`);
+    throw new SestinaError(SestinaErrorCode.validation_failed,`${variableName} must not contain path traversal segments`);
   }
 
   // Reject Windows device paths (check before isAbsolute since "NUL" is not absolute)
   const base = basename(dirPath).toUpperCase();
   const nameWithoutExt = base.includes(".") ? base.split(".")[0] : base;
   if (nameWithoutExt && WINDOWS_DEVICE_NAMES.has(nameWithoutExt)) {
-    throw new Error(`${variableName} must not be a reserved device name: ${dirPath}`);
+    throw new SestinaError(SestinaErrorCode.validation_failed,`${variableName} must not be a reserved device name`);
   }
 
   if (!isAbsolute(dirPath)) {
-    throw new Error(`${variableName} must be an absolute path: ${dirPath}`);
+    throw new SestinaError(SestinaErrorCode.validation_failed,`${variableName} must be an absolute path`);
   }
 }
 

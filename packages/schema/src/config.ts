@@ -129,6 +129,13 @@ export const ConfigLayersSchema = z.object({
 export type ConfigLayers = z.infer<typeof ConfigLayersSchema>;
 
 // ── Effective config with source tracking ──
+export interface EffectiveValue<T> {
+  value: T;
+  source: ConfigLayerSource;
+  sensitive: boolean;
+  overridable: boolean;
+}
+
 export const EffectiveValueSchema = <T extends z.ZodType>(valueSchema: T) =>
   z.object({
     value: valueSchema,

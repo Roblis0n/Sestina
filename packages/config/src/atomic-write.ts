@@ -6,6 +6,7 @@ import { SestinaErrorCode, SestinaError, ActorProvenanceSchema } from "@sestina/
 export interface WriteConfirmation {
   previewHash: string;
   expectedVersion: number;
+  scope: string;
   provenance: {
     actor: string;
     channel: string;
@@ -36,8 +37,18 @@ export function applyConfirmedConfigChange(
   }
 
   // Verify previewHash matches content
+  // Hash must match preview.ts structure: {scope, expectedVersion, diff}
+  const currentContent: Record<string, unknown> = existsSync(targetPath)
+    ? JSON.parse(readFileSync(targetPath, "utf8")) as Record<string, unknown>
+    : {};
+  const proposedContent = newContent as Record<string, unknown>;
+  const verifyDiff = computeSimpleDiff(currentContent, proposedContent);
   const actualHash = createHash("sha256")
-    .update(JSON.stringify({ content: newContent, expectedVersion: confirmation.expectedVersion }))
+    .update(JSON.stringify({
+      scope: confirmation.scope,
+      expectedVersion: confirmation.expectedVersion,
+      diff: verifyDiff,
+    }))
     .digest("hex");
   if (actualHash !== confirmation.previewHash) {
     throw new SestinaError(
@@ -102,4 +113,53 @@ export function applyConfirmedConfigChange(
       "Failed to write config",
     );
   }
+}
+
+interface SimpleDiffEntry {
+  path: string;
+  kind: "added" | "removed" | "changed";
+  oldValue?: unknown;
+  newValue?: unknown;
+}
+
+function computeSimpleDiff(
+  current: Record<string, unknown>,
+  proposed: Record<string, unknown>,
+  prefix = "",
+): SimpleDiffEntry[] {
+  const entries: SimpleDiffEntry[] = [];
+  const allKeys = new Set([...Object.keys(current), ...Object.keys(proposed)]);
+
+  for (const key of [...allKeys].sort()) {
+    const fullPath = prefix ? `${prefix}.${key}` : key;
+    const oldV = current[key];
+    const newV = proposed[key];
+
+    if (!(key in current)) {
+      entries.push({ path: fullPath, kind: "added", newValue: newV });
+    } else if (!(key in proposed)) {
+      entries.push({ path: fullPath, kind: "removed", oldValue: oldV });
+    } else if (
+      newV !== null && typeof newV === "object" && !Array.isArray(newV) &&
+      oldV !== null && typeof oldV === "object" && !Array.isArray(oldV)
+    ) {
+      entries.push(
+        ...computeSimpleDiff(
+          oldV as Record<string, unknown>,
+          newV as Record<string, unknown>,
+          fullPath,
+        ),
+      );
+    } else if (JSON.stringify(oldV) !== JSON.stringify(newV)) {
+      entries.push({
+        path: fullPath,
+        kind: "changed",
+        oldValue: oldV,
+        newValue: newV,
+      });
+    }
+  }
+
+  entries.sort((a, b) => a.path.localeCompare(b.path));
+  return entries;
 }

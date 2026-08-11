@@ -4,9 +4,29 @@ import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { applyConfirmedConfigChange } from "../src/index.js";
 
-function computeHash(content: unknown, expectedVersion: number): string {
+function computeHash(current: unknown, proposed: unknown, scope: string, expectedVersion: number): string {
+  // Match preview.ts hash structure: {scope, expectedVersion, diff}
+  const currentObj = (current ?? {}) as Record<string, unknown>;
+  const proposedObj = proposed as Record<string, unknown>;
+  const allKeys = new Set([...Object.keys(currentObj), ...Object.keys(proposedObj)]);
+  const diff: { path: string; kind: string; oldValue?: unknown; newValue?: unknown }[] = [];
+  for (const key of [...allKeys].sort()) {
+    if (!(key in currentObj)) {
+      diff.push({ path: key, kind: "added", newValue: proposedObj[key] });
+    } else if (!(key in proposedObj)) {
+      diff.push({ path: key, kind: "removed", oldValue: currentObj[key] });
+    } else if (JSON.stringify(currentObj[key]) !== JSON.stringify(proposedObj[key])) {
+      diff.push({
+        path: key,
+        kind: "changed",
+        oldValue: currentObj[key],
+        newValue: proposedObj[key],
+      });
+    }
+  }
+  diff.sort((a, b) => a.path.localeCompare(b.path));
   return createHash("sha256")
-    .update(JSON.stringify({ content, expectedVersion }))
+    .update(JSON.stringify({ scope, expectedVersion, diff }))
     .digest("hex");
 }
 
@@ -32,6 +52,7 @@ describe("Atomic write", () => {
     const confirmation = {
       previewHash: "a".repeat(64),
       expectedVersion: 0 as const,
+      scope: "task" as const,
       provenance: {
         actor: "user" as const,
         channel: "desktop" as const,
@@ -40,7 +61,7 @@ describe("Atomic write", () => {
     };
 
     const newContent = { version: 1 };
-    confirmation.previewHash = computeHash(newContent, confirmation.expectedVersion);
+    confirmation.previewHash = computeHash({ version: 0 }, newContent, confirmation.scope, confirmation.expectedVersion);
     applyConfirmedConfigChange(target, newContent, confirmation);
 
     const data: Record<string, unknown> = JSON.parse(readFileSync(target, "utf8")) as Record<string, unknown>;
@@ -54,7 +75,7 @@ describe("Atomic write", () => {
 
     const newContent2 = { key: "updated" };
     const confirmation = {
-      previewHash: computeHash(newContent2, 0),
+      previewHash: computeHash({ key: "original" }, newContent2, "task", 0),
       expectedVersion: 0 as const,
       provenance: {
         actor: "user" as const,
