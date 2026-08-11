@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { canonicalJson } from "./canonical-json.js";
 
 export interface ConfigDiffEntry {
   path: string;
@@ -35,7 +36,7 @@ export function previewConfigChange(
   };
 
   const previewHash = createHash("sha256")
-    .update(JSON.stringify(hashInput))
+    .update(canonicalJson(hashInput))
     .digest("hex");
 
   return {

@@ -1,11 +1,22 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { readFileSync, writeFileSync, rmSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, rmSync, mkdirSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { applyConfirmedConfigChange } from "../src/index.js";
 
+function canonicalJson(value: unknown): string {
+  return JSON.stringify(value, (_k: string, v: unknown) => {
+    if (v !== null && typeof v === "object" && !Array.isArray(v)) {
+      const obj = v as Record<string, unknown>;
+      const sorted: Record<string, unknown> = {};
+      for (const k of Object.keys(obj).sort()) sorted[k] = obj[k];
+      return sorted;
+    }
+    return v;
+  });
+}
+
 function computeHash(current: unknown, proposed: unknown, scope: string, expectedVersion: number): string {
-  // Match preview.ts hash structure: {scope, expectedVersion, diff}
   const currentObj = (current ?? {}) as Record<string, unknown>;
   const proposedObj = proposed as Record<string, unknown>;
   const allKeys = new Set([...Object.keys(currentObj), ...Object.keys(proposedObj)]);
@@ -15,19 +26,12 @@ function computeHash(current: unknown, proposed: unknown, scope: string, expecte
       diff.push({ path: key, kind: "added", newValue: proposedObj[key] });
     } else if (!(key in proposedObj)) {
       diff.push({ path: key, kind: "removed", oldValue: currentObj[key] });
-    } else if (JSON.stringify(currentObj[key]) !== JSON.stringify(proposedObj[key])) {
-      diff.push({
-        path: key,
-        kind: "changed",
-        oldValue: currentObj[key],
-        newValue: proposedObj[key],
-      });
+    } else if (canonicalJson(currentObj[key]) !== canonicalJson(proposedObj[key])) {
+      diff.push({ path: key, kind: "changed", oldValue: currentObj[key], newValue: proposedObj[key] });
     }
   }
   diff.sort((a, b) => a.path.localeCompare(b.path));
-  return createHash("sha256")
-    .update(JSON.stringify({ scope, expectedVersion, diff }))
-    .digest("hex");
+  return createHash("sha256").update(canonicalJson({ scope, expectedVersion, diff })).digest("hex");
 }
 
 describe("Atomic write", () => {
@@ -36,10 +40,12 @@ describe("Atomic write", () => {
   beforeEach(() => {
     rmSync(tmpBase, { recursive: true, force: true });
     mkdirSync(tmpBase, { recursive: true });
+    process.env.SESTINA_CONFIG_DIR = tmpBase;
   });
 
   afterEach(() => {
     rmSync(tmpBase, { recursive: true, force: true });
+    delete process.env.SESTINA_CONFIG_DIR;
   });
 
   it("atomically writes a config file via temp + rename", () => {
@@ -101,7 +107,8 @@ describe("Atomic write", () => {
 
     const confirmation = {
       previewHash: "c".repeat(64),
-      expectedVersion: 0 as const, // doesn't match current version
+      expectedVersion: 0 as const,
+      scope: "task" as const,
       provenance: {
         actor: "user" as const,
         channel: "desktop" as const,
@@ -111,6 +118,98 @@ describe("Atomic write", () => {
 
     expect(() =>
       { applyConfirmedConfigChange(target, { version: 2 }, confirmation); },
+    ).toThrow();
+  });
+
+  it("rejects previewHash that does not match content", () => {
+    const target = resolve(tmpBase, "hash-mismatch.json");
+    writeFileSync(target, JSON.stringify({ version: 0 }), "utf8");
+
+    const wrongHash = "f".repeat(64);
+    const confirmation = {
+      previewHash: wrongHash,
+      expectedVersion: 0 as const,
+      scope: "task" as const,
+      provenance: {
+        actor: "user" as const,
+        channel: "desktop" as const,
+        directUser: true,
+      },
+    };
+
+    expect(() =>
+      { applyConfirmedConfigChange(target, { version: 1 }, confirmation); },
+    ).toThrow();
+  });
+
+  it("rejects directUser=false confirmation", () => {
+    const target = resolve(tmpBase, "no-user.json");
+    writeFileSync(target, JSON.stringify({ version: 0 }), "utf8");
+
+    const newContent = { version: 1 };
+    const confirmation = {
+      previewHash: computeHash({ version: 0 }, newContent, "task", 0),
+      expectedVersion: 0 as const,
+      scope: "task" as const,
+      provenance: {
+        actor: "agent" as const,
+        channel: "mcp" as const,
+        directUser: false,
+      },
+    };
+
+    expect(() =>
+      { applyConfirmedConfigChange(target, newContent, confirmation); },
+    ).toThrow();
+  });
+
+  it("verifies backup file is created on successful write", () => {
+    const target = resolve(tmpBase, "with-backup.json");
+    writeFileSync(target, JSON.stringify({ version: 0 }), "utf8");
+
+    const newContent = { version: 1 };
+    const confirmation = {
+      previewHash: computeHash({ version: 0 }, newContent, "task", 0),
+      expectedVersion: 0 as const,
+      scope: "task" as const,
+      provenance: {
+        actor: "user" as const,
+        channel: "desktop" as const,
+        directUser: true,
+      },
+    };
+
+    applyConfirmedConfigChange(target, newContent, confirmation);
+
+    // Check backup was created in the same directory
+    const files: string[] = readdirSync(tmpBase);
+    const backupFiles = files.filter((f) => f.startsWith(".config-backup-"));
+    expect(backupFiles.length).toBe(1);
+    // Verify backup content matches original
+    const backupFile = backupFiles[0];
+    expect(backupFile).toBeDefined();
+    const backupContent: Record<string, unknown> = JSON.parse(
+      readFileSync(resolve(tmpBase, backupFile!), "utf8"),
+    ) as Record<string, unknown>;
+    expect(backupContent.version).toBe(0);
+  });
+
+  it("rejects target path outside platform config directory", () => {
+    const badTarget = resolve(tmpBase, "..", "escape.json");
+
+    const confirmation = {
+      previewHash: "d".repeat(64),
+      expectedVersion: 0 as const,
+      scope: "task" as const,
+      provenance: {
+        actor: "user" as const,
+        channel: "desktop" as const,
+        directUser: true,
+      },
+    };
+
+    expect(() =>
+      { applyConfirmedConfigChange(badTarget, { key: "escaped" }, confirmation); },
     ).toThrow();
   });
 });

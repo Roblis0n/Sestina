@@ -93,4 +93,41 @@ describe("Config preview", () => {
 
     expect(previewV0.previewHash).not.toBe(previewV1.previewHash);
   });
+
+  it("detects removed keys with kind: removed", () => {
+    const current: Record<string, unknown> = {
+      capture: { hostContentLevel: "governance_only", retentionDays: 90, hostTextEnabled: false, excludePatterns: [] },
+      privacy: { networkDefault: "deny_unless_provider_enabled", retentionDays: 90, autoCleanup: true },
+    };
+
+    const proposed: Record<string, unknown> = {
+      capture: { hostContentLevel: "governance_only", retentionDays: 90, hostTextEnabled: false, excludePatterns: [] },
+      // privacy key removed entirely
+    };
+
+    const preview = previewConfigChange(current, proposed, { scope: "task", expectedVersion: 0 });
+    const removedEntries = preview.diff.filter((d) => d.kind === "removed");
+    expect(removedEntries.length).toBeGreaterThan(0);
+    const privacyRemoved = removedEntries.find((d) => d.path.startsWith("privacy"));
+    expect(privacyRemoved).toBeDefined();
+  });
+
+  it("produces the same hash with differently-ordered input keys", () => {
+    const a: Record<string, unknown> = { a: 1, b: 2 };
+    const b: Record<string, unknown> = { b: 2, a: 1 };
+    const proposed: Record<string, unknown> = { c: 3 };
+
+    const previewA = previewConfigChange(a, proposed, { scope: "task", expectedVersion: 0 });
+    const previewB = previewConfigChange(b, proposed, { scope: "task", expectedVersion: 0 });
+    expect(previewA.previewHash).toBe(previewB.previewHash);
+  });
+
+  it("produces different hashes for different scopes", () => {
+    const current: Record<string, unknown> = { key: "value" };
+    const proposed: Record<string, unknown> = { key: "new" };
+
+    const task = previewConfigChange(current, proposed, { scope: "task", expectedVersion: 0 });
+    const project = previewConfigChange(current, proposed, { scope: "project", expectedVersion: 0 });
+    expect(task.previewHash).not.toBe(project.previewHash);
+  });
 });

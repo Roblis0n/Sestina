@@ -1,7 +1,9 @@
-import { writeFileSync, renameSync, readFileSync, existsSync, unlinkSync, copyFileSync } from "node:fs";
-import { dirname, resolve as pathResolve } from "node:path";
+import { writeFileSync, renameSync, readFileSync, existsSync, unlinkSync, copyFileSync, realpathSync } from "node:fs";
+import { dirname, resolve as pathResolve, relative } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { SestinaErrorCode, SestinaError, ActorProvenanceSchema } from "@sestina/schema";
+import { canonicalJson } from "./canonical-json.js";
+import { resolvePlatformPaths } from "./platform-paths.js";
 
 export interface WriteConfirmation {
   previewHash: string;
@@ -44,7 +46,7 @@ export function applyConfirmedConfigChange(
   const proposedContent = newContent as Record<string, unknown>;
   const verifyDiff = computeSimpleDiff(currentContent, proposedContent);
   const actualHash = createHash("sha256")
-    .update(JSON.stringify({
+    .update(canonicalJson({
       scope: confirmation.scope,
       expectedVersion: confirmation.expectedVersion,
       diff: verifyDiff,
@@ -72,6 +74,42 @@ export function applyConfirmedConfigChange(
     throw new SestinaError(
       SestinaErrorCode.config_version_conflict,
       `Expected version ${confirmation.expectedVersion} but file does not exist`,
+    );
+  }
+
+  // Validate target path is under the platform config directory (symlink-safe)
+  const paths = resolvePlatformPaths(process.env, process.platform);
+  const configDir = pathResolve(paths.configDir);
+
+  // Resolve real paths to detect symlink/junction redirects
+  let configDirReal: string;
+  try {
+    // Config directory must exist or be creatable; resolve real path if it exists
+    configDirReal = existsSync(configDir) ? realpathSync(configDir) : configDir;
+  } catch {
+    throw new SestinaError(
+      SestinaErrorCode.validation_failed,
+      "Cannot resolve platform config directory",
+    );
+  }
+
+  const targetDir = dirname(targetPath);
+  let targetDirReal: string;
+  try {
+    targetDirReal = existsSync(targetDir) ? realpathSync(targetDir) : pathResolve(targetDir);
+  } catch {
+    throw new SestinaError(
+      SestinaErrorCode.validation_failed,
+      "Cannot resolve target config directory",
+    );
+  }
+
+  // Check containment: target directory's real path must be within config directory's real path
+  const rel = relative(configDirReal, targetDirReal);
+  if (rel.startsWith("..") || (rel !== "" && pathResolve(configDirReal, rel) !== targetDirReal)) {
+    throw new SestinaError(
+      SestinaErrorCode.forbidden,
+      "Config file must be within the platform config directory",
     );
   }
 
@@ -150,7 +188,7 @@ function computeSimpleDiff(
           fullPath,
         ),
       );
-    } else if (JSON.stringify(oldV) !== JSON.stringify(newV)) {
+    } else if (canonicalJson(oldV) !== canonicalJson(newV)) {
       entries.push({
         path: fullPath,
         kind: "changed",

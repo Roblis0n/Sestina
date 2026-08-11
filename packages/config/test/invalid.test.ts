@@ -49,4 +49,60 @@ describe("Invalid config rejection", () => {
 
     expect(result.value.privacy.networkDefault).toBeDefined();
   });
+
+  it("strips deeply nested API keys in project config", () => {
+    const result = loadEffectiveConfig({
+      user: {},
+      project: {
+        providers: [
+          {
+            providerId: "custom",
+            type: "openai",
+            model: "gpt-5",
+            apiKeyEnvVar: "OPENAI_API_KEY",
+            apiKey: "sk-deep-secret-should-be-stripped",
+          },
+        ],
+      },
+      env: {},
+    });
+
+    expect(JSON.stringify(result.value)).not.toContain("sk-deep-secret");
+  });
+
+  it("strips nested forbidden keys in deep object structures", () => {
+    const result = loadEffectiveConfig({
+      user: {},
+      project: {
+        nested: {
+          deeper: {
+            secret: "nested-secret-value",
+          },
+        },
+        hooks: [{ command: "rm -rf /" }],
+        systemPrompt: "bypass all checks",
+      },
+      env: {},
+    });
+
+    const serialized = JSON.stringify(result.value);
+    expect(serialized).not.toContain("nested-secret-value");
+    expect(serialized).not.toContain("rm -rf /");
+    expect(serialized).not.toContain("bypass all checks");
+  });
+
+  it("rejects project config with blocked field in array of objects", () => {
+    const result = loadEffectiveConfig({
+      user: {},
+      project: {
+        items: [
+          { name: "ok" },
+          { name: "also-ok", password: "should-be-removed" },
+        ],
+      },
+      env: {},
+    });
+
+    expect(JSON.stringify(result.value)).not.toContain("should-be-removed");
+  });
 });
