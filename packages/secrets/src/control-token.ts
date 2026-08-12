@@ -18,6 +18,7 @@
  * - The token proves "current OS user installed this client" ONLY.
  */
 import { randomBytes, timingSafeEqual } from "node:crypto";
+import { SestinaError, SestinaErrorCode } from "@sestina/schema";
 import type { SecretBackend } from "./port.js";
 import type { ControlToken, ControlTokenScope } from "./port.js";
 
@@ -91,27 +92,38 @@ export async function getOrCreateControlToken(
     if (parsed) {
       return { ref, version: parsed.v, value: parsed.t };
     }
-    // Corrupt or legacy format: fall through to migration
+    // Record exists but is corrupt — fail closed, never silently rebuild
+    throw new SestinaError(
+      SestinaErrorCode.database_corrupt,
+      `Control token for scope "${scope}" is corrupted. ` +
+      `The stored record could not be parsed. ` +
+      `Delete the key "${ref}" and re-run setup to regenerate.`,
+    );
   }
 
-  // Try legacy split-storage migration
+  // No record exists: try legacy split-storage migration
   const verRef = versionRef(scope);
-  const legacyValue = raw ?? (await backend.get(ref));
-  const legacyVersionStr = await backend.get(verRef);
+  const legacyValue = await backend.get(verRef); // check version key existence as proxy
+  const versionStr = legacyValue;
 
-  if (legacyValue && /^[0-9a-fA-F]{64}$/.test(legacyValue)) {
-    const version = (() => {
-      if (legacyVersionStr) {
-        const p = parseInt(legacyVersionStr, 10);
-        return (Number.isFinite(p) && p > 0 && p <= MAX_VERSION) ? p : 1;
-      }
-      return 1;
-    })();
-    // Migrate to atomic record
-    await backend.set(ref, packRecord(legacyValue, version));
-    // Clean up legacy version key (best-effort)
-    try { await backend.delete(verRef); } catch { /* best-effort */ }
-    return { ref, version, value: legacyValue };
+  if (versionStr) {
+    // Legacy version key exists — try to read the raw token value
+    // (in legacy mode, token was stored at ref and version at verRef)
+    const legacyToken = await backend.get(ref);
+    if (legacyToken && /^[0-9a-fA-F]{64}$/.test(legacyToken)) {
+      const p = parseInt(versionStr, 10);
+      const version = (Number.isSafeInteger(p) && p > 0 && p <= MAX_VERSION) ? p : 1;
+      // Migrate to atomic record
+      await backend.set(ref, packRecord(legacyToken, version));
+      try { await backend.delete(verRef); } catch { /* best-effort */ }
+      return { ref, version, value: legacyToken };
+    }
+    // Legacy version key exists but token is invalid — corruption
+    throw new SestinaError(
+      SestinaErrorCode.database_corrupt,
+      `Control token for scope "${scope}" has legacy version but no valid token. ` +
+      `Delete both "${ref}" and "${verRef}" and re-run setup.`,
+    );
   }
 
   // First-time creation: write atomic record

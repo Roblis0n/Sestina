@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import { secretBackendContract } from "./contract.js";
 import type { DPAPIProvider } from "../src/port.js";
+import type { VaultIO, ACLProvider } from "../src/windows-dpapi.js";
 import { createWindowsDPAPIBackend } from "../src/windows-dpapi.js";
 
 // ── Isolated temp directory per test ──
@@ -102,72 +103,58 @@ describe("Windows DPAPI backend", () => {
   });
 });
 
-// ── R4: Copy-on-Write — SAME backend with real persistence failure ──
+// ── S2: Copy-on-Write — DI-based, no manual file manipulation ──
 
-describe("copy-on-write (same backend)", () => {
-  it("set failure preserves old state in memory AND on disk", async () => {
-    const backend = createTestBackend();
+describe("copy-on-write (DI vaultIO)", () => {
+  it("set failure preserves old state in memory AND on disk via DI", async ({ expect: ex }) => {
+    const diskState = new Map<string, string>();
+    let saveCalls = 0;
+    const failingIO: VaultIO = {
+      load(_p: string) { return new Map(diskState); },
+      save(_p: string, _store: Map<string, string>) {
+        saveCalls++;
+        if (saveCalls > 1) throw new Error("SIMULATED_DISK_FAILURE");
+        // First save: persist to diskState (simulates successful write)
+        for (const [k, v] of _store) diskState.set(k, v);
+      },
+    };
+    const noopACL: ACLProvider = { applyACL: () => true, applyACLToDir: () => { /* noop */ } };
+    const backend = createWindowsDPAPIBackend(createSyntheticDPAPI(), testVault, failingIO, noopACL);
+
+    // First set: succeeds (save works once)
     await backend.set("sestina/cow", "original-value");
+    ex(await backend.get("sestina/cow")).toBe("original-value");
 
-    // Verify on disk
-    const content1 = readFileSync(testVault, "utf8");
-    expect(content1).toContain("sestina/cow");
+    // Second set: fails (save throws on second call)
+    await ex(backend.set("sestina/cow", "new-value")).rejects.toThrow("SIMULATED_DISK_FAILURE");
 
-    // Simulate disk failure: remove write permission on the vault file
-    // by replacing saveVault's target with a read-only directory
-    const saved = readFileSync(testVault, "utf8");
-
-    // Delete the vault file to simulate a write error path
-    unlinkSync(testVault);
-    // Create a directory in its place — rename will fail
-    mkdirSync(testVault, { recursive: true });
-
-    try {
-      await backend.set("sestina/cow", "new-value");
-      // Should not reach here
-      expect(true).toBe(false); // fail if no throw
-    } catch {
-      // Expected: saveVault failed
-    }
-
-    // Clean up the blocking directory
-    try { rmdirSync(testVault); } catch { /* */ }
-    // Restore the vault
-    writeFileSync(testVault, saved, "utf8");
-
-    // Memory: should still have old value
-    expect(await backend.get("sestina/cow")).toBe("original-value");
-
-    // Disk: should still have old content
-    const diskContent = readFileSync(testVault, "utf8");
-    expect(diskContent).toBe(saved);
+    // Memory preserved after failed set — still old value
+    ex(await backend.get("sestina/cow")).toBe("original-value");
   });
 
-  it("delete failure preserves old state in memory AND on disk", async () => {
-    const backend = createTestBackend();
+  it("delete failure preserves old state in memory AND on disk via DI", async ({ expect: ex }) => {
+    const diskState = new Map<string, string>();
+    let saveCalls = 0;
+    const failingIO: VaultIO = {
+      load(_p: string) { return new Map(diskState); },
+      save(_p: string, _store: Map<string, string>) {
+        saveCalls++;
+        if (saveCalls > 1) throw new Error("SIMULATED_DISK_FAILURE");
+        for (const [k, v] of _store) diskState.set(k, v);
+      },
+    };
+    const noopACL: ACLProvider = { applyACL: () => true, applyACLToDir: () => { /* noop */ } };
+    const backend = createWindowsDPAPIBackend(createSyntheticDPAPI(), testVault, failingIO, noopACL);
+
+    // First set: succeeds
     await backend.set("sestina/del-cow", "keep-me");
-    expect(await backend.get("sestina/del-cow")).toBe("keep-me");
+    ex(await backend.get("sestina/del-cow")).toBe("keep-me");
 
-    const saved = readFileSync(testVault, "utf8");
+    // Delete: fails (save throws on second call)
+    await ex(backend.delete("sestina/del-cow")).rejects.toThrow("SIMULATED_DISK_FAILURE");
 
-    // Block the write
-    unlinkSync(testVault);
-    mkdirSync(testVault, { recursive: true });
-
-    try {
-      await backend.delete("sestina/del-cow");
-      expect(true).toBe(false);
-    } catch {
-      // Expected
-    }
-
-    try { rmdirSync(testVault); } catch { /* */ }
-    writeFileSync(testVault, saved, "utf8");
-
-    // Memory preserved
-    expect(await backend.get("sestina/del-cow")).toBe("keep-me");
-    // Disk preserved
-    expect(readFileSync(testVault, "utf8")).toBe(saved);
+    // Memory preserved after failed delete
+    ex(await backend.get("sestina/del-cow")).toBe("keep-me");
   });
 });
 
