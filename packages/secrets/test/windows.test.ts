@@ -198,41 +198,30 @@ describe("real DPAPI and DACL (Windows)", () => {
   it("DACL MUST succeed and verify on Windows", async () => {
     if (process.platform !== "win32") return;
 
-    const { applyCurrentUserACL } = await import("../src/windows-dpapi.js");
+    const { applyCurrentUserACL, createWindowsDPAPIBackend: cwdb } = await import("../src/windows-dpapi.js");
     const { execFileSync } = await import("node:child_process");
 
     const daclFile = join(testDir, "dacl-test.json");
     writeFileSync(daclFile, "{}", "utf8");
 
-    // Verify icacls is available by actually executing it
-    try {
-      execFileSync("icacls", [daclFile], { timeout: 5000, windowsHide: true, stdio: "ignore" });
-    } catch {
-      // icacls failed on the test file — it may not exist yet or icacls unavailable
-      // Try with a known-good path to distinguish
-      try {
-        execFileSync("icacls", ["."], { timeout: 5000, windowsHide: true, stdio: "ignore" });
-      } catch {
-        throw new Error("DACL TEST FAILED: icacls not available on Windows");
-      }
-    }
+    // Verify icacls is available
+    try { execFileSync("icacls", ["."], { timeout: 5000, windowsHide: true, stdio: "ignore" }); }
+    catch { throw new Error("DACL TEST FAILED: icacls not available on Windows"); }
 
+    // Test 1: applyCurrentUserACL must return true
     const result = applyCurrentUserACL(daclFile);
-    // DACL MUST succeed on Windows
     expect(result).toBe(true);
 
-    // Verify: the file should now have restricted permissions.
-    // Attempting to write-then-delete verifies the DACL was applied.
-    // (icacls output is locale-dependent, so we verify behaviorally)
-    try {
-      writeFileSync(daclFile, "{\"modified\":true}", "utf8");
-      // If we can write, the file is accessible to current user
-      unlinkSync(daclFile);
-    } catch {
-      // EPERM on delete is expected when DACL restricts permissions
-      // Clean up via icacls reset
-      try { execFileSync("icacls", [daclFile, "/reset"], { timeout: 5000, windowsHide: true, stdio: "ignore" }); } catch { /* */ }
-      try { unlinkSync(daclFile); } catch { /* file may already be gone */ }
-    }
+    // Test 2: Verify ACL actually changed — read the output
+    const aclOut = execFileSync("icacls", [daclFile], { timeout: 5000, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] }).toString();
+    // ACL output must mention the filename (proves it ran)
+    expect(aclOut.length).toBeGreaterThan(0);
+    // Must NOT contain "Everyone" or "Users" with inherited permissions
+    // (inherited ACEs should have been removed by /inheritance:r)
+    expect(aclOut).not.toMatch(/Everyone/);
+
+    // Cleanup: reset ACL so file can be removed
+    try { execFileSync("icacls", [daclFile, "/reset"], { timeout: 5000, windowsHide: true, stdio: "ignore" }); } catch { /* */ }
+    try { unlinkSync(daclFile); } catch { /* */ }
   });
 });

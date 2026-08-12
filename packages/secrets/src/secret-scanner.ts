@@ -69,7 +69,7 @@ export function scanForSecrets(text: string): ScanResult {
 
 /**
  * Full-mode redaction: replace ALL secret-like patterns with [REDACTED:type].
- * Iterates until the string stabilizes — handles cases where one replacement
+ * Iterates until the string stabilizes — handles cases where one substitution
  * reveals another pattern, and ensures multiple same-type secrets are all
  * replaced (regex global flag handles same-type; iteration handles cross-type).
  *
@@ -82,7 +82,7 @@ export function safeStringForOutput(value: unknown): string {
 
   let result = value;
   let changed = true;
-  // Iterate until stable — one pattern's replacement might reveal another
+  // Iterate until stable — one pattern's substitution might reveal another
   while (changed) {
     changed = false;
     for (const pattern of SECRET_PATTERNS) {
