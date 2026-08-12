@@ -115,18 +115,40 @@ export async function getOrCreateControlToken(
   // No record at ref: try legacy split-storage (version key only)
   const versionStr = await backend.get(verRef);
   if (versionStr) {
+    // Validate version string: must be a clean integer, no trailing junk
+    if (!/^\d+$/.test(versionStr)) {
+      throw new SestinaError(
+        SestinaErrorCode.database_corrupt,
+        `Control token for scope "${scope}" has corrupted legacy version: "${versionStr}". ` +
+        `Delete the key "${verRef}" and re-run setup.`,
+      );
+    }
     const p = parseInt(versionStr, 10);
-    const version = (Number.isSafeInteger(p) && p > 0 && p <= MAX_VERSION) ? p : 1;
-    // Legacy: token was at ref but we didn't find it there, so create new
-    const value = generateTokenValue();
-    await backend.set(ref, packRecord(value, version));
-    try { await backend.delete(verRef); } catch { /* best-effort */ }
-    return { ref, version, value };
+    if (!Number.isSafeInteger(p) || p < 1 || p > MAX_VERSION) {
+      throw new SestinaError(
+        SestinaErrorCode.database_corrupt,
+        `Control token for scope "${scope}" has invalid legacy version: ${versionStr}. ` +
+        `Delete the key "${verRef}" and re-run setup.`,
+      );
+    }
+    // Legacy version exists but no token — corruption
+    throw new SestinaError(
+      SestinaErrorCode.database_corrupt,
+      `Control token for scope "${scope}" has legacy version key but no token value. ` +
+      `Delete both "${ref}" and "${verRef}" and re-run setup.`,
+    );
   }
 
-  // First-time creation: write atomic record
+  // First-time creation: write-then-verify to handle concurrent access
   const value = generateTokenValue();
   await backend.set(ref, packRecord(value, 1));
+  // Re-read to check if a concurrent call wrote something different
+  const final = await backend.get(ref);
+  if (final) {
+    const parsed = parseRecord(final);
+    if (parsed) return { ref, version: parsed.v, value: parsed.t };
+  }
+  // Our write succeeded and persisted
   return { ref, version: 1, value };
 }
 
@@ -151,6 +173,16 @@ export async function resetControlToken(
     const parsed = parseRecord(raw);
     if (parsed) {
       currentVersion = parsed.v;
+    } else if (/^[0-9a-fA-F]{64}$/.test(raw)) {
+      // Legacy raw hex: migrate, then reset
+      currentVersion = 0; // will become version 1 after reset
+    } else {
+      // Corrupt record — fail closed, never overwrite
+      throw new SestinaError(
+        SestinaErrorCode.database_corrupt,
+        `Control token for scope "${scope}" is corrupted and cannot be reset. ` +
+        `Delete the key "${ref}" and re-run setup to regenerate.`,
+      );
     }
   }
 

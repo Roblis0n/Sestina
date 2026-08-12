@@ -22,17 +22,17 @@ const SECRET_PATTERNS: readonly {
   name: string;
   regex: RegExp;
 }[] = [
-  { name: "hex256-token", regex: /\b[0-9a-fA-F]{64}\b/ },
-  { name: "hex128-token", regex: /\b[0-9a-fA-F]{32}\b/ },
-  { name: "openai-key", regex: /\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}\b/ },
-  { name: "anthropic-key", regex: /\bsk-ant-[A-Za-z0-9_-]{20,}\b/ },
-  { name: "github-token", regex: /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{36,}\b/ },
-  { name: "aws-key", regex: /\bAKIA[0-9A-Z]{16}\b/ },
-  { name: "jwt", regex: /\beyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/ },
-  { name: "base64-secret", regex: /\b[A-Za-z0-9+/]{40,}={0,2}\b/ },
-  { name: "dpapi-blob", regex: /\b[0-9a-fA-F]{200,}\b/ },
-  { name: "pem-private-key", regex: /-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----/ },
-  { name: "generic-api-key", regex: /\b(?:api[_-]?key|apikey|secret[_-]?key)["\s:=]+["']?[A-Za-z0-9_-]{20,}["']?/i },
+  { name: "hex256-token", regex: /\b[0-9a-fA-F]{64}\b/g },
+  { name: "hex128-token", regex: /\b[0-9a-fA-F]{32}\b/g },
+  { name: "openai-key", regex: /\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}\b/g },
+  { name: "anthropic-key", regex: /\bsk-ant-[A-Za-z0-9_-]{20,}\b/g },
+  { name: "github-token", regex: /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{36,}\b/g },
+  { name: "aws-key", regex: /\bAKIA[0-9A-Z]{16}\b/g },
+  { name: "jwt", regex: /\beyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/g },
+  { name: "base64-secret", regex: /\b[A-Za-z0-9+/]{40,}={0,2}\b/g },
+  { name: "dpapi-blob", regex: /\b[0-9a-fA-F]{200,}\b/g },
+  { name: "pem-private-key", regex: /-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----/g },
+  { name: "generic-api-key", regex: /\b(?:api[_-]?key|apikey|secret[_-]?key)["\s:=]+["']?[A-Za-z0-9_-]{20,}["']?/gi },
 ];
 
 // ── Public API ──

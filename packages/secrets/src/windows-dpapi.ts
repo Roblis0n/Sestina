@@ -241,10 +241,9 @@ export function createWindowsDPAPIBackend(
       try {
         // Phase 2: persist to disk
         io.save(path, store);
-        // Phase 3: apply DACL — if this fails, the vault IS already saved
-        // but is protected by DPAPI encryption and file location.
-        // ACL failure is logged but not fatal (defense-in-depth).
-        aclProvider.applyACL(path);
+        // Phase 3: apply DACL — fail-closed
+        const daclOk = aclProvider.applyACL(path);
+        if (!daclOk) throw new Error("DACL application failed — vault persisted but ACL not verified");
       } catch (err) {
         // Copy-on-write: revert in-memory state
         if (old !== undefined) store.set(ref, old); else store.delete(ref);
@@ -257,8 +256,11 @@ export function createWindowsDPAPIBackend(
       const old = store.get(ref);
       if (old === undefined) return;
       store.delete(ref);
-      try { io.save(path, store); aclProvider.applyACL(path); }
-      catch (err) { store.set(ref, old); throw err; }
+      try {
+        io.save(path, store);
+        const daclOk = aclProvider.applyACL(path);
+        if (!daclOk) throw new Error("DACL application failed — vault persisted but ACL not verified");
+      } catch (err) { store.set(ref, old); throw err; }
     },
 
     async describe(ref: string): Promise<{ configured: boolean }> {
