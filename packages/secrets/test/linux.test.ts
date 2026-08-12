@@ -1,20 +1,22 @@
-/* eslint-disable @typescript-eslint/require-await, @typescript-eslint/no-empty-function, @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/require-await */
 /**
  * Linux Secret Service backend tests.
  *
- * On Linux:
- * - Prefers Secret Service (org.freedesktop.Secret.Service via D-Bus).
- * - If Secret Service is unavailable → environment-only.
- * - NEVER falls back to plaintext storage.
- * - On non-Linux: structural tests only — NOT mock-as-real.
+ * Tests the REAL production Linux Secret Service backend
+ * (src/linux-secret-service.ts) via dependency injection — a synthetic
+ * SecretServiceProvider is injected into the real createLinuxSecretBackend
+ * factory.
+ *
+ * On non-Linux: structural tests only — NOT mock-as-real.
  */
 import { describe, it, expect } from "vitest";
 import type {
-  SecretBackend,
   SecretServiceProvider,
 } from "../src/port.js";
 
-// ── Synthetic Secret Service for structural tests (CLEARLY labeled) ──
+// ── Synthetic Secret Service for structural tests ──
+// CLEARLY labeled as synthetic; NOT a mock.
+// Injected into the real production backend factory via DI.
 
 function createSyntheticSecretService(): SecretServiceProvider {
   const store = new Map<string, string>();
@@ -46,56 +48,32 @@ function createSyntheticSecretService(): SecretServiceProvider {
   };
 }
 
-// ── Backend factory ──
+// ── Import REAL production backend factory ──
 
-function createSyntheticSecretServiceBackend(): SecretBackend {
+import { createLinuxSecretBackend } from "../src/linux-secret-service.js";
+
+function createTestBackend(): ReturnType<typeof createLinuxSecretBackend> {
+  // Inject synthetic Secret Service provider into the REAL production backend
   const ss = createSyntheticSecretService();
-
-  return {
-    async get(ref: string) {
-      return ss.lookup({ application: "Sestina", ref });
-    },
-    async set(ref: string, value: string) {
-      await ss.store(
-        { application: "Sestina", ref },
-        `Sestina secret: ${ref}`,
-        value,
-      );
-    },
-    async delete(ref: string) {
-      await ss.delete({ application: "Sestina", ref });
-    },
-    async describe(ref: string) {
-      const found = await ss.lookup({ application: "Sestina", ref });
-      return { configured: found !== undefined };
-    },
-    async health() {
-      const available = await ss.isAvailable();
-      return {
-        available,
-        backend: available ? ("secret-service" as const) : ("none" as const),
-        reason: available ? undefined : "Secret Service daemon not reachable",
-      };
-    },
-  };
+  return createLinuxSecretBackend(ss);
 }
 
-// ── Contract tests ──
+// ── Contract tests (run against real backend with injected synthetic provider) ──
 
 import { secretBackendContract } from "./contract.js";
-secretBackendContract(createSyntheticSecretServiceBackend);
+secretBackendContract(createTestBackend);
 
 // ── Linux-specific tests ──
 
 describe("Linux Secret Service backend", () => {
-  it("uses application=Sestina attribute for all entries", async () => {
-    const backend = createSyntheticSecretServiceBackend();
+  it("uses sestina_ref attribute for all entries", async () => {
+    const backend = createTestBackend();
     await backend.set("sestina/test", "value-1");
     expect(await backend.get("sestina/test")).toBe("value-1");
   });
 
   it("isolates different refs by attribute", async () => {
-    const backend = createSyntheticSecretServiceBackend();
+    const backend = createTestBackend();
     await backend.set("sestina/key1", "val1");
     await backend.set("sestina/key2", "val2");
     expect(await backend.get("sestina/key1")).toBe("val1");
@@ -103,7 +81,7 @@ describe("Linux Secret Service backend", () => {
   });
 
   it("returns secure_storage_unavailable when Secret Service is down", async () => {
-    // Create a backend with unavailable SS
+    // Create a backend with unavailable SS injected into real factory
     const unavailableSS: SecretServiceProvider = {
       async lookup() {
         throw new Error("secure_storage_unavailable");
@@ -119,26 +97,7 @@ describe("Linux Secret Service backend", () => {
       },
     };
 
-    const backend: SecretBackend = {
-      async get() {
-        throw new Error("secure_storage_unavailable");
-      },
-      async set() {
-        throw new Error("secure_storage_unavailable");
-      },
-      async delete() {},
-      async describe() {
-        return { configured: false };
-      },
-      async health() {
-        return {
-          available: false,
-          backend: "none",
-          reason: "Secret Service daemon not reachable on this system",
-        };
-      },
-    };
-
+    const backend = createLinuxSecretBackend(unavailableSS);
     const status = await backend.health();
     expect(status.available).toBe(false);
     expect(status.backend).toBe("none");
@@ -146,9 +105,7 @@ describe("Linux Secret Service backend", () => {
   });
 
   it("NEVER falls back to plaintext file storage", () => {
-    // This is a DESIGN constraint encoded in the interface:
-    // There is NO "plaintext" backend type in SecretBackendStatus.backend.
-    // The only valid backends are: dpapi | keychain | secret-service | environment | none
+    // This is a DESIGN constraint: no "plaintext" backend type exists.
     const validBackends = [
       "dpapi",
       "keychain",
@@ -159,21 +116,10 @@ describe("Linux Secret Service backend", () => {
     expect(validBackends).not.toContain("plaintext" as never);
   });
 
-  it("environment backend is the ONLY fallback for unavailable SS", () => {
-    // On Linux without Secret Service, createSecretBackend must return
-    // an environment-variable backend, never a plaintext one.
-    // This constraint is verified structurally: no "file" or "plaintext" backend exists.
-    const backendTypes = [
-      "dpapi",
-      "keychain",
-      "secret-service",
-      "environment",
-      "none",
-    ];
-    expect(backendTypes.includes("environment")).toBe(true);
-    // These must NOT exist:
-    expect(backendTypes).not.toContain("plaintext");
-    expect(backendTypes).not.toContain("file");
-    expect(backendTypes).not.toContain("config-json");
+  it("health reports secret-service when synthetic provider is injected", async () => {
+    const backend = createTestBackend();
+    const status = await backend.health();
+    expect(status.available).toBe(true);
+    expect(status.backend).toBe("secret-service");
   });
 });

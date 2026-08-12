@@ -41,8 +41,48 @@ export const ActorProvenanceSchema = z.object({
 }).refine(
   (data) => !data.directUser || data.actor === "user",
   { message: "directUser must imply actor === 'user'" },
+).refine(
+  (data) => {
+    // Reject directUser on peer channels (mcp, host).
+    // Control token only proves local install identity — it does NOT
+    // grant direct-user provenance to Hooks, MCP agents, or peers.
+    if (data.directUser && (data.channel === "mcp" || data.channel === "host")) {
+      return false;
+    }
+    return true;
+  },
+  { message: "directUser is forbidden on peer channels (mcp, host). Control token proves local install identity only." },
 );
 export type ActorProvenance = z.infer<typeof ActorProvenanceSchema>;
+
+// ── Permission boundary helpers ──
+
+/** Channels that can carry direct-user provenance. */
+export const DIRECT_USER_CHANNELS = ["desktop", "cli"] as const;
+
+/** Peer channels — tokens on these channels never grant user-level access. */
+export const PEER_CHANNELS = ["host", "mcp"] as const;
+
+/**
+ * Returns true only when the provenance represents a real human user
+ * interacting directly through a trusted channel (desktop or CLI).
+ * Peer channels (mcp, host) are permanently excluded regardless of
+ * token possession.
+ */
+export function canActAsDirectUser(provenance: ActorProvenance): boolean {
+  return (
+    provenance.directUser &&
+    DIRECT_USER_CHANNELS.includes(provenance.channel as typeof DIRECT_USER_CHANNELS[number])
+  );
+}
+
+/**
+ * Returns true when the provenance originates from a peer (Hook, MCP).
+ * Peer provenance is permanently distinct from user provenance.
+ */
+export function isPeerProvenance(provenance: ActorProvenance): boolean {
+  return PEER_CHANNELS.includes(provenance.channel as typeof PEER_CHANNELS[number]);
+}
 
 // ── Preview Confirmation ──
 export const PreviewConfirmationSchema = z.object({

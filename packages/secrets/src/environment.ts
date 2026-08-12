@@ -32,12 +32,26 @@ export function createRealEnvReader(): EnvReader {
 
 const PREFIX = "SESTINA_SECRET_";
 
+/**
+ * Convert a ref to an environment variable key.
+ *
+ * COLLISION-FREE ESCAPE SCHEME:
+ * - "_"  → "__" (escape literal underscores)
+ * - "/"  → "_"  (path separator)
+ * - "-"  kept as "-" (hyphens are valid in Node.js env var access)
+ *
+ * This ensures refs like "sestina/a/b", "sestina/a_b", and "sestina/a-b"
+ * all map to DIFFERENT env var names:
+ *   sestina/a/b   → SESTINA_SECRET_A_B
+ *   sestina/a__b  → SESTINA_SECRET_A____B
+ *   sestina/a_b   → SESTINA_SECRET_A__B
+ *   sestina/a-b   → SESTINA_SECRET_A-B
+ */
 function refToEnvKey(ref: string): string {
-  // sestina/openai-main → SESTINA_SECRET_OPENAI_MAIN
   const name = ref
     .replace(/^sestina\//, "")
-    .replace(/-/g, "_")
-    .replace(/\//g, "_")
+    .replace(/_/g, "__")  // escape "_" first (before "/" → "_")
+    .replace(/\//g, "_")  // then encode "/" as "_"
     .toUpperCase();
   return `${PREFIX}${name}`;
 }

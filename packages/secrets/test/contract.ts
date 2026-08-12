@@ -1,4 +1,3 @@
- 
 /**
  * Shared SecretBackend contract tests.
  *

@@ -7,6 +7,10 @@
  *
  * The token proves "current OS user installed this client" ONLY.
  * It does NOT grant direct-user provenance to Hooks, MCP, or peers.
+ *
+ * After reset, the old token is IMMEDIATELY invalidated — there is
+ * no grace period, no previous-token fallback, and no setTimeout logic.
+ * In-flight handshakes using the old token are rejected.
  */
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { SecretBackend } from "./port.js";
@@ -16,7 +20,6 @@ import type { ControlToken, ControlTokenScope } from "./port.js";
 
 const TOKEN_BYTES = 32; // 256 bits
 const TOKEN_HEX_LENGTH = 64; // 32 bytes → 64 hex chars
-const GRACE_PERIOD_MS = 30_000; // 30-second grace period after rotation
 
 // ── Ref key computation ──
 
@@ -26,10 +29,6 @@ function tokenRef(scope: ControlTokenScope): string {
 
 function versionRef(scope: ControlTokenScope): string {
   return `sestina/control-token/${scope}/version`;
-}
-
-function previousRef(scope: ControlTokenScope): string {
-  return `sestina/control-token/${scope}/previous`;
 }
 
 // ── Token generation ──
@@ -46,7 +45,7 @@ function generateTokenValue(): string {
  * - First call: generates a fresh 256-bit token (version 1).
  * - Subsequent calls: returns the existing token unchanged.
  * - After reset: version increments, new random value, old value
- *   kept in grace-period slot for in-flight handshakes.
+ *   immediately invalidated.
  */
 export async function getOrCreateControlToken(
   backend: SecretBackend,
@@ -72,12 +71,9 @@ export async function getOrCreateControlToken(
 /**
  * Explicitly rotate (reset) a control token.
  *
- * Generates a new 256-bit value, increments the version, saves the
- * old value as "previous" for a 30-second grace period, and stores
- * the new token.
- *
- * After rotation, old challenges using the previous value are rejected
- * once the grace period expires.
+ * Generates a new 256-bit value, increments the version, and immediately
+ * overwrites the stored token. The old value is permanently invalidated
+ * — there is no grace period or previous-token fallback.
  */
 export async function resetControlToken(
   backend: SecretBackend,
@@ -85,35 +81,16 @@ export async function resetControlToken(
 ): Promise<ControlToken> {
   const ref = tokenRef(scope);
   const verRef = versionRef(scope);
-  const prevRef = previousRef(scope);
 
   // Read current state
-  const currentValue = await backend.get(ref);
   const currentVersionStr = await backend.get(verRef);
   const currentVersion = currentVersionStr ? parseInt(currentVersionStr, 10) : 0;
   const newVersion = currentVersion + 1;
 
-  // Save previous value for grace period
-  if (currentValue) {
-    await backend.set(prevRef, currentValue);
-  }
-
-  // Generate and store new token
+  // Generate and store new token (overwrites old immediately)
   const newValue = generateTokenValue();
   await backend.set(ref, newValue);
   await backend.set(verRef, String(newVersion));
-
-  // Schedule grace period cleanup
-  setTimeout(() => {
-    backend.get(prevRef).then((stillPrevious) => {
-      if (stillPrevious === currentValue) {
-        return backend.delete(prevRef);
-      }
-      return undefined;
-    }).catch(() => {
-      // Best-effort cleanup; old token expires naturally
-    });
-  }, GRACE_PERIOD_MS).unref();
 
   return { ref, version: newVersion, value: newValue };
 }
@@ -124,10 +101,10 @@ export async function resetControlToken(
  * Verify a challenge response against the stored control token.
  *
  * Uses constant-time comparison via timingSafeEqual.
- * Accepts both the current token value and the previous value
- * (during the grace period after rotation).
+ * Only the current token value is accepted — there is no grace-period
+ * fallback to a previous token.
  *
- * @returns true if the response matches either current or grace-period token.
+ * @returns true if the response matches the current token.
  */
 export async function verifyChallengeResponse(
   backend: SecretBackend,
@@ -138,30 +115,19 @@ export async function verifyChallengeResponse(
   role: string,
 ): Promise<boolean> {
   const ref = tokenRef(scope);
-  const prevRef = previousRef(scope);
 
   const currentValue = await backend.get(ref);
-  const previousValue = await backend.get(prevRef);
-
-  const candidates = [currentValue, previousValue].filter(
-    (v): v is string => v !== undefined,
-  );
+  if (!currentValue) return false;
 
   const { createHmac } = await import("node:crypto");
   const message = Buffer.concat([nonceClient, nonceServer, Buffer.from(role)]);
 
-  for (const candidate of candidates) {
-    const key = Buffer.from(candidate, "hex");
-    if (key.length !== TOKEN_BYTES) continue;
-    const expected = createHmac("sha256", key).update(message).digest();
-    if (expected.length === expectedHMAC.length) {
-      if (timingSafeEqual(expected, expectedHMAC)) {
-        return true;
-      }
-    }
-  }
+  const key = Buffer.from(currentValue, "hex");
+  if (key.length !== TOKEN_BYTES) return false;
+  const expected = createHmac("sha256", key).update(message).digest();
+  if (expected.length !== expectedHMAC.length) return false;
 
-  return false;
+  return timingSafeEqual(expected, expectedHMAC);
 }
 
 // ── Export helpers for testing ──
@@ -169,8 +135,6 @@ export async function verifyChallengeResponse(
 export const __test = {
   TOKEN_BYTES,
   TOKEN_HEX_LENGTH,
-  GRACE_PERIOD_MS,
   tokenRef,
   versionRef,
-  previousRef,
 };

@@ -230,45 +230,93 @@ function createLinuxBackend(
     };
   }
 
-  // No D-Bus: use environment backend with a warning in health().
-  // The environment backend is read-only; set() will reject.
-  let cachedEnv: SecretBackend | null = null;
+  // No D-Bus: Secret Service is unavailable.
+  // Environment variable backend is ONLY used when the user
+  // explicitly opts in via SESTINA_USE_ENV_BACKEND=true.
+  // Without explicit opt-in, fail closed with secure_storage_unavailable.
+  if (process.env.SESTINA_USE_ENV_BACKEND === "true") {
+    let cachedEnv: SecretBackend | null = null;
 
-  async function getEnvBackend(): Promise<SecretBackend> {
-    if (cachedEnv) return cachedEnv;
-    const { createEnvironmentBackend } = await import("./environment.js");
-    cachedEnv = createEnvironmentBackend(injectedEnv);
-    return cachedEnv;
+    async function getEnvBackend(): Promise<SecretBackend> {
+      if (cachedEnv) return cachedEnv;
+      const { createEnvironmentBackend } = await import("./environment.js");
+      cachedEnv = createEnvironmentBackend(injectedEnv);
+      return cachedEnv;
+    }
+
+    const envBackend: SecretBackend = {
+      async get(ref: string) {
+        return (await getEnvBackend()).get(ref);
+      },
+      async set(ref: string, value: string) {
+        return (await getEnvBackend()).set(ref, value);
+      },
+      async delete(ref: string) {
+        return (await getEnvBackend()).delete(ref);
+      },
+      async describe(ref: string) {
+        return (await getEnvBackend()).describe(ref);
+      },
+      // eslint-disable-next-line @typescript-eslint/require-await
+      async health(): Promise<SecretBackendStatus> {
+        return {
+          available: true,
+          backend: "environment",
+          reason:
+            "Secret Service (D-Bus) is not available on this system. " +
+            "Reading secrets from SESTINA_SECRET_* environment variables " +
+            "(explicitly enabled via SESTINA_USE_ENV_BACKEND=true).",
+        };
+      },
+    };
+
+    return envBackend;
   }
 
-  const envBackend: SecretBackend = {
-    async get(ref: string) {
-      return (await getEnvBackend()).get(ref);
+  // Fail closed: no Secret Service, no explicit env backend opt-in.
+  const unavailableBackend: SecretBackend = {
+    async get(ref: string): Promise<undefined> {
+      void ref;
+      throw new (await import("@sestina/schema")).SestinaError(
+        (await import("@sestina/schema")).SestinaErrorCode.secure_storage_unavailable,
+        "Secret Service is not available on this Linux system. " +
+        "Install and start gnome-keyring-daemon or kwalletd6, " +
+        "or explicitly opt in to environment variable storage by setting " +
+        "SESTINA_USE_ENV_BACKEND=true and providing secrets via SESTINA_SECRET_<NAME>.",
+      );
     },
-    async set(ref: string, value: string) {
-      return (await getEnvBackend()).set(ref, value);
+    async set(ref: string, _value: string): Promise<void> {
+      void ref; void _value;
+      throw new (await import("@sestina/schema")).SestinaError(
+        (await import("@sestina/schema")).SestinaErrorCode.secure_storage_unavailable,
+        "Secret Service is not available. Set SESTINA_USE_ENV_BACKEND=true " +
+        "and provide secrets via SESTINA_SECRET_<NAME> environment variables.",
+      );
     },
-    async delete(ref: string) {
-      return (await getEnvBackend()).delete(ref);
+    // eslint-disable-next-line @typescript-eslint/require-await
+    async delete(ref: string): Promise<void> {
+      void ref;
+      // No-op: nothing to delete
     },
-    async describe(ref: string) {
-      return (await getEnvBackend()).describe(ref);
+    // eslint-disable-next-line @typescript-eslint/require-await
+    async describe(ref: string): Promise<{ configured: boolean }> {
+      void ref;
+      return { configured: false };
     },
     // eslint-disable-next-line @typescript-eslint/require-await
     async health(): Promise<SecretBackendStatus> {
       return {
-        available: true,
-        backend: "environment",
+        available: false,
+        backend: "none",
         reason:
           "Secret Service (D-Bus) is not available on this system. " +
-          "Reading secrets from SESTINA_SECRET_* environment variables. " +
-          "To use the system keyring, install and start gnome-keyring-daemon or kwalletd6, " +
-          "then ensure DBUS_SESSION_BUS_ADDRESS or XDG_RUNTIME_DIR/bus is set.",
+          "Install and start gnome-keyring-daemon or kwalletd6, " +
+          "or set SESTINA_USE_ENV_BACKEND=true with SESTINA_SECRET_<NAME> variables.",
       };
     },
   };
 
-  return envBackend;
+  return unavailableBackend;
 }
 
 // ── Control Token ──

@@ -13,10 +13,13 @@
  * - Runtime guard rejects any non-CurrentUser scope.
  * - Verifies round-trip on first use (smoke test).
  * - On-disk vault contains only DPAPI-encrypted blobs (no plaintext).
+ * - Atomic writes via temp-file + rename (no partial writes).
+ * - Corruption detection on load with degraded-mode fallback.
  */
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, unlinkSync } from "node:fs";
 import { dirname } from "node:path";
 import { homedir } from "node:os";
+import { randomBytes } from "node:crypto";
 import type { SecretBackend, SecretBackendStatus, DPAPIProvider } from "./port.js";
 
 // ── Vault path ──
@@ -117,27 +120,92 @@ export function createWindowsDPAPIProvider(): DPAPIProvider {
   };
 }
 
-// ── Disk-persisted vault ──
+// ── Disk-persisted vault (atomic writes + corruption detection) ──
 
+/**
+ * Load the vault from disk. Returns a Map of ref → encrypted-hex.
+ *
+ * Corruption handling:
+ * - If the vault file is missing → empty Map (first run).
+ * - If the vault file is unparseable → empty Map, original file
+ *   renamed to vault.json.corrupt for forensic recovery.
+ * - If any entry value is not valid hex → entry skipped (not plaintext).
+ */
 function loadVault(path: string): Map<string, string> {
   try {
     if (!existsSync(path)) return new Map();
     const raw = readFileSync(path, "utf8");
-    const parsed = JSON.parse(raw) as Record<string, string>;
-    return new Map(Object.entries(parsed));
+    const parsed: unknown = JSON.parse(raw) as unknown;
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      // Structural corruption: not a key-value object
+      handleCorruption(path, "vault root is not a JSON object");
+      return new Map();
+    }
+    const map = new Map<string, string>();
+    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof value !== "string") {
+        // Skip non-string values (corrupt entry)
+        continue;
+      }
+      // Validate that the value is hex-encoded (only DPAPI blobs allowed)
+      if (!/^[0-9a-fA-F]+$/.test(value)) {
+        // Non-hex value found — possible tampering or plaintext leak.
+        // Skip the entry; never return potentially plaintext data.
+        continue;
+      }
+      map.set(key, value);
+    }
+    return map;
   } catch {
+    handleCorruption(path, "JSON parse failure");
     return new Map();
   }
 }
 
+/**
+ * Handle vault corruption: rename the bad file for forensic recovery.
+ */
+function handleCorruption(path: string, reason: string): void {
+  try {
+    const corruptPath = `${path}.corrupt`;
+    renameSync(path, corruptPath);
+    // Log the event (no secret material in log message)
+    const { stderr } = process;
+    stderr.write(`[sestina] Vault corruption detected (${reason}). Renamed to ${corruptPath}\n`);
+  } catch {
+    // Best-effort: if rename fails, delete the corrupt file to avoid
+    // persistent read errors on next load.
+    try { unlinkSync(path); } catch { /* unrecoverable */ }
+  }
+}
+
+/**
+ * Save the vault atomically:
+ * 1. Write to a temp file in the same directory.
+ * 2. Rename temp → target (atomic on same filesystem).
+ *
+ * This prevents partial writes from corrupting the vault on crash/power loss.
+ */
 function saveVault(path: string, store: Map<string, string>): void {
   const dir = dirname(path);
   mkdirSync(dir, { recursive: true });
+
   const obj: Record<string, string> = {};
   for (const [k, v] of store) {
     obj[k] = v;
   }
-  writeFileSync(path, JSON.stringify(obj), "utf8");
+
+  // Write to temp file first
+  const tmpName = `${path}.tmp-${randomBytes(8).toString("hex")}`;
+  try {
+    writeFileSync(tmpName, JSON.stringify(obj), { encoding: "utf8", flush: true });
+    // Atomic rename on same filesystem
+    renameSync(tmpName, path);
+  } catch {
+    // Clean up temp file on failure
+    try { unlinkSync(tmpName); } catch { /* best-effort */ }
+    throw new Error("Failed to persist vault: atomic write failed");
+  }
 }
 
 // ── Backend factory ──

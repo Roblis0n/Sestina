@@ -2,22 +2,36 @@
  * macOS Keychain backend.
  *
  * Uses @napi-rs/keyring (prebuilt Rust+N-API) for native Keychain access.
- * Falls back to the `security` CLI if native bindings are unavailable.
+ * There is NO fallback to the `security` CLI — passing secrets via -w
+ * leaks them to argv/ps and is a security vulnerability.
+ *
+ * If native bindings are unavailable, the backend fails closed.
  *
  * Service name: "Sestina"
  * Account: ref with "sestina/" prefix stripped, "/" replaced with "."
  */
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { SestinaError, SestinaErrorCode } from "@sestina/schema";
 import type { SecretBackend, SecretBackendStatus, KeychainProvider } from "./port.js";
 
-const execFileAsync = promisify(execFile);
 const SERVICE_NAME = "Sestina";
 
 // ── Ref → account mapping ──
 
+/**
+ * Convert a ref to a Keychain account name.
+ *
+ * COLLISION-FREE ESCAPE SCHEME:
+ * - "%"  → "%25" (escape literal percent signs)
+ * - "/"  → "%2F" (path separator)
+ *
+ * This ensures refs like "sestina/a/b" and "sestina/a%2Fb" map to
+ * DIFFERENT accounts ("a%2Fb" vs "a%252Fb").
+ */
 function accountFromRef(ref: string): string {
-  return ref.replace(/^sestina\//, "").replace(/\//g, ".");
+  return ref
+    .replace(/^sestina\//, "")
+    .replace(/%/g, "%25")  // escape "%" first (before "/" → "%2F")
+    .replace(/\//g, "%2F"); // then encode "/"
 }
 
 // ── Lazy native loader (keyring-rs via @napi-rs/keyring) ──
@@ -82,61 +96,6 @@ export function createNativeKeychainProvider(): KeychainProvider {
   };
 }
 
-// ── security CLI provider (fallback) ──
-
-function probeSecurityCLI(): Promise<boolean> {
-  return execFileAsync("security", ["list-keychains"], { timeout: 3000 })
-    .then(() => true)
-    .catch(() => false);
-}
-
-export function createSecurityCLIProvider(): KeychainProvider {
-  return {
-    async addGenericPassword(service, account, password) {
-      // NOTE: The macOS `security` CLI requires the password on the command
-      // line via -w. This means the secret is visible to same-user processes
-      // via `ps`. Prefer the native keyring binding (createNativeKeychainProvider)
-      // which avoids this. This CLI provider is a fallback for environments
-      // where native bindings cannot be installed.
-      await execFileAsync("security", [
-        "add-generic-password", "-U",
-        "-a", account, "-s", service, "-w", password,
-      ], { maxBuffer: 1024 * 1024 });
-    },
-    async findGenericPassword(service, account) {
-      try {
-        const { stdout } = await execFileAsync("security", [
-          "find-generic-password",
-          "-a", account, "-s", service, "-w",
-        ]);
-        const trimmed = stdout.trim();
-        return trimmed || undefined;
-      } catch (err: unknown) {
-        const code = (err as { code?: string | number }).code;
-        // exit code 44 = item not found, exit code 128 + signal = killed
-        if (code === "44" || (typeof code === "number" && code === 44)) {
-          return undefined;
-        }
-        throw err;
-      }
-    },
-    async deleteGenericPassword(service, account) {
-      try {
-        await execFileAsync("security", [
-          "delete-generic-password",
-          "-a", account, "-s", service,
-        ]);
-      } catch (err: unknown) {
-        const code = (err as { code?: string | number }).code;
-        if (code === "44" || (typeof code === "number" && code === 44)) {
-          return; // already gone
-        }
-        throw err;
-      }
-    },
-  };
-}
-
 // ── Backend factory ──
 
 export function createMacOSKeychainBackend(
@@ -148,22 +107,18 @@ export function createMacOSKeychainBackend(
   async function resolveProvider(): Promise<KeychainProvider> {
     if (!providerResolved) {
       providerResolved = true;
-      // Try native first
+      // Only use native keyring binding. The security CLI is deliberately
+      // NOT used as a fallback — passing secrets via -w leaks them to argv.
       const native = await getKeyringNative();
       if (native) {
         provider = createNativeKeychainProvider();
-      } else {
-        // Fall back to security CLI
-        const cliOk = await probeSecurityCLI();
-        if (cliOk) {
-          provider = createSecurityCLIProvider();
-        }
       }
     }
     if (!provider) {
-      throw new Error(
-        "Keychain unavailable: no native bindings and security CLI not functional. " +
-        "Set SESTINA_SECRET_<NAME> environment variables instead.",
+      throw new SestinaError(
+        SestinaErrorCode.secure_storage_unavailable,
+        "Keychain unavailable: native bindings (@napi-rs/keyring) could not be loaded. " +
+        "Set SESTINA_SECRET_<NAME> environment variables to use secrets on this system.",
       );
     }
     return provider;

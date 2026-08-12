@@ -1,51 +1,25 @@
- 
 /**
  * Client capability and permission boundary tests.
  *
- * These tests verify the hard security boundary:
+ * These tests verify the hard security boundary using the PRODUCTION
+ * ActorProvenance schema and permission helpers from @sestina/schema.
+ * No inline type definitions or function reimplementations.
+ *
+ * Rules enforced:
  * - Control tokens prove "current user installed this client" ONLY.
  * - Control tokens do NOT grant direct-user provenance.
  * - Hooks, MCP, and peers can NEVER obtain user-level permissions
  *   regardless of token possession.
  * - Peer provenance is permanently distinct from user provenance.
+ * - directUser on mcp/host channels is rejected at the schema level.
  */
 import { describe, it, expect } from "vitest";
-
-// ── Provenance model (mirrors schema but tested independently here) ──
-
-type ActorKind = "user" | "agent" | "system" | "hook" | "cli";
-type ChannelKind = "desktop" | "host" | "mcp" | "cli" | "runtime";
-
-interface ActorProvenance {
-  actor: ActorKind;
-  channel: ChannelKind;
-  directUser: boolean;
-  challengeId?: string;
-}
-
-/** Peer provenance types — defined here to be tested BEFORE Task 5 storage. */
-type PeerProvenanceKind = "hook" | "mcp_agent" | "cli_script";
-
-interface PeerProvenance {
-  kind: PeerProvenanceKind;
-  /** Peer identity — NOT a user identity. */
-  peerId: string;
-  /** The host session this peer is attached to. */
-  hostSessionId: string;
-}
-
-// ── Permission boundary rules (to be enforced by core) ──
-
-const DIRECT_USER_CHANNELS: ChannelKind[] = ["desktop", "cli"];
-const PEER_CHANNELS: ChannelKind[] = ["host", "mcp"];
-
-function canActAsDirectUser(provenance: ActorProvenance): boolean {
-  return provenance.directUser && DIRECT_USER_CHANNELS.includes(provenance.channel);
-}
-
-function isPeerProvenance(provenance: ActorProvenance): boolean {
-  return PEER_CHANNELS.includes(provenance.channel);
-}
+import {
+  ActorProvenanceSchema,
+  canActAsDirectUser,
+  isPeerProvenance,
+} from "@sestina/schema";
+import type { ActorProvenance } from "@sestina/schema";
 
 // ── Tests ──
 
@@ -103,8 +77,6 @@ describe("client capability boundaries", () => {
 
   describe("control token cannot elevate peer to user", () => {
     it("Hook with valid control token is still peer provenance", () => {
-      // Even if a Hook runner possesses the control token (it needs it for IPC),
-      // its provenance remains "hook" — never "user".
       const hookProvenance: ActorProvenance = {
         actor: "hook",
         channel: "host",
@@ -123,9 +95,7 @@ describe("client capability boundaries", () => {
     });
 
     it("peer provenance can never mutate into directUser", () => {
-      // The directUser flag is set by the IPC handshake based on channel type,
-      // NOT by token possession. Peers cannot flip this flag.
-      const peerChannels: ChannelKind[] = ["host", "mcp"];
+      const peerChannels = ["host", "mcp"] as const;
       for (const channel of peerChannels) {
         // Attempt to "spoof" — should always be false for peer channels
         const spoofed: ActorProvenance = {
@@ -138,50 +108,49 @@ describe("client capability boundaries", () => {
     });
   });
 
-  describe("peer provenance isolation", () => {
-    it("different peers have independent identities", () => {
-      const hookPeer: PeerProvenance = {
-        kind: "hook",
-        peerId: "hook-codex-001",
-        hostSessionId: "session-a",
-      };
-      const mcpPeer: PeerProvenance = {
-        kind: "mcp_agent",
-        peerId: "mcp-agent-001",
-        hostSessionId: "session-b",
-      };
-
-      // Different kinds
-      expect(hookPeer.kind).not.toBe(mcpPeer.kind);
-      // Different identities
-      expect(hookPeer.peerId).not.toBe(mcpPeer.peerId);
-      // May share host session
-      expect(hookPeer.hostSessionId).not.toBe(mcpPeer.hostSessionId);
+  describe("schema-level rejection of directUser on peer channels", () => {
+    it("rejects {actor:user, channel:mcp, directUser:true} at parse time", () => {
+      const result = ActorProvenanceSchema.safeParse({
+        actor: "user",
+        channel: "mcp",
+        directUser: true,
+      });
+      expect(result.success).toBe(false);
     });
 
-    it("peer provenance is always distinct from user provenance", () => {
-      const peerKind: PeerProvenanceKind[] = ["hook", "mcp_agent", "cli_script"];
-      const userActor: ActorKind = "user";
+    it("rejects {actor:user, channel:host, directUser:true} at parse time", () => {
+      const result = ActorProvenanceSchema.safeParse({
+        actor: "user",
+        channel: "host",
+        directUser: true,
+      });
+      expect(result.success).toBe(false);
+    });
 
-      // Peer kinds should never equal "user" actor
-      for (const pk of peerKind) {
-        expect(pk).not.toBe(userActor);
-      }
+    it("accepts {actor:user, channel:desktop, directUser:true}", () => {
+      const result = ActorProvenanceSchema.safeParse({
+        actor: "user",
+        channel: "desktop",
+        directUser: true,
+      });
+      expect(result.success).toBe(true);
+    });
+
+    it("accepts {actor:user, channel:cli, directUser:true}", () => {
+      const result = ActorProvenanceSchema.safeParse({
+        actor: "user",
+        channel: "cli",
+        directUser: true,
+      });
+      expect(result.success).toBe(true);
     });
   });
 
   describe("override authorization boundary", () => {
     it("requires directUser provenance for override confirmation", () => {
-      // This is the rule: override.confirm needs ActorProvenance with
-      // directUser=true AND channel in ["desktop", "cli"].
-
-      function canConfirmOverride(provenance: ActorProvenance): boolean {
-        return provenance.directUser && DIRECT_USER_CHANNELS.includes(provenance.channel);
-      }
-
       // Desktop user can confirm
       expect(
-        canConfirmOverride({
+        canActAsDirectUser({
           actor: "user",
           channel: "desktop",
           directUser: true,
@@ -191,7 +160,7 @@ describe("client capability boundaries", () => {
 
       // CLI user can confirm
       expect(
-        canConfirmOverride({
+        canActAsDirectUser({
           actor: "user",
           channel: "cli",
           directUser: true,
@@ -201,7 +170,7 @@ describe("client capability boundaries", () => {
 
       // MCP agent CANNOT confirm (even with a valid challenge ID)
       expect(
-        canConfirmOverride({
+        canActAsDirectUser({
           actor: "agent",
           channel: "mcp",
           directUser: false,
@@ -211,7 +180,7 @@ describe("client capability boundaries", () => {
 
       // Hook CANNOT confirm
       expect(
-        canConfirmOverride({
+        canActAsDirectUser({
           actor: "hook",
           channel: "host",
           directUser: false,
@@ -220,7 +189,7 @@ describe("client capability boundaries", () => {
 
       // System CANNOT confirm
       expect(
-        canConfirmOverride({
+        canActAsDirectUser({
           actor: "system",
           channel: "runtime",
           directUser: false,
@@ -231,22 +200,12 @@ describe("client capability boundaries", () => {
 
   describe("secret backend access boundary", () => {
     it("peers access secrets through the backend but never see raw storage", () => {
-      // Peers (Hooks, MCP) use getOrCreateControlToken which returns
-      // the token value they need for IPC. But they:
-      // 1. Never get direct access to the backend's raw storage
-      // 2. Never enumerate all stored secrets
-      // 3. Only access their scope-specific token
-
-      // This is a structural guarantee: the SecretBackend interface
-      // has no "list all" or "enumerate" method.
+      // The SecretBackend interface has no "list all" or "enumerate" method.
       // The describe() method only answers { configured: boolean }.
       const describableMethods = ["describe"] as const;
       const nonEnumeratingMethods = ["get", "set", "delete", "describe", "health"] as const;
 
-      // Verify describe exists but has no "list" method
       expect(describableMethods).toHaveLength(1);
-      // Confirm there is no "list" or "keys" or "enumerate" method
-      // in the interface (this is a type-level check, reinforced here)
       expect(nonEnumeratingMethods).not.toContain("list" as never);
       expect(nonEnumeratingMethods).not.toContain("keys" as never);
     });

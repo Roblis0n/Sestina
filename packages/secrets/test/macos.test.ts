@@ -2,18 +2,20 @@
 /**
  * macOS Keychain backend tests.
  *
- * On macOS:
- * - Uses Keychain via security CLI or native bindings.
- * - Service name: "Sestina", account: ref minus "sestina/" prefix.
- * - On non-macOS: structural tests only — NOT mock-as-real.
+ * Tests the REAL production macOS Keychain backend (src/macos-keychain.ts)
+ * via dependency injection — a synthetic KeychainProvider is injected into
+ * the real createMacOSKeychainBackend factory.
+ *
+ * On non-macOS: structural tests only — NOT mock-as-real.
  */
 import { describe, it, expect } from "vitest";
 import type {
-  SecretBackend,
   KeychainProvider,
 } from "../src/port.js";
 
-// ── Synthetic Keychain for structural tests (CLEARLY labeled; NOT a mock) ──
+// ── Synthetic Keychain for structural tests ──
+// CLEARLY labeled as synthetic; NOT a mock.
+// Injected into the real production backend factory via DI.
 
 function createSyntheticKeychain(): KeychainProvider {
   const store = new Map<string, string>();
@@ -42,49 +44,26 @@ function createSyntheticKeychain(): KeychainProvider {
   };
 }
 
-// ── Backend factory ──
+// ── Import REAL production backend factory ──
 
-function createSyntheticKeychainBackend(): SecretBackend {
+import { createMacOSKeychainBackend } from "../src/macos-keychain.js";
+
+function createTestBackend(): ReturnType<typeof createMacOSKeychainBackend> {
+  // Inject synthetic Keychain provider into the REAL production backend
   const keychain = createSyntheticKeychain();
-  const SERVICE = "Sestina";
-
-  function accountFromRef(ref: string): string {
-    return ref.replace(/^sestina\//, "");
-  }
-
-  return {
-    async get(ref: string) {
-      return keychain.findGenericPassword(SERVICE, accountFromRef(ref));
-    },
-    async set(ref: string, value: string) {
-      await keychain.addGenericPassword(SERVICE, accountFromRef(ref), value);
-    },
-    async delete(ref: string) {
-      await keychain.deleteGenericPassword(SERVICE, accountFromRef(ref));
-    },
-    async describe(ref: string) {
-      const found = await keychain.findGenericPassword(
-        SERVICE,
-        accountFromRef(ref),
-      );
-      return { configured: found !== undefined };
-    },
-    async health() {
-      return { available: true, backend: "keychain" as const };
-    },
-  };
+  return createMacOSKeychainBackend(keychain);
 }
 
-// ── Contract tests ──
+// ── Contract tests (run against real backend with injected synthetic provider) ──
 
 import { secretBackendContract } from "./contract.js";
-secretBackendContract(createSyntheticKeychainBackend);
+secretBackendContract(createTestBackend);
 
 // ── macOS-specific tests ──
 
 describe("macOS Keychain backend", () => {
   it("uses fixed service name 'Sestina' for all entries", async () => {
-    const backend = createSyntheticKeychainBackend();
+    const backend = createTestBackend();
     await backend.set("sestina/test1", "value1");
     await backend.set("sestina/test2", "value2");
     // Both should coexist without collision due to different accounts
@@ -93,21 +72,21 @@ describe("macOS Keychain backend", () => {
   });
 
   it("maps ref to keychain account correctly", async () => {
-    const backend = createSyntheticKeychainBackend();
+    const backend = createTestBackend();
     // Multi-segment ref
     await backend.set("sestina/openai/api-key", "sk-test");
     expect(await backend.get("sestina/openai/api-key")).toBe("sk-test");
   });
 
   it("delete is idempotent for non-existent entries", async () => {
-    const backend = createSyntheticKeychainBackend();
+    const backend = createTestBackend();
     await expect(
       backend.delete("sestina/nonexistent"),
     ).resolves.toBeUndefined();
   });
 
   it("get returns undefined for non-existent entries", async () => {
-    const backend = createSyntheticKeychainBackend();
+    const backend = createTestBackend();
     expect(await backend.get("sestina/never-stored")).toBeUndefined();
   });
 
@@ -120,5 +99,12 @@ describe("macOS Keychain backend", () => {
     expect(await kc.findGenericPassword("Svc1", "AcctA")).toBe("pw-a");
     expect(await kc.findGenericPassword("Svc1", "AcctB")).toBe("pw-b");
     expect(await kc.findGenericPassword("Svc2", "AcctA")).toBe("pw-c");
+  });
+
+  it("health reports keychain when synthetic provider is injected", async () => {
+    const backend = createTestBackend();
+    const status = await backend.health();
+    expect(status.available).toBe(true);
+    expect(status.backend).toBe("keychain");
   });
 });

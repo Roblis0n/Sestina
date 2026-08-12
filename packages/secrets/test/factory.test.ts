@@ -1,8 +1,9 @@
-/* eslint-disable @typescript-eslint/require-await, @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/require-await */
 /**
  * Factory tests — directly test createSecretBackend and control token functions.
  *
- * These tests verify correct platform routing and token lifecycle.
+ * These tests verify correct platform routing and token lifecycle
+ * using the REAL production code with injected fake backends.
  */
 import { describe, it, expect } from "vitest";
 import { createHmac, randomBytes } from "node:crypto";
@@ -14,7 +15,7 @@ import {
 } from "../src/index.js";
 import type { SecretBackend } from "../src/index.js";
 
-// ── Fake in-memory backend for testing ──
+// ── Fake in-memory backend for testing (DI pattern) ──
 
 function createFakeBackend(): SecretBackend {
   const store = new Map<string, string>();
@@ -39,8 +40,6 @@ function createFakeBackend(): SecretBackend {
 
 describe("createSecretBackend", () => {
   it("returns a backend for win32", () => {
-    // On non-Windows, this will fail to load @primno/dpapi and return degraded.
-    // That's fine — we just verify it doesn't throw synchronously.
     const backend = createSecretBackend("win32");
     expect(backend).toBeDefined();
     expect(typeof backend.get).toBe("function");
@@ -130,17 +129,6 @@ describe("resetControlToken", () => {
     expect(second.version).toBe(first.version);
   });
 
-  it("stores previous value for grace period during rotation", async () => {
-    const backend = createFakeBackend();
-    const original = await getOrCreateControlToken(backend, "ipc");
-    await resetControlToken(backend, "ipc");
-    // The previous value should be stored
-    const prevDesc = await backend.describe(
-      "sestina/control-token/ipc/previous",
-    );
-    expect(prevDesc.configured).toBe(true);
-  });
-
   it("creates multiple independent rotations", async () => {
     const backend = createFakeBackend();
     const v1 = await getOrCreateControlToken(backend, "ipc");
@@ -180,7 +168,7 @@ describe("verifyChallengeResponse", () => {
     await getOrCreateControlToken(backend, "ipc");
     const nonceC = randomBytes(16);
     const nonceS = randomBytes(16);
-    const wrongHMAC = randomBytes(32); // random, not computed
+    const wrongHMAC = randomBytes(32);
 
     const result = await verifyChallengeResponse(
       backend,
@@ -198,7 +186,6 @@ describe("verifyChallengeResponse", () => {
     const token = await getOrCreateControlToken(backend, "ipc");
     const nonceC = randomBytes(16);
     const nonceS = randomBytes(16);
-    // Compute with role "desktop"
     const messageDesktop = Buffer.concat([
       nonceC,
       nonceS,
@@ -218,12 +205,12 @@ describe("verifyChallengeResponse", () => {
     expect(result).toBe(false);
   });
 
-  it("accepts challenge response against previous token (grace period)", async () => {
+  it("rejects old token after reset (no grace period)", async () => {
     const backend = createFakeBackend();
     const original = await getOrCreateControlToken(backend, "ipc");
     await resetControlToken(backend, "ipc");
 
-    // Use the ORIGINAL token value to compute the HMAC
+    // Use the ORIGINAL (now-invalid) token value to compute HMAC
     const nonceC = randomBytes(16);
     const nonceS = randomBytes(16);
     const role = "desktop";
@@ -231,7 +218,7 @@ describe("verifyChallengeResponse", () => {
     const key = Buffer.from(original.value, "hex");
     const expected = createHmac("sha256", key).update(message).digest();
 
-    // Should still be accepted (grace period)
+    // Must be REJECTED — old token immediately invalid
     const result = await verifyChallengeResponse(
       backend,
       "ipc",
@@ -240,6 +227,6 @@ describe("verifyChallengeResponse", () => {
       nonceS,
       role,
     );
-    expect(result).toBe(true);
+    expect(result).toBe(false);
   });
 });

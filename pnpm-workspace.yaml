@@ -2,7 +2,6 @@ packages:
   - "packages/*"
   - "apps/*"
   - "integrations/*"
-allowBuilds:
-  '@primno/dpapi': set this to true or false
-  esbuild: true
-onlyBuiltDependencies: '@primno/dpapi'
+onlyBuiltDependencies:
+  - '@primno/dpapi'
+  - esbuild

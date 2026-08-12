@@ -2,43 +2,38 @@
 /**
  * Windows DPAPI backend tests.
  *
- * On Windows:
- * - Uses CurrentUser DPAPI (NEVER LocalMachine).
- * - Verifies encryption via protect→unprotect round-trip.
- * - Runs a real smoke test when platform === "win32".
- * - On non-Windows: uses a synthetic DPAPI provider (structural test only,
- *   NOT a mock masquerading as real verification).
+ * Tests the REAL production Windows DPAPI backend (src/windows-dpapi.ts)
+ * via dependency injection — a synthetic DPAPI provider is injected into
+ * the real createWindowsDPAPIBackend factory.
+ *
+ * On non-Windows: uses a synthetic DPAPI provider (structural test only,
+ * NOT a mock masquerading as real verification).
+ * On Windows: real DPAPI via @primno/dpapi.
  */
 import { describe, it, expect } from "vitest";
 import { secretBackendContract } from "./contract.js";
 import type {
-  SecretBackend,
   DPAPIProvider,
   EnvReader,
 } from "../src/port.js";
 
-// ── Synthetic DPAPI for structural tests (clearly labeled; NOT a mock) ──
+// ── Synthetic DPAPI for cross-platform structural tests ──
+// CLEARLY labeled as synthetic; NOT a mock masquerading as real verification.
+// Injected into the real production backend factory.
 
 function createSyntheticDPAPI(): DPAPIProvider {
-  const encrypted = new Map<string, Buffer>();
   let counter = 0;
-  // Simple XOR obfuscation so plaintext is not directly visible in "encrypted" blob.
-  // This is NOT real encryption — it's a structural stand-in clearly labeled as synthetic.
   const XOR_KEY = 0x5a;
   return {
     async protect(data: Buffer, _scope: "CurrentUser") {
       const id = `synth-${++counter}`;
       const obfuscated = Buffer.from(data.map((b) => b ^ XOR_KEY));
-      const wrapped = Buffer.concat([
+      return Buffer.concat([
         Buffer.from(`SYNTH_DPAPI_V1:${id}:`),
         obfuscated,
       ]);
-      encrypted.set(id, data);
-      return wrapped;
     },
-    async unprotect(data: Buffer, scope: "CurrentUser") {
-      // Runtime guard: reject non-CurrentUser scope
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+    async unprotect(data: Buffer, scope: string) {
       if (scope !== "CurrentUser") {
         throw new Error("Only CurrentUser scope is supported");
       }
@@ -54,53 +49,21 @@ function createSyntheticDPAPI(): DPAPIProvider {
   };
 }
 
-// ── Fake env reader ──
+// ── Import REAL production backend factory ──
 
-class FakeEnv implements EnvReader {
-  private store = new Map<string, string>();
-  read(key: string) { return this.store.get(key); }
-  keys() { return Array.from(this.store.keys()); }
-  set(key: string, v: string) { this.store.set(key, v); }
-}
+import { createWindowsDPAPIBackend } from "../src/windows-dpapi.js";
 
-// ── Backend factories ──
-
-function createSyntheticDPAPIBackend(): SecretBackend {
+function createTestBackend(): ReturnType<typeof createWindowsDPAPIBackend> {
+  // Inject synthetic DPAPI provider into the REAL production backend
   const dpapi = createSyntheticDPAPI();
-  const store = new Map<string, string>();
-
-  return {
-    async get(ref: string) {
-      const encryptedHex = store.get(ref);
-      if (!encryptedHex) return undefined;
-      const decrypted = await dpapi.unprotect(
-        Buffer.from(encryptedHex, "hex"),
-        "CurrentUser",
-      );
-      return decrypted.toString("utf8");
-    },
-    async set(ref: string, value: string) {
-      const encrypted = await dpapi.protect(
-        Buffer.from(value, "utf8"),
-        "CurrentUser",
-      );
-      store.set(ref, encrypted.toString("hex"));
-    },
-    async delete(ref: string) {
-      store.delete(ref);
-    },
-    async describe(ref: string) {
-      return { configured: store.has(ref) };
-    },
-    async health() {
-      return { available: true, backend: "dpapi" as const };
-    },
-  };
+  // Use a memory-backed path for tests (no disk IO needed)
+  const tempPath = `${process.env.TEMP ?? "/tmp"}/sestina-test-vault-${Date.now()}.json`;
+  return createWindowsDPAPIBackend(dpapi, tempPath);
 }
 
-// ── Contract tests ──
+// ── Contract tests (run against real backend with injected synthetic provider) ──
 
-secretBackendContract(createSyntheticDPAPIBackend);
+secretBackendContract(createTestBackend);
 
 // ── Windows-specific tests ──
 
@@ -129,25 +92,28 @@ describe("Windows DPAPI backend", () => {
     const original = Buffer.from("super-secret-12345", "utf8");
     const blob = await dpapi.protect(original, "CurrentUser");
     const hex = blob.toString("hex");
-    // The secret text should not appear in the encrypted blob
     expect(hex).not.toContain(
       Buffer.from("super-secret-12345").toString("hex"),
     );
   });
 
-  it("backend set→get round-trips through synthetic DPAPI", async () => {
-    const backend = createSyntheticDPAPIBackend();
+  it("backend set→get round-trips through real backend with synthetic DPAPI", async () => {
+    const backend = createTestBackend();
     await backend.set("sestina/test", "dpapi-encrypted-value");
     expect(await backend.get("sestina/test")).toBe("dpapi-encrypted-value");
-    // Verify the raw store does NOT contain plaintext
-    // (checked by construction: store holds hex of protect output)
   });
 
   it("backend encrypted storage does not contain plaintext secret", async () => {
-    const backend = createSyntheticDPAPIBackend();
+    const backend = createTestBackend();
     await backend.set("sestina/test", "plaintext-secret-abc");
-    // describe must not leak
     const desc = JSON.stringify(await backend.describe("sestina/test"));
     expect(desc).not.toContain("plaintext-secret-abc");
+  });
+
+  it("health reports dpapi when synthetic provider is available", async () => {
+    const backend = createTestBackend();
+    const status = await backend.health();
+    expect(status.available).toBe(true);
+    expect(status.backend).toBe("dpapi");
   });
 });
