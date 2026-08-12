@@ -62,8 +62,10 @@ function createSyntheticDPAPI(): DPAPIProvider {
   };
 }
 
+const silentACL: ACLProvider = { applyACL: () => true, applyACLToDir: () => { /* silent */ } };
+
 function createTestBackend(vaultPath?: string) {
-  return createWindowsDPAPIBackend(createSyntheticDPAPI(), vaultPath ?? testVault);
+  return createWindowsDPAPIBackend(createSyntheticDPAPI(), vaultPath ?? testVault, undefined, silentACL);
 }
 
 // ── Contract tests ──

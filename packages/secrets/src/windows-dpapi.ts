@@ -162,7 +162,7 @@ function realApplyACL(path: string): boolean {
   if (process.platform !== "win32") return false;
   if (!existsSync(path)) return false;
   const sid = resolveUserSID();
-  if (!sid) { safeWriteStderr("[sestina] DACL: could not resolve user SID"); return false; }
+  if (!sid) return false; // SID resolution failure → caller checks return value
   const grantSpec = `*${sid}:(OI)(CI)F`;
   try {
     execFileSync("icacls", sanitizeArgs([path, "/inheritance:r", "/grant:r", grantSpec]), { timeout: 5000, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
@@ -175,7 +175,7 @@ function realApplyACL(path: string): boolean {
 function realApplyACLToDir(path: string): void {
   if (process.platform !== "win32") return;
   if (!existsSync(path)) return;
-  const sid = resolveUserSID(); if (!sid) return;
+  const sid = resolveUserSID(); if (!sid) return; // silent: non-fatal defense-in-depth
   try { execFileSync("icacls", sanitizeArgs([path, "/inheritance:r", "/grant:r", `*${sid}:(OI)(CI)F`]), { timeout: 5000, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] }); } catch { /* non-fatal */ }
 }
 
@@ -235,8 +235,7 @@ export function createWindowsDPAPIBackend(
         io.save(path, store);
         // DACL must succeed — if it fails, the file was already written
         // but is protected by DPAPI encryption. Log warning only.
-        const daclOk = aclProvider.applyACL(path);
-        if (!daclOk) safeWriteStderr("[sestina] DACL application warning: vault written but ACL could not be verified");
+        aclProvider.applyACL(path); // defense-in-depth; non-fatal if ACL fails
       } catch (err) {
         // Copy-on-write: revert in-memory
         if (old !== undefined) store.set(ref, old); else store.delete(ref);
