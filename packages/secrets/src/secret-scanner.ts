@@ -1,63 +1,58 @@
 /**
- * Synthetic-secret scanner — defense-in-depth against secret leakage.
+ * Synthetic-secret scanner — full-mode defense-in-depth sanitizer.
  *
- * Scans strings for patterns that match known secret formats before
- * they reach argv, stderr, exception messages, or other output channels.
+ * Scans and redacts strings for known secret formats before they reach
+ * argv, stderr, exception messages, subprocess arguments, or any other
+ * output boundary.
  *
- * This is NOT a cryptographic guarantee — it's a coarse filter that
- * catches accidental plaintext exposures of hex tokens, API keys,
- * and other identifiable secret formats.
+ * This is NOT a cryptographic guarantee — it is a coarse filter that
+ * catches accidental plaintext exposures. The pattern set covers:
+ * - Hex tokens (128/256-bit)
+ * - API keys (OpenAI, Anthropic, generic sk-*)
+ * - JWT tokens (header.payload.signature)
+ * - Base64-encoded secrets (40+ chars)
+ * - DPAPI-encrypted hex blobs
+ * - PEM private key blocks
+ * - GitHub/GitLab/AWS access keys
  */
 
 // ── Pattern definitions ──
 
-/** Patterns that match common secret formats. */
 const SECRET_PATTERNS: readonly {
   name: string;
   regex: RegExp;
 }[] = [
-  // 256-bit hex tokens (64 hex chars) — control tokens
   { name: "hex256-token", regex: /\b[0-9a-fA-F]{64}\b/ },
-  // 128-bit hex (32 hex chars) — smaller tokens
   { name: "hex128-token", regex: /\b[0-9a-fA-F]{32}\b/ },
-  // OpenAI-style API keys: sk-... or sk-proj-...
   { name: "openai-key", regex: /\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}\b/ },
-  // Anthropic-style API keys: sk-ant-...
   { name: "anthropic-key", regex: /\bsk-ant-[A-Za-z0-9_-]{20,}\b/ },
-  // JWT tokens: eyJ... (base64url header)
+  { name: "github-token", regex: /\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9_]{36,}\b/ },
+  { name: "aws-key", regex: /\bAKIA[0-9A-Z]{16}\b/ },
   { name: "jwt", regex: /\beyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/ },
-  // Generic base64-encoded secrets (40+ chars of base64)
   { name: "base64-secret", regex: /\b[A-Za-z0-9+/]{40,}={0,2}\b/ },
-  // DPAPI hex blobs (200+ hex chars)
   { name: "dpapi-blob", regex: /\b[0-9a-fA-F]{200,}\b/ },
+  { name: "pem-private-key", regex: /-----BEGIN (?:RSA |EC |DSA |OPENSSH )?PRIVATE KEY-----/ },
+  { name: "generic-api-key", regex: /\b(?:api[_-]?key|apikey|secret[_-]?key)["\s:=]+["']?[A-Za-z0-9_-]{20,}["']?/i },
 ];
 
 // ── Public API ──
 
-/**
- * Result of scanning a string for potential secret leakage.
- */
 export interface ScanResult {
-  /** Whether any secret-like patterns were found. */
   hasSecrets: boolean;
-  /** Which patterns matched (without the matched content). */
   matchedPatterns: string[];
-  /** Number of matches found. */
   matchCount: number;
 }
 
 /**
  * Scan a string for synthetic-secret patterns.
- *
- * @param text  The string to scan (e.g., argv element, stderr output, error message).
- * @returns A ScanResult describing any potential secret leakage found.
+ * Returns a ScanResult describing potential leakage found.
  */
 export function scanForSecrets(text: string): ScanResult {
   const matchedPatterns: string[] = [];
   let matchCount = 0;
 
   for (const pattern of SECRET_PATTERNS) {
-    pattern.regex.lastIndex = 0; // reset global regex state
+    pattern.regex.lastIndex = 0;
     const matches = text.match(pattern.regex);
     if (matches && matches.length > 0) {
       matchedPatterns.push(pattern.name);
@@ -73,12 +68,8 @@ export function scanForSecrets(text: string): ScanResult {
 }
 
 /**
- * Safely convert a value to a string for output, redacting any
- * secret-like patterns found.
- *
- * @param value  The value that might contain secret material.
- * @param label  A label for the redacted content in output.
- * @returns A safe string with secret patterns replaced by [REDACTED].
+ * Full-mode redaction: replace ALL secret-like patterns with [REDACTED:type].
+ * Used before any string reaches stderr, exception messages, argv, or logs.
  */
 export function safeStringForOutput(value: unknown): string {
   if (typeof value !== "string") {
@@ -95,11 +86,8 @@ export function safeStringForOutput(value: unknown): string {
 }
 
 /**
- * Guard: throws if the given string resembles a secret.
- * Use before writing to argv-visible channels or stderr.
- *
- * @param text  The string to check.
- * @param channel  Description of the output channel (for error message).
+ * Guard: throw sanitized Error if text contains secret-like content.
+ * The error message itself is pre-scanned and contains no secret material.
  */
 export function assertNoSecrets(text: string, channel: string): void {
   const result = scanForSecrets(text);
@@ -107,7 +95,34 @@ export function assertNoSecrets(text: string, channel: string): void {
     throw new Error(
       `Secret-like content detected in ${channel}: ` +
       `${result.matchCount} match(es) for patterns: ${result.matchedPatterns.join(", ")}. ` +
-      `This may indicate a secret leak. The content has been suppressed.`,
+      `The content has been suppressed to prevent leakage.`,
     );
   }
+}
+
+/**
+ * Sanitize a string for stderr output: scan, redact if needed, write.
+ * Returns true if the message was clean, false if redaction was applied.
+ */
+export function safeWriteStderr(message: string): boolean {
+  const result = scanForSecrets(message);
+  if (result.hasSecrets) {
+    const redacted = safeStringForOutput(message);
+    process.stderr.write(`[sestina:redacted] ${redacted}\n`);
+    return false;
+  }
+  process.stderr.write(`${message}\n`);
+  return true;
+}
+
+/**
+ * Sanitize command-line arguments for subprocess execution.
+ * Each argument is individually scanned; any argument containing
+ * secret-like patterns is replaced with "[REDACTED]".
+ */
+export function sanitizeArgs(args: readonly string[]): string[] {
+  return args.map((arg) => {
+    const result = scanForSecrets(arg);
+    return result.hasSecrets ? "[REDACTED]" : arg;
+  });
 }

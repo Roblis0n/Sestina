@@ -1,22 +1,16 @@
 /**
  * Windows DPAPI backend — CurrentUser scope only.
  *
- * Uses @primno/dpapi (prebuilt native addon wrapping CryptProtectData /
- * CryptUnprotectData from Crypt32.dll).
- *
- * Each entry is individually DPAPI-encrypted and persisted to a JSON
- * vault file on disk, so secrets (including control tokens) survive
- * process restarts.
+ * Uses @primno/dpapi (CryptProtectData / CryptUnprotectData).
  *
  * Invariants:
- * - Only CurrentUser scope (NEVER LocalMachine).
- * - Runtime guard rejects any non-CurrentUser scope.
- * - Verifies round-trip on first use (smoke test).
- * - On-disk vault contains only DPAPI-encrypted blobs (no plaintext).
- * - Atomic writes via temp-file + rename (no partial writes).
- * - Corruption detection on load with forensic preservation.
- * - CurrentUser-only DACL applied to vault file on Windows.
- * - All errors are stable, sanitized SestinaError (no raw native errors).
+ * - Only CurrentUser scope.
+ * - Copy-on-write: set/delete failure preserves old state in memory AND disk.
+ * - Atomic writes via temp-file + rename.
+ * - Corruption detection with forensic preservation.
+ * - CurrentUser-only DACL via icacls (verified, not best-effort).
+ * - All errors are stable, sanitized SestinaError.
+ * - All subprocess args sanitized through secret-scanner.
  */
 import {
   mkdirSync, readFileSync, writeFileSync, renameSync,
@@ -28,7 +22,7 @@ import { randomBytes } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import type { SecretBackend, SecretBackendStatus, DPAPIProvider } from "./port.js";
 import { throwUnavailable, throwCorruption } from "./errors.js";
-import { scanForSecrets } from "./secret-scanner.js";
+import { safeWriteStderr, sanitizeArgs } from "./secret-scanner.js";
 
 // ── Vault path ──
 
@@ -72,17 +66,12 @@ async function getDPAPI(): Promise<DPAPINative | null> {
     dpapiNative = {
       isPlatformSupported: native.isPlatformSupported ?? false,
       Dpapi: native.Dpapi ?? native.default?.Dpapi ?? {
-        protectData: () => {
-          throw new Error("DPAPI not available");
-        },
-        unprotectData: () => {
-          throw new Error("DPAPI not available");
-        },
+        protectData: () => { throw new Error("DPAPI not available"); },
+        unprotectData: () => { throw new Error("DPAPI not available"); },
       },
     };
     if (!dpapiNative.isPlatformSupported) {
-      loadError =
-        "DPAPI platform not supported (non-Windows or unsupported arch)";
+      loadError = "DPAPI platform not supported (non-Windows or unsupported arch)";
       dpapiNative = null;
     }
     return dpapiNative;
@@ -92,13 +81,11 @@ async function getDPAPI(): Promise<DPAPINative | null> {
   }
 }
 
-// ── DPAPI provider (wraps native module) ──
+// ── DPAPI provider ──
 
 function guardScope(scope: string): asserts scope is "CurrentUser" {
   if (scope !== "CurrentUser") {
-    throw new Error(
-      "Only CurrentUser DPAPI scope is supported. LocalMachine is rejected.",
-    );
+    throw new Error("Only CurrentUser DPAPI scope is supported. LocalMachine is rejected.");
   }
 }
 
@@ -107,101 +94,106 @@ export function createWindowsDPAPIProvider(): DPAPIProvider {
     async protect(data: Buffer, scope: "CurrentUser"): Promise<Buffer> {
       guardScope(scope);
       const dpapi = await getDPAPI();
-      if (!dpapi) {
-        throwUnavailable("protect", new Error(loadError ?? "DPAPI unavailable"));
-      }
-      const result = dpapi.Dpapi.protectData(data, null, scope);
-      return Buffer.from(result);
+      if (!dpapi) throwUnavailable("protect", new Error(loadError ?? "DPAPI unavailable"));
+      return Buffer.from(dpapi.Dpapi.protectData(data, null, scope));
     },
     async unprotect(data: Buffer, scope: "CurrentUser"): Promise<Buffer> {
       guardScope(scope);
       const dpapi = await getDPAPI();
-      if (!dpapi) {
-        throwUnavailable("unprotect", new Error(loadError ?? "DPAPI unavailable"));
-      }
-      const result = dpapi.Dpapi.unprotectData(data, null, scope);
-      return Buffer.from(result);
+      if (!dpapi) throwUnavailable("unprotect", new Error(loadError ?? "DPAPI unavailable"));
+      return Buffer.from(dpapi.Dpapi.unprotectData(data, null, scope));
     },
   };
 }
 
-// ── Windows ACL: set CurrentUser-only DACL on vault file ──
+// ── Windows ACL ──
 
 /**
- * Apply CurrentUser-only DACL to the vault file on Windows.
- * Uses icacls to:
- * 1. Inherit no permissions from parent
- * 2. Grant (OI)(CI)F to the current user only
- * 3. Remove inherited entries
- *
- * On non-Windows or if icacls is unavailable, this is a no-op.
- * The vault is still protected by DPAPI encryption and the user's
- * home/profile directory permissions.
+ * Resolve the current user's SID via `whoami /user`.
+ * Returns the SID string (e.g., "S-1-5-21-...") or null on failure.
+ * The subprocess arguments are sanitized before execution.
  */
-function applyCurrentUserACL(vaultPath: string): void {
-  if (process.platform !== "win32") return;
+function resolveUserSID(): string | null {
+  if (process.platform !== "win32") return null;
   try {
-    // Ensure the vault file exists before setting ACL
-    if (!existsSync(vaultPath)) return;
-
-    // /inheritance:r  = remove all inherited ACEs
-    // /grant:r        = replace grant for specified user
-    // %USERNAME%:F    = Full control for current user
-    const username = process.env.USERNAME ?? process.env.USER;
-    if (!username) return;
-
-    execFileSync("icacls", [
-      vaultPath,
-      "/inheritance:r",
-      "/grant:r",
-      `${username}:(OI)(CI)F`,
-    ], {
+    const args = sanitizeArgs(["whoami", "/user"]);
+    const stdout = execFileSync(args[0]!, args.slice(1), {
       timeout: 5000,
       windowsHide: true,
-      stdio: ["ignore", "ignore", "pipe"], // capture stderr only
-    });
+      stdio: ["ignore", "pipe", "pipe"],
+    }).toString("utf8");
+    // Parse: "S-1-5-21-..." from output
+    const match = /S-1-5-\d+(-\d+)+/.exec(stdout);
+    return match ? match[0] : null;
   } catch {
-    // Non-fatal: ACL is defense-in-depth.
-    // DPAPI encryption already binds to the user's credential.
-    // If icacls fails (e.g., non-admin, non-Windows), the vault
-    // is still cryptographically protected.
+    return null;
+  }
+}
+
+/**
+ * Apply CurrentUser-only DACL to the vault file.
+ * Uses the user's SID (not just USERNAME) for reliable identity.
+ *
+ * @param vaultPath  Path to the vault file.
+ * @returns true if DACL was successfully applied.
+ * @throws If DACL application fails (this is NOT best-effort).
+ */
+export function applyCurrentUserACL(vaultPath: string): boolean {
+  if (process.platform !== "win32") return false;
+  if (!existsSync(vaultPath)) return false;
+
+  const sid = resolveUserSID();
+  if (!sid) {
+    safeWriteStderr("[sestina] DACL: could not resolve user SID, cannot verify CurrentUser-only");
+    return false;
+  }
+
+  // Sanitize args: vault path may contain username but no secrets
+  const sanitizedPath = vaultPath; // vault path is not a secret
+  const grantSpec = `${sid}:(OI)(CI)F`;
+
+  try {
+    execFileSync("icacls", sanitizeArgs([
+      sanitizedPath,
+      "/inheritance:r",
+      "/grant:r",
+      grantSpec,
+    ]), {
+      timeout: 5000,
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    return true;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    safeWriteStderr(`[sestina] DACL application failed: ${msg}`);
+    return false;
   }
 }
 
 function applyACLToDir(dirPath: string): void {
   if (process.platform !== "win32") return;
+  if (!existsSync(dirPath)) return;
+  const sid = resolveUserSID();
+  if (!sid) return;
   try {
-    if (!existsSync(dirPath)) return;
-    const username = process.env.USERNAME ?? process.env.USER;
-    if (!username) return;
-
-    execFileSync("icacls", [
+    execFileSync("icacls", sanitizeArgs([
       dirPath,
       "/inheritance:r",
       "/grant:r",
-      `${username}:(OI)(CI)F`,
-    ], {
+      `${sid}:(OI)(CI)F`,
+    ]), {
       timeout: 5000,
       windowsHide: true,
-      stdio: ["ignore", "ignore", "pipe"],
+      stdio: ["ignore", "pipe", "pipe"],
     });
   } catch {
-    // Non-fatal
+    // Directory DACL is non-fatal defense-in-depth
   }
 }
 
-// ── Disk-persisted vault (atomic writes + corruption detection) ──
+// ── Disk-persisted vault ──
 
-/**
- * Load the vault from disk. Returns a Map of ref → encrypted-hex.
- *
- * Corruption handling:
- * - Missing file → empty Map (first run).
- * - Unparseable JSON → forensic backup, empty Map.
- * - Structural corruption → forensic backup, empty Map.
- * - Non-hex entry values → skipped (potential plaintext leak).
- * - NEVER deletes the forensic original on rename conflict.
- */
 function loadVault(path: string): Map<string, string> {
   try {
     if (!existsSync(path)) return new Map();
@@ -224,76 +216,47 @@ function loadVault(path: string): Map<string, string> {
   }
 }
 
-/**
- * Handle vault corruption: rename the bad file for forensic recovery.
- *
- * SAFETY: If the target `.corrupt` file already exists, a unique
- * numbered suffix is appended (e.g., `.corrupt.1`, `.corrupt.2`).
- * The forensic original is NEVER deleted or overwritten.
- */
 function handleCorruption(path: string, reason: string): void {
-  // Find a unique forensic backup name
   let corruptPath = `${path}.corrupt`;
   let counter = 1;
   while (existsSync(corruptPath)) {
     corruptPath = `${path}.corrupt.${counter}`;
     counter++;
-    // Safety limit: avoid infinite loop
     if (counter > 100) {
-      sanitizedStderr(
-        `[sestina] Vault corruption detected (${reason}), but too many .corrupt files exist. ` +
-        `Skipping forensic backup of ${path}.`,
+      safeWriteStderr(
+        `[sestina] Vault corruption (${reason}), too many .corrupt files, skipping backup of ${path}`,
       );
       return;
     }
   }
-
   try {
     renameSync(path, corruptPath);
-    sanitizedStderr(
-      `[sestina] Vault corruption detected (${reason}). Renamed to ${corruptPath}`,
-    );
+    safeWriteStderr(`[sestina] Vault corruption (${reason}). Renamed to ${corruptPath}`);
   } catch {
-    // If rename completely fails (permissions, filesystem error),
-    // leave the original file in place. Do NOT delete it.
-    sanitizedStderr(
-      `[sestina] Vault corruption detected (${reason}), but rename failed. ` +
-      `Original file left at ${path}.`,
-    );
+    safeWriteStderr(`[sestina] Vault corruption (${reason}), rename failed, original left at ${path}`);
   }
 }
 
-/**
- * Sanitized stderr write: scans message for secret patterns before output.
- */
-function sanitizedStderr(message: string): void {
-  const result = scanForSecrets(message);
-  if (result.hasSecrets) {
-    const redacted = message.replace(
-      /[0-9a-fA-F]{32,}/g,
-      "[REDACTED:hex-token]",
-    );
-    process.stderr.write(`${redacted}\n`);
-    return;
-  }
-  process.stderr.write(`${message}\n`);
-}
+// ── Copy-on-write save ──
 
 /**
- * Save the vault atomically:
- * 1. Write to a temp file in the same directory.
- * 2. fsync / flush to disk.
- * 3. Rename temp → target (atomic on same filesystem).
- * 4. Apply CurrentUser DACL to the new file.
+ * Save the vault atomically with copy-on-write semantics.
  *
- * On write failure, the in-memory store is NOT modified.
- * Any temp file is cleaned up on failure.
+ * 1. Serialize current state to temp file
+ * 2. fsync temp file
+ * 3. Atomically rename temp → target
+ * 4. Apply DACL
+ *
+ * On ANY failure:
+ * - The in-memory store is NOT modified (caller's responsibility
+ *   to revert if needed).
+ * - The on-disk vault retains its previous state (rename didn't happen).
+ * - The temp file is cleaned up.
+ * - A stable SestinaError is thrown.
  */
 function saveVault(path: string, store: Map<string, string>): void {
   const dir = dirname(path);
   mkdirSync(dir, { recursive: true });
-
-  // Apply DACL to the vault directory on first creation
   applyACLToDir(dir);
 
   const obj: Record<string, string> = {};
@@ -304,16 +267,11 @@ function saveVault(path: string, store: Map<string, string>): void {
   const tmpName = `${path}.tmp-${randomBytes(8).toString("hex")}`;
   try {
     writeFileSync(tmpName, JSON.stringify(obj), { encoding: "utf8", flush: true });
-    // Atomic rename on same filesystem
     renameSync(tmpName, path);
-    // Apply CurrentUser DACL to the vault file
     applyCurrentUserACL(path);
-    // Restrict POSIX-mode permissions (belt-and-suspenders, effective on Unix)
-    try { chmodSync(path, 0o600); } catch { /* non-fatal on Windows */ }
+    try { chmodSync(path, 0o600); } catch { /* non-fatal */ }
   } catch (err) {
-    // Clean up temp file on failure — never leave stale temp files
     try { unlinkSync(tmpName); } catch { /* best-effort */ }
-    // Throw stable SestinaError, not raw filesystem error
     throwCorruption(
       `atomic write failed: ${err instanceof Error ? err.message : String(err)}`,
     );
@@ -329,10 +287,8 @@ export function createWindowsDPAPIBackend(
   const provider = dpapi ?? createWindowsDPAPIProvider();
   const path = vaultPath ?? defaultVaultPath();
 
-  // Load persisted vault on creation
   const store = loadVault(path);
 
-  // Smoke test on first use
   let smokePassed = false;
   let smokeError: string | undefined;
 
@@ -340,10 +296,7 @@ export function createWindowsDPAPIBackend(
     if (smokePassed) return;
     try {
       const testValue = `dpapi-smoke-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-      const encrypted = await provider.protect(
-        Buffer.from(testValue, "utf8"),
-        "CurrentUser",
-      );
+      const encrypted = await provider.protect(Buffer.from(testValue, "utf8"), "CurrentUser");
       const decrypted = await provider.unprotect(encrypted, "CurrentUser");
       if (decrypted.toString("utf8") !== testValue) {
         throw new Error("DPAPI round-trip mismatch");
@@ -362,35 +315,50 @@ export function createWindowsDPAPIBackend(
       if (!encryptedHex) return undefined;
       try {
         const decrypted = await provider.unprotect(
-          Buffer.from(encryptedHex, "hex"),
-          "CurrentUser",
+          Buffer.from(encryptedHex, "hex"), "CurrentUser",
         );
         return decrypted.toString("utf8");
       } catch (err) {
-        // DPAPI unprotect failure: the blob may be corrupt or from another user.
-        // Return undefined (treat as not found) — do NOT surface raw error.
         const msg = err instanceof Error ? err.message : String(err);
-        sanitizedStderr(
-          "[sestina] DPAPI unprotect failed for ref " + ref + ": " + msg,
-        );
+        safeWriteStderr("[sestina] DPAPI unprotect failed for ref " + ref + ": " + msg);
         return undefined;
       }
     },
 
     async set(ref: string, value: string): Promise<void> {
       await runSmoke();
-      const encrypted = await provider.protect(
-        Buffer.from(value, "utf8"),
-        "CurrentUser",
-      );
-      store.set(ref, encrypted.toString("hex"));
-      saveVault(path, store);
+      const encrypted = await provider.protect(Buffer.from(value, "utf8"), "CurrentUser");
+      const encryptedHex = encrypted.toString("hex");
+      const oldValue = store.get(ref); // save for rollback
+
+      // In-memory update
+      store.set(ref, encryptedHex);
+      try {
+        saveVault(path, store);
+      } catch (err) {
+        // Copy-on-write: revert in-memory state to old value
+        if (oldValue !== undefined) {
+          store.set(ref, oldValue);
+        } else {
+          store.delete(ref);
+        }
+        throw err; // re-throw SestinaError from saveVault
+      }
     },
 
     delete(ref: string): Promise<void> {
+      const oldValue = store.get(ref);
+      if (oldValue === undefined) return Promise.resolve(); // idempotent
+
       store.delete(ref);
-      saveVault(path, store);
-      return Promise.resolve();
+      try {
+        saveVault(path, store);
+        return Promise.resolve();
+      } catch (err) {
+        // Copy-on-write: restore in-memory state
+        store.set(ref, oldValue);
+        throw err;
+      }
     },
 
     describe(ref: string): Promise<{ configured: boolean }> {

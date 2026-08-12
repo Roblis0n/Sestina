@@ -1,16 +1,21 @@
 /**
  * Control token generation, storage, versioning, and rotation.
  *
- * Tokens are 256-bit random values stored in the OS secret backend.
- * They survive upgrades, only rotate on explicit reset, and are
- * isolated to the current OS user by the backend.
+ * Each control token is stored as a SINGLE ATOMIC RECORD containing
+ * both the token value AND its version. This prevents split-brain
+ * inconsistencies where the token and version could desynchronize.
  *
- * The token proves "current OS user installed this client" ONLY.
- * It does NOT grant direct-user provenance to Hooks, MCP, or peers.
+ * Record format (JSON):
+ *   {"v": <number>, "t": "<64-char-hex>"}
  *
- * After reset, the old token is IMMEDIATELY invalidated — there is
- * no grace period, no previous-token fallback, and no setTimeout logic.
- * In-flight handshakes using the old token are rejected.
+ * Migration: existing installations that store token and version as
+ * separate backend keys are transparently migrated on first read.
+ *
+ * Invariants:
+ * - Token + version always written atomically as one record.
+ * - Version is always a positive finite safe integer.
+ * - After reset, old token is IMMEDIATELY invalidated.
+ * - The token proves "current OS user installed this client" ONLY.
  */
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import type { SecretBackend } from "./port.js";
@@ -18,8 +23,10 @@ import type { ControlToken, ControlTokenScope } from "./port.js";
 
 // ── Constants ──
 
-const TOKEN_BYTES = 32; // 256 bits
-const TOKEN_HEX_LENGTH = 64; // 32 bytes → 64 hex chars
+const TOKEN_BYTES = 32;
+const TOKEN_HEX_LENGTH = 64;
+/** Maximum allowed version value (prevents overflow attacks). */
+const MAX_VERSION = Number.MAX_SAFE_INTEGER;
 
 // ── Ref key computation ──
 
@@ -31,6 +38,31 @@ function versionRef(scope: ControlTokenScope): string {
   return `sestina/control-token/${scope}/version`;
 }
 
+// ── Atomic record helpers ──
+
+interface TokenRecord {
+  v: number;
+  t: string;
+}
+
+function packRecord(value: string, version: number): string {
+  return JSON.stringify({ v: version, t: value });
+}
+
+function parseRecord(raw: string): TokenRecord | null {
+  try {
+    const obj: unknown = JSON.parse(raw);
+    if (typeof obj !== "object" || obj === null) return null;
+    const rec = obj as Record<string, unknown>;
+    if (typeof rec.v !== "number" || typeof rec.t !== "string") return null;
+    if (!Number.isFinite(rec.v) || rec.v < 1 || rec.v > MAX_VERSION) return null;
+    if (rec.t.length !== TOKEN_HEX_LENGTH || !/^[0-9a-fA-F]+$/.test(rec.t)) return null;
+    return { v: rec.v, t: rec.t };
+  } catch {
+    return null;
+  }
+}
+
 // ── Token generation ──
 
 function generateTokenValue(): string {
@@ -40,76 +72,97 @@ function generateTokenValue(): string {
 // ── Public API ──
 
 /**
- * Get or create a versioned control token for the given scope.
+ * Get or create a versioned control token.
  *
- * - First call: generates a fresh 256-bit token (version 1).
- * - Subsequent calls: returns the existing token unchanged.
- * - After reset: version increments, new random value, old value
- *   immediately invalidated.
+ * Reads the atomic record first. If absent, tries the legacy
+ * split-storage format (token and version as separate keys) and
+ * migrates to the atomic format on success.
  */
 export async function getOrCreateControlToken(
   backend: SecretBackend,
   scope: ControlTokenScope,
 ): Promise<ControlToken> {
   const ref = tokenRef(scope);
-  const verRef = versionRef(scope);
 
-  const existing = await backend.get(ref);
-  if (existing) {
-    const versionStr = await backend.get(verRef);
-    const parsed = versionStr ? parseInt(versionStr, 10) : 1;
-    // Guard against corrupted version (NaN, negative, non-finite)
-    const version = (Number.isFinite(parsed) && parsed > 0) ? parsed : 1;
-    return { ref, version, value: existing };
+  // Try atomic record first
+  const raw = await backend.get(ref);
+  if (raw) {
+    const parsed = parseRecord(raw);
+    if (parsed) {
+      return { ref, version: parsed.v, value: parsed.t };
+    }
+    // Corrupt or legacy format: fall through to migration
   }
 
-  // First-time creation
+  // Try legacy split-storage migration
+  const verRef = versionRef(scope);
+  const legacyValue = raw ?? (await backend.get(ref));
+  const legacyVersionStr = await backend.get(verRef);
+
+  if (legacyValue && /^[0-9a-fA-F]{64}$/.test(legacyValue)) {
+    const version = (() => {
+      if (legacyVersionStr) {
+        const p = parseInt(legacyVersionStr, 10);
+        return (Number.isFinite(p) && p > 0 && p <= MAX_VERSION) ? p : 1;
+      }
+      return 1;
+    })();
+    // Migrate to atomic record
+    await backend.set(ref, packRecord(legacyValue, version));
+    // Clean up legacy version key (best-effort)
+    try { await backend.delete(verRef); } catch { /* best-effort */ }
+    return { ref, version, value: legacyValue };
+  }
+
+  // First-time creation: write atomic record
   const value = generateTokenValue();
-  await backend.set(ref, value);
-  await backend.set(verRef, "1");
+  await backend.set(ref, packRecord(value, 1));
   return { ref, version: 1, value };
 }
 
 /**
  * Explicitly rotate (reset) a control token.
  *
- * Generates a new 256-bit value, increments the version, and immediately
- * overwrites the stored token. The old value is permanently invalidated
- * — there is no grace period or previous-token fallback.
+ * Writes the new token+version as a single atomic record.
+ * The old token is immediately invalidated.
+ *
+ * @throws SestinaError if the backend write fails.
  */
 export async function resetControlToken(
   backend: SecretBackend,
   scope: ControlTokenScope,
 ): Promise<ControlToken> {
   const ref = tokenRef(scope);
-  const verRef = versionRef(scope);
 
-  // Read current state
-  const currentVersionStr = await backend.get(verRef);
-  const parsed = currentVersionStr ? parseInt(currentVersionStr, 10) : 0;
-  // Guard against corrupted version (NaN, negative, non-finite)
-  const currentVersion = (Number.isFinite(parsed) && parsed >= 0) ? parsed : 0;
+  // Read current version from atomic record
+  const raw = await backend.get(ref);
+  let currentVersion = 0;
+  if (raw) {
+    const parsed = parseRecord(raw);
+    if (parsed) {
+      currentVersion = parsed.v;
+    }
+  }
+
+  // Guard against version overflow
+  if (currentVersion >= MAX_VERSION) {
+    throw new Error(
+      `Control token version has reached maximum (${MAX_VERSION}). ` +
+      `This is an extremely unusual state. Reinstall the client.`,
+    );
+  }
+
   const newVersion = currentVersion + 1;
-
-  // Generate and store new token (overwrites old immediately)
   const newValue = generateTokenValue();
-  await backend.set(ref, newValue);
-  await backend.set(verRef, String(newVersion));
+
+  // Atomic write: token + version in one record
+  await backend.set(ref, packRecord(newValue, newVersion));
 
   return { ref, version: newVersion, value: newValue };
 }
 
 // ── Challenge verification ──
 
-/**
- * Verify a challenge response against the stored control token.
- *
- * Uses constant-time comparison via timingSafeEqual.
- * Only the current token value is accepted — there is no grace-period
- * fallback to a previous token.
- *
- * @returns true if the response matches the current token.
- */
 export async function verifyChallengeResponse(
   backend: SecretBackend,
   scope: ControlTokenScope,
@@ -120,8 +173,12 @@ export async function verifyChallengeResponse(
 ): Promise<boolean> {
   const ref = tokenRef(scope);
 
-  const currentValue = await backend.get(ref);
-  if (!currentValue) return false;
+  const raw = await backend.get(ref);
+  if (!raw) return false;
+
+  const parsed = parseRecord(raw);
+  const currentValue = parsed?.t ?? raw; // tolerate legacy raw-hex format
+  if (!/^[0-9a-fA-F]{64}$/.test(currentValue)) return false;
 
   const { createHmac } = await import("node:crypto");
   const message = Buffer.concat([nonceClient, nonceServer, Buffer.from(role)]);
@@ -139,6 +196,9 @@ export async function verifyChallengeResponse(
 export const __test = {
   TOKEN_BYTES,
   TOKEN_HEX_LENGTH,
+  MAX_VERSION,
   tokenRef,
   versionRef,
+  packRecord,
+  parseRecord,
 };

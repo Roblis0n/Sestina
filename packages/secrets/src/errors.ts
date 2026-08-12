@@ -1,31 +1,29 @@
 /**
- * Unified SestinaError wrappers for the secrets package.
+ * Unified sanitized SestinaError wrappers for ALL platforms.
  *
- * Every secure-storage failure MUST throw a stable, sanitized SestinaError.
- * Raw native errors (which may contain path names, stack traces, or other
- * potentially sensitive context) are NEVER allowed to propagate to callers.
+ * Every secure-storage or native-module failure MUST throw a stable,
+ * sanitized SestinaError. Raw native errors (which may contain path
+ * names, OS error strings, stack traces, or other potentially sensitive
+ * context) are NEVER surfaced to callers.
  *
- * All error messages are pre-approved: they contain no secret material,
- * no file paths, and no raw OS error strings.
+ * Applies to: Windows (DPAPI), macOS (Keychain), Linux (Secret Service),
+ * and the environment backend.
  */
 import { SestinaError, SestinaErrorCode } from "@sestina/schema";
+import { safeWriteStderr } from "./secret-scanner.js";
 
 /**
- * Throw a sanitized secure_storage_unavailable error.
- * Native error details are logged to stderr after scanning,
- * but the thrown error contains only the pre-approved message.
+ * Throw sanitized secure_storage_unavailable.
+ * Logs sanitized native details to stderr; thrown error is pre-approved.
  */
 export function throwUnavailable(context: string, nativeError?: unknown): never {
-  // Log native details to stderr (after secret scan)
   if (nativeError !== undefined) {
     const detail: string = (() => {
       if (nativeError instanceof Error) return nativeError.message;
       if (typeof nativeError === "string") return nativeError;
       try { return JSON.stringify(nativeError); } catch { return "Unknown error"; }
     })();
-    logSanitized(
-      `[sestina] secure_storage_unavailable (${context}): ${detail}`,
-    );
+    safeWriteStderr(`[sestina] secure_storage_unavailable (${context}): ${detail}`);
   }
   throw new SestinaError(
     SestinaErrorCode.secure_storage_unavailable,
@@ -36,11 +34,10 @@ export function throwUnavailable(context: string, nativeError?: unknown): never 
 }
 
 /**
- * Throw a sanitized internal_error for vault corruption.
- * The corruption detail is logged but never surfaced in the thrown error.
+ * Throw sanitized internal_error for vault corruption or write failure.
  */
 export function throwCorruption(detail: string): never {
-  logSanitized(`[sestina] vault corruption: ${detail}`);
+  safeWriteStderr(`[sestina] vault corruption: ${detail}`);
   throw new SestinaError(
     SestinaErrorCode.database_corrupt,
     "The secrets vault appears to be corrupted. " +
@@ -49,21 +46,24 @@ export function throwCorruption(detail: string): never {
   );
 }
 
-// ── Internal: sanitized stderr logging ──
-
-import { scanForSecrets } from "./secret-scanner.js";
-
-function logSanitized(message: string): void {
-  // Scan before writing to stderr
-  const result = scanForSecrets(message);
-  if (result.hasSecrets) {
-    // Redact: replace the message with a safe version
-    const redacted = message.replace(
-      /[0-9a-fA-F]{32,}/g,
-      "[REDACTED:hex-token]",
-    );
-    process.stderr.write(`${redacted}\n`);
-    return;
+/**
+ * Throw sanitized internal_error for any platform-native failure.
+ * Used by macOS Keychain and Linux Secret Service when native
+ * modules are unavailable or fail at runtime.
+ */
+export function throwNativeError(platform: string, context: string, nativeError?: unknown): never {
+  if (nativeError !== undefined) {
+    const detail: string = (() => {
+      if (nativeError instanceof Error) return nativeError.message;
+      if (typeof nativeError === "string") return nativeError;
+      try { return JSON.stringify(nativeError); } catch { return "Unknown error"; }
+    })();
+    safeWriteStderr(`[sestina] ${platform} native error (${context}): ${detail}`);
   }
-  process.stderr.write(`${message}\n`);
+  throw new SestinaError(
+    SestinaErrorCode.secure_storage_unavailable,
+    `${platform} secure storage is not available. ` +
+    "Ensure the native keyring/keystore service is installed and running. " +
+    "Set SESTINA_USE_ENV_BACKEND=true to use environment variable storage instead.",
+  );
 }

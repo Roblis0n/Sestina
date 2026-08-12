@@ -10,7 +10,7 @@
  * Service name: "Sestina"
  * Account: ref with "sestina/" prefix stripped, "/" replaced with "."
  */
-import { SestinaError, SestinaErrorCode } from "@sestina/schema";
+import { throwNativeError } from "./errors.js";
 import type { SecretBackend, SecretBackendStatus, KeychainProvider } from "./port.js";
 
 const SERVICE_NAME = "Sestina";
@@ -115,11 +115,7 @@ export function createMacOSKeychainBackend(
       }
     }
     if (!provider) {
-      throw new SestinaError(
-        SestinaErrorCode.secure_storage_unavailable,
-        "Keychain unavailable: native bindings (@napi-rs/keyring) could not be loaded. " +
-        "Set SESTINA_SECRET_<NAME> environment variables to use secrets on this system.",
-      );
+      throwNativeError("macOS Keychain", "resolveProvider");
     }
     return provider;
   }
