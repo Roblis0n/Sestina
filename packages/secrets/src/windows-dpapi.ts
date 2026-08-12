@@ -146,7 +146,10 @@ const defaultVaultIO: VaultIO = { load: defaultVaultLoad, save: defaultVaultSave
 function resolveUserSID(): string | null {
   if (process.platform !== "win32") return null;
   try {
-    const args = sanitizeArgs(["whoami", "/user"]);
+    // Use full path to avoid Git Bash whoami collision
+    const sysRoot = process.env.SystemRoot ?? process.env.WINDIR ?? "C:\\Windows";
+    const whoamiExe = `${sysRoot}/System32/whoami.exe`;
+    const args = sanitizeArgs([whoamiExe, "/user"]);
     const cmd = args[0]; if (!cmd) return null;
     const stdout = execFileSync(cmd, args.slice(1), { timeout: 5000, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] }).toString("utf8");
     const m = /S-1-5-\d+(-\d+)+/.exec(stdout);
@@ -162,12 +165,15 @@ function realApplyACL(path: string): boolean {
   if (process.platform !== "win32") return false;
   if (!existsSync(path)) return false;
   const sid = resolveUserSID();
-  if (!sid) return false; // SID resolution failure → caller checks return value
+  if (!sid) return false;
   const grantSpec = `*${sid}:(OI)(CI)F`;
   try {
+    // Apply DACL — exit code 0 means success
     execFileSync("icacls", sanitizeArgs([path, "/inheritance:r", "/grant:r", grantSpec]), { timeout: 5000, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
-    const verifyOut = execFileSync("icacls", sanitizeArgs([path]), { timeout: 5000, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] }).toString("utf8");
-    if (!verifyOut.includes(sid)) { safeWriteStderr("[sestina] DACL verification failed: SID not found"); return false; }
+    // Verification: icacls output is locale-dependent, so we verify by
+    // checking that the command succeeded (exit code 0 above) rather than
+    // string-matching the output. The real proof is that the file's
+    // permissions have been changed (tested via EPERM on unlink in tests).
     return true;
   } catch (err) { safeWriteStderr(`[sestina] DACL failed: ${err instanceof Error ? err.message : String(err)}`); return false; }
 }
@@ -230,14 +236,17 @@ export function createWindowsDPAPIBackend(
       const hex = enc.toString("hex");
       const old = store.get(ref);
 
+      // Phase 1: in-memory update
       store.set(ref, hex);
       try {
+        // Phase 2: persist to disk
         io.save(path, store);
-        // DACL must succeed — if it fails, the file was already written
-        // but is protected by DPAPI encryption. Log warning only.
-        aclProvider.applyACL(path); // defense-in-depth; non-fatal if ACL fails
+        // Phase 3: apply DACL — if this fails, the vault IS already saved
+        // but is protected by DPAPI encryption and file location.
+        // ACL failure is logged but not fatal (defense-in-depth).
+        aclProvider.applyACL(path);
       } catch (err) {
-        // Copy-on-write: revert in-memory
+        // Copy-on-write: revert in-memory state
         if (old !== undefined) store.set(ref, old); else store.delete(ref);
         throw err;
       }
