@@ -47,7 +47,7 @@ export function throwCorruption(detail: string): never {
 }
 
 /**
- * Throw sanitized internal_error for any platform-native failure.
+ * Throw sanitized secure_storage_unavailable for any platform-native failure.
  * Used by macOS Keychain and Linux Secret Service when native
  * modules are unavailable or fail at runtime.
  */

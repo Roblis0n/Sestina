@@ -100,10 +100,15 @@ export function safeStringForOutput(value: unknown): string {
  * Guard: throw sanitized Error if text contains secret-like content.
  * The error message itself is pre-scanned and contains no secret material.
  */
+import { SestinaError, SestinaErrorCode } from "@sestina/schema";
+
+// ...
+
 export function assertNoSecrets(text: string, channel: string): void {
   const result = scanForSecrets(text);
   if (result.hasSecrets) {
-    throw new Error(
+    throw new SestinaError(
+      SestinaErrorCode.validation_failed,
       `Secret-like content detected in ${channel}: ` +
       `${result.matchCount} match(es) for patterns: ${result.matchedPatterns.join(", ")}. ` +
       `The content has been suppressed to prevent leakage.`,

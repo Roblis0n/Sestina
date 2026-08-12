@@ -13,6 +13,7 @@
  *   SESTINA_SECRET_OPENAI_MAIN → sestina/openai-main
  *   SESTINA_SECRET_ANTHROPIC → sestina/anthropic
  */
+import { SestinaError, SestinaErrorCode } from "@sestina/schema";
 import type { SecretBackend, SecretBackendStatus, EnvReader } from "./port.js";
 
 // ── Real env reader ──
@@ -71,7 +72,8 @@ export function createEnvironmentBackend(
     set(_ref: string, _value: string): Promise<void> {
       void _ref; void _value;
       return Promise.reject(
-        new Error(
+        new SestinaError(
+          SestinaErrorCode.secure_storage_unavailable,
           "Environment backend is read-only. Set SESTINA_SECRET_<NAME> " +
           "environment variables in your shell profile instead.",
         ),
@@ -79,9 +81,13 @@ export function createEnvironmentBackend(
     },
 
     delete(ref: string): Promise<void> {
-      // No-op: process env vars persist for the process lifetime
       void refToEnvKey(ref);
-      return Promise.reject(new Error("Environment backend is read-only."));
+      return Promise.reject(
+        new SestinaError(
+          SestinaErrorCode.secure_storage_unavailable,
+          "Environment backend is read-only.",
+        ),
+      );
     },
 
     describe(ref: string): Promise<{ configured: boolean }> {
