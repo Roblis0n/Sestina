@@ -55,7 +55,7 @@ function parseRecord(raw: string): TokenRecord | null {
     if (typeof obj !== "object" || obj === null) return null;
     const rec = obj as Record<string, unknown>;
     if (typeof rec.v !== "number" || typeof rec.t !== "string") return null;
-    if (!Number.isFinite(rec.v) || rec.v < 1 || rec.v > MAX_VERSION) return null;
+    if (!Number.isSafeInteger(rec.v) || rec.v < 1 || rec.v > MAX_VERSION) return null;
     if (rec.t.length !== TOKEN_HEX_LENGTH || !/^[0-9a-fA-F]+$/.test(rec.t)) return null;
     return { v: rec.v, t: rec.t };
   } catch {

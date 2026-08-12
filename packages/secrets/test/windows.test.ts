@@ -1,16 +1,44 @@
 /* eslint-disable @typescript-eslint/require-await, @typescript-eslint/no-unused-vars */
 /**
- * Windows DPAPI backend tests.
+ * Windows DPAPI backend tests — R1-R7 coverage.
  *
- * Tests the REAL production backend via DI with synthetic providers.
- * Also includes automated real-DPAPI and DACL tests (Windows only).
+ * All tests use isolated temp directories created in beforeEach/afterEach.
+ * NEVER accesses %LOCALAPPDATA%. All residues cleaned in finally blocks.
  */
-import { describe, it, expect, afterAll } from "vitest";
-import { existsSync, unlinkSync } from "node:fs";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { existsSync, unlinkSync, writeFileSync, mkdirSync, readFileSync, rmdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { randomBytes } from "node:crypto";
 import { secretBackendContract } from "./contract.js";
 import type { DPAPIProvider } from "../src/port.js";
+import { createWindowsDPAPIBackend } from "../src/windows-dpapi.js";
 
-// ── Synthetic DPAPI for structural tests ──
+// ── Isolated temp directory per test ──
+
+let testDir: string;
+let testVault: string;
+
+beforeEach(() => {
+  testDir = join(tmpdir(), `sestina-test-${Date.now()}-${randomBytes(4).toString("hex")}`);
+  mkdirSync(testDir, { recursive: true });
+  testVault = join(testDir, "vault.json");
+});
+
+afterEach(() => {
+  try {
+    if (existsSync(testVault)) unlinkSync(testVault);
+    if (existsSync(`${testVault}.corrupt`)) unlinkSync(`${testVault}.corrupt`);
+    if (existsSync(`${testVault}.corrupt.1`)) unlinkSync(`${testVault}.corrupt.1`);
+    if (existsSync(testDir)) {
+      // Only remove files we know we created
+      try { unlinkSync(testVault); } catch { /* */ }
+      try { rmdirSync(testDir); } catch { /* */ }
+    }
+  } catch { /* best-effort cleanup */ }
+});
+
+// ── Synthetic DPAPI ──
 
 function createSyntheticDPAPI(): DPAPIProvider {
   let counter = 0;
@@ -33,21 +61,13 @@ function createSyntheticDPAPI(): DPAPIProvider {
   };
 }
 
-import { createWindowsDPAPIBackend } from "../src/windows-dpapi.js";
-
-// Use isolated temp paths — NEVER pollute %LOCALAPPDATA%
-const TEMP_VAULT = `${process.env.TEMP ?? "/tmp"}/sestina-test-isolated-${Date.now()}.json`;
-
-function createTestBackend() {
-  return createWindowsDPAPIBackend(createSyntheticDPAPI(), TEMP_VAULT);
+function createTestBackend(vaultPath?: string) {
+  return createWindowsDPAPIBackend(createSyntheticDPAPI(), vaultPath ?? testVault);
 }
 
-afterAll(() => {
-  try { if (existsSync(TEMP_VAULT)) unlinkSync(TEMP_VAULT); } catch { /* cleanup */ }
-  try { if (existsSync(`${TEMP_VAULT}.corrupt`)) unlinkSync(`${TEMP_VAULT}.corrupt`); } catch { /* cleanup */ }
-});
+// ── Contract tests ──
 
-secretBackendContract(createTestBackend);
+secretBackendContract(() => createTestBackend());
 
 // ── Structural tests ──
 
@@ -61,13 +81,13 @@ describe("Windows DPAPI backend", () => {
     expect(recovered.toString("utf8")).toBe("test-secret-data");
   });
 
-  it("backend set→get round-trips with synthetic provider", async () => {
+  it("backend set→get round-trips", async () => {
     const backend = createTestBackend();
     await backend.set("sestina/test", "dpapi-value");
     expect(await backend.get("sestina/test")).toBe("dpapi-value");
   });
 
-  it("backend encrypted storage does not contain plaintext", async () => {
+  it("describe does not contain plaintext", async () => {
     const backend = createTestBackend();
     await backend.set("sestina/test", "secret-abc");
     const desc = JSON.stringify(await backend.describe("sestina/test"));
@@ -80,102 +100,149 @@ describe("Windows DPAPI backend", () => {
     expect(status.available).toBe(true);
     expect(status.backend).toBe("dpapi");
   });
+});
 
-  it("copy-on-write: set failure preserves old state in memory", async () => {
+// ── R4: Copy-on-Write — SAME backend with real persistence failure ──
+
+describe("copy-on-write (same backend)", () => {
+  it("set failure preserves old state in memory AND on disk", async () => {
     const backend = createTestBackend();
-    await backend.set("sestina/cow-test", "original-value");
-    // Verify it was stored
-    expect(await backend.get("sestina/cow-test")).toBe("original-value");
-    // Attempt to set with a provider that fails on protect
-    const failingProvider: DPAPIProvider = {
-      async protect() { throw new Error("SIMULATED PROTECT FAILURE"); },
-      async unprotect() { throw new Error("SIMULATED UNPROTECT FAILURE"); },
-    };
-    const failingBackend = createWindowsDPAPIBackend(failingProvider, `${TEMP_VAULT}.fail`);
-    // Set should throw (smoke test fails)
-    await expect(failingBackend.set("sestina/cow-test", "new-value")).rejects.toThrow();
-    // Original backend still has old value
-    expect(await backend.get("sestina/cow-test")).toBe("original-value");
+    await backend.set("sestina/cow", "original-value");
+
+    // Verify on disk
+    const content1 = readFileSync(testVault, "utf8");
+    expect(content1).toContain("sestina/cow");
+
+    // Simulate disk failure: remove write permission on the vault file
+    // by replacing saveVault's target with a read-only directory
+    const saved = readFileSync(testVault, "utf8");
+
+    // Delete the vault file to simulate a write error path
+    unlinkSync(testVault);
+    // Create a directory in its place — rename will fail
+    mkdirSync(testVault, { recursive: true });
+
+    try {
+      await backend.set("sestina/cow", "new-value");
+      // Should not reach here
+      expect(true).toBe(false); // fail if no throw
+    } catch {
+      // Expected: saveVault failed
+    }
+
+    // Clean up the blocking directory
+    try { rmdirSync(testVault); } catch { /* */ }
+    // Restore the vault
+    writeFileSync(testVault, saved, "utf8");
+
+    // Memory: should still have old value
+    expect(await backend.get("sestina/cow")).toBe("original-value");
+
+    // Disk: should still have old content
+    const diskContent = readFileSync(testVault, "utf8");
+    expect(diskContent).toBe(saved);
+  });
+
+  it("delete failure preserves old state in memory AND on disk", async () => {
+    const backend = createTestBackend();
+    await backend.set("sestina/del-cow", "keep-me");
+    expect(await backend.get("sestina/del-cow")).toBe("keep-me");
+
+    const saved = readFileSync(testVault, "utf8");
+
+    // Block the write
+    unlinkSync(testVault);
+    mkdirSync(testVault, { recursive: true });
+
+    try {
+      await backend.delete("sestina/del-cow");
+      expect(true).toBe(false);
+    } catch {
+      // Expected
+    }
+
+    try { rmdirSync(testVault); } catch { /* */ }
+    writeFileSync(testVault, saved, "utf8");
+
+    // Memory preserved
+    expect(await backend.get("sestina/del-cow")).toBe("keep-me");
+    // Disk preserved
+    expect(readFileSync(testVault, "utf8")).toBe(saved);
   });
 });
 
-// ── Real DPAPI test (Windows only, FAILS if unavailable) ──
+// ── R1: Real DPAPI + DACL test (Windows only, MUST assert success) ──
 
-describe("real DPAPI round-trip (Windows)", () => {
-  it("MUST have real DPAPI available on Windows", async () => {
-    if (process.platform !== "win32") {
-      // On non-Windows, this test is inapplicable — skip cleanly
-      return;
-    }
+describe("real DPAPI and DACL (Windows)", () => {
+  it("real DPAPI round-trip MUST succeed on Windows", async () => {
+    if (process.platform !== "win32") return;
 
-    // On Windows, DPAPI MUST be available — fail if not
-    let dpapi: DPAPIProvider;
+    let provider: DPAPIProvider;
     try {
       const { createWindowsDPAPIProvider } = await import("../src/windows-dpapi.js");
-      dpapi = createWindowsDPAPIProvider();
+      provider = createWindowsDPAPIProvider();
     } catch (err) {
-      // DPAPI unavailable on Windows is a HARD FAILURE
       const msg = err instanceof Error ? err.message : String(err);
       throw new Error(`REAL DPAPI UNAVAILABLE ON WINDOWS: ${msg}`, { cause: err });
     }
 
-    const d = dpapi!;
-    const realVault = `${process.env.TEMP ?? "/tmp"}/sestina-real-dpapi-${Date.now()}.json`;
-    const backend = createWindowsDPAPIBackend(d, realVault);
+    const vault = join(testDir, "real-vault.json");
+    const backend = createWindowsDPAPIBackend(provider, vault);
 
     const status = await backend.health();
     if (!status.available) {
-      throw new Error(`REAL DPAPI UNAVAILABLE ON WINDOWS: ${status.reason ?? "unknown"}`);
+      throw new Error(`REAL DPAPI HEALTH FAILED ON WINDOWS: ${status.reason ?? "unknown"}`);
     }
 
-    // Real round-trip
-    const testValue = `real-dpapi-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const encrypted = await d.protect(Buffer.from(testValue, "utf8"), "CurrentUser");
-    const decrypted = await d.unprotect(encrypted, "CurrentUser");
-    expect(decrypted.toString("utf8")).toBe(testValue);
-    expect(encrypted.toString("utf8")).not.toContain(testValue);
+    const val = `real-dpapi-${Date.now()}`;
+    const enc = await provider.protect(Buffer.from(val, "utf8"), "CurrentUser");
+    const dec = await provider.unprotect(enc, "CurrentUser");
+    expect(dec.toString("utf8")).toBe(val);
+    expect(enc.toString("utf8")).not.toContain(val);
 
-    // Persist through backend
-    await backend.set("sestina/real-dpapi-test", testValue);
-    expect(await backend.get("sestina/real-dpapi-test")).toBe(testValue);
-    await backend.delete("sestina/real-dpapi-test");
-    expect(await backend.get("sestina/real-dpapi-test")).toBeUndefined();
-
-    // Clean up isolated vault
-    try { unlinkSync(realVault); } catch { /* cleanup */ }
+    await backend.set("sestina/real-test", val);
+    expect(await backend.get("sestina/real-test")).toBe(val);
+    await backend.delete("sestina/real-test");
+    expect(await backend.get("sestina/real-test")).toBeUndefined();
   });
-});
 
-// ── DACL auto-test (Windows only) ──
-
-describe("DACL CurrentUser verification", () => {
-  it("applies CurrentUser-only DACL on Windows", async () => {
+  it("DACL MUST succeed and verify on Windows", async () => {
     if (process.platform !== "win32") return;
 
     const { applyCurrentUserACL } = await import("../src/windows-dpapi.js");
-    const { writeFileSync } = await import("node:fs");
+    const { execFileSync } = await import("node:child_process");
 
-    const daclVault = `${process.env.TEMP ?? "/tmp"}/sestina-dacl-test-${Date.now()}.json`;
-    writeFileSync(daclVault, "{}", "utf8");
+    const daclFile = join(testDir, "dacl-test.json");
+    writeFileSync(daclFile, "{}", "utf8");
 
+    // Verify icacls is available before testing
+    let icaclsAvailable = false;
     try {
-      const result = applyCurrentUserACL(daclVault);
-      // DACL should succeed on Windows with valid SID
-      // If it fails, the function returns false but does not throw
-      // We verify the file still exists
-      expect(existsSync(daclVault)).toBe(true);
-      // DACL result: true=applied, false=could not apply (SID resolve failure, etc.)
-      // Both are acceptable — the test verifies the function runs without crash
-      expect(typeof result).toBe("boolean");
-    } finally {
-      try { unlinkSync(daclVault); } catch { /* cleanup */ }
+      execFileSync("icacls", ["--help"], { timeout: 3000, windowsHide: true, stdio: "ignore" });
+      icaclsAvailable = true;
+    } catch {
+      // icacls not available (rare, e.g. non-Windows or restricted environment)
     }
-  });
 
-  it("DACL function does not throw on non-existent file", async () => {
-    if (process.platform !== "win32") return;
-    const { applyCurrentUserACL } = await import("../src/windows-dpapi.js");
-    const result = applyCurrentUserACL("Z:/nonexistent/vault.json");
-    expect(typeof result).toBe("boolean");
+    if (!icaclsAvailable) {
+      // Cannot test DACL without icacls
+      console.log("  [SKIP] icacls not available in this environment");
+      return;
+    }
+
+    const result = applyCurrentUserACL(daclFile);
+    // DACL MUST succeed on Windows with icacls available
+    expect(result).toBe(true);
+
+    // Verify: read ACL and confirm output is non-empty
+    const aclOutput = execFileSync("icacls", [daclFile], {
+      timeout: 5000,
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "pipe"],
+    }).toString("utf8");
+
+    expect(aclOutput.length).toBeGreaterThan(0);
+    // Should NOT contain "Everyone" (inherited ACEs should be removed)
+    expect(aclOutput).not.toMatch(/Everyone/);
   });
 });

@@ -117,7 +117,9 @@ function resolveUserSID(): string | null {
   if (process.platform !== "win32") return null;
   try {
     const args = sanitizeArgs(["whoami", "/user"]);
-    const stdout = execFileSync(args[0]!, args.slice(1), {
+    const cmd = args[0];
+    if (!cmd) return null;
+    const stdout = execFileSync(cmd, args.slice(1), {
       timeout: 5000,
       windowsHide: true,
       stdio: ["ignore", "pipe", "pipe"],
@@ -148,13 +150,13 @@ export function applyCurrentUserACL(vaultPath: string): boolean {
     return false;
   }
 
-  // Sanitize args: vault path may contain username but no secrets
-  const sanitizedPath = vaultPath; // vault path is not a secret
-  const grantSpec = `${sid}:(OI)(CI)F`;
+  // icacls requires * prefix for SID strings (vs usernames)
+  // Syntax: icacls <path> /inheritance:r /grant:r *S-1-5-21-...:(OI)(CI)F
+  const grantSpec = `*${sid}:(OI)(CI)F`;
 
   try {
     execFileSync("icacls", sanitizeArgs([
-      sanitizedPath,
+      vaultPath,
       "/inheritance:r",
       "/grant:r",
       grantSpec,
@@ -163,6 +165,19 @@ export function applyCurrentUserACL(vaultPath: string): boolean {
       windowsHide: true,
       stdio: ["ignore", "pipe", "pipe"],
     });
+
+    // Verify: read back the ACL to confirm it was applied
+    const verifyOut = execFileSync("icacls", sanitizeArgs([vaultPath]), {
+      timeout: 5000,
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "pipe"],
+    }).toString("utf8");
+
+    // The output should contain the SID if DACL was applied
+    if (!verifyOut.includes(sid)) {
+      safeWriteStderr("[sestina] DACL verification failed: SID not found in ACL output");
+      return false;
+    }
     return true;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -361,8 +376,16 @@ export function createWindowsDPAPIBackend(
       }
     },
 
-    describe(ref: string): Promise<{ configured: boolean }> {
-      return Promise.resolve({ configured: store.has(ref) });
+    async describe(ref: string): Promise<{ configured: boolean }> {
+      const encryptedHex = store.get(ref);
+      if (!encryptedHex) return { configured: false };
+      // Verify the blob is readable by the current provider
+      try {
+        await provider.unprotect(Buffer.from(encryptedHex, "hex"), "CurrentUser");
+        return { configured: true };
+      } catch {
+        return { configured: false };
+      }
     },
 
     async health(): Promise<SecretBackendStatus> {

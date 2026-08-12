@@ -16,7 +16,7 @@
     "test:e2e": "playwright test",
     "eval:locked": "pnpm --filter @sestina/eval eval:locked",
     "typecheck": "pnpm -r typecheck",
-    "lint": "eslint .",
+    "lint": "eslint . --max-warnings 0",
     "docs:check": "node scripts/check-doc-links.mjs",
     "release:check": "pnpm lint && pnpm typecheck && pnpm test && pnpm docs:check && node scripts/check-no-placeholders.mjs",
     "repo:check": "node scripts/check-repository-shape.mjs"
