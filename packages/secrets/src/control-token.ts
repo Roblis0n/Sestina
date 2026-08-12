@@ -57,7 +57,9 @@ export async function getOrCreateControlToken(
   const existing = await backend.get(ref);
   if (existing) {
     const versionStr = await backend.get(verRef);
-    const version = versionStr ? parseInt(versionStr, 10) : 1;
+    const parsed = versionStr ? parseInt(versionStr, 10) : 1;
+    // Guard against corrupted version (NaN, negative, non-finite)
+    const version = (Number.isFinite(parsed) && parsed > 0) ? parsed : 1;
     return { ref, version, value: existing };
   }
 
@@ -84,7 +86,9 @@ export async function resetControlToken(
 
   // Read current state
   const currentVersionStr = await backend.get(verRef);
-  const currentVersion = currentVersionStr ? parseInt(currentVersionStr, 10) : 0;
+  const parsed = currentVersionStr ? parseInt(currentVersionStr, 10) : 0;
+  // Guard against corrupted version (NaN, negative, non-finite)
+  const currentVersion = (Number.isFinite(parsed) && parsed >= 0) ? parsed : 0;
   const newVersion = currentVersion + 1;
 
   // Generate and store new token (overwrites old immediately)

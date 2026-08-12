@@ -14,13 +14,21 @@
  * - Verifies round-trip on first use (smoke test).
  * - On-disk vault contains only DPAPI-encrypted blobs (no plaintext).
  * - Atomic writes via temp-file + rename (no partial writes).
- * - Corruption detection on load with degraded-mode fallback.
+ * - Corruption detection on load with forensic preservation.
+ * - CurrentUser-only DACL applied to vault file on Windows.
+ * - All errors are stable, sanitized SestinaError (no raw native errors).
  */
-import { mkdirSync, readFileSync, writeFileSync, renameSync, existsSync, unlinkSync } from "node:fs";
+import {
+  mkdirSync, readFileSync, writeFileSync, renameSync,
+  existsSync, unlinkSync, chmodSync,
+} from "node:fs";
 import { dirname } from "node:path";
 import { homedir } from "node:os";
 import { randomBytes } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import type { SecretBackend, SecretBackendStatus, DPAPIProvider } from "./port.js";
+import { throwUnavailable, throwCorruption } from "./errors.js";
+import { scanForSecrets } from "./secret-scanner.js";
 
 // ── Vault path ──
 
@@ -78,11 +86,8 @@ async function getDPAPI(): Promise<DPAPINative | null> {
       dpapiNative = null;
     }
     return dpapiNative;
-  } catch (err) {
-    loadError =
-      err instanceof Error
-        ? err.message
-        : "DPAPI native module failed to load";
+  } catch {
+    loadError = "DPAPI native module failed to load";
     return null;
   }
 }
@@ -103,7 +108,7 @@ export function createWindowsDPAPIProvider(): DPAPIProvider {
       guardScope(scope);
       const dpapi = await getDPAPI();
       if (!dpapi) {
-        throw new Error(`DPAPI unavailable: ${loadError ?? "unknown error"}`);
+        throwUnavailable("protect", new Error(loadError ?? "DPAPI unavailable"));
       }
       const result = dpapi.Dpapi.protectData(data, null, scope);
       return Buffer.from(result);
@@ -112,12 +117,77 @@ export function createWindowsDPAPIProvider(): DPAPIProvider {
       guardScope(scope);
       const dpapi = await getDPAPI();
       if (!dpapi) {
-        throw new Error(`DPAPI unavailable: ${loadError ?? "unknown error"}`);
+        throwUnavailable("unprotect", new Error(loadError ?? "DPAPI unavailable"));
       }
       const result = dpapi.Dpapi.unprotectData(data, null, scope);
       return Buffer.from(result);
     },
   };
+}
+
+// ── Windows ACL: set CurrentUser-only DACL on vault file ──
+
+/**
+ * Apply CurrentUser-only DACL to the vault file on Windows.
+ * Uses icacls to:
+ * 1. Inherit no permissions from parent
+ * 2. Grant (OI)(CI)F to the current user only
+ * 3. Remove inherited entries
+ *
+ * On non-Windows or if icacls is unavailable, this is a no-op.
+ * The vault is still protected by DPAPI encryption and the user's
+ * home/profile directory permissions.
+ */
+function applyCurrentUserACL(vaultPath: string): void {
+  if (process.platform !== "win32") return;
+  try {
+    // Ensure the vault file exists before setting ACL
+    if (!existsSync(vaultPath)) return;
+
+    // /inheritance:r  = remove all inherited ACEs
+    // /grant:r        = replace grant for specified user
+    // %USERNAME%:F    = Full control for current user
+    const username = process.env.USERNAME ?? process.env.USER;
+    if (!username) return;
+
+    execFileSync("icacls", [
+      vaultPath,
+      "/inheritance:r",
+      "/grant:r",
+      `${username}:(OI)(CI)F`,
+    ], {
+      timeout: 5000,
+      windowsHide: true,
+      stdio: ["ignore", "ignore", "pipe"], // capture stderr only
+    });
+  } catch {
+    // Non-fatal: ACL is defense-in-depth.
+    // DPAPI encryption already binds to the user's credential.
+    // If icacls fails (e.g., non-admin, non-Windows), the vault
+    // is still cryptographically protected.
+  }
+}
+
+function applyACLToDir(dirPath: string): void {
+  if (process.platform !== "win32") return;
+  try {
+    if (!existsSync(dirPath)) return;
+    const username = process.env.USERNAME ?? process.env.USER;
+    if (!username) return;
+
+    execFileSync("icacls", [
+      dirPath,
+      "/inheritance:r",
+      "/grant:r",
+      `${username}:(OI)(CI)F`,
+    ], {
+      timeout: 5000,
+      windowsHide: true,
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+  } catch {
+    // Non-fatal
+  }
 }
 
 // ── Disk-persisted vault (atomic writes + corruption detection) ──
@@ -126,10 +196,11 @@ export function createWindowsDPAPIProvider(): DPAPIProvider {
  * Load the vault from disk. Returns a Map of ref → encrypted-hex.
  *
  * Corruption handling:
- * - If the vault file is missing → empty Map (first run).
- * - If the vault file is unparseable → empty Map, original file
- *   renamed to vault.json.corrupt for forensic recovery.
- * - If any entry value is not valid hex → entry skipped (not plaintext).
+ * - Missing file → empty Map (first run).
+ * - Unparseable JSON → forensic backup, empty Map.
+ * - Structural corruption → forensic backup, empty Map.
+ * - Non-hex entry values → skipped (potential plaintext leak).
+ * - NEVER deletes the forensic original on rename conflict.
  */
 function loadVault(path: string): Map<string, string> {
   try {
@@ -137,22 +208,13 @@ function loadVault(path: string): Map<string, string> {
     const raw = readFileSync(path, "utf8");
     const parsed: unknown = JSON.parse(raw) as unknown;
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-      // Structural corruption: not a key-value object
       handleCorruption(path, "vault root is not a JSON object");
       return new Map();
     }
     const map = new Map<string, string>();
     for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
-      if (typeof value !== "string") {
-        // Skip non-string values (corrupt entry)
-        continue;
-      }
-      // Validate that the value is hex-encoded (only DPAPI blobs allowed)
-      if (!/^[0-9a-fA-F]+$/.test(value)) {
-        // Non-hex value found — possible tampering or plaintext leak.
-        // Skip the entry; never return potentially plaintext data.
-        continue;
-      }
+      if (typeof value !== "string") continue;
+      if (!/^[0-9a-fA-F]+$/.test(value)) continue;
       map.set(key, value);
     }
     return map;
@@ -164,47 +226,97 @@ function loadVault(path: string): Map<string, string> {
 
 /**
  * Handle vault corruption: rename the bad file for forensic recovery.
+ *
+ * SAFETY: If the target `.corrupt` file already exists, a unique
+ * numbered suffix is appended (e.g., `.corrupt.1`, `.corrupt.2`).
+ * The forensic original is NEVER deleted or overwritten.
  */
 function handleCorruption(path: string, reason: string): void {
-  try {
-    const corruptPath = `${path}.corrupt`;
-    renameSync(path, corruptPath);
-    // Log the event (no secret material in log message)
-    const { stderr } = process;
-    stderr.write(`[sestina] Vault corruption detected (${reason}). Renamed to ${corruptPath}\n`);
-  } catch {
-    // Best-effort: if rename fails, delete the corrupt file to avoid
-    // persistent read errors on next load.
-    try { unlinkSync(path); } catch { /* unrecoverable */ }
+  // Find a unique forensic backup name
+  let corruptPath = `${path}.corrupt`;
+  let counter = 1;
+  while (existsSync(corruptPath)) {
+    corruptPath = `${path}.corrupt.${counter}`;
+    counter++;
+    // Safety limit: avoid infinite loop
+    if (counter > 100) {
+      sanitizedStderr(
+        `[sestina] Vault corruption detected (${reason}), but too many .corrupt files exist. ` +
+        `Skipping forensic backup of ${path}.`,
+      );
+      return;
+    }
   }
+
+  try {
+    renameSync(path, corruptPath);
+    sanitizedStderr(
+      `[sestina] Vault corruption detected (${reason}). Renamed to ${corruptPath}`,
+    );
+  } catch {
+    // If rename completely fails (permissions, filesystem error),
+    // leave the original file in place. Do NOT delete it.
+    sanitizedStderr(
+      `[sestina] Vault corruption detected (${reason}), but rename failed. ` +
+      `Original file left at ${path}.`,
+    );
+  }
+}
+
+/**
+ * Sanitized stderr write: scans message for secret patterns before output.
+ */
+function sanitizedStderr(message: string): void {
+  const result = scanForSecrets(message);
+  if (result.hasSecrets) {
+    const redacted = message.replace(
+      /[0-9a-fA-F]{32,}/g,
+      "[REDACTED:hex-token]",
+    );
+    process.stderr.write(`${redacted}\n`);
+    return;
+  }
+  process.stderr.write(`${message}\n`);
 }
 
 /**
  * Save the vault atomically:
  * 1. Write to a temp file in the same directory.
- * 2. Rename temp → target (atomic on same filesystem).
+ * 2. fsync / flush to disk.
+ * 3. Rename temp → target (atomic on same filesystem).
+ * 4. Apply CurrentUser DACL to the new file.
  *
- * This prevents partial writes from corrupting the vault on crash/power loss.
+ * On write failure, the in-memory store is NOT modified.
+ * Any temp file is cleaned up on failure.
  */
 function saveVault(path: string, store: Map<string, string>): void {
   const dir = dirname(path);
   mkdirSync(dir, { recursive: true });
+
+  // Apply DACL to the vault directory on first creation
+  applyACLToDir(dir);
 
   const obj: Record<string, string> = {};
   for (const [k, v] of store) {
     obj[k] = v;
   }
 
-  // Write to temp file first
   const tmpName = `${path}.tmp-${randomBytes(8).toString("hex")}`;
   try {
     writeFileSync(tmpName, JSON.stringify(obj), { encoding: "utf8", flush: true });
     // Atomic rename on same filesystem
     renameSync(tmpName, path);
-  } catch {
-    // Clean up temp file on failure
+    // Apply CurrentUser DACL to the vault file
+    applyCurrentUserACL(path);
+    // Restrict POSIX-mode permissions (belt-and-suspenders, effective on Unix)
+    try { chmodSync(path, 0o600); } catch { /* non-fatal on Windows */ }
+  } catch (err) {
+    // Clean up temp file on failure — never leave stale temp files
     try { unlinkSync(tmpName); } catch { /* best-effort */ }
-    throw new Error("Failed to persist vault: atomic write failed");
+    // Throw stable SestinaError, not raw filesystem error
+    throwCorruption(
+      `atomic write failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 }
 
@@ -238,9 +350,8 @@ export function createWindowsDPAPIBackend(
       }
       smokePassed = true;
     } catch (err) {
-      smokeError =
-        err instanceof Error ? err.message : "DPAPI smoke test failed";
-      throw err;
+      smokeError = "DPAPI smoke test failed";
+      throwUnavailable("smoke-test", err instanceof Error ? err : undefined);
     }
   }
 
@@ -249,11 +360,21 @@ export function createWindowsDPAPIBackend(
       await runSmoke();
       const encryptedHex = store.get(ref);
       if (!encryptedHex) return undefined;
-      const decrypted = await provider.unprotect(
-        Buffer.from(encryptedHex, "hex"),
-        "CurrentUser",
-      );
-      return decrypted.toString("utf8");
+      try {
+        const decrypted = await provider.unprotect(
+          Buffer.from(encryptedHex, "hex"),
+          "CurrentUser",
+        );
+        return decrypted.toString("utf8");
+      } catch (err) {
+        // DPAPI unprotect failure: the blob may be corrupt or from another user.
+        // Return undefined (treat as not found) — do NOT surface raw error.
+        const msg = err instanceof Error ? err.message : String(err);
+        sanitizedStderr(
+          "[sestina] DPAPI unprotect failed for ref " + ref + ": " + msg,
+        );
+        return undefined;
+      }
     },
 
     async set(ref: string, value: string): Promise<void> {

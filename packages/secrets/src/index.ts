@@ -33,3 +33,6 @@ export {
   assertNoSecrets,
 } from "./secret-scanner.js";
 export type { ScanResult } from "./secret-scanner.js";
+
+// Unified error helpers
+export { throwUnavailable, throwCorruption } from "./errors.js";

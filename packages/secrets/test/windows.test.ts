@@ -117,3 +117,61 @@ describe("Windows DPAPI backend", () => {
     expect(status.backend).toBe("dpapi");
   });
 });
+
+// ── Real DPAPI round-trip test (Windows only) ──
+
+describe("real DPAPI round-trip (Windows automated)", () => {
+  it("performs CryptProtectData → CryptUnprotectData round-trip", async () => {
+    // This test uses the REAL @primno/dpapi native module.
+    // On non-Windows or if DPAPI is unavailable, the test is skipped.
+    const platform = process.platform;
+    if (platform !== "win32") {
+      console.log(`  [SKIP] Not on Windows (current: ${platform})`);
+      return;
+    }
+
+    let dpapi: DPAPIProvider;
+    try {
+      const { createWindowsDPAPIProvider } = await import("../src/windows-dpapi.js");
+      dpapi = createWindowsDPAPIProvider();
+    } catch {
+      console.log("  [SKIP] @primno/dpapi native module unavailable");
+      return;
+    }
+
+    // Smoke: check health
+    const backend = createWindowsDPAPIBackend(dpapi);
+    const status = await backend.health();
+
+    if (!status.available) {
+      console.log(`  [SKIP] DPAPI not available: ${status.reason ?? "unknown"}`);
+      return;
+    }
+
+    // Real round-trip
+    const testValue = `real-dpapi-auto-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const encrypted = await dpapi.protect(
+      Buffer.from(testValue, "utf8"),
+      "CurrentUser",
+    );
+    const decrypted = await dpapi.unprotect(encrypted, "CurrentUser");
+
+    expect(decrypted.toString("utf8")).toBe(testValue);
+
+    // Verify encrypted blob does NOT contain plaintext
+    expect(encrypted.toString("utf8")).not.toContain(testValue);
+
+    // Verify encrypted blob does NOT contain the hex representation
+    const hex = Buffer.from(testValue, "utf8").toString("hex");
+    expect(encrypted.toString("hex")).not.toContain(hex);
+
+    // Persist through backend
+    await backend.set("sestina/real-dpapi-test", testValue);
+    const retrieved = await backend.get("sestina/real-dpapi-test");
+    expect(retrieved).toBe(testValue);
+
+    // Cleanup
+    await backend.delete("sestina/real-dpapi-test");
+    expect(await backend.get("sestina/real-dpapi-test")).toBeUndefined();
+  });
+});
