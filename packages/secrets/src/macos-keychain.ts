@@ -11,7 +11,12 @@
  * Account: ref with "sestina/" prefix stripped, "/" replaced with "."
  */
 import { throwNativeError } from "./errors.js";
-import type { SecretBackend, SecretBackendStatus, KeychainProvider } from "./port.js";
+import { registerControlTokenCoordination } from "./control-token.js";
+import type {
+  SecretBackend,
+  SecretBackendStatus,
+  KeychainProvider,
+} from "./port.js";
 
 const SERVICE_NAME = "Sestina";
 
@@ -30,14 +35,17 @@ const SERVICE_NAME = "Sestina";
 function accountFromRef(ref: string): string {
   return ref
     .replace(/^sestina\//, "")
-    .replace(/%/g, "%25")  // escape "%" first (before "/" → "%2F")
+    .replace(/%/g, "%25") // escape "%" first (before "/" → "%2F")
     .replace(/\//g, "%2F"); // then encode "/"
 }
 
 // ── Lazy native loader (keyring-rs via @napi-rs/keyring) ──
 
 interface KeyringNative {
-  Entry: new (service: string, account: string) => {
+  Entry: new (
+    service: string,
+    account: string,
+  ) => {
     getPassword(): string | null;
     setPassword(password: string): void;
     deletePassword(): void;
@@ -53,7 +61,10 @@ async function getKeyringNative(): Promise<KeyringNative | null> {
   try {
     const mod = await import("@napi-rs/keyring");
     // Module exports { Entry } directly
-    const native = mod as unknown as { Entry?: KeyringNative["Entry"]; default?: { Entry?: KeyringNative["Entry"] } };
+    const native = mod as unknown as {
+      Entry?: KeyringNative["Entry"];
+      default?: { Entry?: KeyringNative["Entry"] };
+    };
     const Entry = native.Entry ?? native.default?.Entry;
     if (!Entry) return null;
     keyringNative = { Entry };
@@ -120,18 +131,32 @@ export function createMacOSKeychainBackend(
     return provider;
   }
 
-  return {
+  async function runNative<T>(
+    context: string,
+    operation: (keychain: KeychainProvider) => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await operation(await resolveProvider());
+    } catch (error) {
+      throwNativeError("macOS Keychain", context, error);
+    }
+  }
+
+  const backend: SecretBackend = {
     async get(ref: string) {
-      const kc = await resolveProvider();
-      return kc.findGenericPassword(SERVICE_NAME, accountFromRef(ref));
+      return runNative("get", (kc) =>
+        kc.findGenericPassword(SERVICE_NAME, accountFromRef(ref)),
+      );
     },
     async set(ref: string, value: string) {
-      const kc = await resolveProvider();
-      await kc.addGenericPassword(SERVICE_NAME, accountFromRef(ref), value);
+      await runNative("set", (kc) =>
+        kc.addGenericPassword(SERVICE_NAME, accountFromRef(ref), value),
+      );
     },
     async delete(ref: string) {
-      const kc = await resolveProvider();
-      await kc.deleteGenericPassword(SERVICE_NAME, accountFromRef(ref));
+      await runNative("delete", (kc) =>
+        kc.deleteGenericPassword(SERVICE_NAME, accountFromRef(ref)),
+      );
     },
     async describe(ref: string) {
       try {
@@ -150,15 +175,15 @@ export function createMacOSKeychainBackend(
         await resolveProvider();
         return { available: true, backend: "keychain" };
       } catch (err) {
+        void err;
         return {
           available: false,
           backend: "none",
-          reason:
-            err instanceof Error
-              ? err.message
-              : "Keychain is not available on this system",
+          reason: "Keychain is not available on this system",
         };
       }
     },
   };
+  registerControlTokenCoordination(backend, "macos:current-user");
+  return backend;
 }

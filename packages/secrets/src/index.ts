@@ -18,10 +18,25 @@ export type {
 } from "./port.js";
 
 // Platform-specific factories (for testing and direct use)
-export { createWindowsDPAPIBackend, createWindowsDPAPIProvider, applyCurrentUserACL } from "./windows-dpapi.js";
-export { createMacOSKeychainBackend, createNativeKeychainProvider } from "./macos-keychain.js";
-export { createLinuxSecretBackend, createNativeSecretServiceProvider } from "./linux-secret-service.js";
-export { createEnvironmentBackend, createRealEnvReader } from "./environment.js";
+export {
+  createWindowsDPAPIBackend,
+  createWindowsDPAPIProvider,
+  applyCurrentUserACL,
+} from "./windows-dpapi.js";
+export type { VaultIO, ACLProvider } from "./windows-dpapi.js";
+export {
+  createMacOSKeychainBackend,
+  createNativeKeychainProvider,
+} from "./macos-keychain.js";
+export {
+  createLinuxSecretBackend,
+  createNativeSecretServiceProvider,
+} from "./linux-secret-service.js";
+export {
+  createEnvironmentBackend,
+  createRealEnvReader,
+  environmentKeyForRef,
+} from "./environment.js";
 
 // Internal helpers exposed for testing
 export { __test as __controlTokenTest } from "./control-token.js";
@@ -34,7 +49,11 @@ export {
   safeWriteStderr,
   sanitizeArgs,
 } from "./secret-scanner.js";
-export type { ScanResult } from "./secret-scanner.js";
+export type { ScanResult, SecretScanOptions } from "./secret-scanner.js";
 
 // Unified error helpers
-export { throwUnavailable, throwCorruption, throwNativeError } from "./errors.js";
+export {
+  throwUnavailable,
+  throwCorruption,
+  throwNativeError,
+} from "./errors.js";

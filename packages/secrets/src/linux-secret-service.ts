@@ -17,6 +17,8 @@ import type {
   SecretBackendStatus,
   SecretServiceProvider,
 } from "./port.js";
+import { throwNativeError } from "./errors.js";
+import { registerControlTokenCoordination } from "./control-token.js";
 
 // ── D-Bus availability detection (MUST run before any native import) ──
 
@@ -33,7 +35,10 @@ function isDbusAvailable(): boolean {
 // ── Lazy native loader (only called after isDbusAvailable returns true) ──
 
 interface KeyringNative {
-  Entry: new (service: string, account: string) => {
+  Entry: new (
+    service: string,
+    account: string,
+  ) => {
     getPassword(): string | null;
     setPassword(password: string): void;
     deletePassword(): void;
@@ -49,7 +54,10 @@ async function getKeyringNative(): Promise<KeyringNative | null> {
   if (!isDbusAvailable()) return null;
   try {
     const mod = await import("@napi-rs/keyring");
-    const native = mod as unknown as { Entry?: KeyringNative["Entry"]; default?: { Entry?: KeyringNative["Entry"] } };
+    const native = mod as unknown as {
+      Entry?: KeyringNative["Entry"];
+      default?: { Entry?: KeyringNative["Entry"] };
+    };
     const Entry = native.Entry ?? native.default?.Entry;
     if (!Entry) return null;
     keyringNative = { Entry };
@@ -61,7 +69,10 @@ async function getKeyringNative(): Promise<KeyringNative | null> {
 
 // ── Ref → keyring service/account mapping ──
 
-function refToServiceAccount(ref: string): { service: string; account: string } {
+function refToServiceAccount(ref: string): {
+  service: string;
+  account: string;
+} {
   const withoutPrefix = ref.replace(/^sestina\//, "");
   const slashIdx = withoutPrefix.indexOf("/");
   if (slashIdx === -1) {
@@ -96,13 +107,17 @@ export function createNativeSecretServiceProvider(): SecretServiceProvider {
       return pw ?? undefined;
     },
 
-    async store(attributes: Record<string, string>, _label: string, secret: string) {
+    async store(
+      attributes: Record<string, string>,
+      _label: string,
+      secret: string,
+    ) {
       const kr = await getKeyringNative();
       if (!kr) {
         throw new SestinaError(
           SestinaErrorCode.secure_storage_unavailable,
           "Secret Service is not available. " +
-          "Set SESTINA_SECRET_<NAME> environment variables to store secrets.",
+            "Set SESTINA_SECRET_<NAME> environment variables to store secrets.",
         );
       }
       const ref = attributes.sestina_ref ?? "";
@@ -134,38 +149,38 @@ export function createLinuxSecretBackend(
 ): SecretBackend {
   const ss = secretService ?? createNativeSecretServiceProvider();
 
-  return {
+  const backend: SecretBackend = {
     async get(ref: string) {
-      if (!(await ss.isAvailable())) {
-        throw new SestinaError(
-          SestinaErrorCode.secure_storage_unavailable,
-          `Secret Service is not available. Set the SESTINA_SECRET_${
-            ref.replace(/^sestina\//, "").replace(/-/g, "_").toUpperCase()
-          } environment variable instead.`,
-        );
+      try {
+        if (!(await ss.isAvailable())) {
+          throw new Error("Secret Service unavailable");
+        }
+        return await ss.lookup({ sestina_ref: ref });
+      } catch (error) {
+        throwNativeError("Linux Secret Service", "get", error);
       }
-      return ss.lookup({ sestina_ref: ref });
     },
 
     async set(ref: string, value: string) {
-      if (!(await ss.isAvailable())) {
-        throw new SestinaError(
-          SestinaErrorCode.secure_storage_unavailable,
-          "Secret Service is not available. " +
-          "Set SESTINA_SECRET_<NAME> environment variables instead.",
-        );
+      try {
+        if (!(await ss.isAvailable())) {
+          throw new Error("Secret Service unavailable");
+        }
+        await ss.store({ sestina_ref: ref }, ref, value);
+      } catch (error) {
+        throwNativeError("Linux Secret Service", "set", error);
       }
-      return ss.store({ sestina_ref: ref }, ref, value);
     },
 
     async delete(ref: string) {
-      if (!(await ss.isAvailable())) {
-        throw new SestinaError(
-          SestinaErrorCode.secure_storage_unavailable,
-          "Secret Service is not available.",
-        );
+      try {
+        if (!(await ss.isAvailable())) {
+          throw new Error("Secret Service unavailable");
+        }
+        await ss.delete({ sestina_ref: ref });
+      } catch (error) {
+        throwNativeError("Linux Secret Service", "delete", error);
       }
-      return ss.delete({ sestina_ref: ref });
     },
 
     async describe(ref: string) {
@@ -179,16 +194,29 @@ export function createLinuxSecretBackend(
     },
 
     async health(): Promise<SecretBackendStatus> {
-      const available = await ss.isAvailable();
-      return {
-        available,
-        backend: available ? "secret-service" : "none",
-        reason: available
-          ? undefined
-          : "D-Bus session / Secret Service daemon not reachable. " +
-          "Is gnome-keyring-daemon or kwalletd6 running? " +
-          "Set SESTINA_SECRET_<NAME> environment variables to use secrets without a keyring.",
-      };
+      try {
+        const available = await ss.isAvailable();
+        return {
+          available,
+          backend: available ? "secret-service" : "none",
+          reason: available
+            ? undefined
+            : "D-Bus session / Secret Service daemon not reachable. " +
+              "Is gnome-keyring-daemon or kwalletd6 running? " +
+              "Set SESTINA_SECRET_<NAME> environment variables to use secrets without a keyring.",
+        };
+      } catch {
+        return {
+          available: false,
+          backend: "none",
+          reason: "Secret Service availability check failed.",
+        };
+      }
     },
   };
+  registerControlTokenCoordination(
+    backend,
+    "linux:current-user:secret-service",
+  );
+  return backend;
 }

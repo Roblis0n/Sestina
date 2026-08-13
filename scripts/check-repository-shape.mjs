@@ -97,7 +97,11 @@ function dirsUnder(relPath) {
 function readPackageJson(relDir) {
   const pj = resolve(ROOT, relDir, "package.json");
   if (!existsSync(pj)) return null;
-  try { return JSON.parse(readFileSync(pj, "utf8")); } catch { return null; }
+  try {
+    return JSON.parse(readFileSync(pj, "utf8"));
+  } catch {
+    return null;
+  }
 }
 
 function readPackageName(relDir) {
@@ -107,7 +111,12 @@ function readPackageName(relDir) {
 
 // ── File walking ──
 const WALK_SKIP = new Set([
-  "node_modules", "dist", "build", "coverage", ".turbo", ".git",
+  "node_modules",
+  "dist",
+  "build",
+  "coverage",
+  ".turbo",
+  ".git",
   "OpenMythos-main (1)",
 ]);
 
@@ -117,7 +126,11 @@ function* walkFiles(relDir) {
   const base = relDir.split(/[/\\]/).pop();
   if (base && WALK_SKIP.has(base)) return;
   let entries;
-  try { entries = readdirSync(full, { withFileTypes: true }); } catch { return; }
+  try {
+    entries = readdirSync(full, { withFileTypes: true });
+  } catch {
+    return;
+  }
   for (const e of entries) {
     if (e.isDirectory()) {
       if (WALK_SKIP.has(e.name)) continue;
@@ -159,7 +172,11 @@ function extractImports(fileRel) {
 }
 
 // ── Resolve relative import to absolute path, detect if it escapes package ──
-function relativeImportEscapesPackage(importingFileRel, importSpec, pkgRootRel) {
+function relativeImportEscapesPackage(
+  importingFileRel,
+  importSpec,
+  pkgRootRel,
+) {
   if (!importSpec.startsWith(".")) return false; // not a relative import
   const fileDir = dirname(resolve(ROOT, importingFileRel));
   const resolved = resolve(fileDir, importSpec);
@@ -170,8 +187,12 @@ function relativeImportEscapesPackage(importingFileRel, importSpec, pkgRootRel) 
   if (rel.startsWith(".." + sep) || rel === "..") return true;
   // Also check common extension / index resolutions
   const candidates = [
-    `${resolved}.ts`, `${resolved}.tsx`, `${resolved}.js`,
-    `${resolved}/index.ts`, `${resolved}/index.tsx`, `${resolved}/index.js`,
+    `${resolved}.ts`,
+    `${resolved}.tsx`,
+    `${resolved}.js`,
+    `${resolved}/index.ts`,
+    `${resolved}/index.tsx`,
+    `${resolved}/index.js`,
   ];
   for (const c of candidates) {
     if (existsSync(c)) {
@@ -212,8 +233,13 @@ function buildPackageMap(allPkgs) {
 // ═══════════════════════════════════════════════════════════════════════════
 process.stderr.write("=== Check 1: Root config files ===\n");
 const REQUIRED_ROOT_FILES = [
-  "package.json", "pnpm-workspace.yaml", "tsconfig.base.json",
-  "vitest.workspace.ts", "eslint.config.mjs", ".npmrc", ".node-version",
+  "package.json",
+  "pnpm-workspace.yaml",
+  "tsconfig.base.json",
+  "vitest.config.ts",
+  "eslint.config.mjs",
+  ".npmrc",
+  ".node-version",
 ];
 for (const f of REQUIRED_ROOT_FILES) {
   fileExists(f) ? ok(f) : err(`Missing root config file: ${f}`);
@@ -228,7 +254,9 @@ let workspaceGlobs = [];
 if (fileExists("pnpm-workspace.yaml")) {
   workspaceGlobs = readYamlWorkspace();
   for (const g of REQUIRED_GLOBS) {
-    workspaceGlobs.includes(g) ? ok(`workspace glob declared: ${g}`) : err(`Missing workspace glob: ${g}`);
+    workspaceGlobs.includes(g)
+      ? ok(`workspace glob declared: ${g}`)
+      : err(`Missing workspace glob: ${g}`);
   }
 } else {
   err("Cannot read pnpm-workspace.yaml (file missing)");
@@ -250,7 +278,9 @@ for (const d of ["packages", "apps", "integrations"]) {
 // ═══════════════════════════════════════════════════════════════════════════
 // Check 4 — Cross-imports between apps/integrations
 // ═══════════════════════════════════════════════════════════════════════════
-process.stderr.write("\n=== Check 4: Cross-imports between apps/integrations ===\n");
+process.stderr.write(
+  "\n=== Check 4: Cross-imports between apps/integrations ===\n",
+);
 const allPkgs = collectAllPackageDirs();
 const pkgMap = buildPackageMap(allPkgs);
 
@@ -263,7 +293,9 @@ function checkCategoryCrossImports(catDir, catLabel, otherNames) {
       if (!/\.(ts|tsx|js|jsx|mjs|cjs|mts|cts)$/.test(f)) continue;
       for (const imp of extractImports(f)) {
         if (otherNames.has(imp) && imp !== ownName) {
-          err(`${f} imports "${imp}" — cross-import between ${catLabel} packages is forbidden`);
+          err(
+            `${f} imports "${imp}" — cross-import between ${catLabel} packages is forbidden`,
+          );
         }
       }
     }
@@ -294,9 +326,15 @@ const FORBIDDEN = "OpenMythos-main (1)";
 if (existsSync(resolve(ROOT, FORBIDDEN))) {
   const found = workspaceGlobs.some((g) => {
     const prefix = g.replace(/\*+$/, "").replace(/\/$/, "");
-    try { return resolve(ROOT, FORBIDDEN).startsWith(resolve(ROOT, prefix)); } catch { return false; }
+    try {
+      return resolve(ROOT, FORBIDDEN).startsWith(resolve(ROOT, prefix));
+    } catch {
+      return false;
+    }
   });
-  found ? err(`"${FORBIDDEN}/" should not be a workspace package`) : ok(`"${FORBIDDEN}/" is not a workspace package`);
+  found
+    ? err(`"${FORBIDDEN}/" should not be a workspace package`)
+    : ok(`"${FORBIDDEN}/" is not a workspace package`);
 } else {
   ok(`"${FORBIDDEN}/" does not exist (no issue)`);
 }
@@ -311,10 +349,18 @@ if (pkgsDirs.length === 0) {
 } else {
   for (const d of pkgsDirs) {
     const pj = readPackageJson(`packages/${d}`);
-    if (!pj) { err(`packages/${d}/ missing or invalid package.json`); continue; }
-    if (!pj.name) { err(`packages/${d}/package.json has no "name" field`); continue; }
+    if (!pj) {
+      err(`packages/${d}/ missing or invalid package.json`);
+      continue;
+    }
+    if (!pj.name) {
+      err(`packages/${d}/package.json has no "name" field`);
+      continue;
+    }
     if (!pj.name.startsWith("@sestina/")) {
-      err(`packages/${d}/package.json name is "${pj.name}" — must start with @sestina/`);
+      err(
+        `packages/${d}/package.json name is "${pj.name}" — must start with @sestina/`,
+      );
     } else {
       ok(pj.name);
     }
@@ -332,12 +378,17 @@ function hasRealExports(content) {
   const noBlockComments = content.replace(/\/\*[\s\S]*?\*\//g, "");
   // Remove line comments
   const lines = noBlockComments.split("\n");
-  const noComments = lines.map((l) => {
-    const commentIdx = l.indexOf("//");
-    return commentIdx >= 0 ? l.slice(0, commentIdx) : l;
-  }).join("\n");
+  const noComments = lines
+    .map((l) => {
+      const commentIdx = l.indexOf("//");
+      return commentIdx >= 0 ? l.slice(0, commentIdx) : l;
+    })
+    .join("\n");
   // Remove string literals (simple heuristic: anything between quotes)
-  const noStrings = noComments.replace(/'[^']*'/g, "").replace(/"[^"]*"/g, "").replace(/`[^`]*`/g, "");
+  const noStrings = noComments
+    .replace(/'[^']*'/g, "")
+    .replace(/"[^"]*"/g, "")
+    .replace(/`[^`]*`/g, "");
   // Now check for real export keyword
   return /\bexport\b/.test(noStrings);
 }
@@ -355,7 +406,9 @@ for (const pkg of dirsUnder("packages")) {
   }
   const content = readFileSync(indexPath, "utf8");
   if (!hasRealExports(content)) {
-    err(`${pkgDir}/src/index.ts has no real export statements (comment-only "export" not accepted)`);
+    err(
+      `${pkgDir}/src/index.ts has no real export statements (comment-only "export" not accepted)`,
+    );
   } else {
     ok(`${pkgDir} has real public exports in src/index.ts`);
   }
@@ -365,17 +418,27 @@ for (const pkg of dirsUnder("packages")) {
     err(`${pkgDir}/package.json missing "exports" field`);
   } else if (typeof pj.exports === "string") {
     // Single export
-    if (!pj.exports.endsWith("src/index.ts") && !pj.exports.endsWith("src/index.js")) {
-      err(`${pkgDir}/package.json exports "${pj.exports}" does not point to src/index`);
+    if (
+      !pj.exports.endsWith("src/index.ts") &&
+      !pj.exports.endsWith("src/index.js")
+    ) {
+      err(
+        `${pkgDir}/package.json exports "${pj.exports}" does not point to src/index`,
+      );
     }
   } else if (typeof pj.exports === "object") {
     const dot = pj.exports["."];
     if (!dot) {
       err(`${pkgDir}/package.json exports missing "." entry`);
     } else {
-      const dotPath = typeof dot === "string" ? dot : (dot?.import || dot?.require || dot?.default || "");
+      const dotPath =
+        typeof dot === "string"
+          ? dot
+          : dot?.import || dot?.require || dot?.default || "";
       if (dotPath && !dotPath.includes("src/index")) {
-        err(`${pkgDir}/package.json exports "." → "${dotPath}" does not point to src/index`);
+        err(
+          `${pkgDir}/package.json exports "." → "${dotPath}" does not point to src/index`,
+        );
       }
     }
   }
@@ -405,10 +468,13 @@ for (const pkg of allPkgDirs) {
         const slashIdx = imp.indexOf("/", "@sestina/".length);
         if (slashIdx >= 0) {
           // imp has a subpath: @sestina/foo/sub/path
-          const targetPkg = "@sestina/" + imp.slice("@sestina/".length, slashIdx);
+          const targetPkg =
+            "@sestina/" + imp.slice("@sestina/".length, slashIdx);
           if (allNames.has(targetPkg)) {
             // Known package with subpath — FORBIDDEN
-            err(`${fileRel} imports "${imp}" — cross-package imports must use only the package name (no subpaths). Use "${targetPkg}" instead.`);
+            err(
+              `${fileRel} imports "${imp}" — cross-package imports must use only the package name (no subpaths). Use "${targetPkg}" instead.`,
+            );
             boundaryErrors++;
           }
           // Unknown package — fall through to general check
@@ -419,7 +485,9 @@ for (const pkg of allPkgDirs) {
       // ── Relative imports that cross package roots ──
       if (imp.startsWith(".")) {
         if (relativeImportEscapesPackage(fileRel, imp, pkg.dir)) {
-          err(`${fileRel} imports "${imp}" — relative import escapes package root "${pkg.dir}"`);
+          err(
+            `${fileRel} imports "${imp}" — relative import escapes package root "${pkg.dir}"`,
+          );
           boundaryErrors++;
         }
       }
@@ -437,7 +505,10 @@ if (boundaryErrors === 0) {
 process.stderr.write("\n=== Check 9: Renderer dependency restrictions ===\n");
 
 const FORBIDDEN_RENDERER_DEPS = [
-  "@sestina/core", "@sestina/storage", "@sestina/secrets", "@sestina/providers",
+  "@sestina/core",
+  "@sestina/storage",
+  "@sestina/secrets",
+  "@sestina/providers",
 ];
 
 let rendererErrors = 0;
@@ -448,7 +519,9 @@ for (const pkg of allPkgDirs) {
     for (const imp of extractImports(fileRel)) {
       for (const forbidden of FORBIDDEN_RENDERER_DEPS) {
         if (imp === forbidden || imp.startsWith(forbidden + "/")) {
-          err(`${pkg.dir}/${fileRel} imports "${imp}" — renderer must not depend on ${forbidden}`);
+          err(
+            `${pkg.dir}/${fileRel} imports "${imp}" — renderer must not depend on ${forbidden}`,
+          );
           rendererErrors++;
         }
       }
@@ -465,17 +538,18 @@ if (rendererErrors === 0) {
 // ═══════════════════════════════════════════════════════════════════════════
 process.stderr.write("\n=== Check 10: Unexpanded variables ===\n");
 
-const UNEXPANDED_PATTERNS = [
-  /\$\{[A-Z_]+\}/,
-  /\{\{.*?\}\}/,
-  /<%.*?%>/,
-];
+const UNEXPANDED_PATTERNS = [/\$\{[A-Z_]+\}/, /\{\{.*?\}\}/, /<%.*?%>/];
 
 let unexpandedErrors = 0;
 function checkUnexpanded(dirRel) {
   if (!existsSync(resolve(ROOT, dirRel))) return;
   for (const fileRel of walkFiles(dirRel)) {
-    if (!/\.(json|ya?ml|xml|toml|nsh|plist|desktop|cfg|ini|template)$/.test(fileRel)) continue;
+    if (
+      !/\.(json|ya?ml|xml|toml|nsh|plist|desktop|cfg|ini|template)$/.test(
+        fileRel,
+      )
+    )
+      continue;
     try {
       const content = readFileSync(resolve(ROOT, fileRel), "utf8");
       for (const p of UNEXPANDED_PATTERNS) {
@@ -486,7 +560,9 @@ function checkUnexpanded(dirRel) {
           break;
         }
       }
-    } catch { /* skip */ }
+    } catch {
+      /* skip */
+    }
   }
 }
 

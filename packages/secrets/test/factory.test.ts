@@ -14,6 +14,7 @@ import {
   verifyChallengeResponse,
 } from "../src/index.js";
 import type { SecretBackend } from "../src/index.js";
+import type { ACLProvider, VaultIO } from "../src/windows-dpapi.js";
 
 // ── Fake in-memory backend for testing (DI pattern) ──
 
@@ -62,13 +63,40 @@ describe("createSecretBackend", () => {
   });
 
   it("throws for unsupported platform", () => {
-    expect(() =>
-      createSecretBackend("unsupported" as never),
-    ).toThrow("Unsupported platform");
+    expect(() => createSecretBackend("unsupported" as never)).toThrow(
+      "Unsupported platform",
+    );
   });
 
   it("win32 backend health reports dpapi or none", async () => {
-    const backend = createSecretBackend("win32");
+    const disk = new Map<string, string>();
+    const vaultIO: VaultIO = {
+      load: () => new Map(disk),
+      save: (_path, next, secureCandidate) => {
+        secureCandidate("memory-candidate");
+        disk.clear();
+        for (const [ref, value] of next) disk.set(ref, value);
+      },
+    };
+    const acl: ACLProvider = {
+      applyACL: () => true,
+      verifyACL: () => true,
+      applyACLToDir: () => undefined,
+    };
+    const dpapi = {
+      async protect(value: Buffer) {
+        return Buffer.from(value).reverse();
+      },
+      async unprotect(value: Buffer) {
+        return Buffer.from(value).reverse();
+      },
+    };
+    const backend = createSecretBackend("win32", {
+      dpapi,
+      windowsVaultPath: "memory-vault",
+      windowsVaultIO: vaultIO,
+      windowsACL: acl,
+    });
     const status = await backend.health();
     expect(["dpapi", "none"]).toContain(status.backend);
     expect(typeof status.available).toBe("boolean");
@@ -84,10 +112,58 @@ describe("createSecretBackend", () => {
   it("linux backend health reports secret-service, environment, or none", async () => {
     const backend = createSecretBackend("linux");
     const status = await backend.health();
-    expect(["secret-service", "environment", "none"]).toContain(
-      status.backend,
-    );
+    expect(["secret-service", "environment", "none"]).toContain(status.backend);
     expect(typeof status.available).toBe("boolean");
+  });
+
+  it("explicit Linux environment opt-in wins when session D-Bus has no Secret Service", async () => {
+    const previousOptIn = process.env.SESTINA_USE_ENV_BACKEND;
+    const previousDbus = process.env.DBUS_SESSION_BUS_ADDRESS;
+    process.env.SESTINA_USE_ENV_BACKEND = "true";
+    process.env.DBUS_SESSION_BUS_ADDRESS = "unix:path=/synthetic/session-bus";
+    try {
+      const backend = createSecretBackend("linux", {
+        secretService: {
+          async lookup() {
+            throw new Error("Secret Service is unavailable");
+          },
+          async store() {
+            throw new Error("Secret Service is unavailable");
+          },
+          async delete() {
+            throw new Error("Secret Service is unavailable");
+          },
+          async isAvailable() {
+            return false;
+          },
+        },
+        envReader: {
+          read(key) {
+            return key === "SESTINA_SECRET_6F70656E61692D6D61696E"
+              ? "env-value"
+              : undefined;
+          },
+          keys() {
+            return ["SESTINA_SECRET_6F70656E61692D6D61696E"];
+          },
+        },
+      });
+
+      await expect(backend.get("sestina/openai-main")).resolves.toBe(
+        "env-value",
+      );
+      await expect(backend.health()).resolves.toMatchObject({
+        available: true,
+        backend: "environment",
+      });
+    } finally {
+      if (previousOptIn === undefined)
+        delete process.env.SESTINA_USE_ENV_BACKEND;
+      else process.env.SESTINA_USE_ENV_BACKEND = previousOptIn;
+      if (previousDbus === undefined)
+        delete process.env.DBUS_SESSION_BUS_ADDRESS;
+      else process.env.DBUS_SESSION_BUS_ADDRESS = previousDbus;
+    }
   });
 });
 

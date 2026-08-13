@@ -10,6 +10,9 @@
  */
 
 import { existsSync } from "node:fs";
+import { SestinaError, SestinaErrorCode } from "@sestina/schema";
+import type { ACLProvider, VaultIO } from "./windows-dpapi.js";
+import { registerControlTokenCoordination } from "./control-token.js";
 
 /** Supported host platforms for secret backend selection. */
 export type SecretPlatform = "win32" | "darwin" | "linux";
@@ -24,9 +27,8 @@ export interface SecretBackendStatus {
 
 /**
  * Cross-platform secret storage interface.
- * Every method must be safe to call even when the backend is unavailable
- * (get returns undefined, set/delete throw SestinaError with
- * code secure_storage_unavailable).
+ * Missing entries return undefined. When the backend itself is unavailable,
+ * get/set/delete throw SestinaError with code secure_storage_unavailable.
  */
 export interface SecretBackend {
   /** Retrieve a secret by its stable reference key. Returns undefined if not found. */
@@ -52,6 +54,10 @@ export interface SecretBackend {
 export interface SecretBackendDeps {
   /** Windows: a DPAPI native provider. */
   dpapi?: DPAPIProvider;
+  /** Windows: isolated vault path and publication dependencies. */
+  windowsVaultPath?: string;
+  windowsVaultIO?: VaultIO;
+  windowsACL?: ACLProvider;
   /** macOS: a Keychain native provider. */
   keychain?: KeychainProvider;
   /** Linux: a Secret Service provider. */
@@ -106,7 +112,7 @@ export interface EnvReader {
  *
  * - win32  → CurrentUser DPAPI
  * - darwin → Keychain
- * - linux  → Secret Service if available, else environment-only
+ * - linux  → Secret Service; environment storage only after explicit opt-in
  *
  * @param platform  The OS platform string (process.platform).
  * @param deps      Optional dependency injection for testing.
@@ -118,14 +124,14 @@ export function createSecretBackend(
   switch (platform) {
     case "win32": {
       // Windows: DPAPI CurrentUser only.
-      return createLazyWindowsBackend(deps?.dpapi);
+      return createLazyWindowsBackend(deps);
     }
     case "darwin": {
-      // macOS: Keychain (native bindings or security CLI).
+      // macOS: native Keychain binding only; never pass secrets via CLI argv.
       return createLazyMacOSBackend(deps?.keychain);
     }
     case "linux": {
-      // Linux: Secret Service if available, else environment fallback.
+      // Linux: explicit environment opt-in wins; otherwise Secret Service.
       return createLinuxBackend(deps?.secretService, deps?.envReader);
     }
     default:
@@ -135,7 +141,7 @@ export function createSecretBackend(
 
 // ── Lazy backend wrappers (defer native module loading to first use) ──
 
-function createLazyWindowsBackend(injectedDPAPI?: DPAPIProvider): SecretBackend {
+function createLazyWindowsBackend(deps?: SecretBackendDeps): SecretBackend {
   let backend: SecretBackend | null = null;
   let initError: Error | null = null;
 
@@ -144,24 +150,50 @@ function createLazyWindowsBackend(injectedDPAPI?: DPAPIProvider): SecretBackend 
     if (initError) throw initError;
     try {
       const { createWindowsDPAPIBackend } = await import("./windows-dpapi.js");
-      backend = createWindowsDPAPIBackend(injectedDPAPI);
+      backend = createWindowsDPAPIBackend(
+        deps?.dpapi,
+        deps?.windowsVaultPath,
+        deps?.windowsVaultIO,
+        deps?.windowsACL,
+      );
       return backend;
     } catch (err) {
-      initError = err instanceof Error ? err : new Error(String(err));
+      void err;
+      initError = new SestinaError(
+        SestinaErrorCode.secure_storage_unavailable,
+        "Windows secure storage could not be initialized.",
+      );
       throw initError;
     }
   }
 
-  return {
-    async get(ref) { return (await init()).get(ref); },
-    async set(ref, value) { return (await init()).set(ref, value); },
-    async delete(ref) { return (await init()).delete(ref); },
-    async describe(ref) { return (await init()).describe(ref); },
+  const facade: SecretBackend = {
+    async get(ref) {
+      return (await init()).get(ref);
+    },
+    async set(ref, value) {
+      return (await init()).set(ref, value);
+    },
+    async delete(ref) {
+      return (await init()).delete(ref);
+    },
+    async describe(ref) {
+      return (await init()).describe(ref);
+    },
     async health() {
-      try { return await (await init()).health(); }
-      catch { return { available: false, backend: "none" as const, reason: initError?.message }; }
+      try {
+        return await (await init()).health();
+      } catch {
+        return {
+          available: false,
+          backend: "none" as const,
+          reason: "Windows secure storage is unavailable.",
+        };
+      }
     },
   };
+  registerControlTokenCoordination(facade, "windows:current-user");
+  return facade;
 }
 
 function createLazyMacOSBackend(injectedKC?: KeychainProvider): SecretBackend {
@@ -172,31 +204,93 @@ function createLazyMacOSBackend(injectedKC?: KeychainProvider): SecretBackend {
     if (backend) return backend;
     if (initError) throw initError;
     try {
-      const { createMacOSKeychainBackend } = await import("./macos-keychain.js");
+      const { createMacOSKeychainBackend } =
+        await import("./macos-keychain.js");
       backend = createMacOSKeychainBackend(injectedKC);
       return backend;
     } catch (err) {
-      initError = err instanceof Error ? err : new Error(String(err));
+      void err;
+      initError = new SestinaError(
+        SestinaErrorCode.secure_storage_unavailable,
+        "macOS secure storage could not be initialized.",
+      );
       throw initError;
     }
   }
 
-  return {
-    async get(ref) { return (await init()).get(ref); },
-    async set(ref, value) { return (await init()).set(ref, value); },
-    async delete(ref) { return (await init()).delete(ref); },
-    async describe(ref) { return (await init()).describe(ref); },
+  const facade: SecretBackend = {
+    async get(ref) {
+      return (await init()).get(ref);
+    },
+    async set(ref, value) {
+      return (await init()).set(ref, value);
+    },
+    async delete(ref) {
+      return (await init()).delete(ref);
+    },
+    async describe(ref) {
+      return (await init()).describe(ref);
+    },
     async health() {
-      try { return await (await init()).health(); }
-      catch { return { available: false, backend: "none" as const, reason: initError?.message }; }
+      try {
+        return await (await init()).health();
+      } catch {
+        return {
+          available: false,
+          backend: "none" as const,
+          reason: "macOS secure storage is unavailable.",
+        };
+      }
     },
   };
+  registerControlTokenCoordination(facade, "macos:current-user");
+  return facade;
 }
 
 function createLinuxBackend(
   injectedSS?: SecretServiceProvider,
   injectedEnv?: EnvReader,
 ): SecretBackend {
+  // Environment storage is never selected implicitly. When the user opts in,
+  // honor that choice even if a session D-Bus exists but no keyring service is
+  // registered on it.
+  if (process.env.SESTINA_USE_ENV_BACKEND === "true") {
+    let cachedEnv: SecretBackend | null = null;
+
+    async function getEnvBackend(): Promise<SecretBackend> {
+      if (cachedEnv) return cachedEnv;
+      const { createEnvironmentBackend } = await import("./environment.js");
+      cachedEnv = createEnvironmentBackend(injectedEnv);
+      return cachedEnv;
+    }
+
+    const facade: SecretBackend = {
+      async get(ref: string) {
+        return (await getEnvBackend()).get(ref);
+      },
+      async set(ref: string, value: string) {
+        return (await getEnvBackend()).set(ref, value);
+      },
+      async delete(ref: string) {
+        return (await getEnvBackend()).delete(ref);
+      },
+      async describe(ref: string) {
+        return (await getEnvBackend()).describe(ref);
+      },
+      health(): Promise<SecretBackendStatus> {
+        return Promise.resolve({
+          available: true,
+          backend: "environment",
+          reason:
+            "Reading pre-provisioned secrets from SESTINA_SECRET_* " +
+            "environment variables (explicitly enabled).",
+        });
+      },
+    };
+    registerControlTokenCoordination(facade, "linux:environment");
+    return facade;
+  }
+
   // Determine backend synchronously — the choice is stable for the process lifetime.
   let dbusAvailable = false;
   if (process.env.DBUS_SESSION_BUS_ADDRESS) {
@@ -214,89 +308,72 @@ function createLinuxBackend(
       if (backend) return backend;
       if (!ssInitialized) {
         ssInitialized = true;
-        const { createLinuxSecretBackend } = await import("./linux-secret-service.js");
+        const { createLinuxSecretBackend } =
+          await import("./linux-secret-service.js");
         backend = createLinuxSecretBackend(injectedSS);
       }
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       return backend!;
     }
 
-    return {
-      async get(ref) { return (await init()).get(ref); },
-      async set(ref, value) { return (await init()).set(ref, value); },
-      async delete(ref) { return (await init()).delete(ref); },
-      async describe(ref) { return (await init()).describe(ref); },
-      async health() { return (await init()).health(); },
-    };
-  }
-
-  // No D-Bus: Secret Service is unavailable.
-  // Environment variable backend is ONLY used when the user
-  // explicitly opts in via SESTINA_USE_ENV_BACKEND=true.
-  // Without explicit opt-in, fail closed with secure_storage_unavailable.
-  if (process.env.SESTINA_USE_ENV_BACKEND === "true") {
-    let cachedEnv: SecretBackend | null = null;
-
-    async function getEnvBackend(): Promise<SecretBackend> {
-      if (cachedEnv) return cachedEnv;
-      const { createEnvironmentBackend } = await import("./environment.js");
-      cachedEnv = createEnvironmentBackend(injectedEnv);
-      return cachedEnv;
-    }
-
-    const envBackend: SecretBackend = {
-      async get(ref: string) {
-        return (await getEnvBackend()).get(ref);
+    const facade: SecretBackend = {
+      async get(ref) {
+        return (await init()).get(ref);
       },
-      async set(ref: string, value: string) {
-        return (await getEnvBackend()).set(ref, value);
+      async set(ref, value) {
+        return (await init()).set(ref, value);
       },
-      async delete(ref: string) {
-        return (await getEnvBackend()).delete(ref);
+      async delete(ref) {
+        return (await init()).delete(ref);
       },
-      async describe(ref: string) {
-        return (await getEnvBackend()).describe(ref);
+      async describe(ref) {
+        return (await init()).describe(ref);
       },
-      // eslint-disable-next-line @typescript-eslint/require-await
-      async health(): Promise<SecretBackendStatus> {
-        return {
-          available: true,
-          backend: "environment",
-          reason:
-            "Secret Service (D-Bus) is not available on this system. " +
-            "Reading secrets from SESTINA_SECRET_* environment variables " +
-            "(explicitly enabled via SESTINA_USE_ENV_BACKEND=true).",
-        };
+      async health() {
+        return (await init()).health();
       },
     };
-
-    return envBackend;
+    registerControlTokenCoordination(
+      facade,
+      "linux:current-user:secret-service",
+    );
+    return facade;
   }
 
-  // Fail closed: no Secret Service, no explicit env backend opt-in.
+  // Fail closed: no session D-Bus and no explicit env backend opt-in.
   const unavailableBackend: SecretBackend = {
-    async get(ref: string): Promise<undefined> {
+    get(ref: string): Promise<undefined> {
       void ref;
-      throw new (await import("@sestina/schema")).SestinaError(
-        (await import("@sestina/schema")).SestinaErrorCode.secure_storage_unavailable,
-        "Secret Service is not available on this Linux system. " +
-        "Install and start gnome-keyring-daemon or kwalletd6, " +
-        "or explicitly opt in to environment variable storage by setting " +
-        "SESTINA_USE_ENV_BACKEND=true and providing secrets via SESTINA_SECRET_<NAME>.",
+      return Promise.reject(
+        new SestinaError(
+          SestinaErrorCode.secure_storage_unavailable,
+          "Secret Service is not available on this Linux system. " +
+            "Install and start gnome-keyring-daemon or kwalletd6, " +
+            "or explicitly opt in to environment variable storage by setting " +
+            "SESTINA_USE_ENV_BACKEND=true and providing secrets via SESTINA_SECRET_<NAME>.",
+        ),
       );
     },
-    async set(ref: string, _value: string): Promise<void> {
-      void ref; void _value;
-      throw new (await import("@sestina/schema")).SestinaError(
-        (await import("@sestina/schema")).SestinaErrorCode.secure_storage_unavailable,
-        "Secret Service is not available. Set SESTINA_USE_ENV_BACKEND=true " +
-        "and provide secrets via SESTINA_SECRET_<NAME> environment variables.",
+    set(ref: string, _value: string): Promise<void> {
+      void ref;
+      void _value;
+      return Promise.reject(
+        new SestinaError(
+          SestinaErrorCode.secure_storage_unavailable,
+          "Secret Service is not available. Set SESTINA_USE_ENV_BACKEND=true " +
+            "and provide secrets via SESTINA_SECRET_<NAME> environment variables.",
+        ),
       );
     },
-    // eslint-disable-next-line @typescript-eslint/require-await
-    async delete(ref: string): Promise<void> {
+    delete(ref: string): Promise<void> {
       void ref;
-      // No-op: nothing to delete
+      return Promise.reject(
+        new SestinaError(
+          SestinaErrorCode.secure_storage_unavailable,
+          "Secret Service is not available. Set SESTINA_USE_ENV_BACKEND=true " +
+            "and provide secrets via SESTINA_SECRET_<NAME> environment variables.",
+        ),
+      );
     },
     // eslint-disable-next-line @typescript-eslint/require-await
     async describe(ref: string): Promise<{ configured: boolean }> {

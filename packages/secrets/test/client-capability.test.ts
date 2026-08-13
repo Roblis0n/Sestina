@@ -14,12 +14,42 @@
  * - directUser on mcp/host channels is rejected at the schema level.
  */
 import { describe, it, expect } from "vitest";
+import { createHmac, randomBytes } from "node:crypto";
 import {
   ActorProvenanceSchema,
   canActAsDirectUser,
   isPeerProvenance,
 } from "@sestina/schema";
 import type { ActorProvenance } from "@sestina/schema";
+import type { SecretBackend } from "../src/port.js";
+import {
+  createEnvironmentBackend,
+  getOrCreateControlToken,
+  verifyChallengeResponse,
+} from "../src/index.js";
+
+function createMemoryBackend(): SecretBackend {
+  const store = new Map<string, string>();
+  return {
+    get(ref) {
+      return Promise.resolve(store.get(ref));
+    },
+    set(ref, value) {
+      store.set(ref, value);
+      return Promise.resolve();
+    },
+    delete(ref) {
+      store.delete(ref);
+      return Promise.resolve();
+    },
+    describe(ref) {
+      return Promise.resolve({ configured: store.has(ref) });
+    },
+    health() {
+      return Promise.resolve({ available: true, backend: "dpapi" });
+    },
+  };
+}
 
 // ── Tests ──
 
@@ -76,23 +106,48 @@ describe("client capability boundaries", () => {
   });
 
   describe("control token cannot elevate peer to user", () => {
-    it("Hook with valid control token is still peer provenance", () => {
-      const hookProvenance: ActorProvenance = {
-        actor: "hook",
-        channel: "host",
-        directUser: false,
-      };
-      expect(canActAsDirectUser(hookProvenance)).toBe(false);
-    });
+    it.each([
+      ["hook", "host"],
+      ["agent", "mcp"],
+    ] as const)(
+      "a cryptographically valid token cannot elevate %s/%s provenance",
+      async (actor, channel) => {
+        const backend = createMemoryBackend();
+        const token = await getOrCreateControlToken(backend, "ipc");
+        const clientNonce = randomBytes(32);
+        const serverNonce = randomBytes(32);
+        const role = channel;
+        const response = createHmac("sha256", Buffer.from(token.value, "hex"))
+          .update(Buffer.concat([clientNonce, serverNonce, Buffer.from(role)]))
+          .digest();
 
-    it("MCP agent with valid control token is still peer provenance", () => {
-      const mcpProvenance: ActorProvenance = {
-        actor: "agent",
-        channel: "mcp",
-        directUser: false,
-      };
-      expect(canActAsDirectUser(mcpProvenance)).toBe(false);
-    });
+        await expect(
+          verifyChallengeResponse(
+            backend,
+            "ipc",
+            response,
+            clientNonce,
+            serverNonce,
+            role,
+          ),
+        ).resolves.toBe(true);
+
+        expect(
+          ActorProvenanceSchema.safeParse({
+            actor,
+            channel,
+            directUser: true,
+          }).success,
+        ).toBe(false);
+        const peer = ActorProvenanceSchema.parse({
+          actor,
+          channel,
+          directUser: false,
+        });
+        expect(isPeerProvenance(peer)).toBe(true);
+        expect(canActAsDirectUser(peer)).toBe(false);
+      },
+    );
 
     it("peer provenance can never mutate into directUser", () => {
       const peerChannels = ["host", "mcp"] as const;
@@ -200,14 +255,21 @@ describe("client capability boundaries", () => {
 
   describe("secret backend access boundary", () => {
     it("peers access secrets through the backend but never see raw storage", () => {
-      // The SecretBackend interface has no "list all" or "enumerate" method.
-      // The describe() method only answers { configured: boolean }.
-      const describableMethods = ["describe"] as const;
-      const nonEnumeratingMethods = ["get", "set", "delete", "describe", "health"] as const;
+      const backend = createEnvironmentBackend({
+        read: () => undefined,
+        keys: () => ["SESTINA_SECRET_PRIVATE_INTERNAL_KEY"],
+      });
+      const publicSurface = Reflect.ownKeys(backend);
 
-      expect(describableMethods).toHaveLength(1);
-      expect(nonEnumeratingMethods).not.toContain("list" as never);
-      expect(nonEnumeratingMethods).not.toContain("keys" as never);
+      expect(publicSurface).toEqual([
+        "get",
+        "set",
+        "delete",
+        "describe",
+        "health",
+      ]);
+      expect(publicSurface).not.toContain("list");
+      expect(publicSurface).not.toContain("keys");
     });
   });
 });

@@ -9,7 +9,6 @@
     "packages/*/test/**/*.ts",
     "packages/*/vitest.config.ts",
     "tests/**/*.ts",
-    "vitest.workspace.ts",
     "vitest.config.ts",
     "eslint.config.mjs"
   ],

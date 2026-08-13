@@ -8,7 +8,7 @@
   },
   "scripts": {
     "build": "pnpm -r build",
-    "test": "vitest run --workspace vitest.workspace.ts",
+    "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
     "test:ipc": "vitest run --project ipc",

@@ -1,7 +1,7 @@
 /**
  * Secret scanner edge-case tests — RED tests for known failures.
  */
-import { describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect, vi } from "vitest";
 import {
   scanForSecrets,
   safeStringForOutput,
@@ -10,32 +10,37 @@ import {
 } from "../src/secret-scanner.js";
 
 describe("secret scanner edge cases (RED→GREEN)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   // ── FAILURE 5: Two same-type secrets have matchCount of 1 ──
   describe("multiple same-type secrets", () => {
     it("RED: detects both hex256 tokens in a string with two 64-char hex values", () => {
-      const t1 = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2";
-      const t2 = "f0e1d2c3b4a5968778695a4b3c2d1e0f1e2d3c4b5a69788796a5b4c3d2e1f0";
+      const t1 = "a1".repeat(32);
+      const t2 = "b2".repeat(32);
       const result = scanForSecrets(`token1: ${t1} and token2: ${t2}`);
       expect(result.hasSecrets).toBe(true);
-      expect(result.matchCount).toBeGreaterThanOrEqual(1); // RED: currently returns 1
+      expect(result.matchCount).toBe(2);
     });
 
     it("RED: detects both openai keys in a string with two sk- keys", () => {
       const result = scanForSecrets(
         "key1: sk-test-aaaaaaaaaaaaaaaaaaaa key2: sk-test-bbbbbbbbbbbbbbbbbbbb",
       );
-      expect(result.matchCount).toBeGreaterThanOrEqual(1); // RED: currently returns 1
+      expect(result.matchCount).toBe(2);
     });
 
     it("RED: safeStringForOutput redacts ALL secrets, not just first", () => {
-      const t1 = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2";
-      const t2 = "f0e1d2c3b4a5968778695a4b3c2d1e0f1e2d3c4b5a69788796a5b4c3d2e1f0";
+      const t1 = "a1".repeat(32);
+      const t2 = "b2".repeat(32);
       const output = safeStringForOutput(`a: ${t1} b: ${t2}`);
       expect(output).not.toContain(t1);
       expect(output).not.toContain(t2);
       // Should contain two REDACTED markers
-      const redactedCount = (output.match(/\[REDACTED:hex256-token\]/g) ?? []).length;
-      expect(redactedCount).toBeGreaterThanOrEqual(1); // redaction working
+      const redactedCount = (output.match(/\[REDACTED:hex256-token\]/g) ?? [])
+        .length;
+      expect(redactedCount).toBe(2);
     });
   });
 
@@ -54,7 +59,9 @@ describe("secret scanner edge cases (RED→GREEN)", () => {
     });
 
     it("detects github-token", () => {
-      const r = scanForSecrets("token: ghp_0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJ");
+      const r = scanForSecrets(
+        "token: ghp_0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJ",
+      );
       expect(r.hasSecrets).toBe(true);
       expect(r.matchedPatterns).toContain("github-token");
     });
@@ -66,13 +73,17 @@ describe("secret scanner edge cases (RED→GREEN)", () => {
     });
 
     it("detects jwt", () => {
-      const r = scanForSecrets("Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U");
+      const r = scanForSecrets(
+        "Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U",
+      );
       expect(r.hasSecrets).toBe(true);
       expect(r.matchedPatterns).toContain("jwt");
     });
 
     it("detects base64-secret (40+ chars)", () => {
-      const r = scanForSecrets("secret: dGhpcyBpcyBhIHZlcnkgbG9uZyBiYXNlNjQgc3RyaW5nIHRoYXQgaXMgdXNlZCBhcyBhIHNlY3JldA==");
+      const r = scanForSecrets(
+        "secret: dGhpcyBpcyBhIHZlcnkgbG9uZyBiYXNlNjQgc3RyaW5nIHRoYXQgaXMgdXNlZCBhcyBhIHNlY3JldA==",
+      );
       expect(r.hasSecrets).toBe(true);
       expect(r.matchedPatterns).toContain("base64-secret");
     });
@@ -99,21 +110,29 @@ describe("secret scanner edge cases (RED→GREEN)", () => {
 
   // ── Output boundary tests ──
   describe("output boundary functions", () => {
-    it("safeWriteStderr returns false when secrets detected", () => {
-      const t = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2";
-      // Can't easily test stderr output, but can test return value
-      // by capturing stderr (skip the actual write test)
+    it("safeWriteStderr writes only the redacted form", () => {
+      const t =
+        "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2";
+      const writes: string[] = [];
+      vi.spyOn(process.stderr, "write").mockImplementation((chunk) => {
+        writes.push(String(chunk));
+        return true;
+      });
       const r = safeWriteStderr(`token: ${t}`);
-      expect(r).toBe(false); // secret detected
+      expect(r).toBe(false);
+      expect(writes.join("")).not.toContain(t);
+      expect(writes.join("")).toContain("[REDACTED:hex256-token]");
     });
 
     it("safeWriteStderr returns true for clean messages", () => {
+      vi.spyOn(process.stderr, "write").mockImplementation(() => true);
       const r = safeWriteStderr("all clear, nothing to see here");
       expect(r).toBe(true);
     });
 
     it("sanitizeArgs replaces secret-containing args", () => {
-      const t = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2";
+      const t =
+        "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2";
       const args = sanitizeArgs(["cmd", "--token", t, "--verbose"]);
       expect(args[0]).toBe("cmd");
       expect(args[1]).toBe("--token");
@@ -124,6 +143,43 @@ describe("secret scanner edge cases (RED→GREEN)", () => {
     it("sanitizeArgs does not modify clean args", () => {
       const args = sanitizeArgs(["cmd", "--output", "result.txt"]);
       expect(args).toEqual(["cmd", "--output", "result.txt"]);
+    });
+
+    it("detects and redacts an arbitrary caller-supplied canary", () => {
+      const canary = "sestina-canary-4f8d-qa";
+      const text = `native failure included ${canary}`;
+
+      const scan = scanForSecrets(text, { knownSecrets: [canary] });
+      const output = safeStringForOutput(text, { knownSecrets: [canary] });
+
+      expect(scan.hasSecrets).toBe(true);
+      expect(scan.matchCount).toBe(1);
+      expect(scan.matchedPatterns).toContain("known-secret");
+      expect(output).not.toContain(canary);
+      expect(output).toContain("[REDACTED:known-secret]");
+    });
+
+    it("scans the string form of Error and object values", () => {
+      const canary = "sestina-object-canary-qa";
+      const errorOutput = safeStringForOutput(new Error(`native ${canary}`), {
+        knownSecrets: [canary],
+      });
+      const objectOutput = safeStringForOutput(
+        { toString: () => `object ${canary}` },
+        { knownSecrets: [canary] },
+      );
+
+      expect(errorOutput).not.toContain(canary);
+      expect(objectOutput).not.toContain(canary);
+      expect(errorOutput).toContain("[REDACTED:known-secret]");
+      expect(objectOutput).toContain("[REDACTED:known-secret]");
+    });
+
+    it("sanitizes arbitrary known secrets in subprocess arguments", () => {
+      const canary = "sestina-canary-argv-qa";
+      expect(
+        sanitizeArgs(["tool", canary], { knownSecrets: [canary] }),
+      ).toEqual(["tool", "[REDACTED]"]);
     });
   });
 });

@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync, readdirSync, existsSync, writeFileSync, unlinkSync } from "node:fs";
+import {
+  readFileSync,
+  readdirSync,
+  existsSync,
+  writeFileSync,
+  unlinkSync,
+} from "node:fs";
 import { resolve, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -26,7 +32,12 @@ function parsePnpmWorkspace(): string[] {
       if (match?.[1]) {
         packages.push(match[1]);
       }
-      if (line.trim() && !line.startsWith(" ") && !line.startsWith("\t") && !line.startsWith("-")) {
+      if (
+        line.trim() &&
+        !line.startsWith(" ") &&
+        !line.startsWith("\t") &&
+        !line.startsWith("-")
+      ) {
         break;
       }
     }
@@ -47,13 +58,26 @@ function extractImports(filePath: string): string[] {
 }
 
 /** Walk directory recursively, yielding {fullPath, relativePath} */
-function* walkFiles(dir: string, root: string = dir): Generator<{ fullPath: string; relPath: string }> {
+function* walkFiles(
+  dir: string,
+  root: string = dir,
+): Generator<{ fullPath: string; relPath: string }> {
   if (!existsSync(dir)) return;
   const entries = readdirSync(dir, { withFileTypes: true });
   for (const entry of entries) {
     const fullPath = resolve(dir, entry.name);
     if (entry.isDirectory()) {
-      if (["node_modules", "dist", "build", "coverage", ".git", ".turbo"].includes(entry.name)) continue;
+      if (
+        [
+          "node_modules",
+          "dist",
+          "build",
+          "coverage",
+          ".git",
+          ".turbo",
+        ].includes(entry.name)
+      )
+        continue;
       yield* walkFiles(fullPath, root);
     } else if (entry.isFile() && /\.(ts|tsx|mjs|js)$/.test(entry.name)) {
       yield { fullPath, relPath: relative(root, fullPath) };
@@ -70,7 +94,7 @@ describe("Repository Shape", () => {
     "package.json",
     "pnpm-workspace.yaml",
     "tsconfig.base.json",
-    "vitest.workspace.ts",
+    "vitest.config.ts",
     "eslint.config.mjs",
     ".npmrc",
     ".node-version",
@@ -83,7 +107,14 @@ describe("Repository Shape", () => {
   });
 
   it("has required top-level directories", () => {
-    for (const dir of ["packages", "apps", "integrations", "docs", "tests", "scripts"]) {
+    for (const dir of [
+      "packages",
+      "apps",
+      "integrations",
+      "docs",
+      "tests",
+      "scripts",
+    ]) {
       expect(existsSync(resolve(REPO_ROOT, dir))).toBe(true);
     }
   });
@@ -219,7 +250,9 @@ describe("Package public exports", () => {
       for (const { fullPath } of walkFiles(srcDir)) {
         const imports = extractImports(fullPath);
         for (const imp of imports) {
-          expect(imp).not.toMatch(/^@sestina\/(background-runtime|desktop|hook-runner|mcp-server|cli|codex-plugin|claude-plugin)/);
+          expect(imp).not.toMatch(
+            /^@sestina\/(background-runtime|desktop|hook-runner|mcp-server|cli|codex-plugin|claude-plugin)/,
+          );
         }
       }
     }
@@ -231,7 +264,12 @@ describe("Package public exports", () => {
 // ─────────────────────────────────────────────
 
 describe("Renderer dependency restrictions", () => {
-  const FORBIDDEN_RENDERER_DEPS = ["@sestina/core", "@sestina/storage", "@sestina/secrets", "@sestina/providers"];
+  const FORBIDDEN_RENDERER_DEPS = [
+    "@sestina/core",
+    "@sestina/storage",
+    "@sestina/secrets",
+    "@sestina/providers",
+  ];
 
   it("no renderer directory imports forbidden packages", () => {
     // Check if any renderer directory exists
@@ -245,13 +283,19 @@ describe("Renderer dependency restrictions", () => {
       for (const { fullPath } of walkFiles(dir)) {
         // Only check files within renderer paths
         const normalized = fullPath.replace(/\\/g, "/");
-        if (!normalized.includes("/renderer/") && !normalized.includes("\\renderer\\")) continue;
+        if (
+          !normalized.includes("/renderer/") &&
+          !normalized.includes("\\renderer\\")
+        )
+          continue;
 
         const imports = extractImports(fullPath);
         for (const imp of imports) {
           for (const forbidden of FORBIDDEN_RENDERER_DEPS) {
             expect(imp).not.toBe(forbidden);
-            expect(imp).not.toMatch(new RegExp(`^${forbidden.replace("/", "\\/")}/`));
+            expect(imp).not.toMatch(
+              new RegExp(`^${forbidden.replace("/", "\\/")}/`),
+            );
           }
         }
       }
@@ -311,12 +355,13 @@ describe("CI workflow", () => {
 // Vitest workspace contract
 // ─────────────────────────────────────────────
 
-describe("Vitest workspace", () => {
-  it("vitest.workspace.ts defines unit, integration, ipc, and desktop projects", () => {
+describe("Vitest projects", () => {
+  it("vitest.config.ts defines unit, integration, ipc, and desktop projects", () => {
     const content = readFileSync(
-      resolve(REPO_ROOT, "vitest.workspace.ts"),
+      resolve(REPO_ROOT, "vitest.config.ts"),
       "utf-8",
     );
+    expect(content).toMatch(/projects\s*:/);
     // Each project must be defined by name
     expect(content).toMatch(/name:\s*["']unit["']/);
     expect(content).toMatch(/name:\s*["']integration["']/);
@@ -352,14 +397,22 @@ describe("No-placeholders check", () => {
       writeFileSync(testFile, content, "utf-8");
 
       // Run the script via spawnSync (cross-platform, no shell dependency)
-      const result = spawnSync(process.execPath, [scriptPath, "--root", REPO_ROOT], {
-        encoding: "utf-8",
-      });
+      const result = spawnSync(
+        process.execPath,
+        [scriptPath, "--root", REPO_ROOT],
+        {
+          encoding: "utf-8",
+        },
+      );
       // Script must exit non-zero because it found TODO in .tmp-test-placeholder.ts
       expect(result.status).not.toBe(0);
       expect(result.stderr).toMatch(/TODO/);
     } finally {
-      try { unlinkSync(testFile); } catch { /* ok */ }
+      try {
+        unlinkSync(testFile);
+      } catch {
+        /* ok */
+      }
     }
   });
 

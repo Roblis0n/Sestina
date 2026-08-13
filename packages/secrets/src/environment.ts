@@ -5,16 +5,15 @@
  *
  * This backend is:
  * - READ-ONLY: secrets are set via the environment, never written back.
- * - DELIBERATE: only used when the user explicitly chose env vars or
- *   on Linux when Secret Service is unavailable.
+ * - DELIBERATE: selected only when the user explicitly opts in.
  * - NEVER a silent plaintext fallback.
  *
- * The backend maps:
- *   SESTINA_SECRET_OPENAI_MAIN → sestina/openai-main
- *   SESTINA_SECRET_ANTHROPIC → sestina/anthropic
+ * Ref suffixes are UTF-8 hex encoded so every key is a portable POSIX shell
+ * identifier and distinct refs can never collide.
  */
 import { SestinaError, SestinaErrorCode } from "@sestina/schema";
 import type { SecretBackend, SecretBackendStatus, EnvReader } from "./port.js";
+import { registerControlTokenCoordination } from "./control-token.js";
 
 // ── Real env reader ──
 
@@ -36,52 +35,44 @@ const PREFIX = "SESTINA_SECRET_";
 /**
  * Convert a ref to an environment variable key.
  *
- * COLLISION-FREE ESCAPE SCHEME:
- * - "_"  → "__" (escape literal underscores)
- * - "/"  → "_"  (path separator)
- * - "-"  kept as "-" (hyphens are valid in Node.js env var access)
- *
- * This ensures refs like "sestina/a/b", "sestina/a_b", and "sestina/a-b"
- * all map to DIFFERENT env var names:
- *   sestina/a/b   → SESTINA_SECRET_A_B
- *   sestina/a__b  → SESTINA_SECRET_A____B
- *   sestina/a_b   → SESTINA_SECRET_A__B
- *   sestina/a-b   → SESTINA_SECRET_A-B
+ * The portion after `sestina/` is encoded as uppercase UTF-8 hex. The output
+ * therefore uses only `[A-Z0-9_]`, works with `export KEY=value`, preserves
+ * Unicode and case exactly, and is collision-free.
  */
-function refToEnvKey(ref: string): string {
-  const name = ref
-    .replace(/^sestina\//, "")
-    .replace(/_/g, "__")  // escape "_" first (before "/" → "_")
-    .replace(/\//g, "_")  // then encode "/" as "_"
-    .toUpperCase();
-  return `${PREFIX}${name}`;
+export function environmentKeyForRef(ref: string): string {
+  if (!ref.startsWith("sestina/") || ref.length === "sestina/".length) {
+    throw new SestinaError(
+      SestinaErrorCode.validation_failed,
+      "Secret references must start with sestina/ and include a name.",
+    );
+  }
+  const name = ref.slice("sestina/".length);
+  return `${PREFIX}${Buffer.from(name, "utf8").toString("hex").toUpperCase()}`;
 }
 
 // ── Factory ──
 
-export function createEnvironmentBackend(
-  env?: EnvReader,
-): SecretBackend {
+export function createEnvironmentBackend(env?: EnvReader): SecretBackend {
   const reader = env ?? createRealEnvReader();
 
-  return {
+  const backend: SecretBackend = {
     get(ref: string): Promise<string | undefined> {
-      return Promise.resolve(reader.read(refToEnvKey(ref)));
+      return Promise.resolve(reader.read(environmentKeyForRef(ref)));
     },
 
-    set(_ref: string, _value: string): Promise<void> {
-      void _ref; void _value;
+    set(ref: string, value: string): Promise<void> {
+      void value;
       return Promise.reject(
         new SestinaError(
           SestinaErrorCode.secure_storage_unavailable,
-          "Environment backend is read-only. Set SESTINA_SECRET_<NAME> " +
-          "environment variables in your shell profile instead.",
+          `Environment backend is read-only. Set ${environmentKeyForRef(ref)} ` +
+            "in the service environment or shell profile instead.",
         ),
       );
     },
 
     delete(ref: string): Promise<void> {
-      void refToEnvKey(ref);
+      void environmentKeyForRef(ref);
       return Promise.reject(
         new SestinaError(
           SestinaErrorCode.secure_storage_unavailable,
@@ -91,7 +82,7 @@ export function createEnvironmentBackend(
     },
 
     describe(ref: string): Promise<{ configured: boolean }> {
-      const key = refToEnvKey(ref);
+      const key = environmentKeyForRef(ref);
       return Promise.resolve({ configured: reader.read(key) !== undefined });
     },
 
@@ -105,4 +96,6 @@ export function createEnvironmentBackend(
       });
     },
   };
+  registerControlTokenCoordination(backend, "linux:environment");
+  return backend;
 }
