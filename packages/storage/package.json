@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@sestina/schema": "workspace:*"
+    "@sestina/schema": "workspace:*",
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "typescript": "^5.8.0",

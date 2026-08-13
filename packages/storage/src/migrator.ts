@@ -21,8 +21,8 @@ export type MigrationJournalStatus = "started" | "completed" | "failed";
 
 export interface MigrationRunnerOptions {
   backupDirectory?: string;
-  /** Data root for the common maintenance fence (defaults to "."). */
-  dataRoot?: string;
+  /** Data root for the common maintenance fence (shared with restore/retention). */
+  dataRoot: string;
 }
 
 export interface MigrationRunResult {
@@ -68,7 +68,7 @@ export class MigrationRunner {
   constructor(
     db: StorageDatabase,
     migrations: readonly Migration[],
-    options: MigrationRunnerOptions = {},
+    options: MigrationRunnerOptions,
   ) {
     this.db = db;
     this.migrations = migrations;
@@ -83,7 +83,7 @@ export class MigrationRunner {
     // migrations, restore and retention all share one cross-process domain.
     // The fence is file-based, so it works even before the journal exists.
     const fence = await MaintenanceFence.acquire({
-      dataRoot: this.options.dataRoot ?? ".",
+      dataRoot: this.options.dataRoot,
       scope: "migrations",
     });
     try {

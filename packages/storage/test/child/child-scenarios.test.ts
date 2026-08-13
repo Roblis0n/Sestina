@@ -75,6 +75,51 @@ describe("child scenarios (spawned by parent cross-process tests)", () => {
     }, 60000);
   });
 
+  describe.skipIf(scenario !== "allocate-sequences")("allocate-sequences", () => {
+    it("child allocates stream sequences and records them for the parent", async () => {
+      const { openDatabase, withTransaction, nextStreamSequence } = await import("../../src/index.js");
+      const { generateId } = await import("@sestina/schema");
+      const { writeFileSync } = await import("node:fs");
+      const db = await openDatabase({
+        path: envString("SESTINA_CHILD_DB_PATH", ""),
+        migrate: false,
+      });
+      const count = envNumber("SESTINA_CHILD_SEQ_COUNT", 50);
+      const projectId = envString("SESTINA_CHILD_PROJECT", "");
+      const taskId = envString("SESTINA_CHILD_TASK", "");
+      const allocated: number[] = [];
+      for (let i = 0; i < count; i++) {
+        // Small interleave jitter between allocations, never inside the tx.
+        await delay(envNumber("SESTINA_CHILD_SEQ_JITTER_MS", 0));
+        const seq = await withTransaction(db, (tx) => {
+          const sequence = nextStreamSequence(tx, projectId);
+          // Persist the row so the allocation is durable across processes.
+          tx.run(
+            `INSERT INTO events
+               (event_id, idempotency_key, project_id, task_id, session_id, event_type,
+                occurred_at, received_at, privacy_class, stream_sequence, data)
+             VALUES (?, ?, ?, ?, NULL, 'stop', 1, 1, 'internal', ?, '{}')`,
+            generateId(),
+            generateId(),
+            projectId,
+            taskId,
+            sequence,
+          );
+          return sequence;
+        });
+        allocated.push(seq);
+      }
+      writeFileSync(
+        envString("SESTINA_CHILD_SEQ_FILE", ""),
+        JSON.stringify(allocated),
+        "utf8",
+      );
+      console.log(`CHILD_READY pid=${process.pid}`);
+      db.close();
+      expect(allocated.length).toBe(count);
+    }, 60000);
+  });
+
   describe.skipIf(scenario !== "stale-release-fence")("stale-release-fence", () => {
     it("child attempts a release with a stale token; the current fence must survive", async () => {
       const { MaintenanceFence } = await import("../../src/index.js");

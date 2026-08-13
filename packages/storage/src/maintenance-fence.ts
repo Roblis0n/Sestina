@@ -37,7 +37,7 @@ export interface MaintenanceFenceOptions {
  * for migrations, restore and retention (docs/17 §3.2, docs/22 Task 6).
  *
  * Unlike the in-database lock, the sentinel lives beside — not inside —
- * the target database, so it survives database replacement (restore renames
+ * the target database, so it survives the database being replaced (restore renames
  * the whole file) and works even when the database is corrupted.
  *
  * Acquisition is O_EXCL-atomic; takeover of an expired/corrupted sentinel
@@ -136,8 +136,7 @@ export class MaintenanceFence {
   renew(ttlMs?: number): void {
     this.assertHeld();
     const validated = validateLeaseTtlMs(ttlMs ?? DEFAULT_FENCE_TTL_MS, "Maintenance fence ttlMs");
-    const current = readFence(this.path);
-    const owned = current?.token === this.token ? current : undefined;
+    const owned = readOwnedFence(this.path, this.token);
     if (owned === undefined) {
       this.held = false;
       throw new SestinaError(
@@ -149,7 +148,17 @@ export class MaintenanceFence {
       ...owned,
       expiresAt: Date.now() + validated,
     } satisfies MaintenanceFenceState);
+    // Atomic tmp+rename write; afterwards the token is re-verified so a
+    // takeover that landed in the window is detected instead of masked.
     writeFenceAtomically(this.path, updated, this.token);
+    const after = readFence(this.path);
+    if (after?.token !== this.token) {
+      this.held = false;
+      throw new SestinaError(
+        SestinaErrorCode.stale_state,
+        "Maintenance fence was taken over while renewing",
+      );
+    }
   }
 
   /**
@@ -159,6 +168,9 @@ export class MaintenanceFence {
   release(): void {
     if (!this.held) return;
     this.held = false;
+    // Only delete a sentinel this token still owns: a takeover that landed
+    // between the read and the rm is the residual window, never a stale
+    // deletion of an unrelated holder.
     const current = readFence(this.path);
     if (current?.token !== this.token) return;
     for (let attempt = 0; attempt < 4; attempt++) {
@@ -181,6 +193,11 @@ export class MaintenanceFence {
       throw new SestinaError(SestinaErrorCode.stale_state, "Maintenance fence is released");
     }
   }
+}
+
+function readOwnedFence(path: string, token: string): MaintenanceFenceState | undefined {
+  const current = readFence(path);
+  return current?.token === token ? current : undefined;
 }
 
 function readFence(path: string): MaintenanceFenceState | undefined {

@@ -55,3 +55,16 @@ export const GovernanceAnswerSchema = z.object({
 export type GovernanceContextPacket = z.infer<typeof GovernanceContextPacketSchema>;
 export type GovernanceAnswerChunk = z.infer<typeof GovernanceAnswerChunkSchema>;
 export type GovernanceAnswer = z.infer<typeof GovernanceAnswerSchema>;
+
+// ── Provider Usage (persisted per Judge/Provider call, docs/09 §21 provider_usage) ──
+export const ProviderUsageSchema = z.object({
+  usageId: z.string().min(1).max(64),
+  providerId: z.string().min(1).max(128),
+  taskId: TaskIdSchema.optional(),
+  model: z.string().min(1).max(256),
+  callAt: TimestampSchema,
+  tokensIn: z.number().int().nonnegative().optional(),
+  tokensOut: z.number().int().nonnegative().optional(),
+  cost: z.number().nonnegative().optional(),
+});
+export type ProviderUsage = z.infer<typeof ProviderUsageSchema>;

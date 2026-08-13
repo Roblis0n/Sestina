@@ -25,6 +25,7 @@ export {
 export {
   withTransaction,
   inWriteTransaction,
+  createTransactionView,
   type StorageTransaction,
 } from "./transaction.js";
 
@@ -98,3 +99,88 @@ export {
 
 // JSON columns go through schema before storage
 export { validateJson, type SchemaLike } from "./schema-check.js";
+
+// Migration manifest
+export { migration004 } from "./migrations/004-activity-stream.js";
+
+// ── Task 6: repositories, streams, search, retention, exports ──
+export { createUnitOfWork, type StorageUnitOfWork } from "./unit-of-work.js";
+export {
+  nextStreamSequence,
+  encodeEventCursor,
+  decodeEventCursor,
+  type EventCursor,
+} from "./stream-sequence.js";
+export { search, type SearchQuery, type SearchRow, type SearchKind } from "./search.js";
+export {
+  previewRetention,
+  applyRetentionPreview,
+  sha256,
+  type RetentionConfig,
+  type RetentionTarget,
+  type RetentionPreview,
+  type RetentionResult,
+} from "./retention.js";
+export {
+  createTombstoneRepository,
+  TombstoneSchema,
+  type Tombstone,
+  type TombstoneRepository,
+} from "./tombstones.js";
+export {
+  exportProject,
+  minimiseJson,
+  clearExports,
+  ensureExportDir,
+  type ExportOptions,
+  type ExportFile,
+  type ExportResult,
+} from "./exports.js";
+export type {
+  ProjectRepository,
+} from "./repositories/projects.js";
+export type {
+  TaskRepository,
+} from "./repositories/tasks.js";
+export type {
+  HostSessionRepository,
+} from "./repositories/sessions.js";
+export type {
+  ContractRepository,
+} from "./repositories/contracts.js";
+export type {
+  EventRepository,
+  EventReserveResult,
+} from "./repositories/events.js";
+export type {
+  DecisionRepository,
+} from "./repositories/decisions.js";
+export type {
+  DecisionTraceRepository,
+} from "./repositories/traces.js";
+export type {
+  AssertionRepository,
+} from "./repositories/assertions.js";
+export type {
+  EvidenceRepository,
+} from "./repositories/evidence.js";
+export type {
+  ConversationRepository,
+} from "./repositories/conversations.js";
+export type {
+  CollaborationRepository,
+  DeliveryReserveResult,
+} from "./repositories/collaboration.js";
+export type {
+  ReviewRepository,
+} from "./repositories/reviews.js";
+export type {
+  HostStreamRepository,
+} from "./repositories/host-stream.js";
+export type {
+  NotificationRepository,
+} from "./repositories/notifications.js";
+export type {
+  UsageRepository,
+} from "./repositories/usage.js";
+export type { CursorInput, Page } from "./repositories/shared.js";

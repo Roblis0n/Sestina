@@ -10,6 +10,11 @@ export interface StorageTransaction {
   exec(sql: string): void;
 }
 
+/** Builds a transaction view over a database (repositories bind to this). */
+export function createTransactionView(db: StorageDatabase): StorageTransaction {
+  return new TransactionView(db);
+}
+
 class TransactionView implements StorageTransaction {
   readonly database: StorageDatabase;
 

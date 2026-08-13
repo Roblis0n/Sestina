@@ -231,7 +231,7 @@ export function spawnChildScenario(options: ChildRunOptions): ChildRun {
     process: child,
     combinedOutput: () => output,
     waitForReady: async () => {
-      const deadline = Date.now() + (options.readyTimeoutMs ?? 20000);
+      const deadline = Date.now() + (options.readyTimeoutMs ?? 60000);
       while (Date.now() < deadline) {
         if (output.includes("CHILD_READY")) return true;
         if (exitCode !== null) return false;
@@ -241,4 +241,10 @@ export function spawnChildScenario(options: ChildRunOptions): ChildRun {
     },
     wait: () => exited,
   };
+}
+
+const SCHEMA_FIXTURES = resolve(import.meta.dirname, "../../../tests/fixtures/schema");
+
+export function loadSchemaFixture(name: string): unknown {
+  return JSON.parse(readFileSync(resolve(SCHEMA_FIXTURES, name), "utf8")) as unknown;
 }

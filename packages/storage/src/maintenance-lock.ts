@@ -40,6 +40,7 @@ export class MaintenanceLock {
     options: MaintenanceLockOptions,
   ): Promise<MaintenanceLock> {
     db.assertWritable();
+    assertNotInTransaction(db);
     const ttlMs = validateLeaseTtlMs(options.ttlMs ?? DEFAULT_MAINTENANCE_LOCK_TTL_MS, "Maintenance lock ttlMs");
     const fenceToken = randomUUID();
     db.exec("BEGIN IMMEDIATE");
@@ -86,6 +87,7 @@ export class MaintenanceLock {
    */
   renew(ttlMs: number = this.ttlMs): void {
     this.assertHeld();
+    assertNotInTransaction(this.db);
     const validated = validateLeaseTtlMs(ttlMs, "Maintenance lock ttlMs");
     this.db.exec("BEGIN IMMEDIATE");
     let changes: number;
@@ -122,6 +124,7 @@ export class MaintenanceLock {
   release(): void {
     if (!this.held) return;
     this.held = false;
+    assertNotInTransaction(this.db);
     this.db.exec("BEGIN IMMEDIATE");
     try {
       this.db.run(
@@ -144,5 +147,18 @@ export class MaintenanceLock {
     if (!this.held) {
       throw new SestinaError(SestinaErrorCode.stale_state, "Maintenance lock is released");
     }
+  }
+}
+
+/**
+ * BEGIN IMMEDIATE inside an outer transaction would throw and the catch's
+ * ROLLBACK would silently destroy the caller's unit — refuse instead.
+ */
+function assertNotInTransaction(db: StorageDatabase): void {
+  if (db.isTransaction) {
+    throw new SestinaError(
+      SestinaErrorCode.internal_error,
+      "Maintenance lock must not be used inside a transaction",
+    );
   }
 }

@@ -146,7 +146,11 @@ export async function restoreDatabase(options: RestoreOptions): Promise<RestoreR
       const currentHealth = checkDatabaseIntegrity(databasePath);
       if (!currentHealth.ok) {
         corruptCopyPath = `${databasePath}.corrupt-${Date.now()}-${randomBytes(3).toString("hex")}`;
-        copyFileSync(databasePath, corruptCopyPath);
+        try {
+          copyFileSync(databasePath, corruptCopyPath);
+        } catch (err) {
+          throw mapFsError(err, "Failed to preserve the corrupted database copy");
+        }
       }
 
       preRestoreBackupPath = `${databasePath}.pre-restore-${Date.now()}-${randomBytes(3).toString("hex")}.sqlite`;
@@ -160,7 +164,11 @@ export async function restoreDatabase(options: RestoreOptions): Promise<RestoreR
         }
       } catch {
         // The current database may be damaged; preserve its raw bytes instead.
-        copyFileSync(databasePath, preRestoreBackupPath);
+        try {
+          copyFileSync(databasePath, preRestoreBackupPath);
+        } catch (err) {
+          throw mapFsError(err, "Failed to create the pre-restore backup");
+        }
       }
       const preRestoreHash = await hashFile(preRestoreBackupPath);
       writeFileSync(`${preRestoreBackupPath}.sha256`, `${preRestoreHash}\n`, "utf8");

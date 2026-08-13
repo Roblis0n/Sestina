@@ -2,7 +2,16 @@
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "rootDir": ".",
-    "outDir": "./dist"
+    "outDir": "./dist",
+    "baseUrl": ".",
+    "paths": {
+      "@sestina/schema": [
+        "packages/schema/src/index.ts"
+      ],
+      "@sestina/storage": [
+        "packages/storage/src/index.ts"
+      ]
+    }
   },
   "include": [
     "packages/*/src/**/*.ts",
@@ -10,7 +19,13 @@
     "packages/*/vitest.config.ts",
     "tests/**/*.ts",
     "vitest.config.ts",
-    "eslint.config.mjs"
+    "eslint.config.mjs",
+    "vitest.bench.config.ts"
   ],
-  "exclude": ["node_modules", "dist", "build", "coverage"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "build",
+    "coverage"
+  ]
 }
