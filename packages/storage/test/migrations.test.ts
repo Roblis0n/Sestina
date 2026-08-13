@@ -7,6 +7,7 @@ import {
   RUNTIME_VERSION,
   MIGRATIONS,
   MaintenanceLock,
+  MaintenanceFence,
   type StorageDatabase,
   type Migration,
 } from "../src/index.js";
@@ -468,20 +469,22 @@ describe("MaintenanceLock (docs/17 §3.2, docs/29 §9)", () => {
     }
   });
 
-  it("blocks migrations while another maintenance owner holds the lock", async () => {
+  it("blocks migrations while the maintenance fence is held", async () => {
     // Fresh database seeded with only the first migration so a second one
-    // is pending when the lock is already held.
+    // is pending when the fence is already held (common maintenance domain:
+    // migrations, restore and retention exclude each other, docs/17 §3.2).
     const pendingPath = join(dir, "second.db");
     const v1 = await openDatabase({ path: pendingPath, migrate: { migrations: MIGRATIONS.slice(0, 1) } });
-    v1.run(
-      "INSERT INTO maintenance_locks (name, owner_id, expires_at) VALUES ('migrations', 'other-process', ?)",
-      Date.now() + 60_000,
-    );
     v1.close();
 
-    await expect(openDatabase({ path: pendingPath })).rejects.toSatisfy((err: unknown) => {
-      return isSestinaError(err) && err.code === SestinaErrorCode.storage_busy;
-    });
+    const fence = await MaintenanceFence.acquire({ dataRoot: dir, scope: "restore" });
+    try {
+      await expect(openDatabase({ path: pendingPath, dataRoot: dir })).rejects.toSatisfy((err: unknown) => {
+        return isSestinaError(err) && err.code === SestinaErrorCode.storage_busy;
+      });
+    } finally {
+      fence.release();
+    }
   });
 });
 

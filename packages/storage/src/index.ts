@@ -41,6 +41,7 @@ export {
 } from "./migrator.js";
 export { migration001 } from "./migrations/001-initial.js";
 export { migration002 } from "./migrations/002-fts.js";
+export { migration003 } from "./migrations/003-maintenance-fencing.js";
 
 // Leases
 export {
@@ -48,6 +49,7 @@ export {
   completeEventLease,
   claimMessageDeliveryLease,
   releaseMessageDeliveryLease,
+  validateLeaseTtlMs,
   DEFAULT_EVENT_LEASE_TTL_MS,
   DEFAULT_DELIVERY_LEASE_TTL_MS,
   type EventLease,
@@ -59,6 +61,14 @@ export {
 
 // Maintenance
 export { MaintenanceLock, DEFAULT_MAINTENANCE_LOCK_TTL_MS } from "./maintenance-lock.js";
+export {
+  MaintenanceFence,
+  FENCE_FILE_NAME,
+  DEFAULT_FENCE_TTL_MS,
+  mapFsError,
+  type MaintenanceFenceOptions,
+  type MaintenanceFenceState,
+} from "./maintenance-fence.js";
 
 // Backup and restore
 export {
@@ -72,6 +82,8 @@ export {
 } from "./backup.js";
 export {
   restoreDatabase,
+  stageVerifiedCopy,
+  canonicalizeForIo,
   type RestoreOptions,
   type RestoreResult,
 } from "./restore.js";

@@ -137,6 +137,21 @@ export type CollaborationEndpoint = z.infer<typeof CollaborationEndpointSchema>;
 
 // ── Message (docs/42 §5.3, docs/09 §23) ──
 
+/**
+ * UTF-8 byte size of one string. This package is shared between Node and
+ * the renderer (docs/25 §88), so it must not depend on the Node-only
+ * `Buffer` global: prefer Buffer when present, fall back to TextEncoder.
+ */
+export function utf8Bytes(value: string): number {
+  const globalBuffer = (
+    globalThis as { Buffer?: { byteLength(value: string, encoding: string): number } }
+  ).Buffer;
+  if (typeof globalBuffer?.byteLength === "function") {
+    return globalBuffer.byteLength(value, "utf8");
+  }
+  return new TextEncoder().encode(value).length;
+}
+
 /** UTF-8 byte size of the message's textual payload (used by the 16 KiB cap). */
 export function collaborationMessageTextBytes(message: {
   summary: string;
@@ -154,7 +169,7 @@ export function collaborationMessageTextBytes(message: {
     ...message.evidenceRefs,
     ...message.contextRefs.map((ref) => ref.refId),
   ];
-  return parts.reduce((total, part) => total + Buffer.byteLength(part, "utf8"), 0);
+  return parts.reduce((total, part) => total + utf8Bytes(part), 0);
 }
 
 export const CollaborationMessageSchema = z.object({
@@ -234,11 +249,13 @@ export const CollaborationConfigSchema = z.object({
     .number()
     .int()
     .min(1)
+    .max(COLLABORATION_LIMITS.maxOutstandingConsultsPerTask)
     .default(COLLABORATION_LIMITS.maxOutstandingConsultsPerTask),
   maxMessagesPerMinutePerTask: z
     .number()
     .int()
     .min(1)
+    .max(COLLABORATION_LIMITS.maxMessagesPerMinutePerTask)
     .default(COLLABORATION_LIMITS.maxMessagesPerMinutePerTask),
   maxMessageBytes: z
     .number()
@@ -267,6 +284,7 @@ export const CollaborationConfigSchema = z.object({
     .number()
     .int()
     .min(1)
+    .max(COLLABORATION_LIMITS.messageRetentionDays)
     .default(COLLABORATION_LIMITS.messageRetentionDays),
 }).superRefine((data, ctx) => {
   if (data.defaultTtlSeconds > data.maxTtlSeconds) {
@@ -290,15 +308,22 @@ export interface CollaborationOwnershipContext {
    */
   endpointProjects?: ReadonlyMap<string, { projectId: string; taskId: string }>;
   /**
-   * Known project owners of referenced objects (evidence/claims/decisions/...).
+   * Known owners of referenced objects (evidence/claims/decisions/...).
    * When provided, every ContextRef/evidenceRef must resolve inside the
-   * message's project. A map without an entry means "not resolvable".
+   * message's project AND task — same project but different task is
+   * rejected. A map without an entry means "not resolvable".
    */
-  refOwnerProjects?: ReadonlyMap<string, string>;
+  refOwnerProjects?: ReadonlyMap<string, { projectId: string; taskId: string }>;
+  /**
+   * Known ownership of earlier messages in this thread. When the message
+   * carries a replyToMessageId and this map is provided, the reply target
+   * must resolve to the same thread/project/task (docs/42 §6.2 condition 2).
+   */
+  replyChain?: ReadonlyMap<string, { projectId: string; taskId: string; threadId: string }>;
 }
 
 /**
- * Rejects messages whose thread/project/task/endpoint/ref ownership is
+ * Rejects messages whose thread/project/task/endpoint/ref/reply ownership is
  * inconsistent. Cross-project and cross-task references are always rejected
  * (docs/42 §6.2 condition 2; docs/09 §23).
  */
@@ -361,9 +386,25 @@ export function assertCollaborationOwnership(
       const owner = context.refOwnerProjects.get(refId);
       if (owner === undefined) {
         reject(`referenced object ${refId} is not resolvable in this project`);
-      } else if (owner !== message.projectId) {
-        reject(`referenced object ${refId} belongs to a different project`);
+      } else if (
+        owner.projectId !== message.projectId ||
+        owner.taskId !== message.taskId
+      ) {
+        reject(`referenced object ${refId} belongs to a different project/task`);
       }
+    }
+  }
+
+  if (context.replyChain && message.replyToMessageId) {
+    const target = context.replyChain.get(message.replyToMessageId);
+    if (target === undefined) {
+      reject(`reply target ${message.replyToMessageId} is not resolvable in this thread`);
+    } else if (
+      target.threadId !== message.threadId ||
+      target.projectId !== message.projectId ||
+      target.taskId !== message.taskId
+    ) {
+      reject(`reply target ${message.replyToMessageId} belongs to a different thread/project/task`);
     }
   }
 }

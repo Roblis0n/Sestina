@@ -200,4 +200,26 @@ describe("Project layer may only tighten collaboration", () => {
     expect(result.value.collaboration.defaultInboundPolicy).toBe("hold");
     expect(result.value.missingFields).toHaveLength(0);
   });
+
+  it.each(["user", "contract", "request"] as const)(
+    "rejects the %s layer exceeding the system ceilings",
+    (layer) => {
+      const result = loadEffectiveConfig({
+        user: {},
+        project: {},
+        env: {},
+        [layer]: {
+          collaboration: {
+            maxOutstandingConsultsPerTask: 999999,
+            maxMessagesPerMinutePerTask: 999999,
+            messageRetentionDays: 999999,
+          },
+        },
+      });
+      expect(result.value.collaboration.maxOutstandingConsultsPerTask).toBe(8);
+      expect(result.value.collaboration.maxMessagesPerMinutePerTask).toBe(12);
+      expect(result.value.collaboration.messageRetentionDays).toBe(90);
+      expect(result.value.missingFields.length).toBeGreaterThan(0);
+    },
+  );
 });

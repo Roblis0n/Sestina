@@ -10,6 +10,12 @@ export interface OpenDatabaseOptions {
   readOnly?: boolean;
   busyTimeoutMs?: number;
   /**
+   * Data root for the common maintenance fence. Defaults to the database
+   * file's parent directory. Migration, restore and retention must use the
+   * same data root to exclude each other (docs/17 §3.2).
+   */
+  dataRoot?: string;
+  /**
    * Defaults to true on writable opens. Pass false to skip migrations,
    * or an object to override the migration set / backup directory.
    * `migrate: false` is a diagnostics escape hatch: it skips the
@@ -231,7 +237,21 @@ export async function openDatabase(options: OpenDatabaseOptions): Promise<Storag
       raw.close();
       throw mapSqliteError(err, "Failed to read database");
     }
-    // SQLITE_ERROR here means "no such table: migrations" on a fresh file.
+    // SQLITE_ERROR here usually means "no such table: migrations" on a
+    // fresh file. A file that already contains tables but no Sestina
+    // journal is a foreign database: refuse rather than bootstrap it.
+    if (!readOnly) {
+      const foreignTables = raw
+        .prepare("SELECT COUNT(*) AS c FROM sqlite_schema WHERE type = 'table'")
+        .get() as { c: number } | undefined;
+      if ((foreignTables?.c ?? 0) > 0) {
+        raw.close();
+        throw new SestinaError(
+          SestinaErrorCode.database_corrupt,
+          "The file is not a Sestina database",
+        );
+      }
+    }
   }
 
   if (!readOnly && options.migrate !== false) {
@@ -243,6 +263,7 @@ export async function openDatabase(options: OpenDatabaseOptions): Promise<Storag
         // Destructive migrations on an existing database are always backed
         // up (docs/17 §10); the default location is next to the database.
         backupDirectory: migrateOpts.backupDirectory ?? join(dirname(options.path), "backups"),
+        dataRoot: options.dataRoot ?? dirname(options.path),
       },
     );
     try {

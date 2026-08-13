@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
@@ -220,6 +220,34 @@ describe("Collaboration message limits", () => {
 });
 
 describe("Collaboration default config (doc 42 §11.2)", () => {
+  it("parses messages in an environment without Buffer (renderer-safe)", () => {
+    const original: unknown = globalThis.Buffer;
+    vi.stubGlobal("Buffer", undefined);
+    try {
+      const result = CollaborationMessageSchema.safeParse(
+        loadFixture("valid-collaboration-message.json"),
+      );
+      expect(result.success).toBe(true);
+    } finally {
+      if (original === undefined) {
+        vi.unstubAllGlobals();
+      } else {
+        vi.stubGlobal("Buffer", original);
+      }
+    }
+  });
+
+  it("rejects config values above the system ceilings", () => {
+    expect(CollaborationConfigSchema.safeParse({ maxOutstandingConsultsPerTask: 9 }).success).toBe(false);
+    expect(CollaborationConfigSchema.safeParse({ maxMessagesPerMinutePerTask: 13 }).success).toBe(false);
+    expect(CollaborationConfigSchema.safeParse({ messageRetentionDays: 91 }).success).toBe(false);
+    expect(CollaborationConfigSchema.safeParse({
+      maxOutstandingConsultsPerTask: 8,
+      maxMessagesPerMinutePerTask: 12,
+      messageRetentionDays: 90,
+    }).success).toBe(true);
+  });
+
   it("matches the doc 42 defaults exactly", () => {
     const result = CollaborationConfigSchema.safeParse({});
     expect(result.success).toBe(true);
@@ -306,13 +334,57 @@ describe("Collaboration ownership checks", () => {
 
   it("rejects ContextRef/EvidenceRef ownership outside the project", () => {
     const refOwnerProjects = new Map([
-      ["E-001", OTHER_PROJECT],
+      ["E-001", { projectId: OTHER_PROJECT, taskId: TASK }],
     ]);
     expectOwnershipRejected(() => { assertCollaborationOwnership(message, { thread, refOwnerProjects }); });
   });
 
-  it("rejects unresolvable ContextRef/EvidenceRef ownership", () => {
-    const refOwnerProjects = new Map<string, string>();
+  it("rejects ContextRef/EvidenceRef ownership in a different task of the same project", () => {
+    const refOwnerProjects = new Map([
+      ["E-001", { projectId: PROJECT, taskId: OTHER_TASK }],
+    ]);
     expectOwnershipRejected(() => { assertCollaborationOwnership(message, { thread, refOwnerProjects }); });
+  });
+
+  it("accepts resolvable ContextRef/EvidenceRef ownership in the same project and task", () => {
+    const refOwnerProjects = new Map([
+      ["E-001", { projectId: PROJECT, taskId: TASK }],
+    ]);
+    expect(() => { assertCollaborationOwnership(message, { thread, refOwnerProjects }); }).not.toThrow();
+  });
+
+  it("rejects unresolvable ContextRef/EvidenceRef ownership", () => {
+    const refOwnerProjects = new Map<string, { projectId: string; taskId: string }>();
+    expectOwnershipRejected(() => { assertCollaborationOwnership(message, { thread, refOwnerProjects }); });
+  });
+
+  it("accepts a reply that resolves inside the same thread", () => {
+    const reply = { ...message, messageId: "01JGNK8W4QKERM9VA0C3N5Y7ZK" as never, replyToMessageId: message.messageId };
+    const replyChain = new Map([
+      [message.messageId, { projectId: PROJECT, taskId: TASK, threadId: THREAD }],
+    ]);
+    expect(() => { assertCollaborationOwnership(reply, { thread, replyChain }); }).not.toThrow();
+  });
+
+  it("rejects a reply whose target resolves to a different project", () => {
+    const reply = { ...message, replyToMessageId: message.messageId };
+    const replyChain = new Map([
+      [message.messageId, { projectId: OTHER_PROJECT, taskId: TASK, threadId: THREAD }],
+    ]);
+    expectOwnershipRejected(() => { assertCollaborationOwnership(reply, { thread, replyChain }); });
+  });
+
+  it("rejects a reply whose target resolves to a different task", () => {
+    const reply = { ...message, replyToMessageId: message.messageId };
+    const replyChain = new Map([
+      [message.messageId, { projectId: PROJECT, taskId: OTHER_TASK, threadId: THREAD }],
+    ]);
+    expectOwnershipRejected(() => { assertCollaborationOwnership(reply, { thread, replyChain }); });
+  });
+
+  it("rejects a reply whose target is unresolvable", () => {
+    const reply = { ...message, replyToMessageId: message.messageId };
+    const replyChain = new Map<string, { projectId: string; taskId: string; threadId: string }>();
+    expectOwnershipRejected(() => { assertCollaborationOwnership(reply, { thread, replyChain }); });
   });
 });

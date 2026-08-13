@@ -199,6 +199,27 @@ describe("Event lease concurrency (docs/22 Step 5: 100 concurrent claims, one ow
       db.close();
     }
   });
+
+  it.each([0, -5, Number.NaN, Number.POSITIVE_INFINITY, 1.5, Number.MAX_SAFE_INTEGER + 2])(
+    "rejects invalid event lease ttlMs=%s",
+    async (ttlMs) => {
+      const db = await openDatabase({ path });
+      try {
+        await expect(
+          withTransaction(db, (tx) =>
+            claimEventLease(tx, { idempotencyKey: `ttl-bad-${String(ttlMs)}`, ownerId: "owner-a", ttlMs }),
+          ),
+        ).rejects.toSatisfy((err: unknown) => {
+          return isSestinaError(err) && err.code === SestinaErrorCode.validation_failed;
+        });
+        expect(
+          db.get("SELECT idempotency_key FROM event_leases WHERE idempotency_key LIKE 'ttl-bad-%'"),
+        ).toBeUndefined();
+      } finally {
+        db.close();
+      }
+    },
+  );
 });
 
 describe("Collaboration delivery leases (one active delivery owner per message+target)", () => {
@@ -302,6 +323,24 @@ describe("Collaboration delivery leases (one active delivery owner per message+t
     );
     expect(claim).toBe("wait_for_existing");
   });
+
+  it.each([0, -5, Number.NaN, Number.POSITIVE_INFINITY, 1.5, Number.MAX_SAFE_INTEGER + 2])(
+    "rejects invalid delivery lease ttlMs=%s",
+    async (ttlMs) => {
+      await expect(
+        withTransaction(db, (tx) =>
+          claimMessageDeliveryLease(tx, {
+            messageId: MESSAGE_ID,
+            targetEndpointId: TARGET,
+            ownerId: "deliverer-a",
+            ttlMs,
+          }),
+        ),
+      ).rejects.toSatisfy((err: unknown) => {
+        return isSestinaError(err) && err.code === SestinaErrorCode.validation_failed;
+      });
+    },
+  );
 
   it("returns already_delivered when a delivered attempt exists", async () => {
     await withTransaction(db, (tx) =>

@@ -171,3 +171,74 @@ export function createMessage(db: StorageDatabase, message: unknown): void {
     JSON.stringify(message),
   );
 }
+
+// ── Child-process harness (real cross-process tests, docs/21 §9) ──
+
+import { spawn, type ChildProcess } from "node:child_process";
+import { createRequire } from "node:module";
+import { dirname } from "node:path";
+
+export interface ChildRunOptions {
+  scenario: string;
+  env?: Record<string, string>;
+  /** Max ms to wait for the READY marker (default 20000). */
+  readyTimeoutMs?: number;
+}
+
+export interface ChildRun {
+  process: ChildProcess;
+  combinedOutput: () => string;
+  /** Resolves true once the child printed CHILD_READY, false on timeout. */
+  waitForReady: () => Promise<boolean>;
+  /** Resolves with the exit code. */
+  wait: () => Promise<number>;
+}
+
+const require = createRequire(import.meta.url);
+
+function resolveVitestCli(): string {
+  const pkgPath = require.resolve("vitest/package.json");
+  return join(dirname(pkgPath), "vitest.mjs");
+}
+
+export function spawnChildScenario(options: ChildRunOptions): ChildRun {
+  const vitestCli = resolveVitestCli();
+  const child = spawn(
+    process.execPath,
+    [vitestCli, "run", "test/child/child-scenarios.test.ts", "--no-color"],
+    {
+      cwd: resolve(import.meta.dirname, ".."),
+      env: {
+        ...process.env,
+        SESTINA_CHILD_SCENARIO: options.scenario,
+        ...options.env,
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+    },
+  );
+  let output = "";
+  child.stdout.on("data", (d: Buffer) => { output += d.toString(); });
+  child.stderr.on("data", (d: Buffer) => { output += d.toString(); });
+  let exitCode: number | null = null;
+  const exited = new Promise<number>((resolveExit) => {
+    child.on("exit", (code) => {
+      exitCode = code ?? -1;
+      resolveExit(exitCode);
+    });
+  });
+  return {
+    process: child,
+    combinedOutput: () => output,
+    waitForReady: async () => {
+      const deadline = Date.now() + (options.readyTimeoutMs ?? 20000);
+      while (Date.now() < deadline) {
+        if (output.includes("CHILD_READY")) return true;
+        if (exitCode !== null) return false;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      return output.includes("CHILD_READY");
+    },
+    wait: () => exited,
+  };
+}

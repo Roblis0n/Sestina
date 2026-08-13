@@ -36,6 +36,26 @@ export type ClaimEventLeaseResult = "acquired" | "wait_for_existing" | "already_
 export const DEFAULT_EVENT_LEASE_TTL_MS = 30_000;
 
 /**
+ * Validates a lease TTL: must be a positive safe integer that cannot push
+ * `now + ttlMs` beyond Number.MAX_SAFE_INTEGER (which would poison the row
+ * so it can never be read back or compared).
+ */
+export function validateLeaseTtlMs(ttlMs: number | undefined, label: string): number {
+  const value = ttlMs ?? DEFAULT_EVENT_LEASE_TTL_MS;
+  if (
+    !Number.isInteger(value) ||
+    value < 1 ||
+    value > Number.MAX_SAFE_INTEGER - Date.now()
+  ) {
+    throw new SestinaError(
+      SestinaErrorCode.validation_failed,
+      `${label} must be a positive safe integer`,
+    );
+  }
+  return value;
+}
+
+/**
  * Claims the processing lease for an event idempotency key. Exactly one
  * owner can hold an unexpired lease at a time; completed keys can never be
  * claimed again (docs/08 §15, docs/19 §10).
@@ -45,6 +65,7 @@ export function claimEventLease(
   input: EventLeaseInput,
 ): ClaimEventLeaseResult {
   assertInTransaction(tx);
+  const ttlMs = validateLeaseTtlMs(input.ttlMs, "Event lease ttlMs");
   const now = Date.now();
   const row = tx.get<{ owner_id: string; expires_at: number; completed_at: number | null }>(
     "SELECT owner_id, expires_at, completed_at FROM event_leases WHERE idempotency_key = ?",
@@ -65,7 +86,7 @@ export function claimEventLease(
        packet_hash = excluded.packet_hash`,
     input.idempotencyKey,
     input.ownerId,
-    now + (input.ttlMs ?? DEFAULT_EVENT_LEASE_TTL_MS),
+    now + ttlMs,
     input.packetHash ?? null,
   );
   return "acquired";
@@ -117,6 +138,7 @@ export function claimMessageDeliveryLease(
   input: MessageDeliveryLeaseInput,
 ): ClaimMessageDeliveryLeaseResult {
   assertInTransaction(tx);
+  const ttlMs = validateLeaseTtlMs(input.ttlMs, "Delivery lease ttlMs");
   const delivered = tx.get<{ attempt_id: string }>(
     "SELECT attempt_id FROM collaboration_delivery_attempts WHERE message_id = ? AND target_endpoint_id = ? AND status = 'delivered' LIMIT 1",
     input.messageId,
@@ -144,7 +166,7 @@ export function claimMessageDeliveryLease(
     input.messageId,
     input.targetEndpointId,
     input.ownerId,
-    now + (input.ttlMs ?? DEFAULT_DELIVERY_LEASE_TTL_MS),
+    now + ttlMs,
   );
   return "acquired";
 }

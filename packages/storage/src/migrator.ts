@@ -1,8 +1,7 @@
-import { randomBytes } from "node:crypto";
 import { SestinaError, SestinaErrorCode, isSestinaError } from "@sestina/schema";
 import type { StorageDatabase } from "./connection.js";
 import { withTransaction } from "./transaction.js";
-import { MaintenanceLock } from "./maintenance-lock.js";
+import { MaintenanceFence } from "./maintenance-fence.js";
 import { backupDatabase, pruneOldBackups, type BackupResult } from "./backup.js";
 import { MIGRATIONS, SCHEMA_VERSION } from "./migrations/manifest.js";
 
@@ -22,6 +21,8 @@ export type MigrationJournalStatus = "started" | "completed" | "failed";
 
 export interface MigrationRunnerOptions {
   backupDirectory?: string;
+  /** Data root for the common maintenance fence (defaults to "."). */
+  dataRoot?: string;
 }
 
 export interface MigrationRunResult {
@@ -55,8 +56,9 @@ CREATE TABLE maintenance_locks (
  * started/completed/failed states with the runtime version, each migration
  * is preceded by a hashed backup (docs/17 §10), failures refuse writes and
  * keep the original database readable (docs/19 §5.4), and a newer schema
- * is rejected with migration_too_new. Migration/restore serialisation uses
- * the maintenance lock (docs/22 Task 5).
+ * is rejected with migration_too_new. Migration/restore/retention
+ * serialisation uses the common file-based maintenance fence (docs/17 §3.2,
+ * docs/22 Task 5/6).
  */
 export class MigrationRunner {
   private readonly db: StorageDatabase;
@@ -76,21 +78,21 @@ export class MigrationRunner {
   async run(): Promise<MigrationRunResult> {
     const db = this.db;
     db.assertWritable();
-    const hasJournal = db.get(
-      "SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'migrations'",
-    );
-    if (!hasJournal) {
-      db.exec(BOOTSTRAP_SQL);
-    }
 
-    // Unique owner per acquisition: the lock must be exclusive even between
-    // two connections of the same runtime version (docs/29 §9).
-    const lockOwnerId = `runtime-${RUNTIME_VERSION}-${randomBytes(4).toString("hex")}`;
-    const lock = await MaintenanceLock.acquire(db, {
-      name: "migrations",
-      ownerId: lockOwnerId,
+    // Migrations run under the common maintenance fence (docs/17 §3.2):
+    // migrations, restore and retention all share one cross-process domain.
+    // The fence is file-based, so it works even before the journal exists.
+    const fence = await MaintenanceFence.acquire({
+      dataRoot: this.options.dataRoot ?? ".",
+      scope: "migrations",
     });
     try {
+      const hasJournal = db.get(
+        "SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'migrations'",
+      );
+      if (!hasJournal) {
+        db.exec(BOOTSTRAP_SQL);
+      }
       const sorted = [...this.migrations].sort((a, b) => a.version - b.version);
       const seen = new Set<number>();
       for (const migration of sorted) {
@@ -149,10 +151,10 @@ export class MigrationRunner {
         // so no backup is taken for the very first migration.
         let backup: BackupResult | undefined;
         if (this.options.backupDirectory && completedMax > 0) {
-          // The backup may take longer than the lock TTL — renew around it.
-          lock.renew();
+          // The backup may take longer than the fence TTL — renew around it.
+          fence.renew();
           backup = await backupDatabase(db, { backupDirectory: this.options.backupDirectory });
-          lock.renew();
+          fence.renew();
         }
 
         const now = Date.now();
@@ -219,7 +221,7 @@ export class MigrationRunner {
         databaseVersion: Math.max(completedMax, targetVersion),
       };
     } finally {
-      lock.release();
+      fence.release();
     }
   }
 }

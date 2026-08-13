@@ -1,12 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { join } from "node:path";
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, writeFileSync, rmSync } from "node:fs";
 import {
   openDatabase,
   backupDatabase,
   restoreDatabase,
   checkDatabaseIntegrity,
   pruneOldBackups,
+  MaintenanceFence,
+  stageVerifiedCopy,
+  hashFile,
   type StorageDatabase,
 } from "../src/index.js";
 import { isSestinaError, SestinaErrorCode } from "@sestina/schema";
@@ -165,23 +168,81 @@ describe("restoreDatabase (docs/17 §10, docs/19 §5.3)", () => {
     }
   });
 
-  it("rejects a restore while another owner holds the restore maintenance lock", async () => {
+  it("rejects a restore while another process holds the maintenance fence", async () => {
     const dbPath = join(dir, "sestina.db");
     const backupDir = join(dir, "backups");
     const seed = await openDatabase({ path: dbPath });
     seed.run("INSERT INTO events (event_id, idempotency_key, project_id, task_id, event_type, occurred_at, received_at, privacy_class, data) VALUES ('e1','lk1','p','t','stop',1,1,'internal','{}')");
     const backup = await backupDatabase(seed, { backupDirectory: backupDir });
-    seed.run(
-      "INSERT INTO maintenance_locks (name, owner_id, expires_at) VALUES ('restore', 'someone-else', ?)",
-      Date.now() + 60_000,
-    );
     seed.close();
 
+    const fence = await MaintenanceFence.acquire({ dataRoot: dir, scope: "migrations" });
+    try {
+      await expect(
+        restoreDatabase({ databasePath: dbPath, backupPath: backup.path, dataRoot: dir }),
+      ).rejects.toSatisfy((err: unknown) => {
+        return isSestinaError(err) && err.code === SestinaErrorCode.storage_busy;
+      });
+    } finally {
+      fence.release();
+    }
+  });
+
+  it("rejects a backup whose recorded sidecar hash does not match", async () => {
+    const dbPath = join(dir, "sestina.db");
+    const backupDir = join(dir, "backups");
+    const seed = await openDatabase({ path: dbPath });
+    seed.run("INSERT INTO events (event_id, idempotency_key, project_id, task_id, event_type, occurred_at, received_at, privacy_class, data) VALUES ('e1','hk1','p','t','stop',1,1,'internal','{}')");
+    const backup = await backupDatabase(seed, { backupDirectory: backupDir });
+    seed.close();
+
+    // Corrupt the recorded hash: restore must refuse the mismatch.
+    writeFileSync(
+      `${backup.path}.sha256`,
+      "0".repeat(64) + "\n",
+      "utf8",
+    );
     await expect(
       restoreDatabase({ databasePath: dbPath, backupPath: backup.path, dataRoot: dir }),
     ).rejects.toSatisfy((err: unknown) => {
-      return isSestinaError(err) && err.code === SestinaErrorCode.storage_busy;
+      return isSestinaError(err) && err.code === SestinaErrorCode.database_corrupt;
     });
+  });
+
+  it("restores from a sidecar-less backup and records the fixed source digest", async () => {
+    const dbPath = join(dir, "sestina.db");
+    const backupDir = join(dir, "backups");
+    const seed = await openDatabase({ path: dbPath });
+    seed.run("INSERT INTO events (event_id, idempotency_key, project_id, task_id, event_type, occurred_at, received_at, privacy_class, data) VALUES ('e1','jk1','p','t','stop',1,1,'internal','{}')");
+    const backup = await backupDatabase(seed, { backupDirectory: backupDir });
+    seed.close();
+    const sidecarPath = `${backup.path}.sha256`;
+    rmSync(sidecarPath, { force: true });
+
+    const result = await restoreDatabase({ databasePath: dbPath, backupPath: backup.path, dataRoot: dir });
+    expect(checkDatabaseIntegrity(dbPath).ok).toBe(true);
+    expect(result.restoredFrom).toBe(backup.path);
+  });
+
+  it("stageVerifiedCopy cleans its temp file when the digest mismatches", async () => {
+    const backupDir = join(dir, "backups");
+    const seed = await openDatabase({ path: join(dir, "sestina.db") });
+    const backup = await backupDatabase(seed, { backupDirectory: backupDir });
+    seed.close();
+    const correct = await hashFile(backup.path);
+
+    await expect(
+      stageVerifiedCopy(backup.path, "0".repeat(64), backupDir),
+    ).rejects.toSatisfy((err: unknown) => {
+      return isSestinaError(err) && err.code === SestinaErrorCode.database_corrupt;
+    });
+    const leftovers = readdirSync(backupDir).filter((f) => f.includes("restore-tmp"));
+    expect(leftovers).toHaveLength(0);
+
+    const staged = await stageVerifiedCopy(backup.path, correct, backupDir);
+    expect(existsSync(staged)).toBe(true);
+    expect(await hashFile(staged)).toBe(correct);
+    rmSync(staged, { force: true });
   });
 
   it("rejects restoring from a file that is not a healthy database", async () => {
