@@ -1,0 +1,28 @@
+{
+  "messageId": "01JGNK8W4QKERM9VA0C3N5Y7ZJ",
+  "threadId": "01JGNK7V3PJDQK8TZ9B2M4X6YH",
+  "projectId": "JGP7HHVP7X6E3F3PBJ2RHB7YJW",
+  "taskId": "RCDW1C3BMD01S9BBS2NY3CEVDR",
+  "kind": "reply",
+  "sourceEndpointId": "01JGNP9X5RMFSMA1BD4P6Z8AKK",
+  "targetEndpointIds": ["01JGNQAY6SMGTNB2CE5Q7A9BMM"],
+  "summary": "Hop count above the maxHops ceiling.",
+  "constraints": [],
+  "evidenceRefs": [],
+  "contextRefs": [],
+  "replyToMessageId": "01JGNK8W4QKERM9VA0C3N5Y7ZJ",
+  "authority": {
+    "actor": "peer_agent",
+    "directUser": false,
+    "sourceHost": "claude_code",
+    "sourceSessionId": "session-claude-001",
+    "contractVersion": 3,
+    "allowedOutcome": "inform"
+  },
+  "privacyClass": "internal",
+  "ttlSeconds": 1800,
+  "hopCount": 5,
+  "dedupeKey": "dedupe-hop-exceeded-bad",
+  "createdAt": "2026-08-13T02:00:00.000Z",
+  "expiresAt": "2026-08-13T02:30:00.000Z"
+}

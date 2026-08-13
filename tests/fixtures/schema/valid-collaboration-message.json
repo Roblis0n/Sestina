@@ -1,0 +1,36 @@
+{
+  "messageId": "01JGNK8W4QKERM9VA0C3N5Y7ZJ",
+  "threadId": "01JGNK7V3PJDQK8TZ9B2M4X6YH",
+  "projectId": "JGP7HHVP7X6E3F3PBJ2RHB7YJW",
+  "taskId": "RCDW1C3BMD01S9BBS2NY3CEVDR",
+  "kind": "consult",
+  "sourceEndpointId": "01JGNP9X5RMFSMA1BD4P6Z8AKK",
+  "targetEndpointIds": ["01JGNQAY6SMGTNB2CE5Q7A9BMM"],
+  "summary": "Is the storage concurrency test passing on Windows?",
+  "body": "Please confirm the latest claimEventLease results.",
+  "constraints": ["do not modify any files", "reply with status only"],
+  "evidenceRefs": ["E-001"],
+  "contextRefs": [
+    {
+      "refType": "evidence",
+      "refId": "E-001",
+      "resolutionStatus": "current"
+    }
+  ],
+  "requestedOutcome": "answer",
+  "authority": {
+    "actor": "peer_agent",
+    "directUser": false,
+    "sourceHost": "codex",
+    "sourceSessionId": "session-codex-001",
+    "contractVersion": 3,
+    "preauthorizationId": "preauth-42",
+    "allowedOutcome": "answer"
+  },
+  "privacyClass": "internal",
+  "ttlSeconds": 1800,
+  "hopCount": 0,
+  "dedupeKey": "dedupe-2026-08-13-001",
+  "createdAt": "2026-08-13T02:00:00.000Z",
+  "expiresAt": "2026-08-13T02:30:00.000Z"
+}

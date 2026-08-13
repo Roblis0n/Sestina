@@ -1,0 +1,14 @@
+{
+  "threadId": "01JGNK7V3PJDQK8TZ9B2M4X6YH",
+  "projectId": "JGP7HHVP7X6E3F3PBJ2RHB7YJW",
+  "taskId": "RCDW1C3BMD01S9BBS2NY3CEVDR",
+  "title": "Cross-agent storage verification",
+  "participantEndpointIds": [
+    "01JGNP9X5RMFSMA1BD4P6Z8AKK",
+    "01JGNQAY6SMGTNB2CE5Q7A9BMM"
+  ],
+  "status": "active",
+  "createdBy": "agent",
+  "createdAt": "2026-08-13T01:00:00.000Z",
+  "updatedAt": "2026-08-13T02:00:00.000Z"
+}

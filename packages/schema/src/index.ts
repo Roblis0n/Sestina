@@ -19,6 +19,7 @@ export * from "./reviews.js";
 export * from "./observability.js";
 export * from "./providers.js";
 export * from "./config.js";
+export * from "./collaboration.js";
 
 // IPC
 export * from "./ipc.js";

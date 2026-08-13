@@ -1,0 +1,10 @@
+{
+  "attemptId": "01JGNRBZ7TNHVPC3DF6R8BACMM",
+  "messageId": "01JGNK8W4QKERM9VA0C3N5Y7ZJ",
+  "targetEndpointId": "01JGNQAY6SMGTNB2CE5Q7A9BMM",
+  "sequence": 1,
+  "route": "mcp-inbox",
+  "status": "queued",
+  "startedAt": "2026-08-13T02:00:01.000Z",
+  "adapterReceipt": "receipt-7f3a"
+}

@@ -56,6 +56,9 @@ export const EventTypeSchema = z.enum([
   "chat_message",
   "review_action",
   "health_change",
+  "collaboration_message",
+  "collaboration_delivery",
+  "collaboration_action",
 ]);
 export type EventType = z.infer<typeof EventTypeSchema>;
 

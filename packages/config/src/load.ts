@@ -33,7 +33,11 @@ export function loadEffectiveConfig(
       const filtered = key === "project" ? filterProjectConfig(layer) : layer;
       if (Object.keys(filtered).length > 0) {
         try {
-          effective = mergeConfigs(effective, filtered, source, sources);
+          const merged =
+            key === "project"
+              ? applyProjectTightening(filtered, effective, missingFields)
+              : filtered;
+          effective = mergeConfigs(effective, merged, source, sources);
         } catch {
           missingFields.push(`${key} layer merge failed`);
         }
@@ -84,4 +88,129 @@ function recursiveFilter(value: unknown): unknown {
     return filtered;
   }
   return value;
+}
+
+// ── Project-layer tighten-only rules for collaboration (docs/42 §11.2, docs/16 §6) ──
+// The project layer may close collaboration, shorten TTL/retention, set the
+// inbound policy to hold/refuse, or lower numeric limits — but it can never
+// enable remote transport, cross-project delivery, raise limits, or cancel
+// the handoff user confirmation.
+
+const COLLABORATION_DIRECTION_KEYS = [
+  "sameProjectOnly",
+  "allowRemoteTransport",
+  "handoffRequiresUserConfirmation",
+] as const;
+
+const COLLABORATION_NUMERIC_CEILING_KEYS = [
+  "maxHops",
+  "maxOutstandingConsultsPerTask",
+  "maxMessagesPerMinutePerTask",
+  "maxMessageBytes",
+  "maxContextRefs",
+  "defaultTtlSeconds",
+  "maxTtlSeconds",
+  "messageRetentionDays",
+] as const;
+
+const COLLABORATION_KEYS = new Set<string>([
+  "enabled",
+  "defaultInboundPolicy",
+  ...COLLABORATION_DIRECTION_KEYS,
+  ...COLLABORATION_NUMERIC_CEILING_KEYS,
+]);
+
+function sanitizeProjectCollaboration(
+  projectCollaboration: unknown,
+  higher: Record<string, unknown>,
+  missingFields: string[],
+): Record<string, unknown> | undefined {
+  if (
+    projectCollaboration === null ||
+    typeof projectCollaboration !== "object" ||
+    Array.isArray(projectCollaboration)
+  ) {
+    missingFields.push("project collaboration block is not an object; ignored");
+    return undefined;
+  }
+
+  const sanitized: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(projectCollaboration as Record<string, unknown>)) {
+    if (!COLLABORATION_KEYS.has(key)) continue; // unknown keys are dropped
+
+    if (key === "enabled") {
+      // The project may close collaboration (false), or keep it in the
+      // higher layer's state. Re-enabling after a higher layer disabled it
+      // is a relaxation and is rejected.
+      if (typeof value !== "boolean") continue;
+      if (value && higher[key] === false) {
+        missingFields.push(`project collaboration.${key} rejected: only tightening is allowed`);
+      } else {
+        sanitized[key] = value;
+      }
+      continue;
+    }
+
+    if (key === "defaultInboundPolicy") {
+      // Strictness order: accept < hold < refuse. The project may only
+      // tighten, never relax the higher-layer policy.
+      const order = ["accept", "hold", "refuse"];
+      const higherIndex = order.indexOf(higher[key] as string);
+      const valueIndex = typeof value === "string" ? order.indexOf(value) : -1;
+      if (valueIndex < 0 || higherIndex < 0) continue;
+      if (valueIndex >= higherIndex) {
+        sanitized[key] = value;
+      } else {
+        missingFields.push(`project collaboration.${key} rejected: only tightening is allowed`);
+      }
+      continue;
+    }
+
+    if ((COLLABORATION_DIRECTION_KEYS as readonly string[]).includes(key)) {
+      // Direction keys are locked: the project value must equal the
+      // higher-layer value, so it can never flip the direction.
+      if (value === higher[key]) {
+        sanitized[key] = value;
+      } else {
+        missingFields.push(`project collaboration.${key} rejected: only tightening is allowed`);
+      }
+      continue;
+    }
+
+    if ((COLLABORATION_NUMERIC_CEILING_KEYS as readonly string[]).includes(key)) {
+      if (
+        typeof value === "number" &&
+        typeof higher[key] === "number" &&
+        value <= higher[key]
+      ) {
+        sanitized[key] = value;
+      } else if (typeof value === "number") {
+        missingFields.push(`project collaboration.${key} rejected: only lowering is allowed`);
+      }
+      continue;
+    }
+  }
+  return sanitized;
+}
+
+function applyProjectTightening(
+  projectLayer: Record<string, unknown>,
+  effective: Record<string, unknown>,
+  missingFields: string[],
+): Record<string, unknown> {
+  const result = structuredClone(projectLayer);
+  if ("collaboration" in result) {
+    const higher = (
+      effective.collaboration !== null && typeof effective.collaboration === "object"
+        ? (effective.collaboration as Record<string, unknown>)
+        : {}
+    );
+    const sanitized = sanitizeProjectCollaboration(result.collaboration, higher, missingFields);
+    if (sanitized === undefined) {
+      delete result.collaboration;
+    } else {
+      result.collaboration = sanitized;
+    }
+  }
+  return result;
 }

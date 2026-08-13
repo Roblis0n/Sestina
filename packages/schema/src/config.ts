@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ProjectIdSchema } from "./ids.js";
+import { CollaborationConfigSchema } from "./collaboration.js";
 
 // ── Provider Config ──
 export const ProviderTypeSchema = z.enum([
@@ -85,6 +86,7 @@ export const UserConfigSchema = z.object({
     autoStart: z.boolean(),
   }),
   hostDefaults: HostDefaultsSchema,
+  collaboration: CollaborationConfigSchema.optional(),
 });
 export type UserConfig = z.infer<typeof UserConfigSchema>;
 
@@ -107,6 +109,7 @@ export const EffectiveConfigSchema = z.object({
     autoStart: z.boolean(),
   }),
   hostDefaults: HostDefaultsSchema,
+  collaboration: CollaborationConfigSchema,
   projectOverrides: z.record(z.string(), z.unknown()).optional(),
   degradation: z.boolean(),
   missingFields: z.array(z.string()),
