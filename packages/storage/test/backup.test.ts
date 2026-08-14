@@ -186,7 +186,9 @@ describe("restoreDatabase (docs/17 §10, docs/19 §5.3)", () => {
     } finally {
       fence.release();
     }
-  });
+    // Generous timeout: the companion lock DB acquisition competes with
+    // every other maintenance test under full-repo parallel load.
+  }, 15000);
 
   it("rejects a backup whose recorded sidecar hash does not match", async () => {
     const dbPath = join(dir, "sestina.db");

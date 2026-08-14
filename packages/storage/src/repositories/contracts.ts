@@ -19,8 +19,19 @@ export interface ContractRepository {
    * through its task, and a contract owned by another project fails with
    * the same contract_not_found as a missing one — no existence leak.
    */
-  addVersion(projectId: string, contract: TaskContract, expectedVersion: number): void;
+  /**
+   * `revisionReason` is the free-text reason for the revision — e.g. why a
+   * completed/cancelled task was reopened (docs/30 §6). It is stored on the
+   * version row only and never touches the contract content itself.
+   */
+  addVersion(
+    projectId: string,
+    contract: TaskContract,
+    expectedVersion: number,
+    revisionReason?: string,
+  ): void;
   listVersions(projectId: string, contractId: string): TaskContract[];
+  getRevisionReason(projectId: string, contractId: string, version: number): string | undefined;
 }
 
 interface ContractRow {
@@ -87,7 +98,7 @@ export function createContractRepository(tx: StorageTransaction): ContractReposi
       return row ? assembleContract(row) : undefined;
     },
 
-    addVersion(projectId, contract, expectedVersion) {
+    addVersion(projectId, contract, expectedVersion, revisionReason) {
       assertInTransaction(tx);
       // Fence first: the same contract_not_found a missing id produces, so
       // the caller cannot distinguish "not in my project" from "does not
@@ -127,12 +138,15 @@ export function createContractRepository(tx: StorageTransaction): ContractReposi
         contract.contractId,
       );
       tx.run(
-        "INSERT INTO contract_versions (contract_version_id, contract_id, version, created_at, data) VALUES (?, ?, ?, ?, ?)",
+        `INSERT INTO contract_versions
+           (contract_version_id, contract_id, version, created_at, data, revision_reason)
+         VALUES (?, ?, ?, ?, ?, ?)`,
         generateId(),
         contract.contractId,
         contract.version,
         toMs(contract.createdAt),
         validateJson(TaskContractSchema, contract, "TaskContract"),
+        revisionReason ?? null,
       );
     },
 
@@ -148,6 +162,21 @@ export function createContractRepository(tx: StorageTransaction): ContractReposi
         projectId,
       );
       return rows.map((r) => TaskContractSchema.parse(JSON.parse(r.data) as unknown));
+    },
+
+    getRevisionReason(projectId, contractId, version) {
+      // Fenced like listVersions: an unreadable contract is invisible.
+      const row = tx.get<{ revision_reason: string | null }>(
+        `SELECT cv.revision_reason
+         FROM contract_versions cv
+         JOIN contracts c ON c.contract_id = cv.contract_id
+         JOIN tasks t ON t.task_id = c.task_id
+         WHERE cv.contract_id = ? AND cv.version = ? AND t.project_id = ?`,
+        contractId,
+        version,
+        projectId,
+      );
+      return row?.revision_reason ?? undefined;
     },
   };
 }

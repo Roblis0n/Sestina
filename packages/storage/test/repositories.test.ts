@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+﻿import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { join } from "node:path";
 import {
   generateId,
@@ -151,7 +151,7 @@ describe("Typed repositories round-trip (docs/22 Task 6)", () => {
     uow.commit((u) => {
       u.projects.insert(project);
       u.tasks.insert(task);
-      u.sessions.insert(session);
+      u.sessions.insert(project.projectId, session);
     });
     expect(uow.tasks.get(project.projectId, task.taskId)?.title).toBe("task title");
     const loadedSession = uow.sessions.get(project.projectId, session.sessionId);
@@ -373,7 +373,7 @@ describe("Typed repositories round-trip (docs/22 Task 6)", () => {
     uow.commit((u) => {
       u.projects.insert(project);
       u.tasks.insert(task);
-      u.sessions.insert(session);
+      u.sessions.insert(project.projectId, session);
       u.hostStream.append(streamEvent);
     });
     expect(uow.hostStream.listBySession(project.projectId, session.sessionId, { limit: 10 })).toHaveLength(1);
@@ -474,7 +474,7 @@ describe("Typed repositories round-trip (docs/22 Task 6)", () => {
     uow.commit((u) => {
       u.projects.insert(project);
       u.tasks.insert(task);
-      u.sessions.insert(session);
+      u.sessions.insert(project.projectId, session);
     });
     expectSestinaCode(
       () => uow.hostStream.listBySession(project.projectId, session.sessionId, { limit: 0 }),
@@ -532,7 +532,7 @@ describe("Typed repositories round-trip (docs/22 Task 6)", () => {
       u.collaboration.appendAttempt(attempt, credential);
       u.collaboration.appendAction(thread.projectId, action);
     });
-    // Dual-state projections stay separate: delivered ≠ accepted/completed.
+    // Dual-state projections stay separate: delivered 鈮?accepted/completed.
     expect(uow.collaboration.currentDeliveryState(thread.projectId, message.messageId)).toBe("delivered");
     expect(uow.collaboration.currentProcessingState(thread.projectId, message.messageId)).toBe("acknowledged");
     // Attempts are append-only: a second attempt with its own sequence coexists.
@@ -638,7 +638,7 @@ describe("Typed repositories round-trip (docs/22 Task 6)", () => {
     const task = makeTask(project.projectId);
     expect(() =>
       { uow.commit((u) => {
-        u.tasks.insert(task); // project row missing → FK violation
+        u.tasks.insert(task); // project row missing 鈫?FK violation
       }); },
     ).toThrow();
   });

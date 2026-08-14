@@ -4,6 +4,7 @@ import {
   SestinaErrorCode,
   SestinaError,
   type SestinaProject,
+  type ProjectRootBinding,
 } from "@sestina/schema";
 import type { StorageTransaction } from "../transaction.js";
 import { validateJson } from "../schema-check.js";
@@ -37,6 +38,10 @@ interface BindingRow {
   root_path: string;
   status: string;
   created_at: number;
+  fingerprint: string;
+  confirmed: number;
+  source: string;
+  case_semantics: string;
   data: string;
 }
 
@@ -44,7 +49,19 @@ function assembleProject(row: ProjectRow, bindings: BindingRow[]): SestinaProjec
   const data = JSON.parse(row.data) as SestinaProject;
   const bindingData = bindings.map((b) => {
     const parsed = ProjectRootBindingSchema.parse(JSON.parse(b.data) as unknown);
-    return { ...parsed, rootPath: b.root_path, establishedAt: fromMs(b.created_at) };
+    // Canonical columns (migration 009) are authoritative over the JSON.
+    return {
+      ...parsed,
+      rootPath: b.root_path,
+      establishedAt: fromMs(b.created_at),
+      fingerprint: b.fingerprint !== "" ? b.fingerprint : parsed.fingerprint,
+      source: b.source as ProjectRootBinding["source"],
+      confirmed: b.confirmed !== 0,
+      caseSemantics:
+        b.case_semantics === ""
+          ? parsed.caseSemantics
+          : (b.case_semantics as ProjectRootBinding["caseSemantics"]),
+    };
   });
   return SestinaProjectSchema.parse({
     ...data,
@@ -69,10 +86,16 @@ export function createProjectRepository(tx: StorageTransaction): ProjectReposito
       );
       for (const binding of project.bindings) {
         tx.run(
-          "INSERT INTO project_root_bindings (project_id, root_path, status, created_at, data) VALUES (?, ?, 'active', ?, ?)",
+          `INSERT INTO project_root_bindings
+             (project_id, root_path, status, created_at, fingerprint, confirmed, source, case_semantics, data)
+           VALUES (?, ?, 'active', ?, ?, ?, ?, ?, ?)`,
           project.projectId,
           binding.rootPath,
           toMs(binding.establishedAt),
+          binding.fingerprint,
+          binding.confirmed ? 1 : 0,
+          binding.source ?? "discovered",
+          binding.caseSemantics ?? "",
           validateJson(ProjectRootBindingSchema, binding, "ProjectRootBinding"),
         );
       }
@@ -86,7 +109,8 @@ export function createProjectRepository(tx: StorageTransaction): ProjectReposito
       );
       if (!row) return undefined;
       const bindings = tx.all<BindingRow>(
-        "SELECT root_path, status, created_at, data FROM project_root_bindings WHERE project_id = ? AND status = 'active'",
+        `SELECT root_path, status, created_at, fingerprint, confirmed, source, case_semantics, data
+         FROM project_root_bindings WHERE project_id = ? AND status = 'active'`,
         projectId,
       );
       return assembleProject(row, bindings);

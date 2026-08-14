@@ -31,6 +31,7 @@ export enum SestinaErrorCode {
   contract_not_found = "contract_not_found",
   review_not_found = "review_not_found",
   collaboration_message_not_found = "collaboration_message_not_found",
+  collaboration_endpoint_not_found = "collaboration_endpoint_not_found",
 
   // Override
   override_invalid = "override_invalid",
@@ -95,6 +96,7 @@ const STATUS_MAP: Record<SestinaErrorCode, number> = {
   [SestinaErrorCode.contract_not_found]: 404,
   [SestinaErrorCode.review_not_found]: 404,
   [SestinaErrorCode.collaboration_message_not_found]: 404,
+  [SestinaErrorCode.collaboration_endpoint_not_found]: 404,
   [SestinaErrorCode.override_invalid]: 400,
   [SestinaErrorCode.override_expired]: 410,
   [SestinaErrorCode.non_overridable]: 403,

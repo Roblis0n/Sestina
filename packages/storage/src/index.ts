@@ -45,6 +45,7 @@ export { migration002 } from "./migrations/002-fts.js";
 export { migration003 } from "./migrations/003-maintenance-fencing.js";
 export { migration006 } from "./migrations/006-retention-snapshot.js";
 export { migration007 } from "./migrations/007-keyset-indexes.js";
+export { migration009 } from "./migrations/009-project-scope.js";
 
 // Leases
 export {
@@ -157,7 +158,18 @@ export type {
 } from "./repositories/tasks.js";
 export type {
   HostSessionRepository,
+  HostSessionRecord,
 } from "./repositories/sessions.js";
+export type {
+  RootBindingRepository,
+  RootBindingRecord,
+} from "./repositories/root-bindings.js";
+export type {
+  SessionAttachmentRepository,
+} from "./repositories/session-attachments.js";
+export type {
+  UnownedActivityRepository,
+} from "./repositories/uowned-activity.js";
 export type {
   ContractRepository,
 } from "./repositories/contracts.js";

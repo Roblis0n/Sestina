@@ -14,6 +14,7 @@ import {
   type CollaborationAction,
   type CollaborationDeliveryStatus,
   type CollaborationProcessingStatus,
+  type CollaborationCapability,
 } from "@sestina/schema";
 import type { StorageTransaction } from "../transaction.js";
 import { validateJson } from "../schema-check.js";
@@ -46,6 +47,17 @@ export interface CollaborationRepository {
   // endpoints
   insertEndpoint(endpoint: CollaborationEndpoint): void;
   listEndpoints(projectId: string, taskId?: string): CollaborationEndpoint[];
+  /**
+   * Compare-and-swap on the endpoint capability (docs/30 §8 handshake):
+   * when expectedCapability is given and no longer matches, the update
+   * fails with stale_state; a missing endpoint fails with
+   * collaboration_endpoint_not_found.
+   */
+  updateEndpoint(
+    projectId: string,
+    endpoint: CollaborationEndpoint,
+    opts?: { expectedCapability?: CollaborationCapability },
+  ): void;
   // messages — append-only (docs/42 §11.1)
   insertMessage(message: CollaborationMessage): void;
   getMessage(projectId: string, messageId: string): CollaborationMessage | undefined;
@@ -284,6 +296,39 @@ export function createCollaborationRepository(tx: StorageTransaction): Collabora
             projectId,
           );
       return rows.map(assembleEndpoint);
+    },
+
+    updateEndpoint(projectId, endpoint, opts) {
+      assertInTransaction(tx);
+      assertValidProjectId(projectId);
+      const current = tx.get<{ capability: string }>(
+        "SELECT capability FROM collaboration_endpoints WHERE endpoint_id = ? AND project_id = ? AND task_id = ?",
+        endpoint.endpointId,
+        projectId,
+        endpoint.taskId,
+      );
+      if (!current) {
+        throw new SestinaError(
+          SestinaErrorCode.collaboration_endpoint_not_found,
+          "Collaboration endpoint not found",
+        );
+      }
+      if (opts?.expectedCapability !== undefined && current.capability !== opts.expectedCapability) {
+        throw new SestinaError(SestinaErrorCode.stale_state, "Endpoint capability changed");
+      }
+      tx.run(
+        `UPDATE collaboration_endpoints
+         SET capability = ?, connected = ?, last_seen_at = ?, inbound_policy = ?, data = ?
+         WHERE endpoint_id = ? AND project_id = ? AND task_id = ?`,
+        endpoint.capability,
+        endpoint.connected ? 1 : 0,
+        endpoint.lastSeenAt ? toMs(endpoint.lastSeenAt) : null,
+        endpoint.inboundPolicy,
+        validateJson(CollaborationEndpointSchema, endpoint, "CollaborationEndpoint"),
+        endpoint.endpointId,
+        projectId,
+        endpoint.taskId,
+      );
     },
 
     insertMessage(message) {

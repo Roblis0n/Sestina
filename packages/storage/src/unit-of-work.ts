@@ -15,6 +15,9 @@ import { createReviewRepository, type ReviewRepository } from "./repositories/re
 import { createHostStreamRepository, type HostStreamRepository } from "./repositories/host-stream.js";
 import { createNotificationRepository, type NotificationRepository } from "./repositories/notifications.js";
 import { createUsageRepository, type UsageRepository } from "./repositories/usage.js";
+import { createRootBindingRepository, type RootBindingRepository } from "./repositories/root-bindings.js";
+import { createSessionAttachmentRepository, type SessionAttachmentRepository } from "./repositories/session-attachments.js";
+import { createUnownedActivityRepository, type UnownedActivityRepository } from "./repositories/uowned-activity.js";
 
 /**
  * Typed repository ports bound to one transaction view
@@ -31,6 +34,9 @@ export interface StorageUnitOfWork {
   projects: ProjectRepository;
   tasks: TaskRepository;
   sessions: HostSessionRepository;
+  rootBindings: RootBindingRepository;
+  sessionAttachments: SessionAttachmentRepository;
+  unownedActivity: UnownedActivityRepository;
   contracts: ContractRepository;
   events: EventRepository;
   decisions: DecisionRepository;
@@ -52,6 +58,9 @@ export function createUnitOfWork(db: StorageDatabase): StorageUnitOfWork {
     projects: createProjectRepository(tx),
     tasks: createTaskRepository(tx),
     sessions: createSessionRepository(tx),
+    rootBindings: createRootBindingRepository(tx),
+    sessionAttachments: createSessionAttachmentRepository(tx),
+    unownedActivity: createUnownedActivityRepository(tx),
     contracts: createContractRepository(tx),
     events: createEventRepository(tx),
     decisions: createDecisionRepository(tx),

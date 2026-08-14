@@ -34,6 +34,13 @@ export interface EventRepository {
     event: StandardEvent,
     opts: { ownerId: string; ttlMs?: number },
   ): EventReserveResult;
+  /**
+   * Appends a non-governed association event (docs/30 §5): an append-only
+   * record without a processing lease — the judge pipeline never sees it.
+   * Replaying the same idempotency key with an identical payload/scope is a
+   * no-op; reusing it differently fails with idempotency_violation.
+   */
+  appendAssociation(event: StandardEvent): void;
   get(projectId: string, eventId: string): StandardEvent | undefined;
   listByProject(projectId: string, input: CursorInput): Page<StandardEvent>;
 }
@@ -171,6 +178,50 @@ export function createEventRepository(tx: StorageTransaction): EventRepository {
           expiresAt: lease ? lease.expires_at : 0,
         },
       };
+    },
+
+    appendAssociation(event) {
+      assertInTransaction(tx);
+      const existing = tx.get<{
+        project_id: string; task_id: string; session_id: string | null; data: string;
+      }>(
+        "SELECT project_id, task_id, session_id, data FROM events WHERE idempotency_key = ?",
+        event.idempotencyKey,
+      );
+      if (existing) {
+        const existingData = JSON.parse(existing.data) as { rawPayloadHash?: string };
+        const sameSession = (existing.session_id ?? undefined) === event.sessionId;
+        if (
+          existing.project_id !== event.projectId ||
+          existing.task_id !== event.taskId ||
+          !sameSession ||
+          existingData.rawPayloadHash !== event.rawPayloadHash
+        ) {
+          throw new SestinaError(
+            SestinaErrorCode.idempotency_violation,
+            "Idempotency key reused with a different payload or scope",
+          );
+        }
+        return;
+      }
+      const sequence = nextStreamSequence(tx, event.projectId);
+      tx.run(
+        `INSERT INTO events
+           (event_id, idempotency_key, project_id, task_id, session_id, event_type,
+            occurred_at, received_at, privacy_class, stream_sequence, data)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        event.eventId,
+        event.idempotencyKey,
+        event.projectId,
+        event.taskId,
+        event.sessionId,
+        event.eventType,
+        toMs(event.occurredAt),
+        toMs(event.receivedAt),
+        event.privacyClass,
+        sequence,
+        validateJson(StandardEventSchema, event, "StandardEvent"),
+      );
     },
 
     get(projectId, eventId) {

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+﻿import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { join } from "node:path";
 import { generateId, isSestinaError, SestinaErrorCode } from "@sestina/schema";
 import type {
@@ -132,7 +132,7 @@ describe("Project isolation across repositories (docs/22 Task 6 invariant)", () 
 describe("Id-scoped reads stay inside their project (docs/22 Task 6 invariant)", () => {
   let dir: string;
   let db: StorageDatabase;
-  const projectA = generateId(); // never seeded — must resolve nothing
+  const projectA = generateId(); // never seeded 鈥?must resolve nothing
   const projectB = generateId();
   const taskB = generateId();
 
@@ -236,7 +236,7 @@ describe("Id-scoped reads stay inside their project (docs/22 Task 6 invariant)",
         performedAt: "2026-08-13T00:01:00.000Z",
       });
       u.contracts.insert(contractB);
-      u.sessions.insert(sessionB);
+      u.sessions.insert(projectB, sessionB);
       u.hostStream.append({
         streamEventId: generateId(), sessionId: sessionB.sessionId, sequence: 1,
         eventType: "tool_start", content: "tool started", sourceCapability: "tool_lifecycle",

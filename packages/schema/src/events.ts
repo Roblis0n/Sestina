@@ -59,6 +59,8 @@ export const EventTypeSchema = z.enum([
   "collaboration_message",
   "collaboration_delivery",
   "collaboration_action",
+  // Task 8: attach/detach association events (docs/30 §5 "写关联事件").
+  "session_attachment",
 ]);
 export type EventType = z.infer<typeof EventTypeSchema>;
 
