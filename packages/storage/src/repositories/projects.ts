@@ -127,7 +127,20 @@ export function createProjectRepository(tx: StorageTransaction): ProjectReposito
         cursor: input.cursor,
         limit: input.limit,
       });
-      return { items: page.items.map((r) => assembleProject(r, [])), nextCursor: page.nextCursor };
+      return {
+        items: page.items.map((r) => {
+          // The UI renders same-name projects with their root alias plus a
+          // stable id suffix (docs/30 §10) — list pages must carry the
+          // active bindings, not empty ones.
+          const bindings = tx.all<BindingRow>(
+            `SELECT root_path, status, created_at, fingerprint, confirmed, source, case_semantics, data
+             FROM project_root_bindings WHERE project_id = ? AND status = 'active' ORDER BY root_path`,
+            r.project_id,
+          );
+          return assembleProject(r, bindings);
+        }),
+        nextCursor: page.nextCursor,
+      };
     },
 
     update(project) {

@@ -13,7 +13,7 @@ import {
   type StandardEvent,
 } from "@sestina/schema";
 import { loadSchemaFixture } from "./helpers.js";
-import { openDatabase, createUnitOfWork, type StorageDatabase } from "../src/index.js";
+import { openDatabase, createUnitOfWork, sha256, type StorageDatabase } from "../src/index.js";
 import { makeTempDir, removeTempDir, expectSestinaCode } from "./helpers.js";
 
 function makeProject(overrides: Partial<SestinaProject> = {}): SestinaProject {
@@ -168,6 +168,33 @@ describe("Task 8 storage repositories (docs/22 Task 8, docs/30)", () => {
           });
         });
       }, SestinaErrorCode.stale_state);
+    // The failed CAS left the attachment untouched (post-condition).
+    expect(uow.sessions.get(project.projectId, session.sessionId)?.taskId).toBe(task2.taskId);
+    });
+
+    it("pages sessions by task with stable keysets", () => {
+      const uow = createUnitOfWork(db);
+      const project = makeProject();
+      const task = makeTask(project.projectId);
+      const otherTask = makeTask(project.projectId);
+      const sessions = [0, 1, 2].map((i) =>
+        makeSession({ taskId: task.taskId, startedAt: `2026-08-14T00:00:0${i}.000Z` }),
+      );
+      const unrelated = makeSession({ taskId: otherTask.taskId, startedAt: "2026-08-14T00:00:04.000Z" });
+      uow.commit((u) => {
+        u.projects.insert(project);
+        u.tasks.insert(task);
+        u.tasks.insert(otherTask);
+        for (const session of [...sessions, unrelated]) u.sessions.insert(project.projectId, session);
+      });
+      const page = uow.sessions.listByTask(project.projectId, task.taskId, { limit: 2 });
+      expect(page.items.map((s) => s.sessionId)).toEqual([sessions[0]?.sessionId, sessions[1]?.sessionId]);
+      expect(page.nextCursor).toBeDefined();
+      const rest = uow.sessions.listByTask(project.projectId, task.taskId, {
+        limit: 2,
+        cursor: page.nextCursor,
+      });
+      expect(rest.items.map((s) => s.sessionId)).toEqual([sessions[2]?.sessionId]);
     });
 
     it("detaches a session by attaching null and refuses a task outside the project", () => {
@@ -330,7 +357,7 @@ describe("Task 8 storage repositories (docs/22 Task 8, docs/30)", () => {
         occurredAt: "2026-08-14T00:00:00.000Z",
         reason: "no_project",
         rawEvent: `{"type":"turn.started","n":${i}}`,
-        payloadHash: "b".repeat(64),
+        payloadHash: sha256(`{"type":"turn.started","n":${i}}`),
         createdAt: `2026-08-14T00:00:0${i}.000Z`,
       }));
       uow.commit((u) => {
@@ -341,22 +368,63 @@ describe("Task 8 storage repositories (docs/22 Task 8, docs/30)", () => {
       const rest = uow.unownedActivity.listPending({ limit: 2, cursor: page.nextCursor });
       expect(rest.items.map((a) => a.unownedId)).toEqual([activities[2]?.unownedId]);
 
+      // Resolution targets are real, seeded rows: the storage contract
+      // round-trips the attribution the service validated (docs/30 §10).
       const target = activities[1];
       if (!target) throw new Error("fixture missing");
-      const resolvedProject = generateId();
-      const resolvedTask = generateId();
+      const resolvedProject = makeProject();
+      const resolvedTask = makeTask(resolvedProject.projectId);
       uow.commit((u) => {
-        u.unownedActivity.resolve(target.unownedId, { projectId: resolvedProject, taskId: resolvedTask });
+        u.projects.insert(resolvedProject);
+        u.tasks.insert(resolvedTask);
+        u.unownedActivity.resolve(target.unownedId, {
+          projectId: resolvedProject.projectId,
+          taskId: resolvedTask.taskId,
+        });
       });
-      expect(uow.unownedActivity.get(target.unownedId)?.resolvedProjectId).toBe(resolvedProject);
+      expect(uow.unownedActivity.get(target.unownedId)?.resolvedProjectId).toBe(resolvedProject.projectId);
+      expect(uow.unownedActivity.get(target.unownedId)?.resolvedTaskId).toBe(resolvedTask.taskId);
       expect(uow.unownedActivity.listPending({ limit: 10 }).items).toHaveLength(2);
 
       // Resolving a second time is an idempotency violation.
       expectSestinaCode(() => {
         uow.commit((u) => {
-          u.unownedActivity.resolve(target.unownedId, { projectId: resolvedProject, taskId: null });
+          u.unownedActivity.resolve(target.unownedId, {
+            projectId: resolvedProject.projectId,
+            taskId: null,
+          });
         });
       }, SestinaErrorCode.idempotency_violation);
+    });
+
+    it("rejects invalid queue inserts at write time", () => {
+      const uow = createUnitOfWork(db);
+      const activity: UnownedActivity = {
+        unownedId: generateId(),
+        host: "codex",
+        hostSessionId: "hs-bad",
+        occurredAt: "2026-08-14T00:00:00.000Z",
+        reason: "no_project",
+        rawEvent: '{"type":"turn.started"}',
+        payloadHash: "f".repeat(64), // not the sha256 of rawEvent
+        createdAt: "2026-08-14T00:00:00.000Z",
+      };
+      // A hash that does not match the raw event is refused at write time,
+      // not left to poison every subsequent queue read.
+      expectSestinaCode(() => {
+        uow.commit((u) => {
+          u.unownedActivity.insert(activity);
+        });
+      }, SestinaErrorCode.validation_failed);
+      // An invalid reason is refused here too, before it can corrupt reads.
+      const badReason = { ...activity, reason: "bogus" as UnownedActivity["reason"] };
+      expectSestinaCode(() => {
+        uow.commit((u) => {
+          u.unownedActivity.insert(badReason);
+        });
+      }, SestinaErrorCode.validation_failed);
+      // Nothing partial was written.
+      expect(uow.unownedActivity.listPending({ limit: 10 }).items).toHaveLength(0);
     });
   });
 
@@ -401,6 +469,8 @@ describe("Task 8 storage repositories (docs/22 Task 8, docs/30)", () => {
           });
         });
       }, SestinaErrorCode.stale_state);
+      // The failed CAS left the endpoint untouched (post-condition).
+      expect(uow.collaboration.listEndpoints(project.projectId)[0]?.capability).toBe("next_turn");
 
       expectSestinaCode(() => {
         uow.commit((u) => {
@@ -509,6 +579,67 @@ describe("Task 8 storage repositories (docs/22 Task 8, docs/30)", () => {
           u.events.appendAssociation(conflicting);
         });
       }, SestinaErrorCode.idempotency_violation);
+    });
+
+    it("never creates a lease row and reserve refuses association events", () => {
+      const uow = createUnitOfWork(db);
+      const project = makeProject();
+      const task = makeTask(project.projectId);
+      const session = makeSession({ taskId: task.taskId });
+      uow.commit((u) => {
+        u.projects.insert(project);
+        u.tasks.insert(task);
+        u.sessions.insert(project.projectId, session);
+      });
+      const event = makeAssociationEvent(project.projectId, task.taskId, session.sessionId, "a".repeat(64));
+      uow.commit((u) => {
+        u.events.appendAssociation(event);
+      });
+      // The judge pipeline enters events only through reserve/leases; an
+      // association event must have no lease row (docs/30 §5).
+      const leaseCount = (): number => {
+        const row = db.get<{ c: number | bigint }>(
+          "SELECT COUNT(*) AS c FROM event_leases WHERE idempotency_key = ?",
+          event.idempotencyKey,
+        );
+        return Number(row?.c ?? 0);
+      };
+      expect(leaseCount()).toBe(0);
+      // And reserve must refuse to give it one, keeping the boundary.
+      expectSestinaCode(() => {
+        uow.commit((u) => {
+          u.events.reserve(event, { ownerId: "judge" });
+        });
+      }, SestinaErrorCode.validation_failed);
+      expect(leaseCount()).toBe(0);
+      // Replay stays lease-free too.
+      uow.commit((u) => {
+        u.events.appendAssociation(event);
+      });
+      expect(leaseCount()).toBe(0);
+    });
+
+    it("refuses governed event types through the association append path", () => {
+      const uow = createUnitOfWork(db);
+      const project = makeProject();
+      const task = makeTask(project.projectId);
+      const session = makeSession({ taskId: task.taskId });
+      uow.commit((u) => {
+        u.projects.insert(project);
+        u.tasks.insert(task);
+        u.sessions.insert(project.projectId, session);
+      });
+      const governed = {
+        ...makeAssociationEvent(project.projectId, task.taskId, session.sessionId, "a".repeat(64)),
+        eventType: "stop",
+      } as StandardEvent;
+      expectSestinaCode(() => {
+        uow.commit((u) => {
+          u.events.appendAssociation(governed);
+        });
+      }, SestinaErrorCode.validation_failed);
+      // Nothing was appended through the wrong path.
+      expect(uow.events.listByProject(project.projectId, { limit: 10 }).items).toHaveLength(0);
     });
   });
 });

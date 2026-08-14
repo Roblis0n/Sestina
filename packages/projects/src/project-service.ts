@@ -14,6 +14,7 @@ import {
 import {
   computeRootFingerprint,
   deriveProjectId,
+  rootAlias,
   type RootFingerprint,
 } from "./project-identity.js";
 import { createRootBindingPort, type RootBindingPort } from "./root-bindings.js";
@@ -103,6 +104,26 @@ export function createProjectService(
         );
       }
       const fingerprints = input.roots.map((root) => fingerprint.compute(root, input.gitRemote));
+      // A binding conflict goes to human review as validation_failed, never a
+      // duplicate-detected idempotency violation (docs/30 §10).
+      const canonicalPaths = new Set(fingerprints.map((fp) => fp.canonicalPath));
+      if (canonicalPaths.size !== fingerprints.length) {
+        throw new SestinaError(
+          SestinaErrorCode.validation_failed,
+          "Duplicate roots in one project creation",
+        );
+      }
+      for (const canonicalPath of canonicalPaths) {
+        const owners = bindings
+          .listAllByRootPath(canonicalPath)
+          .filter((b) => b.status === "active");
+        if (owners.length > 0) {
+          throw new SestinaError(
+            SestinaErrorCode.validation_failed,
+            "Root is actively bound to another project",
+          );
+        }
+      }
       // The id derives from the PATH fingerprint, never the remote one: two
       // distinct projects may share a git remote (docs/30 §10 ambiguity) and
       // must stay distinct. The remote fingerprint lives on bindings for
@@ -190,10 +211,14 @@ export function createProjectService(
         );
       }
       const sameIdentity = bindings.findActiveByFingerprint(fp.fingerprint);
-      if (sameIdentity.length > 0) {
+      // A Git worktree may belong to the same project, each root binding
+      // saved separately (docs/30 §4) — only fingerprints claimed by ANOTHER
+      // project block the add.
+      const foreign = sameIdentity.filter((b) => b.projectId !== projectId);
+      if (foreign.length > 0) {
         throw new SestinaError(
           SestinaErrorCode.validation_failed,
-          "Root matches an existing binding fingerprint",
+          "Root matches an existing binding fingerprint of another project",
         );
       }
       const added = makeBinding(fp, "user_added", true);
@@ -237,12 +262,29 @@ export function createProjectService(
       requireProject(projectId);
       const from = fingerprint.compute(fromRootPath).canonicalPath;
       const to = fingerprint.compute(toRootPath, opts?.gitRemote);
+      // Repointing onto a root with an active binding is a conflict for
+      // human review (docs/30 §10) — refuse before touching any row.
+      const owners = bindings
+        .listAllByRootPath(to.canonicalPath)
+        .filter((b) => b.status === "active");
+      if (owners.length > 0) {
+        throw new SestinaError(
+          SestinaErrorCode.validation_failed,
+          "Target root is actively bound to another project",
+        );
+      }
       bindings.repointBinding(projectId, from, makeBinding(to, "user_confirmed", true));
       return requireProject(projectId);
     },
 
     displayLabel(project) {
-      return `${project.name} · ${project.projectId.slice(0, 8)}`;
+      // Same-name projects stay distinguishable (docs/30 §10): name plus
+      // the root alias and a stable id suffix, shown together in the UI.
+      const alias =
+        project.bindings.length > 0
+          ? rootAlias(project.bindings[0]?.rootPath ?? "/")
+          : "/";
+      return `${project.name} · ${alias} · ${project.projectId.slice(0, 8)}`;
     },
   };
 }

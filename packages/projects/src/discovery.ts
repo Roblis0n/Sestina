@@ -1,6 +1,9 @@
 import {
   generateId,
+  isSestinaError,
   ProjectIdSchema,
+  SestinaError,
+  SestinaErrorCode,
   type SestinaProject,
   type UnownedActivity,
   type UnownedActivityReason,
@@ -64,28 +67,42 @@ export function createProjectDiscovery(
     compute: (rootPath, gitRemote) => computeRootFingerprint(rootPath, { gitRemote }),
   };
 
+  /**
+   * Resolves a fingerprint against existing bindings: an active binding at
+   * the canonical root attaches directly; an active binding with the same
+   * identity fingerprint elsewhere (a moved root with a known git remote)
+   * asks for user confirmation.
+   */
+  function resolveExisting(
+    fp: RootFingerprint,
+  ): { kind: "attached"; project: SestinaProject } | { kind: "needs_confirmation"; candidates: SestinaProject[] } | undefined {
+    const atRoot = bindings
+      .listAllByRootPath(fp.canonicalPath)
+      .filter((b) => b.status === "active");
+    if (atRoot.length > 0) {
+      const projects = atRoot
+        .map((b) => uow.projects.get(b.projectId))
+        .filter((p): p is SestinaProject => p !== undefined);
+      if (projects.length === 1 && projects[0]) {
+        return { kind: "attached", project: projects[0] };
+      }
+      return { kind: "needs_confirmation", candidates: projects };
+    }
+    const candidates = bindings
+      .findActiveByFingerprint(fp.fingerprint)
+      .map((b) => uow.projects.get(b.projectId))
+      .filter((p): p is SestinaProject => p !== undefined);
+    if (candidates.length > 0) {
+      return { kind: "needs_confirmation", candidates };
+    }
+    return undefined;
+  }
+
   return {
     async discover(rootPath, opts) {
       const fp = fingerprint.compute(rootPath, opts?.gitRemote);
-      const atRoot = bindings
-        .listAllByRootPath(fp.canonicalPath)
-        .filter((b) => b.status === "active");
-      if (atRoot.length > 0) {
-        const projects = atRoot
-          .map((b) => uow.projects.get(b.projectId))
-          .filter((p): p is SestinaProject => p !== undefined);
-        if (projects.length === 1 && projects[0]) {
-          return { kind: "attached", project: projects[0] };
-        }
-        return { kind: "needs_confirmation", candidates: projects };
-      }
-      const candidates = bindings
-        .findActiveByFingerprint(fp.fingerprint)
-        .map((b) => uow.projects.get(b.projectId))
-        .filter((p): p is SestinaProject => p !== undefined);
-      if (candidates.length > 0) {
-        return { kind: "needs_confirmation", candidates };
-      }
+      const existing = resolveExisting(fp);
+      if (existing) return existing;
       // Id from the path fingerprint (see createProject): the remote
       // fingerprint is for binding matching, not project identity.
       const projectId = ProjectIdSchema.parse(await deriveProjectId(fp.pathFingerprint));
@@ -107,9 +124,20 @@ export function createProjectDiscovery(
         createdAt: at,
         updatedAt: at,
       };
-      uow.commit((u) => {
-        u.projects.insert(project);
-      });
+      try {
+        uow.commit((u) => {
+          u.projects.insert(project);
+        });
+      } catch (error) {
+        // A concurrent discover of the same fresh root wins the derived
+        // project id; the loser re-reads the winner's binding instead of
+        // surfacing an idempotency violation out of the pipeline.
+        if (isSestinaError(error) && error.code === SestinaErrorCode.idempotency_violation) {
+          const reResolved = resolveExisting(fp);
+          if (reResolved) return reResolved;
+        }
+        throw error;
+      }
       return { kind: "created", project };
     },
 
@@ -136,6 +164,21 @@ export function createProjectDiscovery(
 
     resolve(unownedId, target) {
       uow.commit((u) => {
+        // Batch attribution must land on real targets (docs/30 §10): a
+        // mistyped project id or a task from another project is refused
+        // before the retained raw event is marked resolved.
+        if (!u.projects.get(target.projectId)) {
+          throw new SestinaError(
+            SestinaErrorCode.validation_failed,
+            "Resolution target project does not exist",
+          );
+        }
+        if (target.taskId !== null && !u.tasks.get(target.projectId, target.taskId)) {
+          throw new SestinaError(
+            SestinaErrorCode.validation_failed,
+            "Resolution target task does not belong to the project",
+          );
+        }
         u.unownedActivity.resolve(unownedId, target);
       });
     },

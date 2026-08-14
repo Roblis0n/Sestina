@@ -5,6 +5,7 @@ import {
   type UnownedActivity,
 } from "@sestina/schema";
 import type { StorageTransaction } from "../transaction.js";
+import { sha256 } from "../retention.js";
 import { assertInTransaction, fromMs, keysetPage, toMs, type CursorInput, type Page } from "./shared.js";
 
 /**
@@ -61,6 +62,21 @@ export function createUnownedActivityRepository(tx: StorageTransaction): Unowned
   return {
     insert(activity) {
       assertInTransaction(tx);
+      // The queue retains the exact raw event so attribution can be fixed
+      // later (docs/30 §10): shape and hash are validated at write time so
+      // a corrupt item can never masquerade as a pending one.
+      if (!UnownedActivitySchema.safeParse(activity).success) {
+        throw new SestinaError(
+          SestinaErrorCode.validation_failed,
+          "Unowned activity does not match the queue schema",
+        );
+      }
+      if (activity.payloadHash !== sha256(activity.rawEvent)) {
+        throw new SestinaError(
+          SestinaErrorCode.validation_failed,
+          "Unowned activity payload hash does not match the raw event",
+        );
+      }
       tx.run(
         `INSERT INTO unowned_activity
            (unowned_id, host, host_session_id, occurred_at, reason, raw_event, payload_hash,
@@ -109,7 +125,9 @@ export function createUnownedActivityRepository(tx: StorageTransaction): Unowned
         `UPDATE unowned_activity
          SET resolved_at = ?, resolved_project_id = ?, resolved_task_id = ?
          WHERE unowned_id = ? AND resolved_at IS NULL`,
-        Date.now(),
+        // Epoch millis sourced through the ISO clock so every timestamp
+        // in the database flows through the same conversion (docs/22).
+        toMs(new Date().toISOString()),
         resolution.projectId,
         resolution.taskId,
         unownedId,

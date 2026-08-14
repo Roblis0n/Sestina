@@ -53,6 +53,7 @@ export function createSessionAttachmentRepository(tx: StorageTransaction): Sessi
   return {
     insert(attachment) {
       assertInTransaction(tx);
+      assertValidProjectId(attachment.projectId);
       tx.run(
         `INSERT INTO session_task_attachments
            (attachment_id, session_id, project_id, task_id, attached_at, detached_at, reason)

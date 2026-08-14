@@ -92,6 +92,7 @@ export function createRootBindingRepository(tx: StorageTransaction): RootBinding
     },
 
     get(projectId, rootPath) {
+      assertValidProjectId(projectId);
       const row = tx.get<BindingRow>(
         `SELECT ${BINDING_COLUMNS} FROM project_root_bindings WHERE project_id = ? AND root_path = ?`,
         projectId,

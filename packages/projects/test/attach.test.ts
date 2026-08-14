@@ -107,6 +107,58 @@ describe("session resolution and task attach (docs/22 Task 8 Step 1, docs/30 §5
     expect(result.hostSession.projectId).toBe(project.projectId);
   });
 
+  it("resolves concurrent starts of the same host session without errors", async () => {
+    const project = makeProject();
+    const task = makeTask(project.projectId, { status: "active" });
+    seed(db, (u) => {
+      u.projects.insert(project);
+      u.tasks.insert(task);
+    });
+    const sessions = createHostSessionService(db);
+    const input = sessionInput(project.projectId);
+    const [first, second] = await Promise.allSettled([
+      sessions.resolveOnStart(input),
+      sessions.resolveOnStart(input),
+    ]);
+    // Both starts must resolve — the loser re-reads the winner's row on
+    // the natural-key constraint instead of throwing idempotency_violation.
+    expect(first.status).toBe("fulfilled");
+    expect(second.status).toBe("fulfilled");
+    const ids = [first, second].map((r) =>
+      r.status === "fulfilled" ? r.value.hostSession.sessionId : "",
+    );
+    expect(ids[0]).not.toBe("");
+    expect(ids[0]).toBe(ids[1]);
+    const uow = createUnitOfWork(db);
+    expect(uow.sessions.listByProject(project.projectId, { limit: 10 }).items).toHaveLength(1);
+  });
+
+  it("takes the census beyond the first 500 tasks before deciding auto-attach", async () => {
+    const project = makeProject();
+    const dormant = Array.from({ length: 500 }, (_, i) =>
+      makeTask(project.projectId, {
+        status: "completed",
+        createdAt: new Date(Date.parse(T0) + i * 1000).toISOString(),
+      }),
+    );
+    const active = makeTask(project.projectId, {
+      status: "active",
+      createdAt: new Date(Date.parse(T0) + 500 * 1000).toISOString(),
+    });
+    seed(db, (u) => {
+      u.projects.insert(project);
+      for (const task of dormant) u.tasks.insert(task);
+      u.tasks.insert(active);
+    });
+    const sessions = createHostSessionService(db);
+    const result = await sessions.resolveOnStart(sessionInput(project.projectId));
+    // The sole active task sits on the second page — the census must page
+    // through it instead of silently reporting a shell session (docs/30 §5).
+    expect(result.kind).toBe("attached");
+    if (result.kind !== "attached") return;
+    expect(result.attachedTaskId).toBe(active.taskId);
+  });
+
   it("re-resolves the same host session idempotently to the same session", async () => {
     const project = makeProject();
     const task = makeTask(project.projectId, { status: "active" });
@@ -141,6 +193,39 @@ describe("session resolution and task attach (docs/22 Task 8 Step 1, docs/30 §5
     );
     const uow = createUnitOfWork(db);
     expect(uow.sessions.listByProject(project.projectId, { limit: 10 }).items).toHaveLength(0);
+  });
+
+  it("re-attaching to the current task is a no-op that preserves the history", async () => {
+    const project = makeProject();
+    const task = makeTask(project.projectId, { status: "active" });
+    const session = makeSession({ taskId: task.taskId });
+    seed(db, (u) => {
+      u.projects.insert(project);
+      u.tasks.insert(task);
+      u.sessions.insert(project.projectId, session);
+      u.sessionAttachments.insert({
+        attachmentId: generateId(),
+        sessionId: session.sessionId,
+        projectId: project.projectId,
+        taskId: task.taskId,
+        attachedAt: T0,
+      });
+    });
+    const sessions = createHostSessionService(db);
+    // A crash retry (same target task, regenerated occurredAt) must not
+    // churn the append-only history or the association event stream.
+    await sessions.attach(project.projectId, session.sessionId, task.taskId, {
+      reason: "retry of the same attach",
+      occurredAt: T1,
+    });
+    const uow = createUnitOfWork(db);
+    expect(uow.sessionAttachments.listBySession(project.projectId, session.sessionId)).toHaveLength(1);
+    expect(uow.sessionAttachments.current(project.projectId, session.sessionId)?.attachedAt).toBe(T0);
+    expect(uow.sessions.get(project.projectId, session.sessionId)?.taskId).toBe(task.taskId);
+    const associationEvents = uow.events
+      .listByProject(project.projectId, { limit: 10 })
+      .items.filter((e) => e.eventType === "session_attachment");
+    expect(associationEvents).toHaveLength(0);
   });
 
   it("attaches with compare-and-swap and appends the attachment history", async () => {

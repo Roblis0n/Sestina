@@ -1,4 +1,4 @@
-﻿import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { join } from "node:path";
 import {
   generateId,
@@ -532,7 +532,7 @@ describe("Typed repositories round-trip (docs/22 Task 6)", () => {
       u.collaboration.appendAttempt(attempt, credential);
       u.collaboration.appendAction(thread.projectId, action);
     });
-    // Dual-state projections stay separate: delivered 鈮?accepted/completed.
+    // Dual-state projections stay separate: delivered ≠ accepted/completed.
     expect(uow.collaboration.currentDeliveryState(thread.projectId, message.messageId)).toBe("delivered");
     expect(uow.collaboration.currentProcessingState(thread.projectId, message.messageId)).toBe("acknowledged");
     // Attempts are append-only: a second attempt with its own sequence coexists.
@@ -638,7 +638,7 @@ describe("Typed repositories round-trip (docs/22 Task 6)", () => {
     const task = makeTask(project.projectId);
     expect(() =>
       { uow.commit((u) => {
-        u.tasks.insert(task); // project row missing 鈫?FK violation
+        u.tasks.insert(task); // project row missing → FK violation
       }); },
     ).toThrow();
   });

@@ -1,16 +1,22 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { join } from "node:path";
 import { openDatabase, createUnitOfWork, type StorageDatabase } from "@sestina/storage";
-import { createTaskService } from "../src/index.js";
+import {
+  createTaskService,
+  createProjectService,
+  createHostSessionService,
+} from "../src/index.js";
 import {
   makeTempDir,
   removeTempDir,
   makeDb,
   makeProject,
   makeTask,
+  makeSession,
   makeContract,
   seed,
   expectSestinaCode,
+  expectSestinaCodeAsync,
 } from "./helpers.js";
 
 describe("task lifecycle state machine (docs/30 §6)", () => {
@@ -196,6 +202,49 @@ describe("task lifecycle state machine (docs/30 §6)", () => {
       );
       // The refused transition left no partial state behind.
       expect(readOnlyTasks.getTask(project.projectId, task.taskId)?.status).toBe("active");
+    } finally {
+      readOnly.close();
+      db = await makeDb(dir);
+    }
+  });
+
+  it("forbids project and session writes on a read-only database (docs/30 §10)", async () => {
+    const project = makeProject();
+    const task = makeTask(project.projectId, { status: "active" });
+    const session = makeSession({ taskId: task.taskId });
+    seed(db, (u) => {
+      u.projects.insert(project);
+      u.tasks.insert(task);
+      u.sessions.insert(project.projectId, session);
+    });
+    const path = join(dir, "sestina.db");
+    db.close();
+
+    const readOnly = await openDatabase({ path, readOnly: true });
+    try {
+      // Browsing stays available…
+      expect(createProjectService(readOnly).getProject(project.projectId)?.name).toBe(project.name);
+      // …but creating, renaming, archiving and attaching are forbidden.
+      const readOnlyProjects = createProjectService(readOnly);
+      expectSestinaCode(
+        () => readOnlyProjects.renameProject(project.projectId, "nope"),
+        "database_readonly",
+      );
+      expectSestinaCode(
+        () => readOnlyProjects.archiveProject(project.projectId),
+        "database_readonly",
+      );
+      await expectSestinaCodeAsync(
+        () => readOnlyProjects.createProject({ name: "Nope", roots: [join(dir, "ro-root")] }),
+        "database_readonly",
+      );
+      await expectSestinaCodeAsync(
+        () => createHostSessionService(readOnly).attach(project.projectId, session.sessionId, task.taskId),
+        "database_readonly",
+      );
+      // The refused writes left the project untouched.
+      expect(readOnlyProjects.getProject(project.projectId)?.name).toBe(project.name);
+      expect(readOnlyProjects.getProject(project.projectId)?.status).toBe("active");
     } finally {
       readOnly.close();
       db = await makeDb(dir);

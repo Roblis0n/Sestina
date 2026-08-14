@@ -25,11 +25,20 @@ function hashFingerprint(input: string): string {
   return createHash("sha256").update(input).digest("hex");
 }
 
-const isWindows = process.platform === "win32";
+/**
+ * The platform default for case folding (docs/30 §3): Windows and macOS
+ * default volumes fold case, Linux does not. Injectable for tests so the
+ * semantics are asserted per platform instead of per runner.
+ */
+export function platformDefaultCaseInsensitive(
+  platform: NodeJS.Platform = process.platform,
+): boolean {
+  return platform === "win32" || platform === "darwin";
+}
 
 export function canonicalizeRootPath(
   rootPath: string,
-  caseInsensitive: boolean = isWindows,
+  caseInsensitive: boolean = platformDefaultCaseInsensitive(),
 ): string {
   const normalized = resolve(rootPath).replaceAll("\\", "/");
   return caseInsensitive ? normalized.toLowerCase() : normalized;
@@ -39,7 +48,7 @@ export function computeRootFingerprint(
   rootPath: string,
   opts: { gitRemote?: string; caseInsensitive?: boolean } = {},
 ): RootFingerprint {
-  const caseInsensitive = opts.caseInsensitive ?? isWindows;
+  const caseInsensitive = opts.caseInsensitive ?? platformDefaultCaseInsensitive();
   const canonicalPath = canonicalizeRootPath(rootPath, caseInsensitive);
   const gitRemote = opts.gitRemote ?? "";
   const pathFingerprint = hashFingerprint(`path\u0000${canonicalPath}`);

@@ -42,7 +42,9 @@ export interface HostSessionRepository {
    * Compare-and-swap on the current task attachment (docs/30 §5): when
    * expectedTaskId is given and no longer matches, the attach fails with
    * stale_state; a non-null task outside the project fails with
-   * task_not_found.
+   * task_not_found. The session's task_id column materializes the current
+   * session_task_attachments row — callers must update the attachment
+   * history (insert/detach) in the same unit of work as this call.
    */
   attach(
     projectId: string,

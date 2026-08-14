@@ -3,6 +3,7 @@ import {
   canonicalizeRootPath,
   computeRootFingerprint,
   deriveProjectId,
+  platformDefaultCaseInsensitive,
   rootAlias,
 } from "../src/index.js";
 
@@ -30,7 +31,11 @@ describe("project identity (docs/30 §3/§4)", () => {
     // …but the remote identity is stable across the move (docs/30 §4).
     expect(original.fingerprint).toBe(moved.fingerprint);
     expect(original.gitRemote).toBe("https://example.com/org/repo.git");
-    expect(original.caseSemantics).toBe("case_insensitive");
+    // The platform default is the one canonicalizeRootPath uses — the
+    // test must not hardcode Windows semantics (fails on Linux runners).
+    expect(original.caseSemantics).toBe(
+      platformDefaultCaseInsensitive() ? "case_insensitive" : "case_sensitive",
+    );
 
     // Without a remote, the path fingerprint is the identity.
     const noRemote = computeRootFingerprint("D:\\work\\repo");
@@ -46,6 +51,25 @@ describe("project identity (docs/30 §3/§4)", () => {
     expect(a).not.toBe(other);
     // A schema-valid ULID shape — no path text survives the derivation.
     expect(a).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
+  });
+
+  it("defaults case-insensitivity per platform (macOS APFS/HFS+ folds case)", () => {
+    // Windows and macOS default volumes are case-insensitive; Linux is
+    // case-sensitive (docs/30 §3 platform case semantics).
+    expect(platformDefaultCaseInsensitive("win32")).toBe(true);
+    expect(platformDefaultCaseInsensitive("darwin")).toBe(true);
+    expect(platformDefaultCaseInsensitive("linux")).toBe(false);
+    // The explicit option overrides the platform default in both
+    // directions, and the stored caseSemantics records which won.
+    expect(computeRootFingerprint("D:\\Work", { caseInsensitive: true }).caseSemantics).toBe(
+      "case_insensitive",
+    );
+    expect(computeRootFingerprint("D:\\Work", { caseInsensitive: false }).caseSemantics).toBe(
+      "case_sensitive",
+    );
+    expect(
+      computeRootFingerprint("D:\\Work", { caseInsensitive: true }).canonicalPath,
+    ).not.toBe(computeRootFingerprint("D:\\Work", { caseInsensitive: false }).canonicalPath);
   });
 
   it("derives root aliases from the canonical path", () => {

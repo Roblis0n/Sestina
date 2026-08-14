@@ -79,6 +79,14 @@ export function createEventRepository(tx: StorageTransaction): EventRepository {
   return {
     reserve(event, opts) {
       assertInTransaction(tx);
+      // docs/30 §5: association events are appended without a lease and
+      // never enter the judge pipeline — reserve is not a path for them.
+      if (event.eventType === "session_attachment") {
+        throw new SestinaError(
+          SestinaErrorCode.validation_failed,
+          "Association events are appended without a processing lease",
+        );
+      }
       const claim = claimEventLease(tx, {
         idempotencyKey: event.idempotencyKey,
         ownerId: opts.ownerId,
@@ -182,6 +190,14 @@ export function createEventRepository(tx: StorageTransaction): EventRepository {
 
     appendAssociation(event) {
       assertInTransaction(tx);
+      // The append path is reserved for association events; governed event
+      // types must go through reserve so the judge pipeline processes them.
+      if (event.eventType !== "session_attachment") {
+        throw new SestinaError(
+          SestinaErrorCode.validation_failed,
+          "Only association events use the append path; governed events must reserve a lease",
+        );
+      }
       const existing = tx.get<{
         project_id: string; task_id: string; session_id: string | null; data: string;
       }>(

@@ -1,5 +1,6 @@
 import {
   generateId,
+  isSestinaError,
   ProjectIdSchema,
   SessionIdSchema,
   SestinaError,
@@ -12,6 +13,7 @@ import {
   type HostVisibilityLevel,
   type ReviewItem,
   type SestinaProject,
+  type Task,
 } from "@sestina/schema";
 import { hostSessionIdentity } from "@sestina/events";
 import {
@@ -132,9 +134,15 @@ export function createHostSessionService(db: StorageDatabase): HostSessionServic
         );
       }
       const sessionId = await hostSessionIdentity(input.host, input.hostSessionId);
-      const activeTasks = uow.tasks
-        .listByProject(input.projectId, { limit: 500 })
-        .items.filter((t) => t.status === "active");
+      // The task census pages through the whole project — the sole active
+      // task may sit beyond the first 500 rows (docs/30 §5).
+      const activeTasks: Task[] = [];
+      let cursor: string | undefined;
+      do {
+        const page = uow.tasks.listByProject(input.projectId, { limit: 500, cursor });
+        activeTasks.push(...page.items.filter((t) => t.status === "active"));
+        cursor = page.nextCursor;
+      } while (cursor !== undefined);
 
       const session: HostSession = {
         sessionId,
@@ -146,30 +154,48 @@ export function createHostSessionService(db: StorageDatabase): HostSessionServic
         capabilities: input.capabilities,
         startedAt: input.startedAt,
       };
-      uow.commit((u) => {
-        u.sessions.insert(input.projectId, session);
-        if (activeTasks.length === 1 && activeTasks[0]) {
-          const taskId = activeTasks[0].taskId;
-          u.sessionAttachments.insert({
-            attachmentId: generateId(),
-            sessionId,
-            projectId: ProjectIdSchema.parse(input.projectId),
-            taskId,
-            attachedAt: input.startedAt,
-          });
-          u.events.appendAssociation(
-            buildAttachmentAssociationEvent({
-              host: input.host,
-              projectId: input.projectId,
-              taskId,
+      try {
+        uow.commit((u) => {
+          u.sessions.insert(input.projectId, session);
+          if (activeTasks.length === 1 && activeTasks[0]) {
+            const taskId = activeTasks[0].taskId;
+            u.sessionAttachments.insert({
+              attachmentId: generateId(),
               sessionId,
-              action: "attach",
-              occurredAt: input.startedAt,
-              reason: "auto-attached: exactly one active task",
-            }),
-          );
+              projectId: ProjectIdSchema.parse(input.projectId),
+              taskId,
+              attachedAt: input.startedAt,
+            });
+            u.events.appendAssociation(
+              buildAttachmentAssociationEvent({
+                host: input.host,
+                projectId: input.projectId,
+                taskId,
+                sessionId,
+                action: "attach",
+                occurredAt: input.startedAt,
+                reason: "auto-attached: exactly one active task",
+              }),
+            );
+          }
+        });
+      } catch (error) {
+        // A concurrent start of the same host session wins the natural-key
+        // insert; the loser re-reads the winner's row instead of surfacing
+        // an idempotency violation out of the pipeline.
+        if (isSestinaError(error) && error.code === SestinaErrorCode.idempotency_violation) {
+          const winner = uow.sessions.getByHostSessionId(input.host, input.hostSessionId);
+          if (winner) {
+            return {
+              kind: "existing",
+              project: requireProject(winner.projectId),
+              hostSession: winner,
+              taskResolution: "existing",
+            };
+          }
         }
-      });
+        throw error;
+      }
       const record = uow.sessions.get(input.projectId, sessionId);
       if (!record) {
         throw new SestinaError(SestinaErrorCode.internal_error, "Session was not persisted");
@@ -193,6 +219,9 @@ export function createHostSessionService(db: StorageDatabase): HostSessionServic
 
     // eslint-disable-next-line @typescript-eslint/require-await
     async attach(projectId, sessionId, taskId, opts = {}) {
+      // Attach is a write API: a read-only database refuses it up front,
+      // even when the outcome would be a no-op (docs/30 §10).
+      db.assertWritable();
       const session = uow.sessions.get(projectId, sessionId);
       if (!session) {
         throw new SestinaError(SestinaErrorCode.session_not_found, "Session not found");
@@ -200,6 +229,22 @@ export function createHostSessionService(db: StorageDatabase): HostSessionServic
       const task = uow.tasks.get(projectId, taskId);
       if (!task) {
         throw new SestinaError(SestinaErrorCode.task_not_found, "Task not found");
+      }
+      const currentAttachment = uow.sessionAttachments.current(projectId, sessionId);
+      // Auto-attached sessions carry their task on the session row too; the
+      // attachment history is authoritative when present, the row is the
+      // fallback for sessions created before attachment history existed.
+      const currentTaskId = currentAttachment?.taskId ?? session.taskId;
+      if (opts.expectedTaskId !== undefined && opts.expectedTaskId !== currentTaskId) {
+        throw new SestinaError(
+          SestinaErrorCode.stale_state,
+          "Session attachment changed since the attach was requested",
+        );
+      }
+      // Re-attaching to the current task is a no-op: a crash retry must not
+      // churn the append-only history or the association event stream.
+      if (currentTaskId === taskId) {
+        return;
       }
       const at = opts.occurredAt ?? nowIso();
       const event = buildAttachmentAssociationEvent({
@@ -231,6 +276,7 @@ export function createHostSessionService(db: StorageDatabase): HostSessionServic
 
     // eslint-disable-next-line @typescript-eslint/require-await
     async detach(projectId, sessionId, opts = {}) {
+      db.assertWritable();
       const session = uow.sessions.get(projectId, sessionId);
       if (!session) {
         throw new SestinaError(SestinaErrorCode.session_not_found, "Session not found");
