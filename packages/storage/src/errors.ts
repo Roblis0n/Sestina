@@ -3,6 +3,7 @@ import { SestinaError, SestinaErrorCode } from "@sestina/schema";
 // ── SQLite primary result codes we classify (node:sqlite exposes errcode) ──
 export const SQLITE_ERROR = 1;
 export const SQLITE_CONSTRAINT_UNIQUE = 2067;
+export const SQLITE_CONSTRAINT_PRIMARYKEY = 1555;
 export const SQLITE_BUSY = 5;
 export const SQLITE_LOCKED = 6;
 export const SQLITE_READONLY = 8;
@@ -25,6 +26,7 @@ export function sqliteErrcode(err: unknown): number | undefined {
 export function mapSqliteError(err: unknown, message: string): SestinaError {
   switch (sqliteErrcode(err)) {
     case SQLITE_CONSTRAINT_UNIQUE:
+    case SQLITE_CONSTRAINT_PRIMARYKEY:
       return new SestinaError(SestinaErrorCode.idempotency_violation, message);
     case SQLITE_BUSY:
     case SQLITE_LOCKED:

@@ -22,23 +22,23 @@ describe("withTransaction (docs/22 Task 5 Step 1)", () => {
     removeTempDir(dir);
   });
 
-  it("opens a defensive WAL database and rolls back the whole unit", async () => {
+  it("opens a defensive WAL database and rolls back the whole unit", () => {
     expect(db.pragma("journal_mode")).toBe("wal");
     expect(db.pragma("foreign_keys")).toBe(1);
 
-    await expect(
+    expect(() =>
       withTransaction(db, (tx) => {
         tx.run("INSERT INTO events (event_id, idempotency_key, project_id, task_id, event_type, occurred_at, received_at, privacy_class, data) VALUES ('e1','k1','p','t','stop',1,1,'internal','{}')");
         throw new Error("abort");
       }),
-    ).rejects.toThrow("abort");
+    ).toThrow("abort");
 
     expect(db.get("SELECT event_id FROM events WHERE event_id = 'e1'")).toBeUndefined();
     expect(db.isTransaction).toBe(false);
   });
 
-  it("returns the unit's result and commits it", async () => {
-    const result = await withTransaction(db, (tx) => {
+  it("returns the unit's result and commits it", () => {
+    const result = withTransaction(db, (tx) => {
       tx.run("INSERT INTO events (event_id, idempotency_key, project_id, task_id, event_type, occurred_at, received_at, privacy_class, data) VALUES ('e2','k2','p','t','stop',1,1,'internal','{}')");
       return "unit-done";
     });
@@ -46,21 +46,21 @@ describe("withTransaction (docs/22 Task 5 Step 1)", () => {
     expect(db.get("SELECT event_id FROM events WHERE event_id = 'e2'")).toBeTruthy();
   });
 
-  it("rolls back an inner unit via savepoints without losing the outer unit", async () => {
-    await withTransaction(db, async (tx) => {
+  it("rolls back an inner unit via savepoints without losing the outer unit", () => {
+    withTransaction(db, (tx) => {
       tx.run("INSERT INTO events (event_id, idempotency_key, project_id, task_id, event_type, occurred_at, received_at, privacy_class, data) VALUES ('e3','k3','p','t','stop',1,1,'internal','{}')");
-      await expect(
+      expect(() =>
         withTransaction(db, (inner) => {
           inner.run("INSERT INTO events (event_id, idempotency_key, project_id, task_id, event_type, occurred_at, received_at, privacy_class, data) VALUES ('e4','k4','p','t','stop',1,1,'internal','{}')");
           throw new Error("inner abort");
         }),
-      ).rejects.toThrow("inner abort");
+      ).toThrow("inner abort");
     });
     expect(db.get("SELECT event_id FROM events WHERE event_id = 'e3'")).toBeTruthy();
     expect(db.get("SELECT event_id FROM events WHERE event_id = 'e4'")).toBeUndefined();
   });
 
-  it("commits a collaboration message, its initial attempt and the event in one unit", async () => {
+  it("commits a collaboration message, its initial attempt and the event in one unit", () => {
     const thread = loadStorageFixture("valid-collaboration-thread.json");
     const message = loadStorageFixture("valid-collaboration-message.json");
     createThread(db, thread);
@@ -73,7 +73,7 @@ describe("withTransaction (docs/22 Task 5 Step 1)", () => {
     const messageId = (message as { messageId: string }).messageId;
     const dedupeKey = (message as { dedupeKey: string }).dedupeKey;
 
-    await withTransaction(db, (tx) => {
+    withTransaction(db, (tx) => {
       tx.run(
         "INSERT INTO collaboration_messages (message_id, thread_id, project_id, task_id, kind, source_endpoint_id, summary, body, privacy_class, ttl_seconds, hop_count, dedupe_key, created_at, expires_at, data) VALUES (?, ?, ?, ?, 'consult', ?, ?, ?, 'internal', ?, ?, ?, ?, ?, ?)",
         messageId,
@@ -114,7 +114,7 @@ describe("withTransaction (docs/22 Task 5 Step 1)", () => {
     expect(db.get("SELECT event_id FROM events WHERE idempotency_key = ?", `collab-${messageId}`)).toBeTruthy();
   });
 
-  it("persists nothing deliverable when the message unit fails (no message, no attempt)", async () => {
+  it("persists nothing deliverable when the message unit fails (no message, no attempt)", () => {
     const thread = loadStorageFixture("valid-collaboration-thread.json");
     const message = loadStorageFixture("valid-collaboration-message.json");
     createThread(db, thread);
@@ -123,7 +123,7 @@ describe("withTransaction (docs/22 Task 5 Step 1)", () => {
     const taskId = (thread as { taskId: string }).taskId;
     const messageId = (message as { messageId: string }).messageId;
 
-    await expect(
+    expect(() =>
       withTransaction(db, (tx) => {
         tx.run(
           "INSERT INTO collaboration_messages (message_id, thread_id, project_id, task_id, kind, source_endpoint_id, summary, privacy_class, ttl_seconds, hop_count, dedupe_key, created_at, expires_at, data) VALUES (?, ?, ?, ?, 'status', ?, 's', 'internal', 1, 0, 'dk-fail', 1, 2, '{}')",
@@ -135,7 +135,7 @@ describe("withTransaction (docs/22 Task 5 Step 1)", () => {
         );
         throw new Error("delivery rejected before persist");
       }),
-    ).rejects.toThrow("delivery rejected before persist");
+    ).toThrow("delivery rejected before persist");
 
     // Nothing was persisted, so there is nothing a router could forward.
     expect(db.get("SELECT message_id FROM collaboration_messages WHERE message_id = ?", messageId)).toBeUndefined();
@@ -156,35 +156,55 @@ describe("No write transaction during host/provider calls (docs/17 §3.2, docs/2
     removeTempDir(dir);
   });
 
-  it("rolls back when COMMIT fails on an async unit and keeps the connection usable", async () => {
-    // defer_foreign_keys defers the FK check to COMMIT, so the commit
-    // itself fails — the wrapper must not leave a half-open transaction.
-    db.exec("PRAGMA defer_foreign_keys = ON");
+  it("rejects Promise-returning write units with internal_error and rolls back safely", () => {
+    const before = db.get("SELECT event_id FROM events WHERE event_id = 'e5'");
+    expect(before).toBeUndefined();
     try {
-      await expect(
-        withTransaction(db, async (tx) => {
-          tx.run(
-            "INSERT INTO collaboration_messages (message_id, thread_id, project_id, task_id, kind, source_endpoint_id, summary, privacy_class, ttl_seconds, hop_count, dedupe_key, created_at, expires_at, data) VALUES ('orphan','missing-thread','p','t','status','e','s','internal',1,0,'dk-orphan',1,2,'{}')",
-          );
-          await Promise.resolve();
-        }),
-      ).rejects.toSatisfy((err: unknown) => isSestinaError(err));
-    } finally {
-      db.exec("PRAGMA defer_foreign_keys = OFF");
+      withTransaction(db, (tx) => {
+        tx.run("INSERT INTO events (event_id, idempotency_key, project_id, task_id, event_type, occurred_at, received_at, privacy_class, data) VALUES ('e5','k5','p','t','stop',1,1,'internal','{}')");
+        const thenable = { then: () => undefined };
+        return thenable as never;
+      });
+      expect.unreachable("Promise-returning unit must throw internal_error");
+    } catch (err) {
+      expect(isSestinaError(err)).toBe(true);
+      if (isSestinaError(err)) {
+        expect(err.code).toBe(SestinaErrorCode.internal_error);
+      }
     }
-
+    // The unit was rolled back, not half-committed.
     expect(db.isTransaction).toBe(false);
-    expect(db.get("SELECT message_id FROM collaboration_messages WHERE message_id = 'orphan'")).toBeUndefined();
-    // The connection stays usable after the failed commit.
+    expect(db.get("SELECT event_id FROM events WHERE event_id = 'e5'")).toBeUndefined();
+    // The connection stays usable.
     db.run("INSERT INTO events (event_id, idempotency_key, project_id, task_id, event_type, occurred_at, received_at, privacy_class, data) VALUES ('post1','pk-post1','p','t','stop',1,1,'internal','{}')");
     expect(db.get("SELECT event_id FROM events WHERE event_id = 'post1'")).toBeTruthy();
   });
+
+  it("rolls back a synchronous unit whose COMMIT fails (deferred FK) and stays usable", () => {
+    db.exec("PRAGMA defer_foreign_keys = ON");
+    try {
+      expect(() =>
+        { withTransaction(db, (tx) => {
+          tx.run(
+            "INSERT INTO collaboration_messages (message_id, thread_id, project_id, task_id, kind, source_endpoint_id, summary, privacy_class, ttl_seconds, hop_count, dedupe_key, created_at, expires_at, data) VALUES ('orphan','missing-thread','p','t','status','e','s','internal',1,0,'dk-orphan',1,2,'{}')",
+          );
+        }); },
+      ).toThrow();
+    } finally {
+      db.exec("PRAGMA defer_foreign_keys = OFF");
+    }
+    expect(db.isTransaction).toBe(false);
+    expect(db.get("SELECT message_id FROM collaboration_messages WHERE message_id = 'orphan'")).toBeUndefined();
+    db.run("INSERT INTO events (event_id, idempotency_key, project_id, task_id, event_type, occurred_at, received_at, privacy_class, data) VALUES ('post2','pk-post2','p','t','stop',1,1,'internal','{}')");
+    expect(db.get("SELECT event_id FROM events WHERE event_id = 'post2'")).toBeTruthy();
+  });
+
 
   it("writes pending state, commits, calls the host, then completes conditionally", async () => {
     // Pattern required by the invariant: pending write -> COMMIT -> host call ->
     // conditional completion update. The host call must observe no open
     // write transaction.
-    await withTransaction(db, (tx) => {
+    withTransaction(db, (tx) => {
       tx.run("INSERT INTO events (event_id, idempotency_key, project_id, task_id, event_type, occurred_at, received_at, privacy_class, data) VALUES ('p1','pk1','p','t','pre_tool',1,1,'internal','{}')");
     });
     expect(db.isTransaction).toBe(false);
@@ -200,7 +220,7 @@ describe("No write transaction during host/provider calls (docs/17 §3.2, docs/2
     expect(sawTransaction).toBe(false);
     expect(db.isTransaction).toBe(false);
 
-    await withTransaction(db, (tx) => {
+    withTransaction(db, (tx) => {
       if (receipt === "host-ok") {
         tx.run("UPDATE events SET privacy_class = 'public' WHERE event_id = 'p1'");
       }

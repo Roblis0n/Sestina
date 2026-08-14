@@ -7,18 +7,17 @@ import {
 import type { StorageTransaction } from "../transaction.js";
 import { validateJson } from "../schema-check.js";
 import {
-  assertCursorLimit,
   assertInTransaction,
-  assertValidProjectId,
   fromMs,
   toMs,
+  keysetPage,
   type CursorInput,
   type Page,
 } from "./shared.js";
 
 export interface TaskRepository {
   insert(task: Task): void;
-  get(taskId: string): Task | undefined;
+  get(projectId: string, taskId: string): Task | undefined;
   listByProject(projectId: string, input: CursorInput): Page<Task>;
   update(task: Task): void;
 }
@@ -30,7 +29,7 @@ interface TaskRow {
   created_at: number;
   updated_at: number;
   data: string;
-}
+};
 
 function assembleTask(row: TaskRow): Task {
   const data = JSON.parse(row.data) as Task;
@@ -59,23 +58,27 @@ export function createTaskRepository(tx: StorageTransaction): TaskRepository {
       );
     },
 
-    get(taskId) {
+    get(projectId, taskId) {
       const row = tx.get<TaskRow>(
-        "SELECT task_id, project_id, status, created_at, updated_at, data FROM tasks WHERE task_id = ?",
+        "SELECT task_id, project_id, status, created_at, updated_at, data FROM tasks WHERE task_id = ? AND project_id = ?",
         taskId,
+        projectId,
       );
       return row ? assembleTask(row) : undefined;
     },
 
     listByProject(projectId, input) {
-      assertValidProjectId(projectId);
-      assertCursorLimit(input.limit);
-      const rows = tx.all<TaskRow>(
-        "SELECT task_id, project_id, status, created_at, updated_at, data FROM tasks WHERE project_id = ? ORDER BY created_at, task_id LIMIT ?",
+      const page = keysetPage<TaskRow>(tx, {
+        table: "tasks",
+        columns: "task_id, project_id, status, created_at, updated_at, data",
+        keyColumn: "created_at",
+        idColumn: "task_id",
+        projectColumn: "project_id",
         projectId,
-        input.limit,
-      );
-      return { items: rows.map(assembleTask) };
+        cursor: input.cursor,
+        limit: input.limit,
+      });
+      return { items: page.items.map(assembleTask), nextCursor: page.nextCursor };
     },
 
     update(task) {

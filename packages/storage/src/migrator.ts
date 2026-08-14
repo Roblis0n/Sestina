@@ -1,7 +1,7 @@
 import { SestinaError, SestinaErrorCode, isSestinaError } from "@sestina/schema";
 import type { StorageDatabase } from "./connection.js";
 import { withTransaction } from "./transaction.js";
-import { MaintenanceFence } from "./maintenance-fence.js";
+import { MaintenanceGuard } from "./maintenance-domain.js";
 import { backupDatabase, pruneOldBackups, type BackupResult } from "./backup.js";
 import { MIGRATIONS, SCHEMA_VERSION } from "./migrations/manifest.js";
 
@@ -21,8 +21,6 @@ export type MigrationJournalStatus = "started" | "completed" | "failed";
 
 export interface MigrationRunnerOptions {
   backupDirectory?: string;
-  /** Data root for the common maintenance fence (shared with restore/retention). */
-  dataRoot: string;
 }
 
 export interface MigrationRunResult {
@@ -34,7 +32,7 @@ export interface MigrationRunResult {
 
 // ── Bootstrap: journal + maintenance lock exist before any migration ──
 const BOOTSTRAP_SQL = `
-CREATE TABLE migrations (
+CREATE TABLE IF NOT EXISTS migrations (
   version INTEGER PRIMARY KEY,
   name TEXT NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('started','completed','failed')),
@@ -45,11 +43,32 @@ CREATE TABLE migrations (
   started_at INTEGER NOT NULL,
   finished_at INTEGER
 ) STRICT;
-CREATE TABLE maintenance_locks (
+CREATE TABLE IF NOT EXISTS maintenance_locks (
   name TEXT PRIMARY KEY,
   owner_id TEXT NOT NULL,
   expires_at INTEGER NOT NULL
 ) STRICT;`;
+
+/**
+ * Crash-atomic journal bootstrap: both infrastructure tables are created
+ * inside ONE transaction, and each statement is IF NOT EXISTS so a partial
+ * bootstrap from an interrupted run is repaired on the next open instead
+ * of permanently bricking the database.
+ */
+function bootstrapJournal(db: StorageDatabase): void {
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    db.exec(BOOTSTRAP_SQL);
+    db.exec("COMMIT");
+  } catch (err) {
+    try {
+      db.exec("ROLLBACK");
+    } catch {
+      // Preserve the original failure.
+    }
+    throw err;
+  }
+}
 
 /**
  * Applies migrations forward-only (docs/09 §22): journal records
@@ -82,17 +101,13 @@ export class MigrationRunner {
     // Migrations run under the common maintenance fence (docs/17 §3.2):
     // migrations, restore and retention all share one cross-process domain.
     // The fence is file-based, so it works even before the journal exists.
-    const fence = await MaintenanceFence.acquire({
-      dataRoot: this.options.dataRoot,
+    const guard = await MaintenanceGuard.acquire({
+      databasePath: db.path,
       scope: "migrations",
+      ownerId: `runtime-${RUNTIME_VERSION}`,
     });
     try {
-      const hasJournal = db.get(
-        "SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'migrations'",
-      );
-      if (!hasJournal) {
-        db.exec(BOOTSTRAP_SQL);
-      }
+      bootstrapJournal(db);
       const sorted = [...this.migrations].sort((a, b) => a.version - b.version);
       const seen = new Set<number>();
       for (const migration of sorted) {
@@ -152,9 +167,9 @@ export class MigrationRunner {
         let backup: BackupResult | undefined;
         if (this.options.backupDirectory && completedMax > 0) {
           // The backup may take longer than the fence TTL — renew around it.
-          fence.renew();
+          guard.heartbeat();
           backup = await backupDatabase(db, { backupDirectory: this.options.backupDirectory });
-          fence.renew();
+          guard.heartbeat();
         }
 
         const now = Date.now();
@@ -180,7 +195,7 @@ export class MigrationRunner {
         );
 
         try {
-          await withTransaction(db, () => {
+          withTransaction(db, () => {
             migration.up(db);
             db.run(
               "UPDATE migrations SET status = 'completed', runtime_version = ?, finished_at = ? WHERE version = ?",
@@ -221,7 +236,7 @@ export class MigrationRunner {
         databaseVersion: Math.max(completedMax, targetVersion),
       };
     } finally {
-      fence.release();
+      guard.release();
     }
   }
 }

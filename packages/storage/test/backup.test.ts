@@ -7,7 +7,7 @@ import {
   restoreDatabase,
   checkDatabaseIntegrity,
   pruneOldBackups,
-  MaintenanceFence,
+  MaintenanceGuard,
   stageVerifiedCopy,
   hashFile,
   type StorageDatabase,
@@ -176,7 +176,7 @@ describe("restoreDatabase (docs/17 §10, docs/19 §5.3)", () => {
     const backup = await backupDatabase(seed, { backupDirectory: backupDir });
     seed.close();
 
-    const fence = await MaintenanceFence.acquire({ dataRoot: dir, scope: "migrations" });
+    const fence = await MaintenanceGuard.acquire({ databasePath: dbPath, scope: "migrations", ownerId: "test" });
     try {
       await expect(
         restoreDatabase({ databasePath: dbPath, backupPath: backup.path, dataRoot: dir }),
@@ -266,3 +266,17 @@ async function hashFile(path: string): Promise<string> {
   const { createHash } = await import("node:crypto");
   return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
+
+describe("pruneOldBackups validation (docs/17 §10)", () => {
+  let dir: string;
+
+  beforeEach(() => { dir = makeTempDir(); });
+  afterEach(() => { removeTempDir(dir); });
+
+  it.each([-5, 0, 1.5, Number.NaN, Number.POSITIVE_INFINITY])(
+    "rejects invalid keep=%s",
+    (keep) => {
+      expect(() => pruneOldBackups(join(dir, "backups"), { keep })).toThrow();
+    },
+  );
+});

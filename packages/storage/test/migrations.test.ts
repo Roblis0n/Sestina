@@ -7,12 +7,21 @@ import {
   RUNTIME_VERSION,
   MIGRATIONS,
   MaintenanceLock,
-  MaintenanceFence,
+  MaintenanceGuard,
   type StorageDatabase,
   type Migration,
 } from "../src/index.js";
 import { isSestinaError, SestinaErrorCode } from "@sestina/schema";
 import { makeTempDir, removeTempDir, loadStorageFixture, createThread, createEndpoint, createClaudeEndpoint } from "./helpers.js";
+
+/** Indexed access under noUncheckedIndexedAccess (MIGRATIONS[0] is optional). */
+function requireMigration(index: number): Migration {
+  const migration = MIGRATIONS[index];
+  if (!migration) {
+    throw new Error(`MIGRATIONS[${index}] missing`);
+  }
+  return migration;
+}
 
 // ── Docs/09 §21 minimum table set (Task 5 first migration) ──
 const DOC09_MINIMUM_TABLES = [
@@ -117,6 +126,32 @@ describe("First migration creates the doc 09 §21 minimum schema", () => {
       expect(row.finished_at).toBeGreaterThanOrEqual(row.started_at);
     }
     expect(MIGRATIONS.at(-1)?.version).toBe(SCHEMA_VERSION);
+  });
+
+  it("creates the keyset pagination indexes (migration 007)", () => {
+    const indexes = new Set(
+      db
+        .all<{ name: string }>(
+          "SELECT name FROM sqlite_schema WHERE type = 'index' AND name LIKE 'idx_%'",
+        )
+        .map((i) => i.name),
+    );
+    for (const name of [
+      "idx_projects_created",
+      "idx_tasks_project_created",
+      "idx_host_sessions_project_task_started",
+      "idx_decisions_project_created",
+      "idx_decisions_project_task_created",
+      "idx_assertions_project_valid",
+      "idx_assertions_project_task_valid",
+      "idx_evidence_project_observed",
+      "idx_conversations_project_created",
+      "idx_collab_threads_project_created",
+      "idx_review_items_project_created",
+      "idx_usage_task_call",
+    ]) {
+      expect(indexes.has(name), `missing index ${name}`).toBe(true);
+    }
   });
 
   it("enforces foreign keys", () => {
@@ -352,14 +387,14 @@ describe("Migration failure keeps the original database readable", () => {
     const path = join(dir, "sestina.db");
     const backupDir = join(dir, "backups");
     const migrations: Migration[] = [
-      MIGRATIONS[0],
+      requireMigration(0),
       { version: 2, name: "002", up(db) { db.exec("CREATE TABLE m2 (x TEXT)"); } },
       { version: 3, name: "003", up(db) { db.exec("CREATE TABLE m3 (x TEXT)"); } },
       { version: 4, name: "004", up(db) { db.exec("CREATE TABLE m4 (x TEXT)"); } },
     ];
     // Seed an existing database so the three pending migrations are
     // destructive upgrades that each take a backup.
-    const seed = await openDatabase({ path, migrate: { migrations: [MIGRATIONS[0]] } });
+    const seed = await openDatabase({ path, migrate: { migrations: [requireMigration(0)] } });
     seed.close();
     const db = await openDatabase({ path, migrate: { migrations, backupDirectory: backupDir } });
     db.close();
@@ -477,9 +512,9 @@ describe("MaintenanceLock (docs/17 §3.2, docs/29 §9)", () => {
     const v1 = await openDatabase({ path: pendingPath, migrate: { migrations: MIGRATIONS.slice(0, 1) } });
     v1.close();
 
-    const fence = await MaintenanceFence.acquire({ dataRoot: dir, scope: "restore" });
+    const fence = await MaintenanceGuard.acquire({ databasePath: join(dir, "second.db"), scope: "restore", ownerId: "test" });
     try {
-      await expect(openDatabase({ path: pendingPath, dataRoot: dir })).rejects.toSatisfy((err: unknown) => {
+      await expect(openDatabase({ path: pendingPath })).rejects.toSatisfy((err: unknown) => {
         return isSestinaError(err) && err.code === SestinaErrorCode.storage_busy;
       });
     } finally {

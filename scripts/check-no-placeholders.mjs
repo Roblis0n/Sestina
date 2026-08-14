@@ -47,6 +47,9 @@ const EXCLUDE_DIRS = new Set([
   ".git",
   "docs",
   "tests",
+  // Gitignored working notes (CLAUDE.md: keep resumption guides and research
+  // notes there; they legitimately quote upstream docs and are never committed).
+  ".tmp",
 ]);
 
 // Files at the repo root to exclude (historical materials)

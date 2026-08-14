@@ -11,8 +11,8 @@ import { assertInTransaction, toMs } from "./shared.js";
 export interface DecisionTraceRepository {
   /** Writes the trace and its stages in one transaction; append-only. */
   insert(trace: DecisionTrace): void;
-  get(traceId: string): DecisionTrace | undefined;
-  listByDecision(decisionId: string): DecisionTrace[];
+  get(projectId: string, traceId: string): DecisionTrace | undefined;
+  listByDecision(projectId: string, decisionId: string): DecisionTrace[];
 }
 
 export function createDecisionTraceRepository(tx: StorageTransaction): DecisionTraceRepository {
@@ -45,10 +45,16 @@ export function createDecisionTraceRepository(tx: StorageTransaction): DecisionT
       });
     },
 
-    get(traceId) {
+    get(projectId, traceId) {
+      // decision_traces has no project column: the project is attributed
+      // through the decision the trace belongs to.
       const row = tx.get<{ decision_id: string; created_at: number; data: string }>(
-        "SELECT decision_id, created_at, data FROM decision_traces WHERE trace_id = ?",
+        `SELECT t.decision_id, t.created_at, t.data
+         FROM decision_traces t
+         JOIN decisions d ON d.decision_id = t.decision_id
+         WHERE t.trace_id = ? AND d.project_id = ?`,
         traceId,
+        projectId,
       );
       if (!row) return undefined;
       const stages = tx.all<{ data: string }>(
@@ -66,13 +72,18 @@ export function createDecisionTraceRepository(tx: StorageTransaction): DecisionT
       });
     },
 
-    listByDecision(decisionId) {
+    listByDecision(projectId, decisionId) {
       const rows = tx.all<{ trace_id: string }>(
-        "SELECT trace_id FROM decision_traces WHERE decision_id = ? ORDER BY created_at",
+        `SELECT t.trace_id
+         FROM decision_traces t
+         JOIN decisions d ON d.decision_id = t.decision_id
+         WHERE t.decision_id = ? AND d.project_id = ?
+         ORDER BY t.created_at`,
         decisionId,
+        projectId,
       );
       return rows
-        .map((r) => this.get(r.trace_id))
+        .map((r) => this.get(projectId, r.trace_id))
         .filter((t): t is DecisionTrace => t !== undefined);
     },
   };

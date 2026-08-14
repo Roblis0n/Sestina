@@ -8,10 +8,9 @@ import {
 import type { StorageTransaction } from "../transaction.js";
 import { validateJson } from "../schema-check.js";
 import {
-  assertCursorLimit,
   assertInTransaction,
-  assertValidProjectId,
   fromMs,
+  keysetPage,
   toMs,
   type CursorInput,
   type Page,
@@ -20,7 +19,7 @@ import {
 export interface EvidenceRepository {
   /** The sensitive excerpt lives in its own column so retention can clear it. */
   insert(item: EvidenceItem): void;
-  get(evidenceId: string): EvidenceItem | undefined;
+  get(projectId: string, evidenceId: string): EvidenceItem | undefined;
   listByProject(projectId: string, input: CursorInput): Page<EvidenceItem>;
   updateStatus(evidenceId: string, status: EvidenceStatus): void;
   /** Idempotent claim→evidence link (composite primary key). */
@@ -90,24 +89,27 @@ export function createEvidenceRepository(tx: StorageTransaction): EvidenceReposi
       );
     },
 
-    get(evidenceId) {
+    get(projectId, evidenceId) {
       const row = tx.get<EvidenceRow>(
-        `SELECT ${EVIDENCE_COLUMNS} FROM evidence_items WHERE evidence_id = ?`,
+        `SELECT ${EVIDENCE_COLUMNS} FROM evidence_items WHERE evidence_id = ? AND project_id = ?`,
         evidenceId,
+        projectId,
       );
       return row ? assembleEvidence(row) : undefined;
     },
 
     listByProject(projectId, input) {
-      assertValidProjectId(projectId);
-      assertCursorLimit(input.limit);
-      const rows = tx.all<EvidenceRow>(
-        `SELECT ${EVIDENCE_COLUMNS} FROM evidence_items
-         WHERE project_id = ? ORDER BY observed_at, evidence_id LIMIT ?`,
+      const page = keysetPage<EvidenceRow>(tx, {
+        table: "evidence_items",
+        columns: EVIDENCE_COLUMNS,
+        keyColumn: "observed_at",
+        idColumn: "evidence_id",
+        projectColumn: "project_id",
         projectId,
-        input.limit,
-      );
-      return { items: rows.map(assembleEvidence) };
+        cursor: input.cursor,
+        limit: input.limit,
+      });
+      return { items: page.items.map(assembleEvidence), nextCursor: page.nextCursor };
     },
 
     updateStatus(evidenceId, status) {

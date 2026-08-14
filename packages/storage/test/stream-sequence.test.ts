@@ -30,9 +30,9 @@ function makeEvent(projectId: string, taskId: string, n: number): StandardEvent 
   };
 }
 
-async function seedBase(db: StorageDatabase, projectId: string, taskId: string): Promise<void> {
+function seedBase(db: StorageDatabase, projectId: string, taskId: string): void {
   const uow = createUnitOfWork(db);
-  await uow.commit((u) => {
+  uow.commit((u) => {
     u.projects.insert({
       projectId, name: "p", bindings: [], status: "active",
       createdAt: "2026-08-13T00:00:00.000Z", updatedAt: "2026-08-13T00:00:00.000Z",
@@ -60,23 +60,21 @@ describe("nextStreamSequence (docs/22 Task 6)", () => {
   it("allocates monotonic unique sequences per project across connections", async () => {
     const projectId = generateId();
     const taskId = generateId();
-    await seedBase(db, projectId, taskId);
+    seedBase(db, projectId, taskId);
     const uow = createUnitOfWork(db);
 
     const seen: number[] = [];
     for (let i = 0; i < 10; i++) {
-      const seq = await uow.commit((u) => {
+      uow.commit((u) => {
         const event = makeEvent(projectId, taskId, i);
         const reserved = u.events.reserve(event, { ownerId: "owner-a" });
         expect(reserved.kind).toBe("created");
-        return u;
-      }).then(() => {
-        // Sequence is embedded in the row; read it back.
-        return (db.get<{ s: number }>(
-            "SELECT stream_sequence AS s FROM events WHERE project_id = ? ORDER BY stream_sequence DESC LIMIT 1",
-            projectId,
-          )?.s ?? 0);
       });
+      // Sequence is embedded in the row; read it back.
+      const seq = db.get<{ s: number }>(
+        "SELECT stream_sequence AS s FROM events WHERE project_id = ? ORDER BY stream_sequence DESC LIMIT 1",
+        projectId,
+      )?.s ?? 0;
       seen.push(seq);
     }
     expect(seen).toEqual(Array.from({ length: 10 }, (_, i) => i + 1));
@@ -84,7 +82,7 @@ describe("nextStreamSequence (docs/22 Task 6)", () => {
     const other = await openDatabase({ path: join(dir, "sestina.db") });
     try {
       const otherUow = createUnitOfWork(other);
-      const fromOther = await otherUow.commit((u) => {
+      const fromOther = otherUow.commit((u) => {
         u.events.reserve(makeEvent(projectId, taskId, 100), { ownerId: "owner-b" });
         return (
           other.get<{ s: number }>(
@@ -101,7 +99,7 @@ describe("nextStreamSequence (docs/22 Task 6)", () => {
   it("allocates unique monotonic sequences across two real processes", async () => {
     const projectId = generateId();
     const taskId = generateId();
-    await seedBase(db, projectId, taskId);
+    seedBase(db, projectId, taskId);
     const path = join(dir, "sestina.db");
     db.close();
 
@@ -158,11 +156,11 @@ describe("Stable (stream_sequence, id) cursors", () => {
   beforeEach(async () => {
     dir = makeTempDir();
     db = await openDatabase({ path: join(dir, "sestina.db") });
-    await seedBase(db, projectId, taskId);
+    seedBase(db, projectId, taskId);
     const uow = createUnitOfWork(db);
     for (let i = 0; i < 250; i++) {
       const event = makeEvent(projectId, taskId, i);
-      await uow.commit((u) => {
+      uow.commit((u) => {
         u.events.reserve(event, { ownerId: `owner-${i}` });
       });
     }
@@ -189,6 +187,32 @@ describe("Stable (stream_sequence, id) cursors", () => {
     expect(seen).toHaveLength(250);
   });
 
+  it("serves the cursor query from the 3-column index without a temp b-tree sort", () => {
+    // The cursor WHERE in repositories/events.ts uses the row-value form
+    // (stream_sequence, event_id) > (?, ?). With the partial unique index
+    // plus idx_events_project_stream(project_id, stream_sequence, event_id)
+    // both this form and the OR-expanded fallback must be sort-free.
+    const cursorSql = (where: string): string => `EXPLAIN QUERY PLAN
+      SELECT event_id FROM events
+      WHERE ${where}
+      ORDER BY stream_sequence, event_id LIMIT ?`;
+    const plans = [
+      db.all<{ detail: string }>(
+        cursorSql("project_id = ? AND (stream_sequence, event_id) > (?, ?)"),
+        projectId, 5, generateId(), 50,
+      ),
+      db.all<{ detail: string }>(
+        cursorSql("project_id = ? AND (stream_sequence > ? OR (stream_sequence = ? AND event_id > ?))"),
+        projectId, 5, 5, generateId(), 50,
+      ),
+    ];
+    for (const plan of plans) {
+      const details = plan.map((r) => r.detail).join(" | ");
+      expect(details).toContain("idx_events_project_stream");
+      expect(details).not.toMatch(/TEMP B-TREE/i);
+    }
+  });
+
   it("rejects forged cursors", () => {
     expect(() => decodeEventCursor("!!!not-base64!!!", projectId)).toThrow();
     expect(() => decodeEventCursor(Buffer.from("garbage", "utf8").toString("base64url"), projectId)).toThrow();
@@ -211,21 +235,21 @@ describe("Stable (stream_sequence, id) cursors", () => {
     }
   });
 
-  it("leaves a documented gap when a transaction rolls back", async () => {
+  it("leaves a documented gap when a transaction rolls back", () => {
     const uow = createUnitOfWork(db);
     const before =
       db.get<{ s: number }>("SELECT MAX(stream_sequence) AS s FROM events WHERE project_id = ?", projectId)?.s ?? 0;
-    await expect(
+    expect(() =>
       uow.commit((u) => {
         u.events.reserve(makeEvent(projectId, taskId, 999), { ownerId: "doomed" });
         throw new Error("rollback");
       }),
-    ).rejects.toThrow("rollback");
+    ).toThrow("rollback");
     const after =
       db.get<{ s: number }>("SELECT MAX(stream_sequence) AS s FROM events WHERE project_id = ?", projectId)?.s ?? 0;
     // The rolled-back sequence was wasted; monotonicity is what matters.
     expect(after).toBe(before);
-    const next = await uow.commit((u) => {
+    const next = uow.commit((u) => {
       u.events.reserve(makeEvent(projectId, taskId, 1000), { ownerId: "next-owner" });
       return (
         db.get<{ s: number }>("SELECT MAX(stream_sequence) AS s FROM events WHERE project_id = ?", projectId)?.s ?? 0);

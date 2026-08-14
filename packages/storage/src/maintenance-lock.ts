@@ -93,10 +93,11 @@ export class MaintenanceLock {
     let changes: number;
     try {
       const result = this.db.run(
-        "UPDATE maintenance_locks SET expires_at = ? WHERE name = ? AND fence_token = ?",
+        "UPDATE maintenance_locks SET expires_at = ? WHERE name = ? AND fence_token = ? AND expires_at > ?",
         Date.now() + validated,
         this.name,
         this.fenceToken,
+        Date.now(),
       );
       changes = Number(result.changes);
       this.db.exec("COMMIT");

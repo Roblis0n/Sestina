@@ -15,7 +15,9 @@ import { randomBytes } from "node:crypto";
 import { SestinaError, SestinaErrorCode } from "@sestina/schema";
 import { assertInsideRoot, hashFile } from "./backup.js";
 import { checkDatabaseIntegrity } from "./integrity.js";
-import { MaintenanceFence, mapFsError } from "./maintenance-fence.js";
+import { DatabaseSync as _WalAwareDb } from "node:sqlite";
+import { mapFsError } from "./maintenance-domain.js";
+import { MaintenanceGuard } from "./maintenance-domain.js";
 
 export interface RestoreOptions {
   /** Absolute or relative path of the database to restore into. */
@@ -39,6 +41,28 @@ export interface RestoreResult {
  * is realpath-resolved so later operations use the same fixed location the
  * containment check approved (docs/17 §10).
  */
+/**
+ * WAL-aware health check for restore decisions: a read-only connection
+ * silently ignores unreadable -wal frames, so the check must open a
+ * read-write connection (transient) to see the committed WAL state.
+ */
+function checkDatabaseHealthWalAware(path: string): boolean {
+  let raw: _WalAwareDb;
+  try {
+    raw = new _WalAwareDb(path, { open: true });
+  } catch {
+    return false;
+  }
+  try {
+    const rows = raw.prepare("PRAGMA quick_check").all() as Record<string, unknown>[];
+    return rows.length > 0 && rows.every((r) => Object.values(r).every((v) => v === "ok"));
+  } catch {
+    return false;
+  } finally {
+    raw.close();
+  }
+}
+
 export function canonicalizeForIo(path: string): string {
   const absolute = resolve(path);
   let parentReal: string;
@@ -108,10 +132,12 @@ export async function restoreDatabase(options: RestoreOptions): Promise<RestoreR
   assertInsideRoot(options.dataRoot, options.backupPath, "restore source");
   const databasePath = canonicalizeForIo(options.databasePath);
   const backupPath = canonicalizeForIo(options.backupPath);
+  const expectedParentReal = realpathSync(dirname(databasePath));
 
-  const fence = await MaintenanceFence.acquire({
-    dataRoot: options.dataRoot,
+  const guard = await MaintenanceGuard.acquire({
+    databasePath: options.databasePath,
     scope: "restore",
+    ownerId: "restore",
   });
   try {
     if (!existsSync(backupPath)) {
@@ -143,29 +169,51 @@ export async function restoreDatabase(options: RestoreOptions): Promise<RestoreR
     let corruptCopyPath: string | undefined;
 
     if (existsSync(databasePath)) {
-      const currentHealth = checkDatabaseIntegrity(databasePath);
-      if (!currentHealth.ok) {
+      const currentHealthy = checkDatabaseHealthWalAware(databasePath);
+      if (!currentHealthy) {
         corruptCopyPath = `${databasePath}.corrupt-${Date.now()}-${randomBytes(3).toString("hex")}`;
         try {
           copyFileSync(databasePath, corruptCopyPath);
+          for (const suffix of ["-wal", "-shm"]) {
+            const sidecar = `${databasePath}${suffix}`;
+            if (existsSync(sidecar)) {
+              copyFileSync(sidecar, `${corruptCopyPath}${suffix}`);
+            }
+          }
         } catch (err) {
           throw mapFsError(err, "Failed to preserve the corrupted database copy");
         }
       }
 
       preRestoreBackupPath = `${databasePath}.pre-restore-${Date.now()}-${randomBytes(3).toString("hex")}.sqlite`;
-      try {
-        // Prefer the SQLite backup API so WAL contents are included.
+      if (currentHealthy) {
+        // A healthy WAL database must back up through the SQLite backup API
+        // so committed WAL frames are included; a failure is a failure —
+        // never degrade to an unverified bare main-file copy.
         const raw = new DatabaseSync(databasePath, { open: true, readOnly: true });
         try {
           await sqliteBackup(raw, preRestoreBackupPath);
         } finally {
           raw.close();
         }
-      } catch {
-        // The current database may be damaged; preserve its raw bytes instead.
+        const preRestoreHealth = checkDatabaseIntegrity(preRestoreBackupPath);
+        if (!preRestoreHealth.ok) {
+          rmSync(preRestoreBackupPath, { force: true });
+          throw new SestinaError(
+            SestinaErrorCode.database_corrupt,
+            "Pre-restore backup failed verification",
+          );
+        }
+      } else {
+        // Damaged database: preserve raw bytes (main file + WAL/SHM sidecars).
         try {
           copyFileSync(databasePath, preRestoreBackupPath);
+          for (const suffix of ["-wal", "-shm"]) {
+            const sidecar = `${databasePath}${suffix}`;
+            if (existsSync(sidecar)) {
+              copyFileSync(sidecar, `${preRestoreBackupPath}${suffix}`);
+            }
+          }
         } catch (err) {
           throw mapFsError(err, "Failed to create the pre-restore backup");
         }
@@ -179,8 +227,17 @@ export async function restoreDatabase(options: RestoreOptions): Promise<RestoreR
     const temp = await stageVerifiedCopy(backupPath, sourceDigest, dirname(databasePath));
 
     try {
-      // The target parent must still exist and the temp must be intact.
+      // Re-verify containment and the parent directory identity right before
+      // the replace: the TOCTOU window between the original check and the
+      // rename must not let a swapped parent escape the data root.
+      assertInsideRoot(options.dataRoot, databasePath, "restore target");
       const parentReal = realpathSync(dirname(databasePath));
+      if (parentReal !== expectedParentReal) {
+        throw new SestinaError(
+          SestinaErrorCode.validation_failed,
+          "Restore target directory changed since verification",
+        );
+      }
       const tempCanonical = resolve(parentReal, basename(temp));
       if (!existsSync(tempCanonical)) {
         throw new SestinaError(SestinaErrorCode.database_corrupt, "Staged restore copy disappeared");
@@ -188,12 +245,16 @@ export async function restoreDatabase(options: RestoreOptions): Promise<RestoreR
       renameSync(tempCanonical, databasePath);
     } catch (err) {
       rmSync(temp, { force: true });
+      rmSync(`${temp}-wal`, { force: true });
+      rmSync(`${temp}-shm`, { force: true });
       throw mapFsError(err, "Failed to replace the database");
     }
 
-    // Stale WAL/SHM sidecars belong to the previous database.
+    // Stale WAL/SHM sidecars belong to the previous database; the staged
+    // temp's own sidecars must not survive either.
     for (const suffix of ["-wal", "-shm"]) {
       rmSync(`${databasePath}${suffix}`, { force: true });
+      rmSync(`${temp}${suffix}`, { force: true });
     }
 
     const restoredHealth = checkDatabaseIntegrity(databasePath);
@@ -206,6 +267,6 @@ export async function restoreDatabase(options: RestoreOptions): Promise<RestoreR
 
     return { restoredFrom: backupPath, preRestoreBackupPath, corruptCopyPath };
   } finally {
-    fence.release();
+    guard.release();
   }
 }

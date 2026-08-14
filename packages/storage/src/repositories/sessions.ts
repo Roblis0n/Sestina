@@ -7,9 +7,9 @@ import {
 import type { StorageTransaction } from "../transaction.js";
 import { validateJson } from "../schema-check.js";
 import {
-  assertCursorLimit,
   assertInTransaction,
   fromMs,
+  keysetPage,
   toMs,
   type CursorInput,
   type Page,
@@ -17,9 +17,9 @@ import {
 
 export interface HostSessionRepository {
   insert(session: HostSession): void;
-  get(sessionId: string): HostSession | undefined;
-  listByTask(taskId: string, input: CursorInput): Page<HostSession>;
-  update(session: HostSession): void;
+  get(projectId: string, sessionId: string): HostSession | undefined;
+  listByTask(projectId: string, taskId: string, input: CursorInput): Page<HostSession>;
+  update(projectId: string, session: HostSession): void;
 }
 
 interface SessionRow {
@@ -31,7 +31,7 @@ interface SessionRow {
   status: string;
   started_at: number;
   data: string;
-}
+};
 
 function assembleSession(row: SessionRow): HostSession {
   const data = JSON.parse(row.data) as HostSession;
@@ -73,31 +73,39 @@ export function createSessionRepository(tx: StorageTransaction): HostSessionRepo
       );
     },
 
-    get(sessionId) {
+    get(projectId, sessionId) {
       const row = tx.get<SessionRow>(
-        "SELECT session_id, project_id, task_id, host, host_session_id, status, started_at, data FROM host_sessions WHERE session_id = ?",
+        "SELECT session_id, project_id, task_id, host, host_session_id, status, started_at, data FROM host_sessions WHERE session_id = ? AND project_id = ?",
         sessionId,
+        projectId,
       );
       return row ? assembleSession(row) : undefined;
     },
 
-    listByTask(taskId, input) {
-      assertCursorLimit(input.limit);
-      const rows = tx.all<SessionRow>(
-        "SELECT session_id, project_id, task_id, host, host_session_id, status, started_at, data FROM host_sessions WHERE task_id = ? ORDER BY started_at, session_id LIMIT ?",
-        taskId,
-        input.limit,
-      );
-      return { items: rows.map(assembleSession) };
+    listByTask(projectId, taskId, input) {
+      const page = keysetPage<SessionRow>(tx, {
+        table: "host_sessions",
+        columns: "session_id, project_id, task_id, host, host_session_id, status, started_at, data",
+        keyColumn: "started_at",
+        idColumn: "session_id",
+        projectColumn: "project_id",
+        projectId,
+        cursor: input.cursor,
+        limit: input.limit,
+        extraWhere: "task_id = ?",
+        extraParams: [taskId],
+      });
+      return { items: page.items.map(assembleSession), nextCursor: page.nextCursor };
     },
 
-    update(session) {
+    update(projectId, session) {
       assertInTransaction(tx);
       const result = tx.run(
-        "UPDATE host_sessions SET status = ?, data = ? WHERE session_id = ?",
+        "UPDATE host_sessions SET status = ?, data = ? WHERE session_id = ? AND project_id = ?",
         session.status,
         validateJson(HostSessionSchema, session, "HostSession"),
         session.sessionId,
+        projectId,
       );
       if (Number(result.changes) === 0) {
         throw new SestinaError(SestinaErrorCode.session_not_found, "Host session not found");

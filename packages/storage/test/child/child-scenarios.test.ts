@@ -1,6 +1,4 @@
 import { describe, it, expect } from "vitest";
-import { writeFileSync } from "node:fs";
-import { join } from "node:path";
 
 // ── Child-process harness ──
 // Spawned by parent tests via `vitest run` with SESTINA_CHILD_SCENARIO set.
@@ -41,38 +39,19 @@ describe("child scenarios (spawned by parent cross-process tests)", () => {
     }, 60000);
   });
 
-  describe.skipIf(scenario !== "hold-fence")("hold-fence", () => {
-    it("child holds the shared maintenance fence", async () => {
-      const { MaintenanceFence } = await import("../../src/index.js");
-      const fence = await MaintenanceFence.acquire({
-        dataRoot: envString("SESTINA_CHILD_ROOT", ""),
+  describe.skipIf(scenario !== "hold-maintenance")("hold-maintenance", () => {
+    it("child holds the shared maintenance guard on the lock database", async () => {
+      const { MaintenanceGuard } = await import("../../src/index.js");
+      const guard = await MaintenanceGuard.acquire({
+        databasePath: envString("SESTINA_CHILD_DB_PATH", ""),
         scope: envString("SESTINA_CHILD_SCOPE", "migrations"),
-        ttlMs: envNumber("SESTINA_CHILD_TTL", 60000),
+        ownerId: "child-process",
       });
       console.log(`CHILD_READY pid=${process.pid}`);
       await delay(envNumber("SESTINA_CHILD_HOLD_MS", 6000));
-      fence.release();
+      guard.release();
       expect(true).toBe(true);
-    }, 60000);
-  });
-
-  describe.skipIf(scenario !== "acquire-fence-short")("acquire-fence-short", () => {
-    it("child acquires a short-lived fence, records its token, then exits without releasing", async () => {
-      const { MaintenanceFence } = await import("../../src/index.js");
-      const fence = await MaintenanceFence.acquire({
-        dataRoot: envString("SESTINA_CHILD_ROOT", ""),
-        scope: "restore",
-        ttlMs: envNumber("SESTINA_CHILD_TTL", 250),
-      });
-      writeFileSync(
-        envString("SESTINA_CHILD_TOKEN_FILE", join(envString("SESTINA_CHILD_ROOT", "."), "token.txt")),
-        fence.token,
-        "utf8",
-      );
-      console.log(`CHILD_READY pid=${process.pid}`);
-      // Simulated crash: no release().
-      expect(true).toBe(true);
-    }, 60000);
+    }, 120000);
   });
 
   describe.skipIf(scenario !== "allocate-sequences")("allocate-sequences", () => {
@@ -89,11 +68,9 @@ describe("child scenarios (spawned by parent cross-process tests)", () => {
       const taskId = envString("SESTINA_CHILD_TASK", "");
       const allocated: number[] = [];
       for (let i = 0; i < count; i++) {
-        // Small interleave jitter between allocations, never inside the tx.
         await delay(envNumber("SESTINA_CHILD_SEQ_JITTER_MS", 0));
-        const seq = await withTransaction(db, (tx) => {
+        const seq = withTransaction(db, (tx) => {
           const sequence = nextStreamSequence(tx, projectId);
-          // Persist the row so the allocation is durable across processes.
           tx.run(
             `INSERT INTO events
                (event_id, idempotency_key, project_id, task_id, session_id, event_type,
@@ -120,17 +97,4 @@ describe("child scenarios (spawned by parent cross-process tests)", () => {
     }, 60000);
   });
 
-  describe.skipIf(scenario !== "stale-release-fence")("stale-release-fence", () => {
-    it("child attempts a release with a stale token; the current fence must survive", async () => {
-      const { MaintenanceFence } = await import("../../src/index.js");
-      const root = envString("SESTINA_CHILD_ROOT", "");
-      const token = envString("SESTINA_CHILD_TOKEN", "");
-      const stale = MaintenanceFence.attach(root, token);
-      stale.release(); // must be a no-op: the token no longer owns the fence
-      const current = MaintenanceFence.peek(root);
-      console.log("STALE_RELEASE_RESULT fence_token=" + (current?.token ?? "none"));
-      expect(current).toBeDefined();
-      expect(current?.token).not.toBe(token);
-    }, 60000);
-  });
 });

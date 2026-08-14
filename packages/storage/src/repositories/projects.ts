@@ -8,10 +8,10 @@ import {
 import type { StorageTransaction } from "../transaction.js";
 import { validateJson } from "../schema-check.js";
 import {
-  assertCursorLimit,
   assertInTransaction,
   assertValidProjectId,
   fromMs,
+  keysetPage,
   toMs,
   type CursorInput,
   type Page,
@@ -93,12 +93,17 @@ export function createProjectRepository(tx: StorageTransaction): ProjectReposito
     },
 
     list(input) {
-      assertCursorLimit(input.limit);
-      const rows = tx.all<ProjectRow>(
-        "SELECT project_id, display_name, created_at, data FROM projects ORDER BY created_at, project_id LIMIT ?",
-        input.limit,
-      );
-      return { items: rows.map((r) => assembleProject(r, [])) };
+      // Projects sit at the top of the hierarchy, so the page is not
+      // project-scoped (keysetPage's projectColumn stays unset).
+      const page = keysetPage<ProjectRow>(tx, {
+        table: "projects",
+        columns: "project_id, display_name, created_at, data",
+        keyColumn: "created_at",
+        idColumn: "project_id",
+        cursor: input.cursor,
+        limit: input.limit,
+      });
+      return { items: page.items.map((r) => assembleProject(r, [])), nextCursor: page.nextCursor };
     },
 
     update(project) {

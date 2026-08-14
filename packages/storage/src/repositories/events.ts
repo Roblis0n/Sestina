@@ -34,7 +34,7 @@ export interface EventRepository {
     event: StandardEvent,
     opts: { ownerId: string; ttlMs?: number },
   ): EventReserveResult;
-  get(eventId: string): StandardEvent | undefined;
+  get(projectId: string, eventId: string): StandardEvent | undefined;
   listByProject(projectId: string, input: CursorInput): Page<StandardEvent>;
 }
 
@@ -75,9 +75,10 @@ export function createEventRepository(tx: StorageTransaction): EventRepository {
       const claim = claimEventLease(tx, {
         idempotencyKey: event.idempotencyKey,
         ownerId: opts.ownerId,
+        packetHash: event.rawPayloadHash,
         ttlMs: opts.ttlMs,
       });
-      if (claim === "already_completed") {
+      if (claim.kind === "already_completed") {
         const decision = tx.get<{ decision_id: string }>(
           `SELECT d.decision_id FROM decisions d
            JOIN events e ON e.event_id = d.event_id
@@ -93,11 +94,50 @@ export function createEventRepository(tx: StorageTransaction): EventRepository {
         }
         return { kind: "completed", decisionId: decision.decision_id };
       }
-      if (claim === "wait_for_existing") {
+      if (claim.kind === "wait_for_existing") {
         throw new SestinaError(
           SestinaErrorCode.storage_busy,
           "Event processing is already in progress",
         );
+      }
+      // Crash retry: if the original row already exists, verify identity and
+      // REUSE it with the new fencing token instead of colliding on the
+      // unique idempotency key (docs/19 §10).
+      const existing = tx.get<{
+        event_id: string; project_id: string; task_id: string;
+        session_id: string | null; data: string;
+      }>(
+        `SELECT event_id, project_id, task_id, session_id, data
+         FROM events WHERE idempotency_key = ?`,
+        event.idempotencyKey,
+      );
+      if (existing) {
+        const existingData = JSON.parse(existing.data) as { rawPayloadHash?: string };
+        const sameSession = (existing.session_id ?? undefined) === event.sessionId;
+        if (
+          existing.project_id !== event.projectId ||
+          existing.task_id !== event.taskId ||
+          !sameSession ||
+          existingData.rawPayloadHash !== event.rawPayloadHash
+        ) {
+          throw new SestinaError(
+            SestinaErrorCode.idempotency_violation,
+            "Idempotency key reused with a different payload or scope",
+          );
+        }
+        return {
+          kind: "created",
+          eventId: existing.event_id as EventId,
+          lease: {
+            idempotencyKey: event.idempotencyKey,
+            ownerId: opts.ownerId,
+            token: claim.token ?? "",
+            expiresAt: tx.get<{ expires_at: number }>(
+              "SELECT expires_at FROM event_leases WHERE idempotency_key = ?",
+              event.idempotencyKey,
+            )?.expires_at ?? 0,
+          },
+        };
       }
       const sequence = nextStreamSequence(tx, event.projectId);
       tx.run(
@@ -127,17 +167,19 @@ export function createEventRepository(tx: StorageTransaction): EventRepository {
         lease: {
           idempotencyKey: event.idempotencyKey,
           ownerId: opts.ownerId,
+          token: claim.token ?? "",
           expiresAt: lease ? lease.expires_at : 0,
         },
       };
     },
 
-    get(eventId) {
+    get(projectId, eventId) {
       const row = tx.get<EventRow>(
         `SELECT event_id, idempotency_key, project_id, task_id, session_id, event_type,
                 occurred_at, received_at, privacy_class, stream_sequence, data
-         FROM events WHERE event_id = ?`,
+         FROM events WHERE event_id = ? AND project_id = ?`,
         eventId,
+        projectId,
       );
       return row ? assembleEvent(row) : undefined;
     },
@@ -149,6 +191,12 @@ export function createEventRepository(tx: StorageTransaction): EventRepository {
         ? decodeEventCursor(input.cursor, projectId)
         : undefined;
       const fetchLimit = input.limit + 1;
+      // The row-value comparison is served by idx_events_project_stream
+      // (project_id, stream_sequence, event_id) as a single index range —
+      // EXPLAIN QUERY PLAN shows no temp b-tree (regression test in
+      // stream-sequence.test.ts). If that ever regresses, the equivalent
+      // OR-expanded form is `stream_sequence > ? OR (stream_sequence = ?
+      // AND event_id > ?)`.
       const rows = cursor
         ? tx.all<EventRow>(
             `SELECT event_id, idempotency_key, project_id, task_id, session_id, event_type,

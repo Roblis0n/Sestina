@@ -21,6 +21,11 @@ import { createUsageRepository, type UsageRepository } from "./repositories/usag
  * (docs/22 Task 6). `commit` runs the unit inside a single short write
  * transaction; repository write methods additionally assert they are
  * inside a transaction, so a repo can never accidentally autocommit.
+ *
+ * Write units are strictly synchronous (docs/17 §3.2): `commit` returns
+ * the unit's result directly and rejects Promise-returning units with
+ * internal_error. Synchronous nesting becomes a SAVEPOINT whose durability
+ * depends on the outer commit.
  */
 export interface StorageUnitOfWork {
   projects: ProjectRepository;
@@ -38,7 +43,7 @@ export interface StorageUnitOfWork {
   hostStream: HostStreamRepository;
   notifications: NotificationRepository;
   usage: UsageRepository;
-  commit<T>(work: (uow: StorageUnitOfWork) => T | Promise<T>): Promise<T>;
+  commit<T>(work: (uow: StorageUnitOfWork) => T): T;
 }
 
 export function createUnitOfWork(db: StorageDatabase): StorageUnitOfWork {

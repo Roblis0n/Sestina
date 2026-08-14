@@ -10,10 +10,9 @@ import {
 import type { StorageTransaction } from "../transaction.js";
 import { validateJson } from "../schema-check.js";
 import {
-  assertCursorLimit,
   assertInTransaction,
-  assertValidProjectId,
   fromMs,
+  keysetPage,
   toMs,
   type CursorInput,
   type Page,
@@ -21,11 +20,11 @@ import {
 
 export interface ReviewRepository {
   insertItem(item: ReviewItem): void;
-  getItem(reviewId: string): ReviewItem | undefined;
+  getItem(projectId: string, reviewId: string): ReviewItem | undefined;
   listByProject(projectId: string, input: CursorInput): Page<ReviewItem>;
   /** Actions are append-only (docs/36). */
   appendAction(action: ReviewAction): void;
-  listActions(reviewId: string): ReviewAction[];
+  listActions(projectId: string, reviewId: string): ReviewAction[];
   updateItem(reviewId: string, item: ReviewItem, expectedVersion: number): void;
 }
 
@@ -72,23 +71,27 @@ export function createReviewRepository(tx: StorageTransaction): ReviewRepository
       );
     },
 
-    getItem(reviewId) {
+    getItem(projectId, reviewId) {
       const row = tx.get<ReviewRow>(
-        "SELECT review_id, project_id, task_id, decision_id, status, created_at, updated_at, data FROM review_items WHERE review_id = ?",
+        "SELECT review_id, project_id, task_id, decision_id, status, created_at, updated_at, data FROM review_items WHERE review_id = ? AND project_id = ?",
         reviewId,
+        projectId,
       );
       return row ? assembleReview(row) : undefined;
     },
 
     listByProject(projectId, input) {
-      assertValidProjectId(projectId);
-      assertCursorLimit(input.limit);
-      const rows = tx.all<ReviewRow>(
-        "SELECT review_id, project_id, task_id, decision_id, status, created_at, updated_at, data FROM review_items WHERE project_id = ? ORDER BY created_at, review_id LIMIT ?",
+      const page = keysetPage<ReviewRow>(tx, {
+        table: "review_items",
+        columns: "review_id, project_id, task_id, decision_id, status, created_at, updated_at, data",
+        keyColumn: "created_at",
+        idColumn: "review_id",
+        projectColumn: "project_id",
         projectId,
-        input.limit,
-      );
-      return { items: rows.map(assembleReview) };
+        cursor: input.cursor,
+        limit: input.limit,
+      });
+      return { items: page.items.map(assembleReview), nextCursor: page.nextCursor };
     },
 
     appendAction(action) {
@@ -103,10 +106,16 @@ export function createReviewRepository(tx: StorageTransaction): ReviewRepository
       );
     },
 
-    listActions(reviewId) {
+    listActions(projectId, reviewId) {
+      // review_actions has no project column: scope through the review item.
       const rows = tx.all<{ data: string }>(
-        "SELECT data FROM review_actions WHERE review_id = ? ORDER BY acted_at",
+        `SELECT a.data
+         FROM review_actions a
+         JOIN review_items ri ON ri.review_id = a.review_id
+         WHERE a.review_id = ? AND ri.project_id = ?
+         ORDER BY a.acted_at`,
         reviewId,
+        projectId,
       );
       return rows.map((r) => ReviewActionSchema.parse(JSON.parse(r.data) as unknown));
     },

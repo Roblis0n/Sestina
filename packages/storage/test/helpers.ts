@@ -172,6 +172,52 @@ export function createMessage(db: StorageDatabase, message: unknown): void {
   );
 }
 
+
+/**
+ * Seeds a complete collaboration scenario (project/task/thread/endpoints/
+ * evidence refs) so repository ownership checks pass, and returns a live
+ * message built from the fixture.
+ */
+export function seedCollaboration(db: StorageDatabase): {
+  thread: unknown; endpoint: unknown; message: unknown; targetEndpointId: string;
+} {
+  const thread = loadStorageFixture("valid-collaboration-thread.json") as {
+    threadId: string; projectId: string; taskId: string; participantEndpointIds: string[];
+  };
+  const endpoint = loadStorageFixture("valid-collaboration-endpoint.json") as {
+    endpointId: string; projectId: string; taskId: string; host: string; hostSessionId: string;
+    capability: string; inboundPolicy: string; connected: boolean;
+  };
+  const message = loadStorageFixture("valid-collaboration-message.json") as Record<string, unknown>;
+  createTask(db, { taskId: thread.taskId, projectId: thread.projectId });
+  createThread(db, thread);
+  createEndpoint(db, endpoint);
+  createClaudeEndpoint(db);
+  // Evidence refs referenced by the message must resolve.
+  for (const ref of (message.evidenceRefs as string[] | undefined) ?? []) {
+    db.run(
+      `INSERT INTO evidence_items (evidence_id, project_id, task_id, type, status, content_hash, recorded_by, observed_at, expires_at, data)
+       VALUES (?, ?, ?, 'primary_source', 'verified', 'h', 'user', ?, NULL, '{}')
+       ON CONFLICT(evidence_id) DO NOTHING`,
+      ref,
+      thread.projectId,
+      thread.taskId,
+      Date.now(),
+    );
+  }
+  const targetEndpointId = (message.targetEndpointIds as string[] | undefined)?.[0] ?? "";
+  return {
+    thread,
+    endpoint,
+    message: {
+      ...message,
+      createdAt: new Date(Date.now() - 60_000).toISOString(),
+      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+    },
+    targetEndpointId,
+  };
+}
+
 // ── Child-process harness (real cross-process tests, docs/21 §9) ──
 
 import { spawn, type ChildProcess } from "node:child_process";
@@ -247,4 +293,18 @@ const SCHEMA_FIXTURES = resolve(import.meta.dirname, "../../../tests/fixtures/sc
 
 export function loadSchemaFixture(name: string): unknown {
   return JSON.parse(readFileSync(resolve(SCHEMA_FIXTURES, name), "utf8")) as unknown;
+}
+
+/** Asserts the call throws a SestinaError with the given code. */
+export function expectSestinaCode(run: () => void, code: string): void {
+  try {
+    run();
+  } catch (err) {
+    if ((err as { name?: string }).name === "SestinaError") {
+      if ((err as { code?: string }).code === code) return;
+      throw new Error(`expected code ${code}, got ${(err as { code?: string }).code}`, { cause: err });
+    }
+    throw new Error("expected a SestinaError", { cause: err });
+  }
+  throw new Error(`expected a SestinaError with code ${code}`);
 }

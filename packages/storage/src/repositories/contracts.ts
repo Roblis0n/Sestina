@@ -12,10 +12,10 @@ import { assertInTransaction, toMs } from "./shared.js";
 export interface ContractRepository {
   /** Inserts the contract plus its first version in one transaction. */
   insert(contract: TaskContract): void;
-  get(contractId: string): TaskContract | undefined;
-  getCurrentByTask(taskId: string): TaskContract | undefined;
+  get(projectId: string, contractId: string): TaskContract | undefined;
+  getCurrentByTask(projectId: string, taskId: string): TaskContract | undefined;
   addVersion(contract: TaskContract, expectedVersion: number): void;
-  listVersions(contractId: string): TaskContract[];
+  listVersions(projectId: string, contractId: string): TaskContract[];
 }
 
 interface ContractRow {
@@ -56,18 +56,28 @@ export function createContractRepository(tx: StorageTransaction): ContractReposi
       );
     },
 
-    get(contractId) {
+    get(projectId, contractId) {
+      // contracts carries no project column: the project is attributed
+      // through the task the contract belongs to.
       const row = tx.get<ContractRow>(
-        "SELECT contract_id, task_id, status, data FROM contracts WHERE contract_id = ?",
+        `SELECT c.contract_id, c.task_id, c.status, c.data
+         FROM contracts c
+         JOIN tasks t ON t.task_id = c.task_id
+         WHERE c.contract_id = ? AND t.project_id = ?`,
         contractId,
+        projectId,
       );
       return row ? assembleContract(row) : undefined;
     },
 
-    getCurrentByTask(taskId) {
+    getCurrentByTask(projectId, taskId) {
       const row = tx.get<ContractRow>(
-        "SELECT contract_id, task_id, status, data FROM contracts WHERE task_id = ?",
+        `SELECT c.contract_id, c.task_id, c.status, c.data
+         FROM contracts c
+         JOIN tasks t ON t.task_id = c.task_id
+         WHERE c.task_id = ? AND t.project_id = ?`,
         taskId,
+        projectId,
       );
       return row ? assembleContract(row) : undefined;
     },
@@ -101,10 +111,16 @@ export function createContractRepository(tx: StorageTransaction): ContractReposi
       );
     },
 
-    listVersions(contractId) {
+    listVersions(projectId, contractId) {
       const rows = tx.all<{ data: string }>(
-        "SELECT data FROM contract_versions WHERE contract_id = ? ORDER BY version",
+        `SELECT cv.data
+         FROM contract_versions cv
+         JOIN contracts c ON c.contract_id = cv.contract_id
+         JOIN tasks t ON t.task_id = c.task_id
+         WHERE cv.contract_id = ? AND t.project_id = ?
+         ORDER BY cv.version`,
         contractId,
+        projectId,
       );
       return rows.map((r) => TaskContractSchema.parse(JSON.parse(r.data) as unknown));
     },

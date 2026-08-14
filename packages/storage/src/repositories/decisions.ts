@@ -10,10 +10,9 @@ import { validateJson } from "../schema-check.js";
 import { completeEventLease, type EventLease } from "../lease.js";
 import { createDecisionTraceRepository } from "./traces.js";
 import {
-  assertCursorLimit,
   assertInTransaction,
-  assertValidProjectId,
   fromMs,
+  keysetPage,
   toMs,
   type CursorInput,
   type Page,
@@ -28,9 +27,9 @@ export interface DecisionRepository {
   complete(
     input: { lease: EventLease; decision: Decision; trace?: DecisionTrace },
   ): void;
-  get(decisionId: string): Decision | undefined;
+  get(projectId: string, decisionId: string): Decision | undefined;
   listByProject(projectId: string, input: CursorInput): Page<Decision>;
-  listByTask(taskId: string, input: CursorInput): Page<Decision>;
+  listByTask(projectId: string, taskId: string, input: CursorInput): Page<Decision>;
 }
 
 interface DecisionRow {
@@ -61,12 +60,20 @@ export function createDecisionRepository(tx: StorageTransaction): DecisionReposi
   return {
     complete(input) {
       assertInTransaction(tx);
-      const event = tx.get<{ project_id: string; task_id: string }>(
-        "SELECT project_id, task_id FROM events WHERE idempotency_key = ?",
+      const event = tx.get<{ event_id: string; project_id: string; task_id: string }>(
+        "SELECT event_id, project_id, task_id FROM events WHERE idempotency_key = ?",
         input.lease.idempotencyKey,
       );
       if (!event) {
         throw new SestinaError(SestinaErrorCode.internal_error, "Leased event row is missing");
+      }
+      // The decision must describe exactly the leased event (docs/22 Task 6):
+      // using event A's lease to write a decision for event B is forbidden.
+      if (input.decision.eventId !== event.event_id || input.decision.taskId !== event.task_id) {
+        throw new SestinaError(
+          SestinaErrorCode.validation_failed,
+          "Decision does not match the leased event",
+        );
       }
       tx.run(
         `INSERT INTO decisions (decision_id, event_id, project_id, task_id, category, created_at, data)
@@ -82,39 +89,50 @@ export function createDecisionRepository(tx: StorageTransaction): DecisionReposi
       completeEventLease(tx, {
         idempotencyKey: input.lease.idempotencyKey,
         ownerId: input.lease.ownerId,
+        token: input.lease.token,
       });
       if (input.trace) {
         createDecisionTraceRepository(tx).insert(input.trace);
       }
     },
 
-    get(decisionId) {
+    get(projectId, decisionId) {
       const row = tx.get<DecisionRow>(
-        `SELECT ${DECISION_COLUMNS} FROM decisions WHERE decision_id = ?`,
+        `SELECT ${DECISION_COLUMNS} FROM decisions WHERE decision_id = ? AND project_id = ?`,
         decisionId,
+        projectId,
       );
       return row ? assembleDecision(row) : undefined;
     },
 
     listByProject(projectId, input) {
-      assertValidProjectId(projectId);
-      assertCursorLimit(input.limit);
-      const rows = tx.all<DecisionRow>(
-        `SELECT ${DECISION_COLUMNS} FROM decisions WHERE project_id = ? ORDER BY created_at, decision_id LIMIT ?`,
+      const page = keysetPage<DecisionRow>(tx, {
+        table: "decisions",
+        columns: DECISION_COLUMNS,
+        keyColumn: "created_at",
+        idColumn: "decision_id",
+        projectColumn: "project_id",
         projectId,
-        input.limit,
-      );
-      return { items: rows.map(assembleDecision) };
+        cursor: input.cursor,
+        limit: input.limit,
+      });
+      return { items: page.items.map(assembleDecision), nextCursor: page.nextCursor };
     },
 
-    listByTask(taskId, input) {
-      assertCursorLimit(input.limit);
-      const rows = tx.all<DecisionRow>(
-        `SELECT ${DECISION_COLUMNS} FROM decisions WHERE task_id = ? ORDER BY created_at, decision_id LIMIT ?`,
-        taskId,
-        input.limit,
-      );
-      return { items: rows.map(assembleDecision) };
+    listByTask(projectId, taskId, input) {
+      const page = keysetPage<DecisionRow>(tx, {
+        table: "decisions",
+        columns: DECISION_COLUMNS,
+        keyColumn: "created_at",
+        idColumn: "decision_id",
+        projectColumn: "project_id",
+        projectId,
+        cursor: input.cursor,
+        limit: input.limit,
+        extraWhere: "task_id = ?",
+        extraParams: [taskId],
+      });
+      return { items: page.items.map(assembleDecision), nextCursor: page.nextCursor };
     },
   };
 }

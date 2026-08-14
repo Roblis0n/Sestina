@@ -4,13 +4,22 @@ import {
 } from "@sestina/schema";
 import type { StorageTransaction } from "../transaction.js";
 import { validateJson } from "../schema-check.js";
-import { assertInTransaction, fromMs, toMs } from "./shared.js";
+import { assertInTransaction, assertValidProjectId, fromMs, toMs } from "./shared.js";
 
+// ── Project attribution gap (docs/22 Task 6 invariant) ──
+// notification_states has NO project column, and there is no activities
+// table to join against: activity_id is a free-form reference with no
+// foreign key into events/decisions. The projectId argument below is
+// therefore validated but CANNOT be enforced in SQL yet — these reads can
+// still return rows from other projects. Closing the gap needs a migration
+// (add notification_states.project_id + index, and write it in
+// upsertState); until that lands, callers must not rely on these reads for
+// cross-project separation.
 export interface NotificationRepository {
   /** Aggregate state is updatable (acknowledgement toggles). */
   upsertState(state: NotificationState): void;
-  get(notificationId: string): NotificationState | undefined;
-  listByActivity(activityId: string): NotificationState[];
+  get(projectId: string, notificationId: string): NotificationState | undefined;
+  listByActivity(projectId: string, activityId: string): NotificationState[];
 }
 
 function assemble(row: {
@@ -51,7 +60,8 @@ export function createNotificationRepository(tx: StorageTransaction): Notificati
       );
     },
 
-    get(notificationId) {
+    get(projectId, notificationId) {
+      assertValidProjectId(projectId);
       const row = tx.get<{
         notification_id: string;
         activity_id: string | null;
@@ -66,7 +76,8 @@ export function createNotificationRepository(tx: StorageTransaction): Notificati
       return row ? assemble(row) : undefined;
     },
 
-    listByActivity(activityId) {
+    listByActivity(projectId, activityId) {
+      assertValidProjectId(projectId);
       const rows = tx.all<{
         notification_id: string;
         activity_id: string | null;

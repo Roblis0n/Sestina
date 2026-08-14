@@ -1,3 +1,4 @@
+import { assertCollaborationOwnership } from "@sestina/schema";
 import {
   CollaborationThreadSchema,
   CollaborationMessageSchema,
@@ -16,43 +17,57 @@ import {
 } from "@sestina/schema";
 import type { StorageTransaction } from "../transaction.js";
 import { validateJson } from "../schema-check.js";
-import { claimMessageDeliveryLease } from "../lease.js";
+import {
+  claimMessageDeliveryLease,
+  assertDeliveryCredential,
+  type DeliveryCredential,
+} from "../lease.js";
 import {
   assertCursorLimit,
   assertInTransaction,
   assertValidProjectId,
   fromMs,
+  keysetPage,
   toMs,
   type CursorInput,
   type Page,
 } from "./shared.js";
 
 export type DeliveryReserveResult =
-  | "acquired"
-  | "wait_for_existing"
-  | "already_delivered"
-  | "expired";
+  | { kind: "acquired"; credential: DeliveryCredential }
+  | { kind: "wait_for_existing" }
+  | { kind: "already_delivered" }
+  | { kind: "expired" };
 
 export interface CollaborationRepository {
   // threads
   insertThread(thread: CollaborationThread): void;
-  getThread(threadId: string): CollaborationThread | undefined;
+  getThread(projectId: string, threadId: string): CollaborationThread | undefined;
   listThreadsByProject(projectId: string, input: CursorInput): Page<CollaborationThread>;
   // endpoints
   insertEndpoint(endpoint: CollaborationEndpoint): void;
   listEndpoints(projectId: string, taskId?: string): CollaborationEndpoint[];
   // messages — append-only (docs/42 §11.1)
   insertMessage(message: CollaborationMessage): void;
-  getMessage(messageId: string): CollaborationMessage | undefined;
-  listMessages(input: { threadId?: string; taskId?: string; limit: number }): CollaborationMessage[];
+  getMessage(projectId: string, messageId: string): CollaborationMessage | undefined;
+  listMessages(
+    projectId: string,
+    input: { threadId?: string; taskId?: string; limit: number },
+  ): CollaborationMessage[];
   // attempts — append-only (docs/09 §23)
-  appendAttempt(attempt: CollaborationDeliveryAttempt): void;
-  listAttempts(messageId: string): CollaborationDeliveryAttempt[];
+  appendAttempt(attempt: CollaborationDeliveryAttempt, credential: DeliveryCredential): void;
+  listAttempts(projectId: string, messageId: string): CollaborationDeliveryAttempt[];
   // actions — append-only (docs/42 §7.2)
   appendAction(action: CollaborationAction): void;
   /** Delivery and processing stay separate projections (docs/42 §7). */
-  currentDeliveryState(messageId: string): CollaborationDeliveryStatus | undefined;
-  currentProcessingState(messageId: string): CollaborationProcessingStatus | undefined;
+  currentDeliveryState(
+    projectId: string,
+    messageId: string,
+  ): CollaborationDeliveryStatus | undefined;
+  currentProcessingState(
+    projectId: string,
+    messageId: string,
+  ): CollaborationProcessingStatus | undefined;
   /**
    * Reserves the delivery lease for message+target. Expired messages can
    * never be claimed again (docs/22 Task 6 invariant).
@@ -150,8 +165,8 @@ function assembleEndpoint(row: {
 const MESSAGE_COLUMNS = `message_id, thread_id, project_id, task_id, kind, source_endpoint_id,
   summary, body, privacy_class, ttl_seconds, hop_count, dedupe_key, created_at, expires_at, data`;
 
-const ATTEMPT_COLUMNS = `attempt_id, message_id, target_endpoint_id, sequence, route, status,
-  started_at, finished_at, adapter_receipt, error, data`;
+const ATTEMPT_COLUMNS = `a.attempt_id, a.message_id, a.target_endpoint_id, a.sequence, a.route,
+  a.status, a.started_at, a.finished_at, a.adapter_receipt, a.error, a.data`;
 
 export function createCollaborationRepository(tx: StorageTransaction): CollaborationRepository {
   return {
@@ -170,7 +185,7 @@ export function createCollaborationRepository(tx: StorageTransaction): Collabora
       );
     },
 
-    getThread(threadId) {
+    getThread(projectId, threadId) {
       const row = tx.get<{
         thread_id: string;
         project_id: string;
@@ -180,16 +195,15 @@ export function createCollaborationRepository(tx: StorageTransaction): Collabora
         updated_at: number;
         data: string;
       }>(
-        "SELECT thread_id, project_id, task_id, status, created_at, updated_at, data FROM collaboration_threads WHERE thread_id = ?",
+        "SELECT thread_id, project_id, task_id, status, created_at, updated_at, data FROM collaboration_threads WHERE thread_id = ? AND project_id = ?",
         threadId,
+        projectId,
       );
       return row ? assembleThread(row) : undefined;
     },
 
     listThreadsByProject(projectId, input) {
-      assertValidProjectId(projectId);
-      assertCursorLimit(input.limit);
-      const rows = tx.all<{
+      const page = keysetPage<{
         thread_id: string;
         project_id: string;
         task_id: string;
@@ -197,12 +211,17 @@ export function createCollaborationRepository(tx: StorageTransaction): Collabora
         created_at: number;
         updated_at: number;
         data: string;
-      }>(
-        "SELECT thread_id, project_id, task_id, status, created_at, updated_at, data FROM collaboration_threads WHERE project_id = ? ORDER BY created_at, thread_id LIMIT ?",
+      }>(tx, {
+        table: "collaboration_threads",
+        columns: "thread_id, project_id, task_id, status, created_at, updated_at, data",
+        keyColumn: "created_at",
+        idColumn: "thread_id",
+        projectColumn: "project_id",
         projectId,
-        input.limit,
-      );
-      return { items: rows.map(assembleThread) };
+        cursor: input.cursor,
+        limit: input.limit,
+      });
+      return { items: page.items.map(assembleThread), nextCursor: page.nextCursor };
     },
 
     insertEndpoint(endpoint) {
@@ -265,6 +284,73 @@ export function createCollaborationRepository(tx: StorageTransaction): Collabora
 
     insertMessage(message) {
       assertInTransaction(tx);
+      // Authoritative ownership check before persistence (docs/42 §6.2):
+      // thread, project/task, participants, endpoint bindings, ref owners
+      // and the reply chain must all line up.
+      const thread = tx.get<{
+        thread_id: string; project_id: string; task_id: string; data: string;
+      }>("SELECT thread_id, project_id, task_id, data FROM collaboration_threads WHERE thread_id = ?", message.threadId);
+      if (!thread) {
+        throw new SestinaError(SestinaErrorCode.internal_error, "Collaboration thread not found");
+      }
+      const threadData = JSON.parse(thread.data) as { participantEndpointIds?: string[] };
+      const endpointProjects = new Map<string, { projectId: string; taskId: string }>();
+      for (const endpointId of new Set([
+        message.sourceEndpointId,
+        ...message.targetEndpointIds,
+        ...(threadData.participantEndpointIds ?? []),
+      ])) {
+        const row = tx.get<{ project_id: string; task_id: string }>(
+          "SELECT project_id, task_id FROM collaboration_endpoints WHERE endpoint_id = ?",
+          endpointId,
+        );
+        if (row) {
+          endpointProjects.set(endpointId, { projectId: row.project_id, taskId: row.task_id });
+        }
+      }
+      const refOwnerProjects = new Map<string, { projectId: string; taskId: string }>();
+      const resolveRef = (refType: string, refId: string): void => {
+        const table = REF_TABLE_BY_TYPE[refType];
+        if (!table) return;
+        const row = tx.get<{ project_id: string; task_id: string | null }>(
+          `SELECT project_id, task_id FROM ${table} WHERE ${REF_ID_BY_TYPE[refType] ?? "id"} = ?`,
+          refId,
+        );
+        if (row) {
+          refOwnerProjects.set(refId, { projectId: row.project_id, taskId: row.task_id ?? message.taskId });
+        }
+      };
+      for (const ref of message.contextRefs) {
+        resolveRef(ref.refType, ref.refId);
+      }
+      for (const evidenceId of message.evidenceRefs) {
+        resolveRef("evidence", evidenceId);
+      }
+      const replyChain = new Map<string, { projectId: string; taskId: string; threadId: string }>();
+      if (message.replyToMessageId) {
+        const replyRow = tx.get<{ project_id: string; task_id: string; thread_id: string }>(
+          "SELECT project_id, task_id, thread_id FROM collaboration_messages WHERE message_id = ?",
+          message.replyToMessageId,
+        );
+        if (replyRow) {
+          replyChain.set(message.replyToMessageId, {
+            projectId: replyRow.project_id,
+            taskId: replyRow.task_id,
+            threadId: replyRow.thread_id,
+          });
+        }
+      }
+      assertCollaborationOwnership(message, {
+        thread: CollaborationThreadSchema.parse({
+          ...threadData,
+          threadId: thread.thread_id,
+          projectId: thread.project_id,
+          taskId: thread.task_id,
+        }),
+        endpointProjects,
+        refOwnerProjects,
+        replyChain,
+      });
       tx.run(
         `INSERT INTO collaboration_messages
            (message_id, thread_id, project_id, task_id, kind, source_endpoint_id, summary, body,
@@ -288,7 +374,7 @@ export function createCollaborationRepository(tx: StorageTransaction): Collabora
       );
     },
 
-    getMessage(messageId) {
+    getMessage(projectId, messageId) {
       const row = tx.get<{
         message_id: string;
         thread_id: string;
@@ -305,11 +391,15 @@ export function createCollaborationRepository(tx: StorageTransaction): Collabora
         created_at: number;
         expires_at: number;
         data: string;
-      }>(`SELECT ${MESSAGE_COLUMNS} FROM collaboration_messages WHERE message_id = ?`, messageId);
+      }>(
+        `SELECT ${MESSAGE_COLUMNS} FROM collaboration_messages WHERE message_id = ? AND project_id = ?`,
+        messageId,
+        projectId,
+      );
       return row ? assembleMessage(row) : undefined;
     },
 
-    listMessages(input) {
+    listMessages(projectId, input) {
       assertCursorLimit(input.limit);
       const where = input.threadId ? "thread_id = ?" : input.taskId ? "task_id = ?" : null;
       if (!where) {
@@ -332,15 +422,23 @@ export function createCollaborationRepository(tx: StorageTransaction): Collabora
         expires_at: number;
         data: string;
       }>(
-        `SELECT ${MESSAGE_COLUMNS} FROM collaboration_messages WHERE ${where} ORDER BY created_at, message_id LIMIT ?`,
+        `SELECT ${MESSAGE_COLUMNS} FROM collaboration_messages WHERE ${where} AND project_id = ? ORDER BY created_at, message_id LIMIT ?`,
         input.threadId ?? input.taskId,
+        projectId,
         input.limit,
       );
       return rows.map(assembleMessage);
     },
 
-    appendAttempt(attempt) {
+    appendAttempt(attempt, credential) {
       assertInTransaction(tx);
+      // The current unexpired delivery lease holder alone may append
+      // attempts — an uncredentialed caller can never mark a delivery.
+      assertDeliveryCredential(tx, {
+        messageId: attempt.messageId,
+        targetEndpointId: attempt.targetEndpointId,
+        credential,
+      });
       // Expired messages can never receive new attempts (docs/22 Task 6).
       const message = tx.get<{ expires_at: number }>(
         "SELECT expires_at FROM collaboration_messages WHERE message_id = ?",
@@ -371,7 +469,8 @@ export function createCollaborationRepository(tx: StorageTransaction): Collabora
       );
     },
 
-    listAttempts(messageId) {
+    listAttempts(projectId, messageId) {
+      // attempts carry no project column: scope through the message.
       const rows = tx.all<{
         attempt_id: string;
         message_id: string;
@@ -385,8 +484,13 @@ export function createCollaborationRepository(tx: StorageTransaction): Collabora
         error: string | null;
         data: string;
       }>(
-        `SELECT ${ATTEMPT_COLUMNS} FROM collaboration_delivery_attempts WHERE message_id = ? ORDER BY sequence`,
+        `SELECT ${ATTEMPT_COLUMNS}
+         FROM collaboration_delivery_attempts a
+         JOIN collaboration_messages m ON m.message_id = a.message_id
+         WHERE a.message_id = ? AND m.project_id = ?
+         ORDER BY a.sequence`,
         messageId,
+        projectId,
       );
       return rows.map((row) => {
         const data = JSON.parse(row.data) as CollaborationDeliveryAttempt;
@@ -421,35 +525,85 @@ export function createCollaborationRepository(tx: StorageTransaction): Collabora
       );
     },
 
-    currentDeliveryState(messageId) {
+    currentDeliveryState(projectId, messageId) {
       const row = tx.get<{ status: string }>(
-        "SELECT status FROM collaboration_delivery_attempts WHERE message_id = ? ORDER BY sequence DESC LIMIT 1",
+        `SELECT a.status
+         FROM collaboration_delivery_attempts a
+         JOIN collaboration_messages m ON m.message_id = a.message_id
+         WHERE a.message_id = ? AND m.project_id = ?
+         ORDER BY a.sequence DESC LIMIT 1`,
         messageId,
+        projectId,
       );
       return (row?.status as CollaborationDeliveryStatus | undefined) ?? undefined;
     },
 
-    currentProcessingState(messageId) {
+    currentProcessingState(projectId, messageId) {
       const row = tx.get<{ status: string }>(
-        "SELECT status FROM collaboration_actions WHERE message_id = ? ORDER BY acted_at DESC, action_id DESC LIMIT 1",
+        `SELECT a.status
+         FROM collaboration_actions a
+         JOIN collaboration_messages m ON m.message_id = a.message_id
+         WHERE a.message_id = ? AND m.project_id = ?
+         ORDER BY a.acted_at DESC, a.action_id DESC LIMIT 1`,
         messageId,
+        projectId,
       );
       return (row?.status as CollaborationProcessingStatus | undefined) ?? undefined;
     },
 
     reserveDelivery(input) {
       assertInTransaction(tx);
-      const message = tx.get<{ expires_at: number }>(
-        "SELECT expires_at FROM collaboration_messages WHERE message_id = ?",
+      const message = tx.get<{ expires_at: number; data: string }>(
+        "SELECT expires_at, data FROM collaboration_messages WHERE message_id = ?",
         input.messageId,
       );
       if (!message) {
         throw new SestinaError(SestinaErrorCode.internal_error, "Collaboration message not found");
       }
       if (message.expires_at <= Date.now()) {
-        return "expired";
+        return { kind: "expired" };
       }
-      return claimMessageDeliveryLease(tx, input);
+      // Only endpoints the message itself declares may be claimed.
+      const parsed = JSON.parse(message.data) as { targetEndpointIds?: string[] };
+      if (!(parsed.targetEndpointIds ?? []).includes(input.targetEndpointId)) {
+        throw new SestinaError(
+          SestinaErrorCode.validation_failed,
+          "Target endpoint is not declared by the message",
+        );
+      }
+      const claim = claimMessageDeliveryLease(tx, input);
+      if (claim.kind === "acquired") {
+        return { kind: "acquired", credential: { ownerId: input.ownerId, token: claim.token ?? "" } };
+      }
+      return { kind: claim.kind };
     },
   };
 }
+
+
+/** refType → (table, id column) for ownership resolution (docs/42 §6.2). */
+const REF_TABLE_BY_TYPE: Record<string, string> = {
+  task: "tasks",
+  decision: "decisions",
+  event: "events",
+  contract_version: "contract_versions",
+  boundary: "boundaries",
+  evidence: "evidence_items",
+  claim: "claims",
+  correction: "corrections",
+  host_session: "host_sessions",
+  review: "review_items",
+};
+
+const REF_ID_BY_TYPE: Record<string, string> = {
+  task: "task_id",
+  decision: "decision_id",
+  event: "event_id",
+  contract_version: "contract_version_id",
+  boundary: "boundary_id",
+  evidence: "evidence_id",
+  claim: "claim_id",
+  correction: "correction_id",
+  host_session: "session_id",
+  review: "review_id",
+};

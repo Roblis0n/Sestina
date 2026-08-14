@@ -12,6 +12,7 @@ import {
 } from "../src/index.js";
 import { isSestinaError, SestinaErrorCode } from "@sestina/schema";
 import { makeTempDir, removeTempDir, loadStorageFixture, createThread, createEndpoint, createClaudeEndpoint } from "./helpers.js";
+import { expectSestinaCode } from "./helpers.js";
 
 const CONNECTIONS = 20;
 const CLAIMS_PER_CONNECTION = 5;
@@ -44,18 +45,18 @@ describe("Event lease concurrency (docs/22 Step 5: 100 concurrent claims, one ow
             // Yield between claims (never inside the transaction) so the
             // connections interleave at claim boundaries.
             await Promise.resolve();
-            const result = await withTransaction(db, (tx) =>
-              claimEventLease(tx, { idempotencyKey: key, ownerId: `owner-${ci}-${n}` }),
+            const result = withTransaction(db, (tx) =>
+              claimEventLease(tx, { idempotencyKey: key, ownerId: `owner-${ci}-${n}`, packetHash: `hash-${key}` }),
             );
-            out.push(result);
+            out.push(result.kind);
           }
           return out;
         }),
       );
       for (const results of perConnection) {
-        for (const result of results) {
-          if (result === "acquired") acquired.push(result);
-          else if (result === "wait_for_existing") waited.push(result);
+        for (const kind of results) {
+          if (kind === "acquired") acquired.push(kind);
+          else if (kind === "wait_for_existing") waited.push(kind);
         }
       }
       // 100 claims, exactly one owner.
@@ -73,26 +74,24 @@ describe("Event lease concurrency (docs/22 Step 5: 100 concurrent claims, one ow
         connections.push(await openDatabase({ path }));
       }
       const keys = Array.from({ length: 100 }, (_, i) => `distinct-key-${i}`);
-      const outcomes = await Promise.all(
-        keys.map(async (key, ki) => {
-          const first = connections[ki % CONNECTIONS];
-          const second = connections[(ki + 1) % CONNECTIONS];
-          if (!first || !second) {
-            throw new Error("connection pool under-provisioned");
-          }
-          const [a, b] = await Promise.all([
-            withTransaction(first, (tx) =>
-              claimEventLease(tx, { idempotencyKey: key, ownerId: `owner-a-${ki}` }),
-            ),
-            withTransaction(second, (tx) =>
-              claimEventLease(tx, { idempotencyKey: key, ownerId: `owner-b-${ki}` }),
-            ),
-          ]);
-          return { a, b };
-        }),
-      );
+      const outcomes = keys.map((key, ki) => {
+        const first = connections[ki % CONNECTIONS];
+        const second = connections[(ki + 1) % CONNECTIONS];
+        if (!first || !second) {
+          throw new Error("connection pool under-provisioned");
+        }
+        // withTransaction is synchronous: the two claims still interleave
+        // through the shared busy handling, one is acquired, the other waits.
+        const a = withTransaction(first, (tx) =>
+          claimEventLease(tx, { idempotencyKey: key, ownerId: `owner-a-${ki}`, packetHash: `hash-${key}` }),
+        );
+        const b = withTransaction(second, (tx) =>
+          claimEventLease(tx, { idempotencyKey: key, ownerId: `owner-b-${ki}`, packetHash: `hash-${key}` }),
+        );
+        return { a, b };
+      });
       for (const { a, b } of outcomes) {
-        const owners = [a, b].sort();
+        const owners = [a.kind, b.kind].sort();
         expect(owners).toEqual(["acquired", "wait_for_existing"]);
       }
     } finally {
@@ -111,7 +110,7 @@ describe("Event lease concurrency (docs/22 Step 5: 100 concurrent claims, one ow
         exec: db.exec.bind(db),
       };
       try {
-        claimEventLease(rawTx, { idempotencyKey: "naked-key", ownerId: "owner-a" });
+        claimEventLease(rawTx, { idempotencyKey: "naked-key", ownerId: "owner-a", packetHash: "h" });
         expect.unreachable("claim outside a transaction must throw");
       } catch (err) {
         expect(isSestinaError(err)).toBe(true);
@@ -127,22 +126,22 @@ describe("Event lease concurrency (docs/22 Step 5: 100 concurrent claims, one ow
   it("returns wait_for_existing for an unexpired foreign owner and acquires after expiry", async () => {
     const db = await openDatabase({ path });
     try {
-      const first = await withTransaction(db, (tx) =>
-        claimEventLease(tx, { idempotencyKey: "expiry-key", ownerId: "owner-a" }),
+      const first = withTransaction(db, (tx) =>
+        claimEventLease(tx, { idempotencyKey: "expiry-key", ownerId: "owner-a", packetHash: "h" }),
       );
-      expect(first).toBe("acquired");
+      expect(first.kind).toBe("acquired");
 
-      const second = await withTransaction(db, (tx) =>
-        claimEventLease(tx, { idempotencyKey: "expiry-key", ownerId: "owner-b" }),
+      const second = withTransaction(db, (tx) =>
+        claimEventLease(tx, { idempotencyKey: "expiry-key", ownerId: "owner-b", packetHash: "h" }),
       );
-      expect(second).toBe("wait_for_existing");
+      expect(second.kind).toBe("wait_for_existing");
 
       // Expire the lease manually, then the next claim takes over.
       db.run("UPDATE event_leases SET expires_at = ? WHERE idempotency_key = 'expiry-key'", Date.now() - 1);
-      const third = await withTransaction(db, (tx) =>
-        claimEventLease(tx, { idempotencyKey: "expiry-key", ownerId: "owner-b" }),
+      const third = withTransaction(db, (tx) =>
+        claimEventLease(tx, { idempotencyKey: "expiry-key", ownerId: "owner-b", packetHash: "h" }),
       );
-      expect(third).toBe("acquired");
+      expect(third.kind).toBe("acquired");
 
       const row = db.get<{ owner_id: string; expires_at: number }>(
         "SELECT owner_id, expires_at FROM event_leases WHERE idempotency_key = 'expiry-key'",
@@ -157,23 +156,24 @@ describe("Event lease concurrency (docs/22 Step 5: 100 concurrent claims, one ow
   it("reports already_completed after the lease is completed, even past expiry", async () => {
     const db = await openDatabase({ path });
     try {
-      await withTransaction(db, (tx) =>
-        claimEventLease(tx, { idempotencyKey: "completed-key", ownerId: "owner-a" }),
+      const firstClaim = withTransaction(db, (tx) =>
+        claimEventLease(tx, { idempotencyKey: "completed-key", ownerId: "owner-a", packetHash: "h" }),
       );
-      await withTransaction(db, (tx) =>
-        { completeEventLease(tx, { idempotencyKey: "completed-key", ownerId: "owner-a" }); },
+      expect(firstClaim.kind).toBe("acquired");
+      withTransaction(db, (tx) =>
+        { completeEventLease(tx, { idempotencyKey: "completed-key", ownerId: "owner-a", token: firstClaim.token ?? "" }); },
       );
 
-      const again = await withTransaction(db, (tx) =>
-        claimEventLease(tx, { idempotencyKey: "completed-key", ownerId: "owner-b" }),
+      const again = withTransaction(db, (tx) =>
+        claimEventLease(tx, { idempotencyKey: "completed-key", ownerId: "owner-b", packetHash: "h" }),
       );
-      expect(again).toBe("already_completed");
+      expect(again.kind).toBe("already_completed");
 
       db.run("UPDATE event_leases SET expires_at = ? WHERE idempotency_key = 'completed-key'", Date.now() - 1);
-      const afterExpiry = await withTransaction(db, (tx) =>
-        claimEventLease(tx, { idempotencyKey: "completed-key", ownerId: "owner-b" }),
+      const afterExpiry = withTransaction(db, (tx) =>
+        claimEventLease(tx, { idempotencyKey: "completed-key", ownerId: "owner-b", packetHash: "h" }),
       );
-      expect(afterExpiry).toBe("already_completed");
+      expect(afterExpiry.kind).toBe("already_completed");
     } finally {
       db.close();
     }
@@ -182,7 +182,7 @@ describe("Event lease concurrency (docs/22 Step 5: 100 concurrent claims, one ow
   it("stores the packet hash and default TTL on claim", async () => {
     const db = await openDatabase({ path });
     try {
-      await withTransaction(db, (tx) =>
+      withTransaction(db, (tx) =>
         claimEventLease(tx, {
           idempotencyKey: "hash-key",
           ownerId: "owner-a",
@@ -205,13 +205,11 @@ describe("Event lease concurrency (docs/22 Step 5: 100 concurrent claims, one ow
     async (ttlMs) => {
       const db = await openDatabase({ path });
       try {
-        await expect(
+        expectSestinaCode(() =>
           withTransaction(db, (tx) =>
-            claimEventLease(tx, { idempotencyKey: `ttl-bad-${String(ttlMs)}`, ownerId: "owner-a", ttlMs }),
+            claimEventLease(tx, { idempotencyKey: `ttl-bad-${String(ttlMs)}`, ownerId: "owner-a", ttlMs, packetHash: "h" }),
           ),
-        ).rejects.toSatisfy((err: unknown) => {
-          return isSestinaError(err) && err.code === SestinaErrorCode.validation_failed;
-        });
+          SestinaErrorCode.validation_failed);
         expect(
           db.get("SELECT idempotency_key FROM event_leases WHERE idempotency_key LIKE 'ttl-bad-%'"),
         ).toBeUndefined();
@@ -275,13 +273,13 @@ describe("Collaboration delivery leases (one active delivery owner per message+t
             // connections interleave at claim boundaries.
             await Promise.resolve();
             out.push(
-              await withTransaction(conn, (tx) =>
+              withTransaction(conn, (tx) =>
                 claimMessageDeliveryLease(tx, {
                   messageId: MESSAGE_ID,
                   targetEndpointId: TARGET,
                   ownerId: `deliverer-${ci}-${n}`,
                 }),
-              ),
+              ).kind,
             );
           }
           return out;
@@ -297,15 +295,16 @@ describe("Collaboration delivery leases (one active delivery owner per message+t
     }
   });
 
-  it("never lets a wrong owner release a delivery lease", async () => {
-    await withTransaction(db, (tx) =>
+  it("never lets a wrong owner release a delivery lease", () => {
+    const realClaim = withTransaction(db, (tx) =>
       claimMessageDeliveryLease(tx, {
         messageId: MESSAGE_ID,
         targetEndpointId: TARGET,
         ownerId: "deliverer-real",
       }),
     );
-    await withTransaction(db, (tx) =>
+    expect(realClaim.kind).toBe("acquired");
+    withTransaction(db, (tx) =>
       { releaseMessageDeliveryLease(tx, {
         messageId: MESSAGE_ID,
         targetEndpointId: TARGET,
@@ -314,20 +313,20 @@ describe("Collaboration delivery leases (one active delivery owner per message+t
     );
     // The real owner still holds the lease: a fresh claim by anyone else
     // must still wait.
-    const claim = await withTransaction(db, (tx) =>
+    const claim = withTransaction(db, (tx) =>
       claimMessageDeliveryLease(tx, {
         messageId: MESSAGE_ID,
         targetEndpointId: TARGET,
         ownerId: "deliverer-third",
       }),
     );
-    expect(claim).toBe("wait_for_existing");
+    expect(claim.kind).toBe("wait_for_existing");
   });
 
   it.each([0, -5, Number.NaN, Number.POSITIVE_INFINITY, 1.5, Number.MAX_SAFE_INTEGER + 2])(
     "rejects invalid delivery lease ttlMs=%s",
-    async (ttlMs) => {
-      await expect(
+    (ttlMs) => {
+      expectSestinaCode(() =>
         withTransaction(db, (tx) =>
           claimMessageDeliveryLease(tx, {
             messageId: MESSAGE_ID,
@@ -336,14 +335,12 @@ describe("Collaboration delivery leases (one active delivery owner per message+t
             ttlMs,
           }),
         ),
-      ).rejects.toSatisfy((err: unknown) => {
-        return isSestinaError(err) && err.code === SestinaErrorCode.validation_failed;
-      });
+        SestinaErrorCode.validation_failed);
     },
   );
 
-  it("returns already_delivered when a delivered attempt exists", async () => {
-    await withTransaction(db, (tx) =>
+  it("returns already_delivered when a delivered attempt exists", () => {
+    withTransaction(db, (tx) =>
       claimMessageDeliveryLease(tx, {
         messageId: MESSAGE_ID,
         targetEndpointId: TARGET,
@@ -357,7 +354,7 @@ describe("Collaboration delivery leases (one active delivery owner per message+t
       Date.now(),
       Date.now(),
     );
-    await withTransaction(db, (tx) =>
+    withTransaction(db, (tx) =>
       { releaseMessageDeliveryLease(tx, {
         messageId: MESSAGE_ID,
         targetEndpointId: TARGET,
@@ -365,14 +362,14 @@ describe("Collaboration delivery leases (one active delivery owner per message+t
       }); },
     );
 
-    const result = await withTransaction(db, (tx) =>
+    const result = withTransaction(db, (tx) =>
       claimMessageDeliveryLease(tx, {
         messageId: MESSAGE_ID,
         targetEndpointId: TARGET,
         ownerId: "deliverer-2",
       }),
     );
-    expect(result).toBe("already_delivered");
+    expect(result.kind).toBe("already_delivered");
   });
 
   it("keeps attempts append-only: both attempts persist with their own sequence", () => {
@@ -405,8 +402,8 @@ describe("Collaboration delivery leases (one active delivery owner per message+t
     try {
       holder.exec("BEGIN IMMEDIATE");
       try {
-        await withTransaction(contender, (tx) =>
-          claimEventLease(tx, { idempotencyKey: "busy-lease-key", ownerId: "contender" }),
+        withTransaction(contender, (tx) =>
+          claimEventLease(tx, { idempotencyKey: "busy-lease-key", ownerId: "contender", packetHash: "h" }),
         );
         expect.unreachable("claim under a held write lock must fail with storage_busy");
       } catch (err) {

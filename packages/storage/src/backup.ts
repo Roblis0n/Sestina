@@ -15,6 +15,7 @@ import { dirname, join, relative, resolve, sep, isAbsolute } from "node:path";
 import { SestinaError, SestinaErrorCode } from "@sestina/schema";
 import type { StorageDatabase } from "./connection.js";
 import { checkDatabaseIntegrity } from "./integrity.js";
+import { mapFsError } from "./maintenance-domain.js";
 
 export interface BackupOptions {
   backupDirectory: string;
@@ -54,7 +55,11 @@ export async function backupDatabase(
   if (options.dataRoot) {
     assertInsideRoot(options.dataRoot, options.backupDirectory, "backup directory");
   }
-  mkdirSync(options.backupDirectory, { recursive: true });
+  try {
+    mkdirSync(options.backupDirectory, { recursive: true });
+  } catch (err) {
+    throw mapFsError(err, "Failed to create the backup directory");
+  }
 
   const version = readSchemaVersion(db);
   const suffix = randomBytes(6).toString("hex");
@@ -62,7 +67,13 @@ export async function backupDatabase(
 
   await sqliteBackup(db.raw, path);
 
-  const hash = await hashFile(path);
+  let hash: string;
+  try {
+    hash = await hashFile(path);
+  } catch (err) {
+    rmSync(path, { force: true });
+    throw mapFsError(err, "Failed to hash the backup file");
+  }
   writeFileSync(`${path}.sha256`, `${hash}\n`, "utf8");
 
   const integrity = checkDatabaseIntegrity(path);
@@ -88,6 +99,12 @@ export function pruneOldBackups(
   options: { keep?: number } = {},
 ): string[] {
   const keep = options.keep ?? 3;
+  if (!Number.isSafeInteger(keep) || keep < 1) {
+    throw new SestinaError(
+      SestinaErrorCode.validation_failed,
+      "keep must be a positive safe integer",
+    );
+  }
   if (!existsSync(directory)) return [];
   const files = readdirSync(directory)
     .filter((name) => BACKUP_NAME_PATTERN.test(name))

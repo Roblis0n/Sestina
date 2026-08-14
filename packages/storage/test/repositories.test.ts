@@ -27,7 +27,9 @@ import {
   type DecisionTrace,
 } from "@sestina/schema";
 import { openDatabase, createUnitOfWork } from "../src/index.js";
-import { makeTempDir, removeTempDir, loadStorageFixture, loadSchemaFixture } from "./helpers.js";
+import { makeTempDir, removeTempDir, loadSchemaFixture } from "./helpers.js";
+import { expectSestinaCode } from "./helpers.js";
+import { seedCollaboration } from "./helpers.js";
 import type { StorageDatabase } from "../src/index.js";
 
 function makeProject(overrides: Partial<SestinaProject> = {}): SestinaProject {
@@ -122,12 +124,12 @@ describe("Typed repositories round-trip (docs/22 Task 6)", () => {
     removeTempDir(dir);
   });
 
-  it("round-trips projects with bindings and snake_case columns", async () => {
+  it("round-trips projects with bindings and snake_case columns", () => {
     const uow = createUnitOfWork(db);
     const project = makeProject({
       bindings: [{ rootPath: join(dir, "work"), establishedAt: "2026-08-13T00:00:00.000Z", fingerprint: "fp-1" }],
     });
-    await uow.commit((u) => {
+    uow.commit((u) => {
       u.projects.insert(project);
     });
     const raw = db.get<{ project_id: string; display_name: string }>(
@@ -141,52 +143,68 @@ describe("Typed repositories round-trip (docs/22 Task 6)", () => {
     expect(loaded?.bindings[0]?.rootPath).toBe(join(dir, "work"));
   });
 
-  it("round-trips tasks and sessions", async () => {
+  it("round-trips tasks and sessions", () => {
     const uow = createUnitOfWork(db);
     const project = makeProject();
     const task = makeTask(project.projectId);
     const session = makeSession(task.taskId);
-    await uow.commit((u) => {
+    uow.commit((u) => {
       u.projects.insert(project);
       u.tasks.insert(task);
       u.sessions.insert(session);
     });
-    expect(uow.tasks.get(task.taskId)?.title).toBe("task title");
-    const loadedSession = uow.sessions.get(session.sessionId);
+    expect(uow.tasks.get(project.projectId, task.taskId)?.title).toBe("task title");
+    const loadedSession = uow.sessions.get(project.projectId, session.sessionId);
     expect(loadedSession?.hostSessionId).toBe(session.hostSessionId);
-    const byTask = uow.sessions.listByTask(task.taskId, { limit: 10 });
+    const byTask = uow.sessions.listByTask(project.projectId, task.taskId, { limit: 10 });
     expect(byTask.items).toHaveLength(1);
   });
 
-  it("round-trips contracts with versions and rejects version conflicts", async () => {
+  it("pages projects with keyset cursors (no offset scans)", () => {
+    const uow = createUnitOfWork(db);
+    const projects = [0, 1, 2].map((i) =>
+      makeProject({ projectId: generateId(), createdAt: `2026-08-13T00:00:0${i}.000Z` }),
+    );
+    uow.commit((u) => {
+      for (const project of projects) u.projects.insert(project);
+    });
+    const page1 = uow.projects.list({ limit: 2 });
+    expect(page1.items).toHaveLength(2);
+    expect(page1.nextCursor).toBeDefined();
+    const page2 = uow.projects.list({ cursor: page1.nextCursor, limit: 2 });
+    expect(page2.items).toHaveLength(1);
+    expect(page2.nextCursor).toBeUndefined();
+    const seen = [...page1.items, ...page2.items].map((p) => p.projectId);
+    expect(new Set(seen).size).toBe(3);
+  });
+
+  it("round-trips contracts with versions and rejects version conflicts", () => {
     const uow = createUnitOfWork(db);
     const project = makeProject();
     const contract = loadSchemaFixture("valid-contract.json") as TaskContract;
-    await uow.commit((u) => {
+    uow.commit((u) => {
       u.projects.insert(project);
       // The contract's FK points at its own task id (fixture id).
       u.tasks.insert(makeTask(project.projectId, { taskId: contract.taskId }));
       u.contracts.insert(contract);
     });
-    expect(uow.contracts.getCurrentByTask(contract.taskId)?.contractId).toBe(contract.contractId);
+    expect(uow.contracts.getCurrentByTask(project.projectId, contract.taskId)?.contractId).toBe(contract.contractId);
 
     const v2 = { ...contract, version: 2, updatedAt: "2026-08-13T01:00:00.000Z" };
-    await uow.commit((u) => {
+    uow.commit((u) => {
       u.contracts.addVersion(v2, 1);
     });
-    expect(uow.contracts.listVersions(contract.contractId)).toHaveLength(2);
+    expect(uow.contracts.listVersions(project.projectId, contract.contractId)).toHaveLength(2);
 
     const v4 = { ...contract, version: 4, updatedAt: "2026-08-13T02:00:00.000Z" };
-    await expect(
-      uow.commit((u) => {
+    expectSestinaCode(() =>
+      { uow.commit((u) => {
         u.contracts.addVersion(v4, 2);
-      }),
-    ).rejects.toSatisfy((err: unknown) => {
-      return isSestinaError(err) && err.code === SestinaErrorCode.contract_version_mismatch;
-    });
+      }); },
+      SestinaErrorCode.contract_version_mismatch);
   });
 
-  it("round-trips evidence and assertions with JSON schema validation", async () => {
+  it("round-trips evidence and assertions with JSON schema validation", () => {
     const uow = createUnitOfWork(db);
     const project = makeProject();
     const task = makeTask(project.projectId);
@@ -212,27 +230,25 @@ describe("Typed repositories round-trip (docs/22 Task 6)", () => {
       status: "active",
       validFrom: "2026-08-13T00:00:00.000Z",
     };
-    await uow.commit((u) => {
+    uow.commit((u) => {
       u.projects.insert(project);
       u.tasks.insert(task);
       u.evidence.insert(evidence);
       u.assertions.insert(assertion);
     });
-    const loaded = uow.evidence.get("E-001");
+    const loaded = uow.evidence.get(project.projectId, "E-001");
     expect(loaded?.excerpt).toBe("sensitive excerpt");
     expect(uow.assertions.listByProject(project.projectId, { limit: 10 }).items).toHaveLength(1);
 
     // Invalid JSON data must be rejected before storage.
-    await expect(
-      uow.commit((u) => {
+    expectSestinaCode(() =>
+      { uow.commit((u) => {
         u.evidence.insert({ ...evidence, evidenceId: "E-002", type: "not-a-type" } as never);
-      }),
-    ).rejects.toSatisfy((err: unknown) => {
-      return isSestinaError(err) && err.code === SestinaErrorCode.validation_failed;
-    });
+      }); },
+      SestinaErrorCode.validation_failed);
   });
 
-  it("round-trips conversations, messages and context refs", async () => {
+  it("round-trips conversations, messages and context refs", () => {
     const uow = createUnitOfWork(db);
     const project = makeProject();
     const conversation: Conversation = {
@@ -254,19 +270,19 @@ describe("Typed repositories round-trip (docs/22 Task 6)", () => {
       status: "complete",
       createdAt: "2026-08-13T00:00:00.100Z",
     };
-    await uow.commit((u) => {
+    uow.commit((u) => {
       u.projects.insert(project);
       u.conversations.insertConversation(conversation);
       u.conversations.insertMessage(message);
     });
-    const loaded = uow.conversations.getMessage(message.messageId);
+    const loaded = uow.conversations.getMessage(project.projectId, message.messageId);
     expect(loaded?.body).toBe("blocked write");
     expect(loaded?.contextRefs).toHaveLength(1);
-    const list = uow.conversations.listMessages(conversation.conversationId, { limit: 10 });
+    const list = uow.conversations.listMessages(project.projectId, conversation.conversationId, { limit: 10 });
     expect(list.items).toHaveLength(1);
   });
 
-  it("round-trips reviews with append-only actions", async () => {
+  it("round-trips reviews with append-only actions", () => {
     const uow = createUnitOfWork(db);
     const project = makeProject();
     const item: ReviewItem = {
@@ -291,16 +307,16 @@ describe("Typed repositories round-trip (docs/22 Task 6)", () => {
       performedBy: { actor: "user", channel: "desktop", directUser: true },
       performedAt: "2026-08-13T00:01:00.000Z",
     };
-    await uow.commit((u) => {
+    uow.commit((u) => {
       u.projects.insert(project);
       u.reviews.insertItem(item);
       u.reviews.appendAction(action);
     });
-    expect(uow.reviews.getItem(item.reviewId)?.status).toBe("open");
-    expect(uow.reviews.listActions(item.reviewId)).toHaveLength(1);
+    expect(uow.reviews.getItem(project.projectId, item.reviewId)?.status).toBe("open");
+    expect(uow.reviews.listActions(project.projectId, item.reviewId)).toHaveLength(1);
   });
 
-  it("round-trips host stream events with sequence dedupe", async () => {
+  it("round-trips host stream events with sequence dedupe", () => {
     const uow = createUnitOfWork(db);
     const project = makeProject();
     const task = makeTask(project.projectId);
@@ -314,22 +330,22 @@ describe("Typed repositories round-trip (docs/22 Task 6)", () => {
       sourceCapability: "tool_lifecycle",
       occurredAt: "2026-08-13T00:00:00.000Z",
     };
-    await uow.commit((u) => {
+    uow.commit((u) => {
       u.projects.insert(project);
       u.tasks.insert(task);
       u.sessions.insert(session);
       u.hostStream.append(streamEvent);
     });
-    expect(uow.hostStream.listBySession(session.sessionId, { limit: 10 })).toHaveLength(1);
+    expect(uow.hostStream.listBySession(project.projectId, session.sessionId, { limit: 10 })).toHaveLength(1);
     // Duplicate (session_id, sequence) must be rejected.
-    await expect(
-      uow.commit((u) => {
+    expect(() =>
+      { uow.commit((u) => {
         u.hostStream.append({ ...streamEvent, streamEventId: generateId() });
-      }),
-    ).rejects.toBeTruthy();
+      }); },
+    ).toThrow();
   });
 
-  it("round-trips notifications and usage records", async () => {
+  it("round-trips notifications and usage records", () => {
     const uow = createUnitOfWork(db);
     const project = makeProject();
     const task = makeTask(project.projectId);
@@ -350,41 +366,43 @@ describe("Typed repositories round-trip (docs/22 Task 6)", () => {
       tokensOut: 40,
       cost: 0.0002,
     };
-    await uow.commit((u) => {
+    uow.commit((u) => {
       u.projects.insert(project);
       u.tasks.insert(task);
       u.notifications.upsertState(notification);
       u.usage.insert(usage);
     });
-    expect(uow.notifications.get(notification.notificationId)?.acknowledged).toBe(false);
-    expect(uow.usage.sumByTask(task.taskId)).toEqual({ tokensIn: 120, tokensOut: 40, cost: 0.0002 });
+    expect(uow.notifications.get(project.projectId, notification.notificationId)?.acknowledged).toBe(false);
+    expect(uow.usage.sumByTask(project.projectId, task.taskId)).toEqual({ tokensIn: 120, tokensOut: 40, cost: 0.0002 });
+    expect(uow.usage.listByTask(project.projectId, task.taskId, { limit: 10 }).items).toHaveLength(1);
   });
 
-  it("round-trips collaboration threads, endpoints, messages, attempts and dual-state projections", async () => {
+  it("round-trips collaboration threads, endpoints, messages, attempts and dual-state projections", () => {
     const uow = createUnitOfWork(db);
-    const thread = loadStorageFixture("valid-collaboration-thread.json") as CollaborationThread;
-    const endpoint = loadStorageFixture("valid-collaboration-endpoint.json") as CollaborationEndpoint;
-    const message = {
-      ...(loadStorageFixture("valid-collaboration-message.json") as CollaborationMessage),
-      // The fixture's timestamps are in the past; make the message live for
-      // this test so attempts are not rejected as expired.
-      createdAt: new Date(Date.now() - 60_000).toISOString(),
-      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
-    };
-    await uow.commit((u) => {
-      // The fixtures' project/task ids must exist for the FKs.
-      u.projects.insert(makeProject({ projectId: thread.projectId }));
-      u.tasks.insert(makeTask(thread.projectId, { taskId: thread.taskId }));
-      u.collaboration.insertThread(thread);
-      u.collaboration.insertEndpoint(endpoint);
+    const seeded = seedCollaboration(db);
+    const thread = seeded.thread as CollaborationThread;
+    const endpoint = seeded.endpoint as CollaborationEndpoint;
+    const message = seeded.message as CollaborationMessage;
+    uow.commit((u) => {
+      // thread/endpoints/evidence are seeded by seedCollaboration.
       u.collaboration.insertMessage(message);
     });
-    expect(uow.collaboration.getThread(thread.threadId)?.title).toBe(thread.title);
+    expect(uow.collaboration.getThread(thread.projectId, thread.threadId)?.title).toBe(thread.title);
+
+    const reserved = uow.commit((u) =>
+      u.collaboration.reserveDelivery({
+        messageId: message.messageId,
+        targetEndpointId: seeded.targetEndpointId,
+        ownerId: "repo-deliverer",
+      }),
+    );
+    expect(reserved.kind).toBe("acquired");
+    const credential = reserved.kind === "acquired" ? reserved.credential : { ownerId: "", token: "" };
 
     const attempt: CollaborationDeliveryAttempt = {
       attemptId: generateId(),
       messageId: message.messageId,
-      targetEndpointId: endpoint.endpointId,
+      targetEndpointId: seeded.targetEndpointId,
       sequence: 1,
       route: "mcp-inbox",
       status: "delivered",
@@ -397,28 +415,28 @@ describe("Typed repositories round-trip (docs/22 Task 6)", () => {
       status: "acknowledged",
       actedAt: "2026-08-13T02:05:00.000Z",
     };
-    await uow.commit((u) => {
-      u.collaboration.appendAttempt(attempt);
+    uow.commit((u) => {
+      u.collaboration.appendAttempt(attempt, credential);
       u.collaboration.appendAction(action);
     });
     // Dual-state projections stay separate: delivered ≠ accepted/completed.
-    expect(uow.collaboration.currentDeliveryState(message.messageId)).toBe("delivered");
-    expect(uow.collaboration.currentProcessingState(message.messageId)).toBe("acknowledged");
+    expect(uow.collaboration.currentDeliveryState(thread.projectId, message.messageId)).toBe("delivered");
+    expect(uow.collaboration.currentProcessingState(thread.projectId, message.messageId)).toBe("acknowledged");
     // Attempts are append-only: a second attempt with its own sequence coexists.
-    await uow.commit((u) => {
-      u.collaboration.appendAttempt({ ...attempt, attemptId: generateId(), sequence: 2, status: "failed" });
+    uow.commit((u) => {
+      u.collaboration.appendAttempt({ ...attempt, attemptId: generateId(), sequence: 2, status: "failed" }, credential);
     });
-    expect(uow.collaboration.listAttempts(message.messageId)).toHaveLength(2);
+    expect(uow.collaboration.listAttempts(thread.projectId, message.messageId)).toHaveLength(2);
   });
 
-  it("round-trips events, decisions and traces with leases", async () => {
+  it("round-trips events, decisions and traces with leases", () => {
     const uow = createUnitOfWork(db);
     const project = makeProject();
     const task = makeTask(project.projectId);
     const event = makeEvent(project.projectId, task.taskId);
     const decision = makeDecision(event);
     const traceFixture = loadSchemaFixture("valid-decision-trace.json") as DecisionTrace;
-    await uow.commit((u) => {
+    uow.commit((u) => {
       u.projects.insert(project);
       u.tasks.insert(task);
       const reserved = u.events.reserve(event, { ownerId: "owner-a" });
@@ -431,21 +449,53 @@ describe("Typed repositories round-trip (docs/22 Task 6)", () => {
         });
       }
     });
-    expect(uow.events.get(event.eventId)?.eventType).toBe("pre_tool");
-    expect(uow.decisions.get(decision.decisionId)?.category).toBe("allow");
+    expect(uow.events.get(project.projectId, event.eventId)?.eventType).toBe("pre_tool");
+    expect(uow.decisions.get(project.projectId, decision.decisionId)?.category).toBe("allow");
     expect(uow.decisions.listByProject(project.projectId, { limit: 10 }).items).toHaveLength(1);
-    expect(uow.traces.listByDecision(decision.decisionId)).toHaveLength(1);
+    expect(uow.traces.listByDecision(project.projectId, decision.decisionId)).toHaveLength(1);
   });
 
-  it("enforces foreign keys through repositories", async () => {
+  it("pages decisions with keyset cursors without gaps or overlaps", () => {
     const uow = createUnitOfWork(db);
     const project = makeProject();
     const task = makeTask(project.projectId);
-    await expect(
-      uow.commit((u) => {
+    const decisionIds: string[] = [];
+    uow.commit((u) => {
+      u.projects.insert(project);
+      u.tasks.insert(task);
+      for (let i = 0; i < 5; i++) {
+        const event = makeEvent(project.projectId, task.taskId);
+        const reserved = u.events.reserve(event, { ownerId: `pager-${i}` });
+        if (reserved.kind === "created") {
+          const decision = makeDecision(event);
+          decisionIds.push(decision.decisionId);
+          u.decisions.complete({ lease: reserved.lease, decision });
+        }
+      }
+    });
+    const page1 = uow.decisions.listByProject(project.projectId, { limit: 2 });
+    expect(page1.items).toHaveLength(2);
+    expect(page1.nextCursor).toBeDefined();
+    const page2 = uow.decisions.listByProject(project.projectId, { cursor: page1.nextCursor, limit: 2 });
+    expect(page2.items).toHaveLength(2);
+    expect(page2.nextCursor).toBeDefined();
+    const page3 = uow.decisions.listByProject(project.projectId, { cursor: page2.nextCursor, limit: 2 });
+    expect(page3.items).toHaveLength(1);
+    expect(page3.nextCursor).toBeUndefined();
+    const seen = [...page1.items, ...page2.items, ...page3.items].map((d) => d.decisionId);
+    expect(new Set(seen).size).toBe(5);
+    expect(seen).toHaveLength(5);
+  });
+
+  it("enforces foreign keys through repositories", () => {
+    const uow = createUnitOfWork(db);
+    const project = makeProject();
+    const task = makeTask(project.projectId);
+    expect(() =>
+      { uow.commit((u) => {
         u.tasks.insert(task); // project row missing → FK violation
-      }),
-    ).rejects.toBeTruthy();
+      }); },
+    ).toThrow();
   });
 
   it("rejects repository writes outside a transaction", () => {

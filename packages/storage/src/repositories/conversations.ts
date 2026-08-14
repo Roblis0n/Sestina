@@ -13,8 +13,8 @@ import { validateJson } from "../schema-check.js";
 import {
   assertCursorLimit,
   assertInTransaction,
-  assertValidProjectId,
   fromMs,
+  keysetPage,
   toMs,
   type CursorInput,
   type Page,
@@ -22,13 +22,17 @@ import {
 
 export interface ConversationRepository {
   insertConversation(conversation: Conversation): void;
-  getConversation(conversationId: string): Conversation | undefined;
+  getConversation(projectId: string, conversationId: string): Conversation | undefined;
   listByProject(projectId: string, input: CursorInput): Page<Conversation>;
   /** Writes the message and its context_refs rows in one transaction. */
   insertMessage(message: ConversationMessage): void;
-  getMessage(messageId: string): ConversationMessage | undefined;
-  listMessages(conversationId: string, input: CursorInput): Page<ConversationMessage>;
-  setMessageStatus(messageId: string, status: MessageStatus): void;
+  getMessage(projectId: string, messageId: string): ConversationMessage | undefined;
+  listMessages(
+    projectId: string,
+    conversationId: string,
+    input: CursorInput,
+  ): Page<ConversationMessage>;
+  setMessageStatus(projectId: string, messageId: string, status: MessageStatus): void;
 }
 
 function assembleConversation(row: {
@@ -101,7 +105,7 @@ export function createConversationRepository(tx: StorageTransaction): Conversati
       );
     },
 
-    getConversation(conversationId) {
+    getConversation(projectId, conversationId) {
       const row = tx.get<{
         conversation_id: string;
         project_id: string;
@@ -113,16 +117,15 @@ export function createConversationRepository(tx: StorageTransaction): Conversati
         data: string;
       }>(
         `SELECT conversation_id, project_id, task_id, type, status, created_at, updated_at, data
-         FROM conversations WHERE conversation_id = ?`,
+         FROM conversations WHERE conversation_id = ? AND project_id = ?`,
         conversationId,
+        projectId,
       );
       return row ? assembleConversation(row) : undefined;
     },
 
     listByProject(projectId, input) {
-      assertValidProjectId(projectId);
-      assertCursorLimit(input.limit);
-      const rows = tx.all<{
+      const page = keysetPage<{
         conversation_id: string;
         project_id: string;
         task_id: string | null;
@@ -131,13 +134,17 @@ export function createConversationRepository(tx: StorageTransaction): Conversati
         created_at: number;
         updated_at: number;
         data: string;
-      }>(
-        `SELECT conversation_id, project_id, task_id, type, status, created_at, updated_at, data
-         FROM conversations WHERE project_id = ? ORDER BY created_at, conversation_id LIMIT ?`,
+      }>(tx, {
+        table: "conversations",
+        columns: "conversation_id, project_id, task_id, type, status, created_at, updated_at, data",
+        keyColumn: "created_at",
+        idColumn: "conversation_id",
+        projectColumn: "project_id",
         projectId,
-        input.limit,
-      );
-      return { items: rows.map(assembleConversation) };
+        cursor: input.cursor,
+        limit: input.limit,
+      });
+      return { items: page.items.map(assembleConversation), nextCursor: page.nextCursor };
     },
 
     insertMessage(message) {
@@ -166,7 +173,9 @@ export function createConversationRepository(tx: StorageTransaction): Conversati
       }
     },
 
-    getMessage(messageId) {
+    getMessage(projectId, messageId) {
+      // conversation_messages carries no project column of its own: the
+      // project is pinned through the owning conversation.
       const row = tx.get<{
         message_id: string;
         conversation_id: string;
@@ -176,9 +185,12 @@ export function createConversationRepository(tx: StorageTransaction): Conversati
         created_at: number;
         data: string;
       }>(
-        `SELECT message_id, conversation_id, role, body, status, created_at, data
-         FROM conversation_messages WHERE message_id = ?`,
+        `SELECT m.message_id, m.conversation_id, m.role, m.body, m.status, m.created_at, m.data
+         FROM conversation_messages m
+         JOIN conversations c ON c.conversation_id = m.conversation_id
+         WHERE m.message_id = ? AND c.project_id = ?`,
         messageId,
+        projectId,
       );
       if (!row) return undefined;
       const refs = tx.all<{ ref_type: string; ref_id: string; resolution_status: string; data: string }>(
@@ -188,7 +200,7 @@ export function createConversationRepository(tx: StorageTransaction): Conversati
       return assembleMessage(row, refs);
     },
 
-    listMessages(conversationId, input) {
+    listMessages(projectId, conversationId, input) {
       assertCursorLimit(input.limit);
       const rows = tx.all<{
         message_id: string;
@@ -199,9 +211,13 @@ export function createConversationRepository(tx: StorageTransaction): Conversati
         created_at: number;
         data: string;
       }>(
-        `SELECT message_id, conversation_id, role, body, status, created_at, data
-         FROM conversation_messages WHERE conversation_id = ? ORDER BY created_at, message_id LIMIT ?`,
+        `SELECT m.message_id, m.conversation_id, m.role, m.body, m.status, m.created_at, m.data
+         FROM conversation_messages m
+         JOIN conversations c ON c.conversation_id = m.conversation_id
+         WHERE m.conversation_id = ? AND c.project_id = ?
+         ORDER BY m.created_at, m.message_id LIMIT ?`,
         conversationId,
+        projectId,
         input.limit,
       );
       return {
@@ -215,12 +231,18 @@ export function createConversationRepository(tx: StorageTransaction): Conversati
       };
     },
 
-    setMessageStatus(messageId, status) {
+    setMessageStatus(projectId, messageId, status) {
       assertInTransaction(tx);
       const result = tx.run(
-        "UPDATE conversation_messages SET status = ? WHERE message_id = ?",
+        `UPDATE conversation_messages SET status = ?
+         WHERE message_id = ?
+           AND EXISTS (
+             SELECT 1 FROM conversations c
+             WHERE c.conversation_id = conversation_messages.conversation_id
+               AND c.project_id = ?)`,
         status,
         messageId,
+        projectId,
       );
       if (Number(result.changes) === 0) {
         throw new SestinaError(SestinaErrorCode.internal_error, "Conversation message not found");

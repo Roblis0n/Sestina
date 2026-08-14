@@ -1,3 +1,4 @@
+import { SestinaError, SestinaErrorCode } from "@sestina/schema";
 import { StorageDatabase, type QueryResult } from "./connection.js";
 
 export interface StorageTransaction {
@@ -15,7 +16,7 @@ export function createTransactionView(db: StorageDatabase): StorageTransaction {
   return new TransactionView(db);
 }
 
-class TransactionView implements StorageTransaction {
+class TransactionView implements StorageDatabaseView {
   readonly database: StorageDatabase;
 
   constructor(db: StorageDatabase) {
@@ -40,6 +41,15 @@ class TransactionView implements StorageTransaction {
   }
 }
 
+interface StorageDatabaseView {
+  readonly database: StorageDatabase;
+  run(sql: string, ...params: unknown[]): QueryResult;
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
+  get<T = Record<string, unknown>>(sql: string, ...params: unknown[]): T | undefined;
+  all<T = Record<string, unknown>>(sql: string, ...params: unknown[]): T[];
+  exec(sql: string): void;
+}
+
 const savepointCounters = new WeakMap<StorageDatabase, number>();
 
 /**
@@ -50,18 +60,20 @@ const savepointCounters = new WeakMap<StorageDatabase, number>();
  * delivery must never happen inside this transaction — write pending state,
  * COMMIT, call the host, then complete with a conditional update.
  *
- * Nested calls on the same connection use SAVEPOINTs so an inner failure
- * rolls back only the inner unit.
+ * **Write units are strictly synchronous.** A unit that returns a Promise
+ * (thenable) is rejected with internal_error after an immediate rollback:
+ * yielding between BEGIN and COMMIT lets other transactions interleave on
+ * the same connection, and nested calls would report success for a
+ * SAVEPOINT that a later outer rollback silently undoes.
  *
- * Synchronous units commit synchronously: node:sqlite's busy-wait is
- * synchronous, so yielding to the microtask queue between BEGIN and COMMIT
- * would let other connections block the whole thread while the lock is
- * held. Only genuinely async units (an await point inside fn) ever yield.
+ * Synchronous nesting on the same connection still uses SAVEPOINTs; note
+ * that a nested unit's durability always depends on the outer unit's
+ * commit (SAVEPOINT semantics).
  */
-export async function withTransaction<T>(
+export function withTransaction<T>(
   db: StorageDatabase,
-  fn: (tx: StorageTransaction) => T | Promise<T>,
-): Promise<T> {
+  fn: (tx: StorageTransaction) => T,
+): T {
   db.assertWritable();
   const tx = new TransactionView(db);
 
@@ -70,31 +82,51 @@ export async function withTransaction<T>(
     savepointCounters.set(db, n);
     const savepoint = `sp_task5_${n}`;
     db.exec(`SAVEPOINT ${savepoint}`);
-    return runUnit(callUnit(fn, tx, () => {
+    const result = callUnit(fn, tx, () => {
       db.exec(`ROLLBACK TO ${savepoint}`);
       db.exec(`RELEASE ${savepoint}`);
-    }), {
-      commit: () => { db.exec(`RELEASE ${savepoint}`); },
-      rollback: () => {
-        db.exec(`ROLLBACK TO ${savepoint}`);
-        db.exec(`RELEASE ${savepoint}`);
-      },
     });
+    if (isThenable(result)) {
+      safeRollback({
+        rollback: () => {
+          db.exec(`ROLLBACK TO ${savepoint}`);
+          db.exec(`RELEASE ${savepoint}`);
+        },
+      });
+      throw new SestinaError(
+        SestinaErrorCode.internal_error,
+        "Write units must be synchronous",
+      );
+    }
+    db.exec(`RELEASE ${savepoint}`);
+    return result;
   }
 
   db.exec("BEGIN IMMEDIATE");
-  return runUnit(callUnit(fn, tx, () => { db.exec("ROLLBACK"); }), {
-    commit: () => { db.exec("COMMIT"); },
-    rollback: () => { db.exec("ROLLBACK"); },
-  });
+  const result = callUnit(fn, tx, () => { db.exec("ROLLBACK"); });
+  if (isThenable(result)) {
+    safeRollback({ rollback: () => { db.exec("ROLLBACK"); } });
+    throw new SestinaError(
+      SestinaErrorCode.internal_error,
+      "Write units must be synchronous",
+    );
+  }
+  try {
+    db.exec("COMMIT");
+  } catch (err) {
+    // A failed COMMIT must never leave the connection half-open.
+    safeRollback({ rollback: () => { db.exec("ROLLBACK"); } });
+    throw err;
+  }
+  return result;
 }
 
 /** Invokes the unit; a synchronous throw rolls back immediately. */
 function callUnit<T>(
-  fn: (tx: StorageTransaction) => T | Promise<T>,
+  fn: (tx: StorageTransaction) => T,
   tx: StorageTransaction,
   rollback: () => void,
-): T | Promise<T> {
+): T {
   try {
     return fn(tx);
   } catch (err) {
@@ -103,38 +135,12 @@ function callUnit<T>(
   }
 }
 
-function runUnit<T>(
-  result: T | Promise<T>,
-  ops: { commit: () => void; rollback: () => void },
-): Promise<T> {
-  if (result !== null && typeof result === "object" && "then" in result) {
-    const promise = result;
-    return promise.then(
-      (value) => {
-        try {
-          ops.commit();
-          return value;
-        } catch (err) {
-          // A failed COMMIT must never leave the connection inside a
-          // half-open transaction.
-          safeRollback(ops);
-          throw err;
-        }
-      },
-      (err: unknown) => {
-        safeRollback(ops);
-        throw err;
-      },
-    );
-  }
-  // Synchronous unit: commit without yielding to the event loop.
-  try {
-    ops.commit();
-    return Promise.resolve(result);
-  } catch (err) {
-    safeRollback(ops);
-    throw err;
-  }
+function isThenable(value: unknown): boolean {
+  return (
+    value !== null &&
+    (typeof value === "object" || typeof value === "function") &&
+    typeof (value as { then?: unknown }).then === "function"
+  );
 }
 
 function safeRollback(ops: { rollback: () => void }): void {

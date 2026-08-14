@@ -5,10 +5,9 @@ import {
 import type { StorageTransaction } from "../transaction.js";
 import { validateJson } from "../schema-check.js";
 import {
-  assertCursorLimit,
   assertInTransaction,
-  assertValidProjectId,
   fromMs,
+  keysetPage,
   toMs,
   type CursorInput,
   type Page,
@@ -17,9 +16,9 @@ import {
 export interface AssertionRepository {
   /** Insert-only: status evolution writes new rows (supersede, never overwrite). */
   insert(assertion: SituationAssertion): void;
-  get(assertionId: string): SituationAssertion | undefined;
+  get(projectId: string, assertionId: string): SituationAssertion | undefined;
   listByProject(projectId: string, input: CursorInput): Page<SituationAssertion>;
-  listByTask(taskId: string, input: CursorInput): Page<SituationAssertion>;
+  listByTask(projectId: string, taskId: string, input: CursorInput): Page<SituationAssertion>;
 }
 
 interface AssertionRow {
@@ -65,35 +64,43 @@ export function createAssertionRepository(tx: StorageTransaction): AssertionRepo
       );
     },
 
-    get(assertionId) {
+    get(projectId, assertionId) {
       const row = tx.get<AssertionRow>(
-        `SELECT ${ASSERTION_COLUMNS} FROM situation_assertions WHERE assertion_id = ?`,
+        `SELECT ${ASSERTION_COLUMNS} FROM situation_assertions WHERE assertion_id = ? AND project_id = ?`,
         assertionId,
+        projectId,
       );
       return row ? assembleAssertion(row) : undefined;
     },
 
     listByProject(projectId, input) {
-      assertValidProjectId(projectId);
-      assertCursorLimit(input.limit);
-      const rows = tx.all<AssertionRow>(
-        `SELECT ${ASSERTION_COLUMNS} FROM situation_assertions
-         WHERE project_id = ? ORDER BY valid_from, assertion_id LIMIT ?`,
+      const page = keysetPage<AssertionRow>(tx, {
+        table: "situation_assertions",
+        columns: ASSERTION_COLUMNS,
+        keyColumn: "valid_from",
+        idColumn: "assertion_id",
+        projectColumn: "project_id",
         projectId,
-        input.limit,
-      );
-      return { items: rows.map(assembleAssertion) };
+        cursor: input.cursor,
+        limit: input.limit,
+      });
+      return { items: page.items.map(assembleAssertion), nextCursor: page.nextCursor };
     },
 
-    listByTask(taskId, input) {
-      assertCursorLimit(input.limit);
-      const rows = tx.all<AssertionRow>(
-        `SELECT ${ASSERTION_COLUMNS} FROM situation_assertions
-         WHERE task_id = ? ORDER BY valid_from, assertion_id LIMIT ?`,
-        taskId,
-        input.limit,
-      );
-      return { items: rows.map(assembleAssertion) };
+    listByTask(projectId, taskId, input) {
+      const page = keysetPage<AssertionRow>(tx, {
+        table: "situation_assertions",
+        columns: ASSERTION_COLUMNS,
+        keyColumn: "valid_from",
+        idColumn: "assertion_id",
+        projectColumn: "project_id",
+        projectId,
+        cursor: input.cursor,
+        limit: input.limit,
+        extraWhere: "task_id = ?",
+        extraParams: [taskId],
+      });
+      return { items: page.items.map(assembleAssertion), nextCursor: page.nextCursor };
     },
   };
 }

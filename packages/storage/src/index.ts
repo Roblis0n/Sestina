@@ -43,6 +43,8 @@ export {
 export { migration001 } from "./migrations/001-initial.js";
 export { migration002 } from "./migrations/002-fts.js";
 export { migration003 } from "./migrations/003-maintenance-fencing.js";
+export { migration006 } from "./migrations/006-retention-snapshot.js";
+export { migration007 } from "./migrations/007-keyset-indexes.js";
 
 // Leases
 export {
@@ -55,21 +57,27 @@ export {
   DEFAULT_DELIVERY_LEASE_TTL_MS,
   type EventLease,
   type EventLeaseInput,
-  type ClaimEventLeaseResult,
+  type ClaimEventLeaseKind,
+  type EventLeaseClaim,
   type MessageDeliveryLeaseInput,
-  type ClaimMessageDeliveryLeaseResult,
+  type ClaimMessageDeliveryLeaseKind,
+  type MessageDeliveryLeaseClaim,
+  type DeliveryCredential,
+  assertDeliveryCredential,
 } from "./lease.js";
 
 // Maintenance
 export { MaintenanceLock, DEFAULT_MAINTENANCE_LOCK_TTL_MS } from "./maintenance-lock.js";
 export {
-  MaintenanceFence,
-  FENCE_FILE_NAME,
-  DEFAULT_FENCE_TTL_MS,
-  mapFsError,
-  type MaintenanceFenceOptions,
-  type MaintenanceFenceState,
-} from "./maintenance-fence.js";
+  MaintenanceGuard,
+  maintenanceRootOf,
+  maintenanceLockDbPath,
+  MAINTENANCE_LOCK_DB_NAME,
+  DEFAULT_MAINTENANCE_BUSY_TIMEOUT_MS,
+  type MaintenanceGuardOptions,
+} from "./maintenance-domain.js";
+export { mapFsError } from "./maintenance-domain.js";
+export { mapFsError as mapMaintenanceFsError } from "./maintenance-domain.js";
 
 // Backup and restore
 export {
@@ -118,8 +126,10 @@ export {
   sha256,
   type RetentionConfig,
   type RetentionTarget,
+  type RetentionMembers,
   type RetentionPreview,
   type RetentionResult,
+  type RetentionApplyOptions,
 } from "./retention.js";
 export {
   createTombstoneRepository,
@@ -130,11 +140,14 @@ export {
 export {
   exportProject,
   minimiseJson,
-  clearExports,
+  clearExportByMetadata,
   ensureExportDir,
+  ExportManifestSchema,
+  ExportMetadataSchema,
   type ExportOptions,
   type ExportFile,
   type ExportResult,
+  type ExportManifest,
 } from "./exports.js";
 export type {
   ProjectRepository,

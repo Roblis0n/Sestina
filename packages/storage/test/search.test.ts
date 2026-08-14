@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { join } from "node:path";
 import { generateId } from "@sestina/schema";
-import type { Conversation, ConversationMessage, CollaborationThread, CollaborationEndpoint, CollaborationMessage } from "@sestina/schema";
+import type { Conversation, ConversationMessage, CollaborationThread, CollaborationMessage } from "@sestina/schema";
 import { openDatabase, createUnitOfWork, search } from "../src/index.js";
 import { makeTempDir, removeTempDir, loadStorageFixture } from "./helpers.js";
+import { seedCollaboration } from "./helpers.js";
 import type { StorageDatabase } from "../src/index.js";
 
 describe("Project-scoped FTS search (docs/22 Task 6)", () => {
@@ -24,7 +25,7 @@ describe("Project-scoped FTS search (docs/22 Task 6)", () => {
       createdAt: "2026-08-13T00:00:00.000Z",
       updatedAt: "2026-08-13T00:00:00.000Z",
     };
-    await uow.commit((u) => {
+    uow.commit((u) => {
       for (const [projectId, taskId] of [[projectA, taskA], [projectB, taskB]] as const) {
         u.projects.insert({ projectId, name: "p", ...base });
         u.tasks.insert({
@@ -77,7 +78,7 @@ describe("Project-scoped FTS search (docs/22 Task 6)", () => {
     expect(() => search(db, { projectId: projectA, text: "   ", limit: 10 })).toThrow();
   });
 
-  it("leaves zero FTS residue after the source row is deleted", async () => {
+  it("leaves zero FTS residue after the source row is deleted", () => {
     const rows = search(db, { projectId: projectA, text: "needle", limit: 50 });
     const before = rows.length;
     expect(before).toBeGreaterThan(0);
@@ -89,7 +90,7 @@ describe("Project-scoped FTS search (docs/22 Task 6)", () => {
       projectA,
     );
     const uow = createUnitOfWork(db);
-    await uow.commit(() => {
+    uow.commit(() => {
       for (const row of conversationRows) {
         db.run("DELETE FROM conversation_messages WHERE message_id = ?", row.message_id);
       }
@@ -123,24 +124,10 @@ describe("Collaboration FTS search (docs/42 §12)", () => {
     dir = makeTempDir();
     db = await openDatabase({ path: join(dir, "sestina.db") });
     const uow = createUnitOfWork(db);
-    const thread = loadStorageFixture("valid-collaboration-thread.json") as CollaborationThread;
-    const endpoint = loadStorageFixture("valid-collaboration-endpoint.json") as CollaborationEndpoint;
-    const message = {
-      ...(loadStorageFixture("valid-collaboration-message.json") as CollaborationMessage),
-      createdAt: new Date(Date.now() - 60_000).toISOString(),
-      expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
-    };
-    await uow.commit((u) => {
-      u.projects.insert({
-        projectId: thread.projectId, name: "p", bindings: [], status: "active",
-        createdAt: "2026-08-13T00:00:00.000Z", updatedAt: "2026-08-13T00:00:00.000Z",
-      });
-      u.tasks.insert({
-        taskId: thread.taskId, projectId: thread.projectId, title: "t", status: "active", priority: "normal",
-        createdAt: "2026-08-13T00:00:00.000Z", updatedAt: "2026-08-13T00:00:00.000Z",
-      });
-      u.collaboration.insertThread(thread);
-      u.collaboration.insertEndpoint(endpoint);
+    const seeded = seedCollaboration(db);
+    const message = seeded.message as CollaborationMessage;
+    uow.commit((u) => {
+      // thread/endpoints/evidence are seeded by seedCollaboration.
       u.collaboration.insertMessage(message);
     });
   });

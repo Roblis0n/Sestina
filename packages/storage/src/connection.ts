@@ -10,12 +10,6 @@ export interface OpenDatabaseOptions {
   readOnly?: boolean;
   busyTimeoutMs?: number;
   /**
-   * Data root for the common maintenance fence. Defaults to the database
-   * file's parent directory. Migration, restore and retention must use the
-   * same data root to exclude each other (docs/17 §3.2).
-   */
-  dataRoot?: string;
-  /**
    * Defaults to true on writable opens. Pass false to skip migrations,
    * or an object to override the migration set / backup directory.
    * `migrate: false` is a diagnostics escape hatch: it skips the
@@ -33,7 +27,11 @@ export interface QueryResult {
 /** Values node:sqlite accepts as bind parameters. */
 type SqlBindValue = null | number | bigint | string | Uint8Array;
 
-/** Normalises JS values into bindable SQLite parameters. */
+/**
+ * Normalises JS values into bindable SQLite parameters. Plain objects are
+ * NEVER silently stringified: JSON columns must pass their schema first
+ * (validateJson) — callers that need JSON pass the validated string.
+ */
 function normalizeParams(params: unknown[]): SqlBindValue[] {
   return params.map((p): SqlBindValue => {
     if (p === undefined) return null;
@@ -43,8 +41,7 @@ function normalizeParams(params: unknown[]): SqlBindValue[] {
     }
     if (p === null) return null;
     if (p instanceof Uint8Array) return p;
-    if (typeof p === "object") return JSON.stringify(p);
-    throw new TypeError("Unsupported bind parameter type");
+    throw new TypeError("Unsupported bind parameter type — pass schema-validated JSON strings");
   });
 }
 
@@ -263,7 +260,6 @@ export async function openDatabase(options: OpenDatabaseOptions): Promise<Storag
         // Destructive migrations on an existing database are always backed
         // up (docs/17 §10); the default location is next to the database.
         backupDirectory: migrateOpts.backupDirectory ?? join(dirname(options.path), "backups"),
-        dataRoot: options.dataRoot ?? dirname(options.path),
       },
     );
     try {
