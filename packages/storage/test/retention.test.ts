@@ -327,6 +327,29 @@ describe("Retention preview and apply (docs/22 Task 6)", () => {
     expect(JSON.stringify(tombstone)).not.toContain("Is the storage concurrency test");
   });
 
+  it("pages tombstones with keyset cursors (no dupes, real nextCursor)", async () => {
+    const projectId = generateId();
+    const taskId = generateId();
+    const { conversationId } = seedOldContent(projectId, taskId, Date.now());
+    // A second old message guarantees at least two tombstones so the
+    // keyset cursor actually has to skip.
+    insertOldMessage(conversationId, Date.now());
+    const preview = previewRetention(db, retentionConfig());
+    await applyPreview(preview);
+
+    const tx = createTransactionView(db);
+    const tombstones = createTombstoneRepository(tx);
+    const total = tombstones.listByProject(projectId, { limit: 100 }).items.length;
+    const page1 = tombstones.listByProject(projectId, { limit: 1 });
+    expect(page1.items).toHaveLength(1);
+    expect(page1.nextCursor).toBeDefined();
+    const page2 = tombstones.listByProject(projectId, { cursor: page1.nextCursor, limit: 100 });
+    // The keyset cursor must never hand a page-1 row back and pages must
+    // partition the full set exactly.
+    expect(page2.items.map((t) => t.tombstoneId)).not.toContain(page1.items[0]?.tombstoneId);
+    expect(page1.items.length + page2.items.length).toBe(total);
+  });
+
   it("refuses to apply while the maintenance fence is held", async () => {
     const projectId = generateId();
     const taskId = generateId();

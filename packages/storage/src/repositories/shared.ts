@@ -56,11 +56,11 @@ export function assertCursorLimit(limit: number): void {
 // when more rows exist.
 
 export interface KeysetCursor {
-  key: number;
+  key: number | null;
   id: string;
 }
 
-export function encodeKeysetCursor(key: number, id: string): string {
+export function encodeKeysetCursor(key: number | null, id: string): string {
   return `k1.${Buffer.from(JSON.stringify({ key, id }), "utf8").toString("base64url")}`;
 }
 
@@ -77,16 +77,20 @@ export function decodeKeysetCursor(cursor: string): KeysetCursor {
   } catch {
     throw new SestinaError(SestinaErrorCode.validation_failed, "Invalid cursor");
   }
+  const keyValid =
+    parsed.key === null ||
+    (typeof parsed.key === "number" &&
+      Number.isSafeInteger(parsed.key) &&
+      parsed.key >= 0);
   if (
-    typeof parsed.key !== "number" ||
-    !Number.isSafeInteger(parsed.key) ||
-    parsed.key < 0 ||
+    !keyValid ||
     typeof parsed.id !== "string" ||
     parsed.id.length === 0
   ) {
     throw new SestinaError(SestinaErrorCode.validation_failed, "Invalid cursor");
   }
-  return { key: parsed.key, id: parsed.id };
+  // keyValid is a separate boolean so TS cannot narrow parsed.key here.
+  return { key: parsed.key as number | null, id: parsed.id };
 }
 
 export interface KeysetPageInput {
@@ -140,39 +144,47 @@ export function keysetPage<T extends object>(
   const fetchLimit = input.limit + 1;
   const extra = input.extraWhere ? ` AND ${input.extraWhere}` : "";
   const extraParams = input.extraParams ?? [];
-  const rows = cursor
-    ? tx.all<T>(
-        `SELECT ${input.columns} FROM ${input.table}
-         WHERE ${projectWhere}
-           AND (${input.keyColumn} > ? OR (${input.keyColumn} = ? AND ${input.idColumn} > ?))${extra}
-         ORDER BY ${input.keyColumn}, ${input.idColumn}
-         LIMIT ?`,
-        ...projectParams,
-        cursor.key,
-        cursor.key,
-        cursor.id,
-        ...extraParams,
-        fetchLimit,
-      )
-    : tx.all<T>(
-        `SELECT ${input.columns} FROM ${input.table}
-         WHERE ${projectWhere}${extra}
-         ORDER BY ${input.keyColumn}, ${input.idColumn}
-         LIMIT ?`,
-        ...projectParams,
-        ...extraParams,
-        fetchLimit,
-      );
+  // NULL sorts first in SQLite ASC, so a cursor inside the NULL group must
+  // resume "same NULL key, id after cursor" before falling into the
+  // non-NULL rows; a plain `key > ?` comparison would silently drop the
+  // rest of the NULL group.
+  const cursorWhere =
+    cursor === undefined
+      ? ""
+      : cursor.key === null
+        ? ` AND (${input.keyColumn} IS NULL AND ${input.idColumn} > ? OR ${input.keyColumn} IS NOT NULL)`
+        : ` AND (${input.keyColumn} > ? OR (${input.keyColumn} = ? AND ${input.idColumn} > ?))`;
+  const cursorParams =
+    cursor === undefined
+      ? []
+      : cursor.key === null
+        ? [cursor.id]
+        : [cursor.key, cursor.key, cursor.id];
+  const rows = tx.all<T>(
+    `SELECT ${input.columns} FROM ${input.table}
+     WHERE ${projectWhere}${cursorWhere}${extra}
+     ORDER BY ${input.keyColumn}, ${input.idColumn}
+     LIMIT ?`,
+    ...projectParams,
+    ...cursorParams,
+    ...extraParams,
+    fetchLimit,
+  );
   const hasMore = rows.length > input.limit;
   const pageRows = hasMore ? rows.slice(0, input.limit) : rows;
   const last = pageRows.at(-1) as Record<string, unknown> | undefined;
+  // SQLite keys result columns of qualified references (e.g. "m.created_at")
+  // by their last identifier segment, so strip any qualifier before reading
+  // the boundary row.
+  const keyProp = input.keyColumn.split(".").at(-1) ?? input.keyColumn;
+  const idProp = input.idColumn.split(".").at(-1) ?? input.idColumn;
   return {
     items: pageRows,
     nextCursor:
       hasMore && last
         ? encodeKeysetCursor(
-            Number(last[input.keyColumn]),
-            String(last[input.idColumn]),
+            last[keyProp] == null ? null : Number(last[keyProp]),
+            String(last[idProp]),
           )
         : undefined,
   };

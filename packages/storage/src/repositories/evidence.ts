@@ -21,7 +21,11 @@ export interface EvidenceRepository {
   insert(item: EvidenceItem): void;
   get(projectId: string, evidenceId: string): EvidenceItem | undefined;
   listByProject(projectId: string, input: CursorInput): Page<EvidenceItem>;
-  updateStatus(evidenceId: string, status: EvidenceStatus): void;
+  /**
+   * Project-fenced (docs/22 Task 6): a cross-project evidence id fails with
+   * the same evidence_not_found as a missing one — no existence leak.
+   */
+  updateStatus(projectId: string, evidenceId: string, status: EvidenceStatus): void;
   /** Idempotent claim→evidence link (composite primary key). */
   linkClaim(claimId: string, evidenceId: string): void;
 }
@@ -112,12 +116,13 @@ export function createEvidenceRepository(tx: StorageTransaction): EvidenceReposi
       return { items: page.items.map(assembleEvidence), nextCursor: page.nextCursor };
     },
 
-    updateStatus(evidenceId, status) {
+    updateStatus(projectId, evidenceId, status) {
       assertInTransaction(tx);
       const result = tx.run(
-        "UPDATE evidence_items SET status = ? WHERE evidence_id = ?",
+        "UPDATE evidence_items SET status = ? WHERE evidence_id = ? AND project_id = ?",
         status,
         evidenceId,
+        projectId,
       );
       if (Number(result.changes) === 0) {
         throw new SestinaError(SestinaErrorCode.evidence_not_found, "Evidence item not found");

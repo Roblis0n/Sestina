@@ -183,7 +183,7 @@ describe("Id-scoped reads stay inside their project (docs/22 Task 6 invariant)",
     callAt: "2026-08-13T00:00:00.000Z", tokensIn: 120, tokensOut: 40, cost: 0.0002,
   };
   const notificationB = {
-    notificationId: notificationIdB, activityId: generateId(), deliveredAt: "2026-08-13T00:00:00.000Z",
+    notificationId: notificationIdB, projectId: projectB, activityId: generateId(), deliveredAt: "2026-08-13T00:00:00.000Z",
     channel: "feed_item" as const, acknowledged: false,
   };
   const contractB = { ...(loadSchemaFixture("valid-contract.json") as TaskContract), taskId: taskB };
@@ -282,7 +282,7 @@ describe("Id-scoped reads stay inside their project (docs/22 Task 6 invariant)",
     expect(uow.conversations.listMessages(projectA, conversationB.conversationId, { limit: 10 }).items).toHaveLength(0);
     expect(uow.collaboration.getThread(projectA, thread.threadId)).toBeUndefined();
     expect(uow.collaboration.getMessage(projectA, collabMessage.messageId)).toBeUndefined();
-    expect(uow.collaboration.listMessages(projectA, { threadId: thread.threadId, limit: 10 })).toHaveLength(0);
+    expect(uow.collaboration.listMessages(projectA, { threadId: thread.threadId, limit: 10 }).items).toHaveLength(0);
     expect(uow.collaboration.listAttempts(projectA, collabMessage.messageId)).toHaveLength(0);
     expect(uow.collaboration.currentDeliveryState(projectA, collabMessage.messageId)).toBeUndefined();
     expect(uow.collaboration.currentProcessingState(projectA, collabMessage.messageId)).toBeUndefined();
@@ -313,7 +313,7 @@ describe("Id-scoped reads stay inside their project (docs/22 Task 6 invariant)",
     expect(uow.conversations.listMessages(projectB, conversationB.conversationId, { limit: 10 }).items).toHaveLength(1);
     expect(uow.collaboration.getThread(thread.projectId, thread.threadId)?.threadId).toBe(thread.threadId);
     expect(uow.collaboration.getMessage(thread.projectId, collabMessage.messageId)?.messageId).toBe(collabMessage.messageId);
-    expect(uow.collaboration.listMessages(thread.projectId, { threadId: thread.threadId, limit: 10 })).toHaveLength(1);
+    expect(uow.collaboration.listMessages(thread.projectId, { threadId: thread.threadId, limit: 10 }).items).toHaveLength(1);
     expect(uow.collaboration.listAttempts(thread.projectId, collabMessage.messageId)).toHaveLength(1);
     expect(uow.collaboration.currentDeliveryState(thread.projectId, collabMessage.messageId)).toBe("delivered");
     expect(uow.collaboration.currentProcessingState(thread.projectId, collabMessage.messageId)).toBe("acknowledged");
@@ -328,10 +328,7 @@ describe("Id-scoped reads stay inside their project (docs/22 Task 6 invariant)",
     expect(uow.usage.sumByTask(projectB, taskB)).toEqual({ tokensIn: 120, tokensOut: 40, cost: 0.0002 });
   });
 
-  it("validates the project argument on notification reads (schema gap documented in the repository)", () => {
-    // notification_states carries no project column (no activities table to
-    // join either), so these reads validate the argument but cannot scope
-    // the SQL yet — the repository documents the gap in a code comment.
+  it("validates the project argument on notification reads", () => {
     const uow = createUnitOfWork(db);
     expectSestinaCode(
       () => uow.notifications.get("not-a-ulid", notificationIdB),
@@ -341,10 +338,164 @@ describe("Id-scoped reads stay inside their project (docs/22 Task 6 invariant)",
       () => uow.notifications.listByActivity("not-a-ulid", notificationB.activityId),
       SestinaErrorCode.validation_failed,
     );
-    // A valid-but-foreign project still resolves today (the honest current
-    // behaviour): this assertion must flip to `undefined` once the
-    // notification_states.project_id column lands (migration owned by the
-    // migrations agent).
-    expect(uow.notifications.get(projectA, notificationIdB)?.notificationId).toBe(notificationIdB);
+    // notification_states now carries project_id (migration 008): a
+    // valid-but-foreign project resolves nothing, exactly like every other
+    // id-scoped read in this suite.
+    expect(uow.notifications.get(projectA, notificationIdB)).toBeUndefined();
+    expect(uow.notifications.listByActivity(projectA, notificationB.activityId)).toHaveLength(0);
+  });
+
+  it("rejects cross-project write mutations without touching the target", () => {
+    const uow = createUnitOfWork(db);
+    const taskBefore = uow.tasks.get(projectB, taskB);
+    const reviewBefore = uow.reviews.getItem(projectB, reviewB.reviewId);
+    const evidenceBefore = uow.evidence.get(projectB, evidenceB);
+    const contractBefore = uow.contracts.getCurrentByTask(projectB, taskB);
+    if (!taskBefore || !reviewBefore || !contractBefore) {
+      throw new Error("fixture rows missing");
+    }
+    const endpoints = uow.collaboration.listEndpoints(thread.projectId);
+    const processingBefore = uow.collaboration.currentProcessingState(
+      thread.projectId,
+      collabMessage.messageId,
+    );
+
+    // Cross-project tasks.update fails like a missing task and the target
+    // row is untouched.
+    expectSestinaCode(() => {
+      uow.commit((u) => {
+        u.tasks.update(projectA, { ...taskBefore, title: "tampered" });
+      });
+    }, SestinaErrorCode.task_not_found);
+    expect(uow.tasks.get(projectB, taskB)?.title).toBe(taskBefore.title);
+
+    // Cross-project contracts.addVersion fails like a missing contract and
+    // no new version lands.
+    expectSestinaCode(() => {
+      uow.commit((u) => {
+        u.contracts.addVersion(
+          projectA,
+          {
+            ...contractBefore,
+            version: contractBefore.version + 1,
+            updatedAt: "2026-08-13T02:00:00.000Z",
+          },
+          contractBefore.version,
+        );
+      });
+    }, SestinaErrorCode.contract_not_found);
+    expect(uow.contracts.listVersions(projectB, contractBefore.contractId)).toHaveLength(1);
+
+    // Cross-project evidence.updateStatus fails like a missing item and the
+    // status stays put.
+    expectSestinaCode(() => {
+      uow.commit((u) => {
+        u.evidence.updateStatus(projectA, evidenceB, "verified");
+      });
+    }, SestinaErrorCode.evidence_not_found);
+    expect(uow.evidence.get(projectB, evidenceB)?.status).toBe(evidenceBefore?.status);
+
+    // Cross-project reviews.updateItem fails like a missing item and the
+    // version/status stay put.
+    expectSestinaCode(() => {
+      uow.commit((u) => {
+        u.reviews.updateItem(projectA, reviewB.reviewId, {
+          ...reviewBefore,
+          status: "resolved" as const,
+          resolvedAt: "2026-08-13T00:00:05.000Z",
+          version: reviewBefore.version + 1,
+        }, reviewBefore.version);
+      });
+    }, SestinaErrorCode.review_not_found);
+    expect(uow.reviews.getItem(projectB, reviewB.reviewId)?.version).toBe(reviewBefore.version);
+    expect(uow.reviews.getItem(projectB, reviewB.reviewId)?.status).toBe("open");
+
+    // Cross-project collaboration.appendAction fails like a missing message
+    // and no processing state is fabricated.
+    expectSestinaCode(() => {
+      uow.commit((u) => {
+        u.collaboration.appendAction(projectA, {
+          actionId: generateId(),
+          messageId: collabMessage.messageId,
+          endpointId: endpoints[0]?.endpointId ?? generateId(),
+          status: "completed",
+          actedAt: "2026-08-13T02:06:00.000Z",
+        });
+      });
+    }, SestinaErrorCode.collaboration_message_not_found);
+    expect(
+      uow.collaboration.currentProcessingState(thread.projectId, collabMessage.messageId),
+    ).toBe(processingBefore);
+  });
+
+  it("leaves no project-less evidence.updateStatus path (scoping must fail closed)", () => {
+    const uow = createUnitOfWork(db);
+    const before = uow.evidence.get(projectB, evidenceB);
+    // The pre-fence repository exposed a project-less update; the call below
+    // is cast to that old shape. With the fence the first argument lands on
+    // projectId, the shuffled call resolves nothing, and the row is safe.
+    const projectLess = uow.evidence.updateStatus.bind(uow.evidence) as unknown as
+      (evidenceId: string, status: string) => void;
+    expectSestinaCode(() => {
+      uow.commit((u) => {
+        void u;
+        projectLess(evidenceB, "verified");
+      });
+    }, SestinaErrorCode.evidence_not_found);
+    expect(uow.evidence.get(projectB, evidenceB)?.status).toBe(before?.status);
+  });
+
+  it("uses the same error for missing ids as for foreign-project ids (no existence leak)", () => {
+    const uow = createUnitOfWork(db);
+    const taskBefore = uow.tasks.get(projectB, taskB);
+    const reviewBefore = uow.reviews.getItem(projectB, reviewB.reviewId);
+    const contractBefore = uow.contracts.getCurrentByTask(projectB, taskB);
+    if (!taskBefore || !reviewBefore || !contractBefore) {
+      throw new Error("fixture rows missing");
+    }
+    expectSestinaCode(() => {
+      uow.commit((u) => {
+        u.tasks.update(projectA, { ...taskBefore, taskId: generateId() });
+      });
+    }, SestinaErrorCode.task_not_found);
+    expectSestinaCode(() => {
+      uow.commit((u) => {
+        u.evidence.updateStatus(projectB, generateId(), "verified");
+      });
+    }, SestinaErrorCode.evidence_not_found);
+    expectSestinaCode(() => {
+      uow.commit((u) => {
+        u.reviews.updateItem(projectB, generateId(), {
+          ...reviewBefore,
+          status: "resolved" as const,
+          version: reviewBefore.version + 1,
+        }, reviewBefore.version);
+      });
+    }, SestinaErrorCode.review_not_found);
+    expectSestinaCode(() => {
+      uow.commit((u) => {
+        u.contracts.addVersion(
+          projectB,
+          {
+            ...contractBefore,
+            contractId: generateId(),
+            version: contractBefore.version + 1,
+            updatedAt: "2026-08-13T02:00:00.000Z",
+          },
+          contractBefore.version,
+        );
+      });
+    }, SestinaErrorCode.contract_not_found);
+    expectSestinaCode(() => {
+      uow.commit((u) => {
+        u.collaboration.appendAction(projectB, {
+          actionId: generateId(),
+          messageId: generateId(),
+          endpointId: generateId(),
+          status: "acknowledged",
+          actedAt: "2026-08-13T02:06:00.000Z",
+        });
+      });
+    }, SestinaErrorCode.collaboration_message_not_found);
   });
 });

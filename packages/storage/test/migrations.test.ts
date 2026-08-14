@@ -154,6 +154,38 @@ describe("First migration creates the doc 09 §21 minimum schema", () => {
     }
   });
 
+  it("adds notification project attribution and fence/pagination indexes (migration 008)", () => {
+    const columns = db
+      .all<{ name: string; notnull: number; dflt_value: string | null }>(
+        "PRAGMA table_info(notification_states)",
+      )
+      .map((c) => c);
+    const projectColumn = columns.find((c) => c.name === "project_id");
+    expect(projectColumn).toBeDefined();
+    // Fail-closed sentinel for legacy rows: NOT NULL with the empty-string
+    // default, which can never equal a valid ULID project id.
+    expect(projectColumn?.notnull).toBe(1);
+    expect(projectColumn?.dflt_value).toBe("''");
+
+    const indexes = new Set(
+      db
+        .all<{ name: string }>(
+          "SELECT name FROM sqlite_schema WHERE type = 'index' AND name LIKE 'idx_%'",
+        )
+        .map((i) => i.name),
+    );
+    for (const name of [
+      "idx_notification_states_project",
+      "idx_notification_states_activity",
+      "idx_conversation_messages_conv_created",
+      "idx_collab_messages_thread_created",
+      "idx_collab_messages_task_created",
+      "idx_tombstones_project_created",
+    ]) {
+      expect(indexes.has(name), `missing index ${name}`).toBe(true);
+    }
+  });
+
   it("enforces foreign keys", () => {
     expect(() =>
       db.run(

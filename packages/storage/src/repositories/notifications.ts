@@ -6,15 +6,11 @@ import type { StorageTransaction } from "../transaction.js";
 import { validateJson } from "../schema-check.js";
 import { assertInTransaction, assertValidProjectId, fromMs, toMs } from "./shared.js";
 
-// ── Project attribution gap (docs/22 Task 6 invariant) ──
-// notification_states has NO project column, and there is no activities
-// table to join against: activity_id is a free-form reference with no
-// foreign key into events/decisions. The projectId argument below is
-// therefore validated but CANNOT be enforced in SQL yet — these reads can
-// still return rows from other projects. Closing the gap needs a migration
-// (add notification_states.project_id + index, and write it in
-// upsertState); until that lands, callers must not rely on these reads for
-// cross-project separation.
+// ── Project-fenced notification state (docs/22 Task 6 fix) ──
+// notification_states.project_id (migration 008) owns the row: reads are
+// pinned to it in SQL. Legacy rows carry the fail-closed '' sentinel, which
+// never equals a valid ULID, so pre-migration rows resolve under NO project
+// instead of leaking into whichever project asks first.
 export interface NotificationRepository {
   /** Aggregate state is updatable (acknowledgement toggles). */
   upsertState(state: NotificationState): void;
@@ -24,6 +20,7 @@ export interface NotificationRepository {
 
 function assemble(row: {
   notification_id: string;
+  project_id: string;
   activity_id: string | null;
   channel: string;
   delivered_at: number;
@@ -34,6 +31,7 @@ function assemble(row: {
   return NotificationStateSchema.parse({
     ...data,
     notificationId: row.notification_id,
+    projectId: row.project_id !== "" ? row.project_id : data.projectId,
     activityId: row.activity_id ?? data.activityId,
     deliveredAt: fromMs(row.delivered_at),
     channel: row.channel,
@@ -46,12 +44,14 @@ export function createNotificationRepository(tx: StorageTransaction): Notificati
     upsertState(state) {
       assertInTransaction(tx);
       tx.run(
-        `INSERT INTO notification_states (notification_id, activity_id, channel, delivered_at, acknowledged, data)
-         VALUES (?, ?, ?, ?, ?, ?)
+        `INSERT INTO notification_states (notification_id, project_id, activity_id, channel, delivered_at, acknowledged, data)
+         VALUES (?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(notification_id) DO UPDATE SET
+           project_id = excluded.project_id,
            acknowledged = excluded.acknowledged,
            data = excluded.data`,
         state.notificationId,
+        state.projectId,
         state.activityId,
         state.channel,
         toMs(state.deliveredAt),
@@ -64,14 +64,18 @@ export function createNotificationRepository(tx: StorageTransaction): Notificati
       assertValidProjectId(projectId);
       const row = tx.get<{
         notification_id: string;
+        project_id: string;
         activity_id: string | null;
         channel: string;
         delivered_at: number;
         acknowledged: number;
         data: string;
       }>(
-        "SELECT notification_id, activity_id, channel, delivered_at, acknowledged, data FROM notification_states WHERE notification_id = ?",
+        `SELECT notification_id, project_id, activity_id, channel, delivered_at, acknowledged, data
+         FROM notification_states
+         WHERE notification_id = ? AND project_id = ?`,
         notificationId,
+        projectId,
       );
       return row ? assemble(row) : undefined;
     },
@@ -80,14 +84,19 @@ export function createNotificationRepository(tx: StorageTransaction): Notificati
       assertValidProjectId(projectId);
       const rows = tx.all<{
         notification_id: string;
+        project_id: string;
         activity_id: string | null;
         channel: string;
         delivered_at: number;
         acknowledged: number;
         data: string;
       }>(
-        "SELECT notification_id, activity_id, channel, delivered_at, acknowledged, data FROM notification_states WHERE activity_id = ? ORDER BY delivered_at",
+        `SELECT notification_id, project_id, activity_id, channel, delivered_at, acknowledged, data
+         FROM notification_states
+         WHERE activity_id = ? AND project_id = ?
+         ORDER BY delivered_at`,
         activityId,
+        projectId,
       );
       return rows.map(assemble);
     },

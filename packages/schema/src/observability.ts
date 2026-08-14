@@ -130,6 +130,8 @@ export type NotificationChannel = z.infer<typeof NotificationChannelSchema>;
 
 export const NotificationStateSchema = z.object({
   notificationId: z.string(),
+  /** Owning project (docs/22 Task 6 fix): reads are fenced on this column. */
+  projectId: ProjectIdSchema,
   activityId: z.string(),
   deliveredAt: TimestampSchema,
   channel: NotificationChannelSchema,

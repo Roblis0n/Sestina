@@ -6,7 +6,7 @@ import {
 } from "@sestina/schema";
 import type { StorageTransaction } from "../transaction.js";
 import { validateJson } from "../schema-check.js";
-import { assertInTransaction } from "./shared.js";
+import { assertCursorLimit, assertInTransaction } from "./shared.js";
 
 export interface HostStreamRepository {
   /** Append-only; UNIQUE(session_id, sequence) deduplicates re-deliveries. */
@@ -52,6 +52,7 @@ export function createHostStreamRepository(tx: StorageTransaction): HostStreamRe
     },
 
     listBySession(projectId, sessionId, input) {
+      assertCursorLimit(input.limit);
       // host_stream_events has no project column: scope through the session.
       const select = `SELECT e.stream_event_id, e.session_id, e.sequence, e.kind, e.data
         FROM host_stream_events e

@@ -192,14 +192,14 @@ describe("Typed repositories round-trip (docs/22 Task 6)", () => {
 
     const v2 = { ...contract, version: 2, updatedAt: "2026-08-13T01:00:00.000Z" };
     uow.commit((u) => {
-      u.contracts.addVersion(v2, 1);
+      u.contracts.addVersion(project.projectId, v2, 1);
     });
     expect(uow.contracts.listVersions(project.projectId, contract.contractId)).toHaveLength(2);
 
     const v4 = { ...contract, version: 4, updatedAt: "2026-08-13T02:00:00.000Z" };
     expectSestinaCode(() =>
       { uow.commit((u) => {
-        u.contracts.addVersion(v4, 2);
+        u.contracts.addVersion(project.projectId, v4, 2);
       }); },
       SestinaErrorCode.contract_version_mismatch);
   });
@@ -282,6 +282,46 @@ describe("Typed repositories round-trip (docs/22 Task 6)", () => {
     expect(list.items).toHaveLength(1);
   });
 
+  it("pages conversation messages with keyset cursors (no dupes, real nextCursor)", () => {
+    const uow = createUnitOfWork(db);
+    const project = makeProject();
+    const conversation: Conversation = {
+      conversationId: generateId(),
+      projectId: project.projectId,
+      type: "governance_chat",
+      title: "paged governance chat",
+      status: "active",
+      createdAt: "2026-08-13T00:00:00.000Z",
+      updatedAt: "2026-08-13T00:00:00.000Z",
+    };
+    const messages = [0, 1, 2].map((i) => ({
+      messageId: generateId(),
+      conversationId: conversation.conversationId,
+      role: "sestina" as const,
+      body: `paged-message-${i}`,
+      contextRefs: [],
+      confirmable: false,
+      status: "complete" as const,
+      createdAt: `2026-08-13T00:00:0${i}.000Z`,
+    }));
+    uow.commit((u) => {
+      u.projects.insert(project);
+      u.conversations.insertConversation(conversation);
+      for (const message of messages) u.conversations.insertMessage(message);
+    });
+    const page1 = uow.conversations.listMessages(project.projectId, conversation.conversationId, { limit: 2 });
+    expect(page1.items).toHaveLength(2);
+    expect(page1.nextCursor).toBeDefined();
+    const page2 = uow.conversations.listMessages(project.projectId, conversation.conversationId, {
+      cursor: page1.nextCursor,
+      limit: 2,
+    });
+    expect(page2.items).toHaveLength(1);
+    expect(page2.nextCursor).toBeUndefined();
+    const seen = [...page1.items, ...page2.items].map((m) => m.messageId);
+    expect(new Set(seen).size).toBe(3);
+  });
+
   it("round-trips reviews with append-only actions", () => {
     const uow = createUnitOfWork(db);
     const project = makeProject();
@@ -351,6 +391,7 @@ describe("Typed repositories round-trip (docs/22 Task 6)", () => {
     const task = makeTask(project.projectId);
     const notification: NotificationState = {
       notificationId: generateId(),
+      projectId: project.projectId,
       activityId: generateId(),
       deliveredAt: "2026-08-13T00:00:00.000Z",
       channel: "feed_item",
@@ -375,6 +416,78 @@ describe("Typed repositories round-trip (docs/22 Task 6)", () => {
     expect(uow.notifications.get(project.projectId, notification.notificationId)?.acknowledged).toBe(false);
     expect(uow.usage.sumByTask(project.projectId, task.taskId)).toEqual({ tokensIn: 120, tokensOut: 40, cost: 0.0002 });
     expect(uow.usage.listByTask(project.projectId, task.taskId, { limit: 10 }).items).toHaveLength(1);
+  });
+
+  it("fences notification reads to their stored project and fails closed on legacy rows", () => {
+    const uow = createUnitOfWork(db);
+    const project = makeProject();
+    const other = makeProject();
+    const task = makeTask(project.projectId);
+    const notification: NotificationState = {
+      notificationId: generateId(),
+      projectId: project.projectId,
+      activityId: generateId(),
+      deliveredAt: "2026-08-13T00:00:00.000Z",
+      channel: "feed_item",
+      acknowledged: false,
+    };
+    uow.commit((u) => {
+      u.projects.insert(project);
+      u.projects.insert(other);
+      u.tasks.insert(task);
+      u.notifications.upsertState(notification);
+    });
+    expect(uow.notifications.get(project.projectId, notification.notificationId)).toBeDefined();
+    // A foreign project resolves nothing (migration 008 fence).
+    expect(uow.notifications.get(other.projectId, notification.notificationId)).toBeUndefined();
+    expect(uow.notifications.listByActivity(other.projectId, notification.activityId)).toHaveLength(0);
+
+    // A legacy pre-008 row (no project_id, default sentinel) fails closed
+    // under every project instead of leaking to one of them.
+    const legacyId = generateId();
+    const legacyActivityId = generateId();
+    db.run(
+      `INSERT INTO notification_states (notification_id, activity_id, channel, delivered_at, acknowledged, data)
+       VALUES (?, ?, 'feed_item', ?, 0, ?)`,
+      legacyId,
+      legacyActivityId,
+      Date.now(),
+      JSON.stringify({
+        notificationId: legacyId,
+        activityId: legacyActivityId,
+        deliveredAt: new Date(Date.now()).toISOString(),
+        channel: "feed_item",
+        acknowledged: false,
+        projectId: project.projectId,
+      }),
+    );
+    expect(uow.notifications.get(project.projectId, legacyId)).toBeUndefined();
+    expect(uow.notifications.get(other.projectId, legacyId)).toBeUndefined();
+    expect(uow.notifications.listByActivity(project.projectId, legacyActivityId)).toHaveLength(0);
+  });
+
+  it("validates host-stream listBySession limits", () => {
+    const uow = createUnitOfWork(db);
+    const project = makeProject();
+    const task = makeTask(project.projectId);
+    const session = makeSession(task.taskId);
+    uow.commit((u) => {
+      u.projects.insert(project);
+      u.tasks.insert(task);
+      u.sessions.insert(session);
+    });
+    expectSestinaCode(
+      () => uow.hostStream.listBySession(project.projectId, session.sessionId, { limit: 0 }),
+      SestinaErrorCode.validation_failed,
+    );
+    expectSestinaCode(
+      () => uow.hostStream.listBySession(project.projectId, session.sessionId, { limit: 501 }),
+      SestinaErrorCode.validation_failed,
+    );
+    expectSestinaCode(
+      () => uow.hostStream.listBySession(project.projectId, session.sessionId, { limit: 1.5 }),
+      SestinaErrorCode.validation_failed,
+    );
   });
 
   it("round-trips collaboration threads, endpoints, messages, attempts and dual-state projections", () => {
@@ -417,7 +530,7 @@ describe("Typed repositories round-trip (docs/22 Task 6)", () => {
     };
     uow.commit((u) => {
       u.collaboration.appendAttempt(attempt, credential);
-      u.collaboration.appendAction(action);
+      u.collaboration.appendAction(thread.projectId, action);
     });
     // Dual-state projections stay separate: delivered ≠ accepted/completed.
     expect(uow.collaboration.currentDeliveryState(thread.projectId, message.messageId)).toBe("delivered");
@@ -427,6 +540,38 @@ describe("Typed repositories round-trip (docs/22 Task 6)", () => {
       u.collaboration.appendAttempt({ ...attempt, attemptId: generateId(), sequence: 2, status: "failed" }, credential);
     });
     expect(uow.collaboration.listAttempts(thread.projectId, message.messageId)).toHaveLength(2);
+  });
+
+  it("pages collaboration messages with keyset cursors (thread scope, no dupes)", () => {
+    const uow = createUnitOfWork(db);
+    const seeded = seedCollaboration(db);
+    const thread = seeded.thread as CollaborationThread;
+    const base = seeded.message as CollaborationMessage;
+    const extras = [1, 2].map((i) => ({
+      ...base,
+      messageId: generateId(),
+      dedupeKey: `repo-paging-${i}-${generateId()}`,
+      createdAt: `2026-08-13T00:00:0${i}.000Z`,
+    }));
+    uow.commit((u) => {
+      u.collaboration.insertMessage(base);
+      for (const extra of extras) u.collaboration.insertMessage(extra);
+    });
+    const page1 = uow.collaboration.listMessages(thread.projectId, {
+      threadId: thread.threadId,
+      limit: 2,
+    });
+    expect(page1.items).toHaveLength(2);
+    expect(page1.nextCursor).toBeDefined();
+    const page2 = uow.collaboration.listMessages(thread.projectId, {
+      threadId: thread.threadId,
+      cursor: page1.nextCursor,
+      limit: 2,
+    });
+    expect(page2.items).toHaveLength(1);
+    expect(page2.nextCursor).toBeUndefined();
+    const seen = [...page1.items, ...page2.items].map((m) => m.messageId);
+    expect(new Set(seen).size).toBe(3);
   });
 
   it("round-trips events, decisions and traces with leases", () => {

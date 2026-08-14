@@ -19,7 +19,12 @@ export interface TaskRepository {
   insert(task: Task): void;
   get(projectId: string, taskId: string): Task | undefined;
   listByProject(projectId: string, input: CursorInput): Page<Task>;
-  update(task: Task): void;
+  /**
+   * Project-fenced (docs/22 Task 6): the WHERE clause pins the project so a
+   * cross-project task id fails with the same task_not_found as a missing
+   * one — no existence leak.
+   */
+  update(projectId: string, task: Task): void;
 }
 
 interface TaskRow {
@@ -81,14 +86,15 @@ export function createTaskRepository(tx: StorageTransaction): TaskRepository {
       return { items: page.items.map(assembleTask), nextCursor: page.nextCursor };
     },
 
-    update(task) {
+    update(projectId, task) {
       assertInTransaction(tx);
       const result = tx.run(
-        "UPDATE tasks SET status = ?, updated_at = ?, data = ? WHERE task_id = ?",
+        "UPDATE tasks SET status = ?, updated_at = ?, data = ? WHERE task_id = ? AND project_id = ?",
         task.status,
         toMs(task.updatedAt),
         validateJson(TaskSchema, task, "Task"),
         task.taskId,
+        projectId,
       );
       if (Number(result.changes) === 0) {
         throw new SestinaError(SestinaErrorCode.task_not_found, "Task not found");

@@ -11,7 +11,6 @@ import {
 import type { StorageTransaction } from "../transaction.js";
 import { validateJson } from "../schema-check.js";
 import {
-  assertCursorLimit,
   assertInTransaction,
   fromMs,
   keysetPage,
@@ -201,8 +200,7 @@ export function createConversationRepository(tx: StorageTransaction): Conversati
     },
 
     listMessages(projectId, conversationId, input) {
-      assertCursorLimit(input.limit);
-      const rows = tx.all<{
+      const page = keysetPage<{
         message_id: string;
         conversation_id: string;
         role: string;
@@ -210,24 +208,27 @@ export function createConversationRepository(tx: StorageTransaction): Conversati
         status: string;
         created_at: number;
         data: string;
-      }>(
-        `SELECT m.message_id, m.conversation_id, m.role, m.body, m.status, m.created_at, m.data
-         FROM conversation_messages m
-         JOIN conversations c ON c.conversation_id = m.conversation_id
-         WHERE m.conversation_id = ? AND c.project_id = ?
-         ORDER BY m.created_at, m.message_id LIMIT ?`,
-        conversationId,
+      }>(tx, {
+        table: "conversation_messages m JOIN conversations c ON c.conversation_id = m.conversation_id",
+        columns: "m.message_id, m.conversation_id, m.role, m.body, m.status, m.created_at, m.data",
+        keyColumn: "m.created_at",
+        idColumn: "m.message_id",
+        projectColumn: "c.project_id",
         projectId,
-        input.limit,
-      );
+        cursor: input.cursor,
+        limit: input.limit,
+        extraWhere: "m.conversation_id = ?",
+        extraParams: [conversationId],
+      });
       return {
-        items: rows.map((row) => {
+        items: page.items.map((row) => {
           const refs = tx.all<{ ref_type: string; ref_id: string; resolution_status: string; data: string }>(
             "SELECT ref_type, ref_id, resolution_status, data FROM context_refs WHERE conversation_message_id = ?",
             row.message_id,
           );
           return assembleMessage(row, refs);
         }),
+        nextCursor: page.nextCursor,
       };
     },
 

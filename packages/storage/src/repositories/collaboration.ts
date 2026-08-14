@@ -23,7 +23,6 @@ import {
   type DeliveryCredential,
 } from "../lease.js";
 import {
-  assertCursorLimit,
   assertInTransaction,
   assertValidProjectId,
   fromMs,
@@ -52,13 +51,18 @@ export interface CollaborationRepository {
   getMessage(projectId: string, messageId: string): CollaborationMessage | undefined;
   listMessages(
     projectId: string,
-    input: { threadId?: string; taskId?: string; limit: number },
-  ): CollaborationMessage[];
+    input: { threadId?: string; taskId?: string } & CursorInput,
+  ): Page<CollaborationMessage>;
   // attempts — append-only (docs/09 §23)
   appendAttempt(attempt: CollaborationDeliveryAttempt, credential: DeliveryCredential): void;
   listAttempts(projectId: string, messageId: string): CollaborationDeliveryAttempt[];
   // actions — append-only (docs/42 §7.2)
-  appendAction(action: CollaborationAction): void;
+  /**
+   * Project-fenced (docs/22 Task 6): the message must belong to the given
+   * project, otherwise the append fails with the same
+   * collaboration_message_not_found as a missing id — no existence leak.
+   */
+  appendAction(projectId: string, action: CollaborationAction): void;
   /** Delivery and processing stay separate projections (docs/42 §7). */
   currentDeliveryState(
     projectId: string,
@@ -400,12 +404,11 @@ export function createCollaborationRepository(tx: StorageTransaction): Collabora
     },
 
     listMessages(projectId, input) {
-      assertCursorLimit(input.limit);
-      const where = input.threadId ? "thread_id = ?" : input.taskId ? "task_id = ?" : null;
-      if (!where) {
+      const scope = input.threadId ? "thread_id = ?" : input.taskId ? "task_id = ?" : null;
+      if (!scope) {
         throw new SestinaError(SestinaErrorCode.validation_failed, "threadId or taskId is required");
       }
-      const rows = tx.all<{
+      const page = keysetPage<{
         message_id: string;
         thread_id: string;
         project_id: string;
@@ -421,13 +424,19 @@ export function createCollaborationRepository(tx: StorageTransaction): Collabora
         created_at: number;
         expires_at: number;
         data: string;
-      }>(
-        `SELECT ${MESSAGE_COLUMNS} FROM collaboration_messages WHERE ${where} AND project_id = ? ORDER BY created_at, message_id LIMIT ?`,
-        input.threadId ?? input.taskId,
+      }>(tx, {
+        table: "collaboration_messages",
+        columns: MESSAGE_COLUMNS,
+        keyColumn: "created_at",
+        idColumn: "message_id",
+        projectColumn: "project_id",
         projectId,
-        input.limit,
-      );
-      return rows.map(assembleMessage);
+        cursor: input.cursor,
+        limit: input.limit,
+        extraWhere: scope,
+        extraParams: [input.threadId ?? input.taskId],
+      });
+      return { items: page.items.map(assembleMessage), nextCursor: page.nextCursor };
     },
 
     appendAttempt(attempt, credential) {
@@ -510,8 +519,18 @@ export function createCollaborationRepository(tx: StorageTransaction): Collabora
       });
     },
 
-    appendAction(action) {
+    appendAction(projectId, action) {
       assertInTransaction(tx);
+      const owned = tx.get<{ project_id: string }>(
+        "SELECT project_id FROM collaboration_messages WHERE message_id = ?",
+        action.messageId,
+      );
+      if (owned?.project_id !== projectId) {
+        throw new SestinaError(
+          SestinaErrorCode.collaboration_message_not_found,
+          "Collaboration message not found",
+        );
+      }
       tx.run(
         `INSERT INTO collaboration_actions (action_id, message_id, endpoint_id, status, acted_at, note, data)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,

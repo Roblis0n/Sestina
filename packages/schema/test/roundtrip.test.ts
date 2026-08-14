@@ -21,6 +21,7 @@ import {
   ActivityEventSchema,
   NotificationStateSchema,
   HealthCheckSchema,
+  generateId,
   ActorProvenanceSchema,
   PreviewConfirmationSchema,
   RpcRequestSchema,
@@ -350,6 +351,7 @@ describe("Schema round-trips", () => {
   it("round-trips NotificationState", () => {
     const notification = {
       notificationId: "N-001",
+      projectId: generateId(),
       activityId: "A-001",
       deliveredAt: "2026-08-10T10:05:01.000Z",
       channel: "feed_item" as const,
@@ -361,6 +363,17 @@ describe("Schema round-trips", () => {
       const roundTripped = NotificationStateSchema.parse(JSON.parse(JSON.stringify(result.data)));
       expect(roundTripped).toEqual(result.data);
     }
+  });
+
+  it("rejects NotificationState without a project", () => {
+    const notification = {
+      notificationId: "N-002",
+      activityId: "A-002",
+      deliveredAt: "2026-08-10T10:05:01.000Z",
+      channel: "feed_item" as const,
+      acknowledged: false,
+    };
+    expect(NotificationStateSchema.safeParse(notification).success).toBe(false);
   });
 
   it("round-trips HealthCheck", () => {

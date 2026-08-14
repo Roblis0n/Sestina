@@ -2,7 +2,7 @@ import { z } from "zod";
 import { generateId } from "@sestina/schema";
 import type { StorageTransaction } from "./transaction.js";
 import { validateJson } from "./schema-check.js";
-import { assertCursorLimit, assertInTransaction, assertValidProjectId, type CursorInput, type Page } from "./repositories/shared.js";
+import { assertInTransaction, assertValidProjectId, keysetPage, type CursorInput, type Page } from "./repositories/shared.js";
 
 /**
  * Irreversible tombstone for cleaned content (docs/22 Task 6): once
@@ -71,13 +71,20 @@ export function createTombstoneRepository(tx: StorageTransaction): TombstoneRepo
 
     listByProject(projectId, input) {
       assertValidProjectId(projectId);
-      assertCursorLimit(input.limit);
-      const rows = tx.all<{ data: string }>(
-        "SELECT data FROM retention_tombstones WHERE project_id = ? ORDER BY created_at, tombstone_id LIMIT ?",
+      const page = keysetPage<{ tombstone_id: string; created_at: number; data: string }>(tx, {
+        table: "retention_tombstones",
+        columns: "tombstone_id, created_at, data",
+        keyColumn: "created_at",
+        idColumn: "tombstone_id",
+        projectColumn: "project_id",
         projectId,
-        input.limit,
-      );
-      return { items: rows.map((r) => TombstoneSchema.parse(JSON.parse(r.data) as unknown)) };
+        cursor: input.cursor,
+        limit: input.limit,
+      });
+      return {
+        items: page.items.map((r) => TombstoneSchema.parse(JSON.parse(r.data) as unknown)),
+        nextCursor: page.nextCursor,
+      };
     },
   };
 }

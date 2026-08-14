@@ -25,7 +25,11 @@ export interface ReviewRepository {
   /** Actions are append-only (docs/36). */
   appendAction(action: ReviewAction): void;
   listActions(projectId: string, reviewId: string): ReviewAction[];
-  updateItem(reviewId: string, item: ReviewItem, expectedVersion: number): void;
+  /**
+   * Project-fenced (docs/22 Task 6): a cross-project review id fails with
+   * the same review_not_found as a missing one — no existence leak.
+   */
+  updateItem(projectId: string, reviewId: string, item: ReviewItem, expectedVersion: number): void;
 }
 
 interface ReviewRow {
@@ -120,25 +124,27 @@ export function createReviewRepository(tx: StorageTransaction): ReviewRepository
       return rows.map((r) => ReviewActionSchema.parse(JSON.parse(r.data) as unknown));
     },
 
-    updateItem(reviewId, item, expectedVersion) {
+    updateItem(projectId, reviewId, item, expectedVersion) {
       assertInTransaction(tx);
       const existing = tx.get<{ data: string; status: string; created_at: number; updated_at: number }>(
-        "SELECT data, status, created_at, updated_at FROM review_items WHERE review_id = ?",
+        "SELECT data, status, created_at, updated_at FROM review_items WHERE review_id = ? AND project_id = ?",
         reviewId,
+        projectId,
       );
       if (!existing) {
-        throw new SestinaError(SestinaErrorCode.internal_error, "Review item not found");
+        throw new SestinaError(SestinaErrorCode.review_not_found, "Review item not found");
       }
       const existingData = JSON.parse(existing.data) as ReviewItem;
       if (existingData.version !== expectedVersion) {
         throw new SestinaError(SestinaErrorCode.stale_state, "Review item version changed");
       }
       tx.run(
-        "UPDATE review_items SET status = ?, updated_at = ?, data = ? WHERE review_id = ?",
+        "UPDATE review_items SET status = ?, updated_at = ?, data = ? WHERE review_id = ? AND project_id = ?",
         item.status,
         item.resolvedAt ? toMs(item.resolvedAt) : existing.updated_at,
         validateJson(ReviewItemSchema, item, "ReviewItem"),
         reviewId,
+        projectId,
       );
     },
   };

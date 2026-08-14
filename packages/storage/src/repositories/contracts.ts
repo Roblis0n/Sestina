@@ -14,7 +14,12 @@ export interface ContractRepository {
   insert(contract: TaskContract): void;
   get(projectId: string, contractId: string): TaskContract | undefined;
   getCurrentByTask(projectId: string, taskId: string): TaskContract | undefined;
-  addVersion(contract: TaskContract, expectedVersion: number): void;
+  /**
+   * Project-fenced (docs/22 Task 6): the contract's project is attributed
+   * through its task, and a contract owned by another project fails with
+   * the same contract_not_found as a missing one — no existence leak.
+   */
+  addVersion(projectId: string, contract: TaskContract, expectedVersion: number): void;
   listVersions(projectId: string, contractId: string): TaskContract[];
 }
 
@@ -82,8 +87,28 @@ export function createContractRepository(tx: StorageTransaction): ContractReposi
       return row ? assembleContract(row) : undefined;
     },
 
-    addVersion(contract, expectedVersion) {
+    addVersion(projectId, contract, expectedVersion) {
       assertInTransaction(tx);
+      // Fence first: the same contract_not_found a missing id produces, so
+      // the caller cannot distinguish "not in my project" from "does not
+      // exist".
+      const attributed = tx.get<{ task_id: string }>(
+        `SELECT c.task_id
+         FROM contracts c
+         JOIN tasks t ON t.task_id = c.task_id
+         WHERE c.contract_id = ? AND t.project_id = ?`,
+        contract.contractId,
+        projectId,
+      );
+      if (!attributed) {
+        throw new SestinaError(SestinaErrorCode.contract_not_found, "Contract not found");
+      }
+      if (contract.taskId !== attributed.task_id) {
+        throw new SestinaError(
+          SestinaErrorCode.validation_failed,
+          "Contract task attribution must not change",
+        );
+      }
       const existing = tx.get<{ version: number }>(
         "SELECT MAX(version) AS version FROM contract_versions WHERE contract_id = ?",
         contract.contractId,
