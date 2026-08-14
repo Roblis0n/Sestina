@@ -29,8 +29,12 @@ import {
 //     command text is never parsed, so a command that reaches the network
 //     (curl) is invisible here. This is a documented tool-semantic
 //     classification; later judge layers may override from content rules.
-//   - MCP tools classified `network` are external; others are not (the tool
-//     name is the only signal available).
+//   - MCP tools classified network/publish/deploy are external (docs/10:
+//     externality tier 2 = 对外发送/发布/部署), and message tokens with send
+//     semantics (send/post/reply/respond/answer/comment) are external too.
+//     read/write/delete/execute and local-interaction message tokens
+//     (chat/ask/notify) are not external — the tool name is the only signal
+//     available.
 //
 // Unknown tools classify as unknown-but-sourced: toolName is preserved, so
 // nothing is silently dropped.
@@ -88,8 +92,9 @@ export const CLAUDE_ACTION_TABLE: Readonly<Record<string, ActionClassification>>
  * ordered rule sets — a token-based match, not a substring regex, so
  * `mcp__slack__post_message` classifies as publish (token "post") instead of
  * write, and `mcp__db__forget_row` does NOT classify as read via "get".
- * Order matters: publish/message precede the generic write tokens, and
- * network precedes read ("search" is a network token).
+ * Order matters: publish, send-semantics message and deploy rules precede
+ * the generic write/message tokens, and network precedes read ("search" is a
+ * network token).
  * Fall-through is `unknown` (still sourced — toolName is preserved).
  */
 const MCP_TOKEN_RULES: readonly {
@@ -99,8 +104,11 @@ const MCP_TOKEN_RULES: readonly {
 }[] = [
   { tokens: ["delete", "remove", "rm", "drop", "unlink", "truncate", "destroy", "purge"], category: "delete", external: false },
   { tokens: ["publish", "push", "broadcast", "share", "post", "send", "announce"], category: "publish", external: true },
-  { tokens: ["message", "chat", "reply", "ask", "notify"], category: "message", external: false },
-  { tokens: ["deploy", "release", "promote"], category: "deploy", external: false },
+  // Send-semantics message tokens BEFORE the local-interaction message rule:
+  // a "reply" is a message that leaves the local environment.
+  { tokens: ["reply", "respond", "answer", "comment"], category: "message", external: true },
+  { tokens: ["message", "chat", "ask", "notify"], category: "message", external: false },
+  { tokens: ["deploy", "release", "promote"], category: "deploy", external: true },
   { tokens: ["fetch", "download", "upload", "http", "api", "web", "browse", "url", "request", "search", "curl", "call"], category: "network", external: true },
   { tokens: ["execute", "exec", "run", "command", "bash", "shell", "terminal", "spawn", "start", "kill"], category: "execute", external: false },
   { tokens: ["write", "create", "update", "insert", "upsert", "apply", "patch", "put", "edit", "set", "save", "copy", "move", "rename"], category: "write", external: false },

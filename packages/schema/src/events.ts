@@ -80,7 +80,12 @@ export const StandardEventSchema = z.object({
   receivedAt: TimestampSchema,
   bypass: z.boolean(),
   privacyClass: PRIVACY_CLASS_SCHEMA,
-  rawPayloadHash: z.string(),
+  // The replay/identity anchor (storage lease reuse checks compare it): a
+  // lowercase sha256 hex digest of the exact raw bytes, never free text.
+  rawPayloadHash: z
+    .string()
+    .length(64)
+    .regex(/^[a-f0-9]{64}$/, "rawPayloadHash must be a lowercase sha256 hex digest"),
   sourceCapability: z.string().optional(),
   hostVisibilityLevel: HOST_VISIBILITY_LEVEL_SCHEMA.optional(),
 });

@@ -315,4 +315,24 @@ describe("classifier rules (MCP tokens, Monitor, anchors)", () => {
     expect(event.action?.reversible).toBe(true);
     expect(event.action?.external).toBe(false);
   });
+
+  it("classifies mcp__vercel__deploy as deploy and external", async () => {
+    const event = expectOk(
+      await normalizeHostEvent(
+        claudePreToolUse("mcp__vercel__deploy", { project: "demo" }),
+      ),
+    );
+    expect(event.action?.category).toBe("deploy");
+    expect(event.action?.external).toBe(true);
+  });
+
+  it("classifies mcp__slack__reply as an external message", async () => {
+    const event = expectOk(
+      await normalizeHostEvent(
+        claudePreToolUse("mcp__slack__reply", { thread: "t1", text: "ok" }),
+      ),
+    );
+    expect(event.action?.category).toBe("message");
+    expect(event.action?.external).toBe(true);
+  });
 });

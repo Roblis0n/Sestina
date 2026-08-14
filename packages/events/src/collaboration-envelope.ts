@@ -36,17 +36,29 @@ import type { Result } from "./normalize.js";
  *
  * The message carries its own projectId/taskId/privacyClass (validated
  * ULIDs) and they are preserved. Delivery attempts and processing actions
- * carry no project/task identity: callers should pass the real ids via
- * options; otherwise a deterministic stand-in derived from the messageId is used (the same
- * honesty rule as host events — Task 8 re-binds).
+ * carry no project/task identity of their own, and the normalizer NEVER
+ * fabricates one: the caller must resolve the real owner of the referenced
+ * message (docs/42 §8: the message row exists before its attempts) and pass
+ * it as validated options.projectId/taskId, or inject a resolveOwner lookup.
+ * An attempt/action envelope without a resolved owner is rejected
+ * (validation_failed) — a deterministic stand-in would split one message's
+ * lifecycle across a real project and a fake one.
  *
  * The host defaults to "service" — envelopes arrive through the local
  * collaboration relay, not a code host.
  */
 export interface NormalizeCollaborationEnvelopeOptions {
   host?: "desktop" | "service" | "cli";
+  /** Both or neither: the real owner of the referenced message. */
   projectId?: string;
   taskId?: string;
+  /** Owner lookup for the referenced message (e.g. the relay's message row). */
+  resolveOwner?: (
+    messageId: string,
+  ) =>
+    | { projectId: string; taskId: string }
+    | Promise<{ projectId: string; taskId: string } | undefined>
+    | undefined;
 }
 
 const MESSAGE_ACTION: ActionDescriptor = {
@@ -119,7 +131,7 @@ export async function normalizeCollaborationEnvelope(
     const attempt = CollaborationDeliveryAttemptSchema.safeParse(raw);
     if (attempt.success) {
       const data = attempt.data;
-      const [projectId, taskId] = await derivedProjectTask(
+      const [projectId, taskId] = await resolveProjectTask(
         data.messageId,
         options,
       );
@@ -158,7 +170,7 @@ export async function normalizeCollaborationEnvelope(
     const action = CollaborationActionSchema.safeParse(raw);
     if (action.success) {
       const data = action.data;
-      const [projectId, taskId] = await derivedProjectTask(
+      const [projectId, taskId] = await resolveProjectTask(
         data.messageId,
         options,
       );
@@ -221,23 +233,60 @@ export async function normalizeCollaborationEnvelope(
   }
 }
 
-async function derivedProjectTask(
+/**
+ * Resolve the real owner of the referenced message for attempt/action
+ * envelopes. Options carry it directly (both validated ids together) or
+ * the caller injects a lookup. Absent owner is rejected, never invented.
+ */
+async function resolveProjectTask(
   messageId: string,
   options: NormalizeCollaborationEnvelopeOptions,
 ): Promise<[ProjectId, TaskId]> {
-  const projectId =
-    options.projectId !== undefined
-      ? ProjectIdSchema.parse(options.projectId)
-      : ProjectIdSchema.parse(
-          await deriveDeterministicId("project", `collaboration\u0000${messageId}`),
-        );
-  const taskId =
-    options.taskId !== undefined
-      ? TaskIdSchema.parse(options.taskId)
-      : TaskIdSchema.parse(
-          await deriveDeterministicId("task", `collaboration\u0000${messageId}`),
-        );
-  return [projectId, taskId];
+  if (options.projectId !== undefined || options.taskId !== undefined) {
+    if (options.projectId === undefined || options.taskId === undefined) {
+      throw new SestinaError(
+        SestinaErrorCode.validation_failed,
+        "projectId and taskId must be provided together",
+        undefined,
+        { reason: "collaboration_owner_partial" },
+      );
+    }
+    return [
+      parseOwnerId(ProjectIdSchema, options.projectId),
+      parseOwnerId(TaskIdSchema, options.taskId),
+    ];
+  }
+  if (options.resolveOwner !== undefined) {
+    const owner = await options.resolveOwner(messageId);
+    if (owner !== undefined) {
+      return [
+        parseOwnerId(ProjectIdSchema, owner.projectId),
+        parseOwnerId(TaskIdSchema, owner.taskId),
+      ];
+    }
+  }
+  throw new SestinaError(
+    SestinaErrorCode.validation_failed,
+    "collaboration delivery/action envelope requires a resolved project/task owner",
+    undefined,
+    { reason: "collaboration_owner_required" },
+  );
+}
+
+function parseOwnerId<T>(
+  schema: { safeParse: (value: unknown) => { success: boolean; data?: T } },
+  value: string,
+): T {
+  const parsed = schema.safeParse(value);
+  if (!parsed.success || parsed.data === undefined) {
+    throw new SestinaError(
+      SestinaErrorCode.validation_failed,
+      "invalid project/task owner in collaboration envelope options",
+      undefined,
+      { reason: "invalid_owner_id" },
+    );
+  }
+  return parsed.data;
 }
 
 function ok(event: StandardEvent): Result<StandardEvent> {

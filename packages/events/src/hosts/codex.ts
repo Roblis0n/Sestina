@@ -99,13 +99,32 @@ export function normalizeCodexEvent(
 ): NormalizedHostFields {
   const raw = limited.raw;
   const hookName = str(raw, "hook_event_name");
+  const type = str(raw, "type");
+  // Governance authority (docs/12): only the hook path carries
+  // hook_event_name, only the stream path carries a stream type. A payload
+  // with BOTH is ambiguous about which path produced it, and dispatching it
+  // as a hook event would let a stream line spoof hook-path authority
+  // (sourceCapability "hooks" → governance decisions). Reject instead of
+  // guessing. Hook-internal `type` descriptors (json-schema "object", rule
+  // types) are not stream types and stay legitimate hook payloads.
+  if (
+    hookName !== undefined &&
+    type !== undefined &&
+    (CODEX_STREAM_TYPES as readonly string[]).includes(type)
+  ) {
+    throw new SestinaError(
+      SestinaErrorCode.validation_failed,
+      "ambiguous codex payload carries both hook_event_name and a stream type",
+      undefined,
+      { host: "codex", reason: "ambiguous_hook_and_stream_fields" },
+    );
+  }
   if (hookName !== undefined) {
     if (!(CODEX_HOOK_EVENT_NAMES as readonly string[]).includes(hookName)) {
       fail(hookName);
     }
     return normalizeCodexHook(raw, hookName as CodexHookEventName, limited.bypass);
   }
-  const type = str(raw, "type");
   if (type !== undefined && (CODEX_STREAM_TYPES as readonly string[]).includes(type)) {
     return normalizeCodexStream(raw, type, sessionHint, limited.bypass);
   }

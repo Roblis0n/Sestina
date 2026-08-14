@@ -105,6 +105,28 @@ describe("Schema round-trips", () => {
     }
   });
 
+  it("requires rawPayloadHash to be a lowercase sha256 hex digest", () => {
+    const base = loadFixture("valid-event.json") as Record<string, unknown>;
+    const valid = StandardEventSchema.safeParse({
+      ...base,
+      rawPayloadHash: "a".repeat(64),
+    });
+    expect(valid.success).toBe(true);
+    // "sha256:test123" is the value this repo's fixture used to ship —
+    // keeping it rejected is the point of the format pin.
+    for (const bad of [
+      "sha256:test123",
+      "",
+      "not-hex",
+      "A".repeat(64),
+      "a".repeat(63),
+    ]) {
+      expect(
+        StandardEventSchema.safeParse({ ...base, rawPayloadHash: bad }).success,
+      ).toBe(false);
+    }
+  });
+
   it("round-trips EvidenceItem", () => {
     const evidence = {
       evidenceId: "E-001",

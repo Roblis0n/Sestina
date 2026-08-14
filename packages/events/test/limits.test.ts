@@ -3,6 +3,7 @@ import {
   normalizeHostEvent,
   normalizeHostEventDetailed,
   RAW_EVENT_LIMITS,
+  sha256Hex,
   type NormalizeHostEventInput,
   type Result,
 } from "../src/index.js";
@@ -36,6 +37,17 @@ function expectError<T>(result: Result<T>): { code: string; details?: unknown; m
     details: result.error.details,
     message: result.error.message,
   };
+}
+
+function expectOk<T>(result: Result<T>): T {
+  expect(
+    result.ok,
+    `expected ok, got: ${JSON.stringify(!result.ok ? result.error.toJSON() : null)}`,
+  ).toBe(true);
+  if (!result.ok) {
+    throw new Error("unreachable");
+  }
+  return result.value;
 }
 
 describe("raw event limits", () => {
@@ -121,6 +133,123 @@ describe("raw event limits", () => {
     });
     const failure = expectError(codexStreamOnClaude);
     expect(failure.code).toBe("validation_failed");
+  });
+});
+
+describe("raw / rawBytes single source (hash only bytes the event is parsed from)", () => {
+  it("rejects a raw/rawBytes pair that disagree", async () => {
+    const rawA = codexPreToolUse().raw;
+    const rawB = codexPreToolUse({ hook_event_name: "SessionStart" }).raw;
+    const bytesOfB = new TextEncoder().encode(JSON.stringify(rawB));
+    const result = await normalizeHostEvent({
+      host: "codex",
+      raw: rawA,
+      rawBytes: bytesOfB,
+    });
+    const failure = expectError(result);
+    expect(failure.code).toBe("validation_failed");
+    // never leaks either payload into the error
+    expect(failure.message).not.toContain("SessionStart");
+  });
+
+  it("derives the parsed payload from rawBytes alone and hashes those exact bytes", async () => {
+    const payload = codexPreToolUse().raw;
+    const bytes = new TextEncoder().encode(JSON.stringify(payload));
+    // raw is omitted: rawBytes is the single canonical source (the GREEN
+    // contract makes `raw` optional).
+    const result = await normalizeHostEvent({
+      host: "codex",
+      rawBytes: bytes,
+    });
+    const event = expectOk(result);
+    expect(event.eventType).toBe("pre_tool");
+    expect(event.bypass).toBe(false);
+    expect(event.rawPayloadHash).toBe(await sha256Hex(bytes));
+  });
+
+  it("gates the rawBytes size before parsing", async () => {
+    const bytes = new TextEncoder().encode(
+      JSON.stringify({
+        type: "turn.started",
+        pad: "x".repeat(RAW_EVENT_LIMITS.maxRawEventBytes + 16),
+      }),
+    );
+    const result = await normalizeHostEvent({
+      host: "codex",
+      rawBytes: bytes,
+    });
+    const failure = expectError(result);
+    expect(failure.code).toBe("limit_exceeded");
+  });
+
+  it("rejects rawBytes that do not contain a single JSON object", async () => {
+    for (const bytes of [
+      new TextEncoder().encode("[1,2,3]"),
+      new TextEncoder().encode("just text"),
+      new TextEncoder().encode("42"),
+    ]) {
+      const result = await normalizeHostEvent({
+        host: "codex",
+        rawBytes: bytes,
+      });
+      const failure = expectError(result);
+      expect(failure.code).toBe("validation_failed");
+    }
+  });
+});
+
+describe("governance authority pins (docs/12: only the hook path decides)", () => {
+  it("rejects an ambiguous codex payload carrying both hook_event_name and a stream type", async () => {
+    const ambiguous = codexPreToolUse();
+    ambiguous.raw = {
+      ...(ambiguous.raw as Record<string, unknown>),
+      type: "item.completed",
+      item: { id: "i1", type: "command_execution", status: "completed" },
+    };
+    const failure = expectError(await normalizeHostEvent(ambiguous));
+    expect(failure.code).toBe("validation_failed");
+  });
+
+  it("rejects an ambiguous claude payload carrying both hook_event_name and a stream type", async () => {
+    const result = await normalizeHostEvent({
+      host: "claude-code",
+      raw: {
+        session_id: "claude-sess-0001",
+        transcript_path: "/tmp/t.jsonl",
+        cwd: "/Users/alice/projects/demo",
+        permission_mode: "default",
+        hook_event_name: "PreToolUse",
+        type: "stream_event",
+        tool_name: "Bash",
+        tool_input: { command: "npm test" },
+        tool_use_id: "toolu_01",
+      },
+    });
+    const failure = expectError(result);
+    expect(failure.code).toBe("validation_failed");
+  });
+
+  it("a stream payload alone can never fabricate a governance event type or hook capability", async () => {
+    const event = expectOk(
+      await normalizeHostEvent({
+        host: "codex",
+        sessionId: "codex-sess-0001",
+        raw: {
+          type: "item.completed",
+          permission_mode: "bypassPermissions",
+          sourceCapability: "hooks",
+          item: {
+            id: "i1",
+            type: "command_execution",
+            status: "completed",
+          },
+        },
+      }),
+    );
+    expect(event.eventType).toBe("host_stream");
+    expect(event.sourceCapability).toBe("stream");
+    expect(event.bypass).toBe(true); // recorded, never acted upon
+    expect(event.action?.category).toBe("execute");
   });
 });
 

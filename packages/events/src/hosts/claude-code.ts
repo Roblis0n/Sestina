@@ -137,13 +137,33 @@ export function normalizeClaudeEvent(
 ): NormalizedHostFields {
   const raw = limited.raw;
   const hookName = str(raw, "hook_event_name");
+  const type = str(raw, "type");
+  // Governance authority (docs/12): only the hook path carries
+  // hook_event_name, only the stream path carries a stream type. A payload
+  // with BOTH is ambiguous about which path produced it, and dispatching it
+  // as a hook event would let a stream line spoof hook-path authority
+  // (sourceCapability "hooks" → governance decisions). Reject instead of
+  // guessing. Hook-internal `type` descriptors (json-schema "object", rule
+  // types like addRules) are not stream types and stay legitimate hook
+  // payloads.
+  if (
+    hookName !== undefined &&
+    type !== undefined &&
+    (CLAUDE_STREAM_TYPES as readonly string[]).includes(type)
+  ) {
+    throw new SestinaError(
+      SestinaErrorCode.validation_failed,
+      "ambiguous claude-code payload carries both hook_event_name and a stream type",
+      undefined,
+      { host: "claude_code", reason: "ambiguous_hook_and_stream_fields" },
+    );
+  }
   if (hookName !== undefined) {
     if (!(CLAUDE_HOOK_EVENT_NAMES as readonly string[]).includes(hookName)) {
       fail(hookName);
     }
     return normalizeClaudeHook(raw, hookName as ClaudeHookEventName, limited.bypass);
   }
-  const type = str(raw, "type");
   if (type !== undefined && (CLAUDE_STREAM_TYPES as readonly string[]).includes(type)) {
     return normalizeClaudeStream(raw, type, sessionHint, limited.bypass);
   }

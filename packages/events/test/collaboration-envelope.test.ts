@@ -108,16 +108,30 @@ describe("normalizeCollaborationEnvelope", () => {
   });
 
   it("maps a delivery attempt to collaboration_delivery", async () => {
-    const event = expectOk(await normalizeCollaborationEnvelope(validAttempt));
+    const event = expectOk(
+      await normalizeCollaborationEnvelope(validAttempt, {
+        projectId: PROJECT,
+        taskId: TASK,
+      }),
+    );
     expect(event.eventType).toBe("collaboration_delivery");
+    expect(event.projectId).toBe(PROJECT);
+    expect(event.taskId).toBe(TASK);
     expect(event.action).toBeUndefined();
     expect(event.occurredAt).toBe(validAttempt.startedAt);
     expect(event.privacyClass).toBe("internal");
   });
 
   it("maps a processing action to collaboration_action", async () => {
-    const event = expectOk(await normalizeCollaborationEnvelope(validAction));
+    const event = expectOk(
+      await normalizeCollaborationEnvelope(validAction, {
+        projectId: PROJECT,
+        taskId: TASK,
+      }),
+    );
     expect(event.eventType).toBe("collaboration_action");
+    expect(event.projectId).toBe(PROJECT);
+    expect(event.taskId).toBe(TASK);
     expect(event.occurredAt).toBe(validAction.actedAt);
     expect(event.action?.toolName).toBe("collaboration_action");
     expect(event.action?.category).toBe("message");
@@ -125,8 +139,18 @@ describe("normalizeCollaborationEnvelope", () => {
 
   it("derives distinct keys for message, delivery and action of one message", async () => {
     const message = expectOk(await normalizeCollaborationEnvelope(validMessage));
-    const delivery = expectOk(await normalizeCollaborationEnvelope(validAttempt));
-    const action = expectOk(await normalizeCollaborationEnvelope(validAction));
+    const delivery = expectOk(
+      await normalizeCollaborationEnvelope(validAttempt, {
+        projectId: PROJECT,
+        taskId: TASK,
+      }),
+    );
+    const action = expectOk(
+      await normalizeCollaborationEnvelope(validAction, {
+        projectId: PROJECT,
+        taskId: TASK,
+      }),
+    );
     expect(message.idempotencyKey).not.toBe(delivery.idempotencyKey);
     expect(delivery.idempotencyKey).not.toBe(action.idempotencyKey);
   });
@@ -151,5 +175,43 @@ describe("normalizeCollaborationEnvelope", () => {
         expect(result.error.code).toBe("validation_failed");
       }
     }
+  });
+
+  it("rejects delivery attempt and action envelopes without a resolved owner", async () => {
+    for (const raw of [validAttempt, validAction]) {
+      const result = await normalizeCollaborationEnvelope(raw);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe("validation_failed");
+        expect(result.error.message).toMatch(/resolved project/);
+      }
+    }
+  });
+
+  it("rejects a partial or invalid caller-provided owner with validation_failed", async () => {
+    const cases = [
+      { projectId: PROJECT },
+      { taskId: TASK },
+      { projectId: "not-a-ulid", taskId: TASK },
+    ];
+    for (const options of cases) {
+      const result = await normalizeCollaborationEnvelope(validAttempt, options);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error.code).toBe("validation_failed");
+      }
+    }
+  });
+
+  it("resolves the owner from the message via the injected resolver", async () => {
+    const resolveOwner = (messageId: string) =>
+      messageId === MESSAGE ? { projectId: PROJECT, taskId: TASK } : undefined;
+    const event = expectOk(
+      await normalizeCollaborationEnvelope(validAction, {
+        resolveOwner,
+      }),
+    );
+    expect(event.projectId).toBe(PROJECT);
+    expect(event.taskId).toBe(TASK);
   });
 });

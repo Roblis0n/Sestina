@@ -1,7 +1,6 @@
 import {
   EventIdSchema,
   ProjectIdSchema,
-  SessionIdSchema,
   SestinaError,
   SestinaErrorCode,
   StandardEventSchema,
@@ -21,6 +20,8 @@ import {
   buildActionFingerprint,
   buildIdempotencyKey,
   deriveDeterministicId,
+  hostIdentityInput,
+  hostSessionIdentity,
   sha256Hex,
   type IdempotencyPhase,
 } from "./idempotency.js";
@@ -51,9 +52,18 @@ export type Result<T> =
  */
 export interface NormalizeHostEventInput {
   host: "codex" | "claude-code";
-  /** Parsed JSON of the hook stdin / stream line. */
-  raw: unknown;
-  /** Exact wire bytes. When absent the normalizer re-serializes `raw`. */
+  /**
+   * Parsed JSON of the hook stdin / stream line. Exactly one of `raw` /
+   * `rawBytes` must be provided — see enforceRawEventLimits: they are
+   * mutually exclusive so the size gate, the payload hash and the parsed
+   * content always describe the same bytes.
+   */
+  raw?: unknown;
+  /**
+   * Exact wire bytes. When present, `raw` must be absent: the normalizer
+   * size-gates these bytes first and parses the payload from them, so they
+   * are the single source of truth for content AND hash.
+   */
   rawBytes?: Uint8Array;
   /**
    * Host session id hint. Required for codex exec --json lines (item events
@@ -166,29 +176,22 @@ export async function normalizeHostEventDetailed(
             host: fields.host,
           });
 
-    const sessionId = SessionIdSchema.parse(
-      await deriveDeterministicId(
-        "session",
-        `${fields.host}\u0000${fields.hostSessionId}`,
-      ),
-    );
+    // The canonical host-session identity mapping is a single exported
+    // function (idempotency.ts) — correlation and Task 8's HostSessionService
+    // consume the same derivation instead of re-deriving their own.
+    const sessionId = await hostSessionIdentity(fields.host, fields.hostSessionId);
+    const identityInput = hostIdentityInput(fields.host, fields.hostSessionId);
     const projectId =
       input.projectId !== undefined
         ? ProjectIdSchema.parse(input.projectId)
         : ProjectIdSchema.parse(
-            await deriveDeterministicId(
-              "project",
-              `${fields.host}\u0000${fields.hostSessionId}`,
-            ),
+            await deriveDeterministicId("project", identityInput),
           );
     const taskId =
       input.taskId !== undefined
         ? TaskIdSchema.parse(input.taskId)
         : TaskIdSchema.parse(
-            await deriveDeterministicId(
-              "task",
-              `${fields.host}\u0000${fields.hostSessionId}`,
-            ),
+            await deriveDeterministicId("task", identityInput),
           );
 
     const rawPayloadHash = await sha256Hex(limited.bytes);

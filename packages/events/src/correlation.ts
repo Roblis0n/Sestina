@@ -4,6 +4,7 @@ import {
   nowUTC,
   type ContentDescriptor,
   type EventType,
+  type PrivacyClass,
 } from "@sestina/schema";
 import { buildActionFingerprint, sha256Hex } from "./idempotency.js";
 import type { NormalizedHostEvent } from "./normalize.js";
@@ -80,7 +81,8 @@ export interface CorrelateHostAndHookOptions {
  *
  * Only the hook path may create governance decisions — correlation is
  * bookkeeping; the merged record uses the hook's eventType and action (the
- * hook is the governance authority) and the stream's richer body.
+ * hook is the governance authority), the stream's richer body, and the
+ * strictest privacyClass of both sides (never downgraded by merging).
  *
  * Known asymmetry (documented, spec-true): Claude stream-json `user` lines
  * carry tool_result blocks with a tool_use_id but NO tool name, so their
@@ -112,6 +114,25 @@ const PHASE_TO_HOOK_EVENT_TYPE: Partial<Record<string, EventType>> = {
   post: "post_tool",
   failure: "tool_failure",
 };
+
+/**
+ * Privacy classes in ascending strictness (docs/17 §6.3). Merging is
+ * bookkeeping and must never downgrade a stricter class — the merged record
+ * always carries max(stream, hook).
+ */
+const PRIVACY_STRICTNESS: readonly PrivacyClass[] = [
+  "public",
+  "internal",
+  "sensitive",
+  "restricted",
+];
+
+export function strictestPrivacyClass(
+  a: PrivacyClass,
+  b: PrivacyClass,
+): PrivacyClass {
+  return PRIVACY_STRICTNESS.indexOf(a) >= PRIVACY_STRICTNESS.indexOf(b) ? a : b;
+}
 
 export async function correlateHostAndHook(
   stream: NormalizedHostEvent,
@@ -189,6 +210,11 @@ export async function correlateHostAndHook(
           ? streamEvent.occurredAt
           : hookEvent.occurredAt,
       receivedAt: nowUTC(),
+      // Merging never downgrades privacy: the strictest of both sides wins.
+      privacyClass: strictestPrivacyClass(
+        streamEvent.privacyClass,
+        hookEvent.privacyClass,
+      ),
       bypass: streamEvent.bypass || hookEvent.bypass,
       rawPayloadHash: await sha256Hex(
         new TextEncoder().encode(

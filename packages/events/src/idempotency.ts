@@ -1,8 +1,10 @@
 import {
+  SessionIdSchema,
   SestinaError,
   SestinaErrorCode,
   type ActionDescriptor,
   type Host,
+  type SessionId,
 } from "@sestina/schema";
 
 // ── Crypto helpers ─────────────────────────────────────────────────────────
@@ -99,6 +101,29 @@ export async function deriveDeterministicId(
     ),
   );
   return ulidFromBytes(digest.slice(0, 16));
+}
+
+// ── Host-session identity (docs/22 deviation #3) ───────────────────────────
+//
+// One host session maps to exactly one Sestina session id, deterministically.
+// The mapping below is THE canonical derivation: the normalizer, correlation
+// and Task 8's HostSessionService all consume it — nobody re-derives their
+// own template. `host` is the schema enum spelling ("codex" | "claude_code"),
+// never the wire spelling; the wire spelling stays an adapter concern.
+
+/** The exact identity input the deterministic derivations consume. */
+export function hostIdentityInput(host: Host, hostSessionId: string): string {
+  return `${host}\u0000${hostSessionId}`;
+}
+
+/** Derive the canonical Sestina session id for a (host, hostSessionId) pair. */
+export async function hostSessionIdentity(
+  host: Host,
+  hostSessionId: string,
+): Promise<SessionId> {
+  return SessionIdSchema.parse(
+    await deriveDeterministicId("session", hostIdentityInput(host, hostSessionId)),
+  );
 }
 
 // ── Action fingerprints ────────────────────────────────────────────────────

@@ -86,6 +86,35 @@ describe("correlateHostAndHook", () => {
     }
   });
 
+  it("merged record keeps the strictest privacyClass of stream and hook", async () => {
+    const stream = await codexStream("exec-stream-command-completed.json");
+    const hook = await codexHook("post-tool-use-bash.json");
+    const sensitiveHook: NormalizedHostEvent = {
+      ...hook,
+      event: { ...hook.event, privacyClass: "sensitive" },
+    };
+    const result = await correlateHostAndHook(stream, sensitiveHook);
+    expect(result.kind).toBe("merged");
+    if (result.kind === "merged") {
+      // Merging is bookkeeping; it must never downgrade a stricter class.
+      expect(result.merged.event.privacyClass).toBe("sensitive");
+    }
+  });
+
+  it("keeps the stream privacyClass when it is the stricter side", async () => {
+    const stream = await codexStream("exec-stream-command-completed.json");
+    const restrictedStream: NormalizedHostEvent = {
+      ...stream,
+      event: { ...stream.event, privacyClass: "restricted" },
+    };
+    const hook = await codexHook("post-tool-use-bash.json");
+    const result = await correlateHostAndHook(restrictedStream, hook);
+    expect(result.kind).toBe("merged");
+    if (result.kind === "merged") {
+      expect(result.merged.event.privacyClass).toBe("restricted");
+    }
+  });
+
   it("keeps both and marks possible_duplicate on tool call id mismatch", async () => {
     const stream = await codexStream("exec-stream-command-completed.json");
     const hook = await codexHook("post-tool-use-failure-bash.json");

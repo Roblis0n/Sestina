@@ -290,6 +290,48 @@ describe("codex exec --json stream lines", () => {
     expect(spawn.event.action?.category).toBe("execute");
   });
 
+  it("classifies a Codex stream mcp deploy item as external", async () => {
+    const detailed = expectOk(
+      await normalizeHostEventDetailed({
+        host: "codex",
+        sessionId: "codex-sess-0001",
+        raw: {
+          type: "item.completed",
+          item: {
+            id: "item_mcp_09",
+            type: "mcp_tool_call",
+            server: "vercel",
+            tool: "deploy",
+            status: "completed",
+          },
+        },
+      }),
+    );
+    expect(detailed.event.action?.toolName).toBe("mcp__vercel__deploy");
+    expect(detailed.event.action?.external).toBe(true);
+  });
+
+  it("never treats a Codex collab tool call as a collaboration_* event", async () => {
+    const detailed = expectOk(
+      await normalizeHostEventDetailed({
+        host: "codex",
+        sessionId: "codex-sess-0001",
+        raw: {
+          type: "item.completed",
+          item: {
+            id: "item_col_05",
+            type: "collab_tool_call",
+            tool: "send_input",
+            status: "completed",
+          },
+        },
+      }),
+    );
+    expect(detailed.event.eventType).toBe("host_stream");
+    expect(detailed.event.action?.toolName).toBe("send_input");
+    expect(detailed.event.action?.external).toBe(false);
+  });
+
   it("normalizes a stream error line without crashing", async () => {
     const event = expectOk(
       await normalizeHostEvent(
