@@ -1,0 +1,19 @@
+{
+  "_source": {
+    "description": "Codex PreToolUse hook stdin for the Bash tool (pre-tool-use.command.input.schema.json). Codex Bash tool_input carries a command string.",
+    "url": "https://developers.openai.com/codex/hooks",
+    "accessed": "2026-08-14"
+  },
+  "session_id": "codex-sess-0001",
+  "cwd": "C:\\Users\\alice\\projects\\demo",
+  "hook_event_name": "PreToolUse",
+  "model": "gpt-5.1-codex",
+  "permission_mode": "default",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npm test"
+  },
+  "tool_use_id": "toolu_codex_01bash",
+  "turn_id": "turn-codex-0002",
+  "transcript_path": "C:\\Users\\alice\\.codex\\sessions\\codex-sess-0001.jsonl"
+}

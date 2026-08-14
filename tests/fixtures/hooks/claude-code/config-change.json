@@ -1,0 +1,13 @@
+{
+  "_source": {
+    "description": "Claude Code ConfigChange hook stdin — official example shape (ConfigChange input section).",
+    "url": "https://code.claude.com/docs/en/hooks",
+    "accessed": "2026-08-14"
+  },
+  "session_id": "claude-sess-0001",
+  "transcript_path": "/Users/alice/.claude/projects/demo/00893aaf-19fa-41d2-8238-13269b9b3ca0.jsonl",
+  "cwd": "/Users/alice/projects/demo",
+  "hook_event_name": "ConfigChange",
+  "source": "project_settings",
+  "file_path": "/Users/alice/projects/demo/.claude/settings.json"
+}

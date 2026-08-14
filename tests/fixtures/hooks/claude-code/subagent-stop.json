@@ -1,0 +1,19 @@
+{
+  "_source": {
+    "description": "Claude Code SubagentStop hook stdin — official example shape (SubagentStop input section). transcript_path is the main session's; agent_transcript_path is the subagent's own.",
+    "url": "https://code.claude.com/docs/en/hooks",
+    "accessed": "2026-08-14"
+  },
+  "session_id": "claude-sess-0001",
+  "transcript_path": "/Users/alice/.claude/projects/demo/transcript.jsonl",
+  "cwd": "/Users/alice/projects/demo",
+  "permission_mode": "default",
+  "hook_event_name": "SubagentStop",
+  "stop_hook_active": false,
+  "agent_id": "agent-claude-0001",
+  "agent_type": "Explore",
+  "agent_transcript_path": "/Users/alice/.claude/projects/demo/transcript.jsonl",
+  "last_assistant_message": "Analysis complete. Found 3 potential issues...",
+  "background_tasks": [],
+  "session_crons": []
+}

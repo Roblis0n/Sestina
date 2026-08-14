@@ -1,0 +1,16 @@
+{
+  "_source": {
+    "description": "codex exec --json line: ItemStarted for a CommandExecution thread item (exec-events.rs). item ids are the tool-call ids used by hooks.",
+    "url": "https://github.com/openai/codex/blob/main/codex-rs/exec/src/exec_events.rs",
+    "accessed": "2026-08-14"
+  },
+  "type": "item.started",
+  "item": {
+    "id": "toolu_codex_01bash",
+    "type": "command_execution",
+    "command": "npm test",
+    "aggregated_output": "",
+    "exit_code": null,
+    "status": "in_progress"
+  }
+}

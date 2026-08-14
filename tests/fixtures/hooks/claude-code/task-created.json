@@ -1,0 +1,17 @@
+{
+  "_source": {
+    "description": "Claude Code TaskCreated hook stdin — official example shape (TaskCreated input section). task_description, teammate_name and team_name are optional.",
+    "url": "https://code.claude.com/docs/en/hooks",
+    "accessed": "2026-08-14"
+  },
+  "session_id": "claude-sess-0001",
+  "transcript_path": "/Users/alice/.claude/projects/demo/00893aaf-19fa-41d2-8238-13269b9b3ca0.jsonl",
+  "cwd": "/Users/alice/projects/demo",
+  "permission_mode": "default",
+  "hook_event_name": "TaskCreated",
+  "task_id": "task-001",
+  "task_subject": "Implement user authentication",
+  "task_description": "Add login and signup endpoints",
+  "teammate_name": "implementer",
+  "team_name": "session-a1b2c3d4"
+}

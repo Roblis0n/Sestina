@@ -1,0 +1,19 @@
+{
+  "_source": {
+    "description": "codex exec --json line: ItemCompleted for a FileChange thread item (apply_patch). FileChange items are emitted only as completed events (exec-events.rs).",
+    "url": "https://github.com/openai/codex/blob/main/codex-rs/exec/src/exec_events.rs",
+    "accessed": "2026-08-14"
+  },
+  "type": "item.completed",
+  "item": {
+    "id": "filechange-codex-0001",
+    "type": "file_change",
+    "changes": [
+      {
+        "path": "C:\\Users\\alice\\projects\\demo\\src\\app.ts",
+        "kind": "update"
+      }
+    ],
+    "status": "completed"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "_source": {
+    "description": "Claude Code DirectoryAdded hook stdin — official example shape (DirectoryAdded input section).",
+    "url": "https://code.claude.com/docs/en/hooks",
+    "accessed": "2026-08-14"
+  },
+  "session_id": "claude-sess-0001",
+  "transcript_path": "/Users/alice/.claude/projects/demo/transcript.jsonl",
+  "cwd": "/Users/alice/projects/demo",
+  "hook_event_name": "DirectoryAdded",
+  "directory": "/Users/alice/other-repo",
+  "source": "slash_command"
+}

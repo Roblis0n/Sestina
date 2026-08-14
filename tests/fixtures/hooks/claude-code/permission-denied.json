@@ -1,0 +1,19 @@
+{
+  "_source": {
+    "description": "Claude Code PermissionDenied hook stdin — official example shape (PermissionDenied input section). Fires only in auto mode when the classifier denies a call.",
+    "url": "https://code.claude.com/docs/en/hooks",
+    "accessed": "2026-08-14"
+  },
+  "session_id": "claude-sess-0001",
+  "transcript_path": "/Users/alice/.claude/projects/demo/00893aaf-19fa-41d2-8238-13269b9b3ca0.jsonl",
+  "cwd": "/Users/alice/projects/demo",
+  "permission_mode": "auto",
+  "hook_event_name": "PermissionDenied",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "rm -rf /tmp/build",
+    "description": "Clean build directory"
+  },
+  "tool_use_id": "toolu_claude_01denied",
+  "reason": "Blocked by classifier"
+}

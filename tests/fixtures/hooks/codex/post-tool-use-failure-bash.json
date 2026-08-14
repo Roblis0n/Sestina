@@ -1,0 +1,23 @@
+{
+  "_source": {
+    "description": "Codex PostToolUse hook stdin where the Bash call failed (exit_code != 0). Codex has no separate PostToolUseFailure event; the failure surfaces through PostToolUse with a non-zero exit code (docs/12 §4).",
+    "url": "https://developers.openai.com/codex/hooks",
+    "accessed": "2026-08-14"
+  },
+  "session_id": "codex-sess-0001",
+  "cwd": "C:\\Users\\alice\\projects\\demo",
+  "hook_event_name": "PostToolUse",
+  "model": "gpt-5.1-codex",
+  "permission_mode": "default",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npm test"
+  },
+  "tool_response": {
+    "exit_code": 1,
+    "output": "1 test failed"
+  },
+  "tool_use_id": "toolu_codex_01bashfail",
+  "turn_id": "turn-codex-0005",
+  "transcript_path": "C:\\Users\\alice\\.codex\\sessions\\codex-sess-0001.jsonl"
+}

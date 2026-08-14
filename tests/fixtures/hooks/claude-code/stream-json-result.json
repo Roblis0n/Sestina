@@ -1,0 +1,15 @@
+{
+  "_source": {
+    "description": "claude -p --output-format stream-json line: the final result message (headless.md, Stream responses). Last line of the stream.",
+    "url": "https://code.claude.com/docs/en/headless",
+    "accessed": "2026-08-14"
+  },
+  "type": "result",
+  "subtype": "success",
+  "session_id": "claude-sess-0001",
+  "result": "All tests pass.",
+  "total_cost_usd": 0.05,
+  "duration_ms": 4187,
+  "num_turns": 3,
+  "uuid": "a1b2c3d4-0000-0000-0000-000000000004"
+}

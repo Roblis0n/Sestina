@@ -1,0 +1,14 @@
+{
+  "_source": {
+    "description": "Claude Code InstructionsLoaded hook stdin — official example shape (InstructionsLoaded input section). Fires when a CLAUDE.md or .claude/rules/*.md file is loaded.",
+    "url": "https://code.claude.com/docs/en/hooks",
+    "accessed": "2026-08-14"
+  },
+  "session_id": "claude-sess-0001",
+  "transcript_path": "/Users/alice/.claude/projects/demo/transcript.jsonl",
+  "cwd": "/Users/alice/projects/demo",
+  "hook_event_name": "InstructionsLoaded",
+  "file_path": "/Users/alice/projects/demo/CLAUDE.md",
+  "memory_type": "Project",
+  "load_reason": "session_start"
+}

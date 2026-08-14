@@ -1,0 +1,9 @@
+{
+  "_source": {
+    "description": "codex exec --json line: ThreadErrorEvent emitted directly by the event stream (exec-events.rs).",
+    "url": "https://github.com/openai/codex/blob/main/codex-rs/exec/src/exec_events.rs",
+    "accessed": "2026-08-14"
+  },
+  "type": "error",
+  "message": "unrecoverable stream error"
+}

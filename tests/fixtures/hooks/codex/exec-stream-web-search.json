@@ -1,0 +1,15 @@
+{
+  "_source": {
+    "description": "codex exec --json item.completed line for a hosted WebSearch (exec-events.rs WebSearchItem). Hosted tools emit NO tool hooks, so the stream is the only signal.",
+    "url": "https://github.com/openai/codex/blob/main/codex-rs/exec/src/exec_events.rs",
+    "accessed": "2026-08-14"
+  },
+  "type": "item.completed",
+  "item": {
+    "id": "item_ws_01",
+    "type": "web_search",
+    "query": "sestina governance agent",
+    "action": "searched",
+    "status": "completed"
+  }
+}

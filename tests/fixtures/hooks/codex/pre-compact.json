@@ -1,0 +1,14 @@
+{
+  "_source": {
+    "description": "Codex PreCompact hook stdin (pre-compact.command.input.schema.json). trigger is manual or auto.",
+    "url": "https://developers.openai.com/codex/hooks",
+    "accessed": "2026-08-14"
+  },
+  "session_id": "codex-sess-0001",
+  "cwd": "C:\\Users\\alice\\projects\\demo",
+  "hook_event_name": "PreCompact",
+  "model": "gpt-5.1-codex",
+  "trigger": "manual",
+  "turn_id": "turn-codex-0006",
+  "transcript_path": "C:\\Users\\alice\\.codex\\sessions\\codex-sess-0001.jsonl"
+}

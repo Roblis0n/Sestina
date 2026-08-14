@@ -1,0 +1,21 @@
+{
+  "_source": {
+    "description": "Claude Code PreToolUse hook stdin for Bash — official example shape (PreToolUse input section, common fields example).",
+    "url": "https://code.claude.com/docs/en/hooks",
+    "accessed": "2026-08-14"
+  },
+  "session_id": "claude-sess-0001",
+  "prompt_id": "550e8400-e29b-41d4-a716-446655440000",
+  "transcript_path": "/Users/alice/.claude/projects/demo/transcript.jsonl",
+  "cwd": "/Users/alice/projects/demo",
+  "permission_mode": "default",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npm test",
+    "description": "Run test suite",
+    "timeout": 120000,
+    "run_in_background": false
+  },
+  "tool_use_id": "toolu_claude_01bash"
+}

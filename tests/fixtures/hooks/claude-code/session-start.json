@@ -1,0 +1,13 @@
+{
+  "_source": {
+    "description": "Claude Code SessionStart hook stdin — verbatim official example shape from the Claude Code hooks reference (SessionStart input section), with session_id normalized.",
+    "url": "https://code.claude.com/docs/en/hooks",
+    "accessed": "2026-08-14"
+  },
+  "session_id": "claude-sess-0001",
+  "transcript_path": "/Users/alice/.claude/projects/demo/00893aaf-19fa-41d2-8238-13269b9b3ca0.jsonl",
+  "cwd": "/Users/alice/projects/demo",
+  "hook_event_name": "SessionStart",
+  "source": "startup",
+  "model": "claude-sonnet-5"
+}

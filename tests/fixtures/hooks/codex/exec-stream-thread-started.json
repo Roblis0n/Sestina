@@ -1,0 +1,9 @@
+{
+  "_source": {
+    "description": "codex exec --json line: ThreadEvent::ThreadStarted (exec-events.rs, openai/codex codex-rs/exec). thread.started is emitted as the first event.",
+    "url": "https://github.com/openai/codex/blob/main/codex-rs/exec/src/exec_events.rs",
+    "accessed": "2026-08-14"
+  },
+  "type": "thread.started",
+  "thread_id": "thread-codex-0001"
+}

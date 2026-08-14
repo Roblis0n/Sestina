@@ -1,0 +1,14 @@
+{
+  "_source": {
+    "description": "claude -p --output-format stream-json line: system/init event (headless.md, Read session metadata). First event in the stream.",
+    "url": "https://code.claude.com/docs/en/headless",
+    "accessed": "2026-08-14"
+  },
+  "type": "system",
+  "subtype": "init",
+  "session_id": "claude-sess-0001",
+  "model": "claude-sonnet-5",
+  "tools": ["Bash", "Read", "Write", "Edit", "WebFetch", "WebSearch"],
+  "mcp_servers": [],
+  "uuid": "a1b2c3d4-0000-0000-0000-000000000001"
+}

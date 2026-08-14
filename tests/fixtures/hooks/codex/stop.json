@@ -1,0 +1,16 @@
+{
+  "_source": {
+    "description": "Codex Stop hook stdin (stop.command.input.schema.json). stop_hook_active signals whether the host is already continuing because of a stop hook.",
+    "url": "https://developers.openai.com/codex/hooks",
+    "accessed": "2026-08-14"
+  },
+  "session_id": "codex-sess-0001",
+  "cwd": "C:\\Users\\alice\\projects\\demo",
+  "hook_event_name": "Stop",
+  "last_assistant_message": "All tasks completed.",
+  "model": "gpt-5.1-codex",
+  "permission_mode": "default",
+  "stop_hook_active": false,
+  "turn_id": "turn-codex-0008",
+  "transcript_path": "C:\\Users\\alice\\.codex\\sessions\\codex-sess-0001.jsonl"
+}

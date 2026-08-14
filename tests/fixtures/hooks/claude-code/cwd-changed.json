@@ -1,0 +1,13 @@
+{
+  "_source": {
+    "description": "Claude Code CwdChanged hook stdin — official example shape (CwdChanged input section).",
+    "url": "https://code.claude.com/docs/en/hooks",
+    "accessed": "2026-08-14"
+  },
+  "session_id": "claude-sess-0001",
+  "transcript_path": "/Users/alice/.claude/projects/demo/transcript.jsonl",
+  "cwd": "/Users/alice/projects/demo/src",
+  "hook_event_name": "CwdChanged",
+  "old_cwd": "/Users/alice/projects/demo",
+  "new_cwd": "/Users/alice/projects/demo/src"
+}

@@ -1,0 +1,16 @@
+{
+  "_source": {
+    "description": "codex exec --json line: ItemCompleted for a CommandExecution thread item that failed (exec-events.rs, CommandExecutionStatus::Failed).",
+    "url": "https://github.com/openai/codex/blob/main/codex-rs/exec/src/exec_events.rs",
+    "accessed": "2026-08-14"
+  },
+  "type": "item.completed",
+  "item": {
+    "id": "toolu_codex_01bashfail",
+    "type": "command_execution",
+    "command": "npm test",
+    "aggregated_output": "1 test failed",
+    "exit_code": 1,
+    "status": "failed"
+  }
+}

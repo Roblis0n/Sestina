@@ -1,0 +1,21 @@
+{
+  "_source": {
+    "description": "Claude Code PreToolUse hook stdin for Edit. Official field table (PreToolUse input, Edit): file_path, old_string, new_string, replace_all.",
+    "url": "https://code.claude.com/docs/en/hooks",
+    "accessed": "2026-08-14"
+  },
+  "session_id": "claude-sess-0001",
+  "prompt_id": "550e8400-e29b-41d4-a716-446655440000",
+  "transcript_path": "/Users/alice/.claude/projects/demo/transcript.jsonl",
+  "cwd": "/Users/alice/projects/demo",
+  "permission_mode": "default",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Edit",
+  "tool_input": {
+    "file_path": "/Users/alice/projects/demo/src/app.ts",
+    "old_string": "const app = 0;",
+    "new_string": "const app = 1;",
+    "replace_all": false
+  },
+  "tool_use_id": "toolu_claude_01edit"
+}

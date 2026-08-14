@@ -1,0 +1,19 @@
+{
+  "_source": {
+    "description": "Codex PreToolUse hook stdin for apply_patch. Codex apply_patch uses tool_input.command (patch text); matcher aliases Write/Edit never change the serialized name (hook_names.rs, openai/codex).",
+    "url": "https://developers.openai.com/codex/hooks",
+    "accessed": "2026-08-14"
+  },
+  "session_id": "codex-sess-0001",
+  "cwd": "C:\\Users\\alice\\projects\\demo",
+  "hook_event_name": "PreToolUse",
+  "model": "gpt-5.1-codex",
+  "permission_mode": "default",
+  "tool_name": "apply_patch",
+  "tool_input": {
+    "command": "*** Begin Patch\n*** Update File: src/app.ts\n@@\n-old text\n+new text\n*** End Patch"
+  },
+  "tool_use_id": "toolu_codex_01patch",
+  "turn_id": "turn-codex-0003",
+  "transcript_path": "C:\\Users\\alice\\.codex\\sessions\\codex-sess-0001.jsonl"
+}

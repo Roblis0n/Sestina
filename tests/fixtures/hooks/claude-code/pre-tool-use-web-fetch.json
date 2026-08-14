@@ -1,0 +1,19 @@
+{
+  "_source": {
+    "description": "Claude Code PreToolUse hook stdin for WebFetch. Official field table (PreToolUse input, WebFetch): url, prompt.",
+    "url": "https://code.claude.com/docs/en/hooks",
+    "accessed": "2026-08-14"
+  },
+  "session_id": "claude-sess-0001",
+  "prompt_id": "550e8400-e29b-41d4-a716-446655440000",
+  "transcript_path": "/Users/alice/.claude/projects/demo/transcript.jsonl",
+  "cwd": "/Users/alice/projects/demo",
+  "permission_mode": "default",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "WebFetch",
+  "tool_input": {
+    "url": "https://example.com/api",
+    "prompt": "Extract the API endpoints"
+  },
+  "tool_use_id": "toolu_claude_01webfetch"
+}

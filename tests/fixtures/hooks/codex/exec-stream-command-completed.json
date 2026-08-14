@@ -1,0 +1,16 @@
+{
+  "_source": {
+    "description": "codex exec --json line: ItemCompleted for a CommandExecution thread item that succeeded (exec-events.rs).",
+    "url": "https://github.com/openai/codex/blob/main/codex-rs/exec/src/exec_events.rs",
+    "accessed": "2026-08-14"
+  },
+  "type": "item.completed",
+  "item": {
+    "id": "toolu_codex_01bash",
+    "type": "command_execution",
+    "command": "npm test",
+    "aggregated_output": "1 test passed",
+    "exit_code": 0,
+    "status": "completed"
+  }
+}

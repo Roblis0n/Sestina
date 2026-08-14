@@ -1,0 +1,17 @@
+{
+  "_source": {
+    "description": "codex exec --json item.completed line for a collab_tool_call (exec-events.rs CollabTool enum: spawn_agent | send_input | wait | close_agent). Each tool keeps its own identity.",
+    "url": "https://github.com/openai/codex/blob/main/codex-rs/exec/src/exec_events.rs",
+    "accessed": "2026-08-14"
+  },
+  "type": "item.completed",
+  "item": {
+    "id": "item_col_01",
+    "type": "collab_tool_call",
+    "tool": "wait",
+    "sender_thread_id": "thr_codex_a",
+    "receiver_thread_ids": ["thr_codex_b"],
+    "agents_states": [],
+    "status": "completed"
+  }
+}

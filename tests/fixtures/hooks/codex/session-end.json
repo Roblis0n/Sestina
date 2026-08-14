@@ -1,0 +1,12 @@
+{
+  "_source": {
+    "description": "Codex SessionEnd hook stdin. The schema fixes reason to the const \"other\" (session-end.command.input.schema.json).",
+    "url": "https://developers.openai.com/codex/hooks",
+    "accessed": "2026-08-14"
+  },
+  "session_id": "codex-sess-0001",
+  "cwd": "C:\\Users\\alice\\projects\\demo",
+  "hook_event_name": "SessionEnd",
+  "reason": "other",
+  "transcript_path": "C:\\Users\\alice\\.codex\\sessions\\codex-sess-0001.jsonl"
+}

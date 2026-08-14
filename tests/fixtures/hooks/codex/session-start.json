@@ -1,0 +1,14 @@
+{
+  "_source": {
+    "description": "Codex SessionStart hook stdin, synthesized to satisfy the exact required array of the generated wire schema permission-session-start command input (codex-hooks-schemas/session-start.command.input.schema.json).",
+    "url": "https://developers.openai.com/codex/hooks",
+    "accessed": "2026-08-14"
+  },
+  "session_id": "codex-sess-0001",
+  "cwd": "C:\\Users\\alice\\projects\\demo",
+  "hook_event_name": "SessionStart",
+  "model": "gpt-5.1-codex",
+  "permission_mode": "default",
+  "source": "startup",
+  "transcript_path": "C:\\Users\\alice\\.codex\\sessions\\codex-sess-0001.jsonl"
+}

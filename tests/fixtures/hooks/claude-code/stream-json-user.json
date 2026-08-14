@@ -1,0 +1,20 @@
+{
+  "_source": {
+    "description": "claude -p --output-format stream-json line: user message carrying the serialized tool_result content (headless.md, Follow subagent messages).",
+    "url": "https://code.claude.com/docs/en/headless",
+    "accessed": "2026-08-14"
+  },
+  "type": "user",
+  "session_id": "claude-sess-0001",
+  "message": {
+    "role": "user",
+    "content": [
+      {
+        "type": "tool_result",
+        "tool_use_id": "toolu_claude_01bash",
+        "content": "1 test passed"
+      }
+    ]
+  },
+  "uuid": "a1b2c3d4-0000-0000-0000-000000000003"
+}

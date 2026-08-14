@@ -1,0 +1,20 @@
+{
+  "_source": {
+    "description": "codex exec --json line: ItemStarted for an McpToolCall thread item (exec-events.rs). Hook tool names use mcp__<server>__<tool>.",
+    "url": "https://github.com/openai/codex/blob/main/codex-rs/exec/src/exec_events.rs",
+    "accessed": "2026-08-14"
+  },
+  "type": "item.started",
+  "item": {
+    "id": "mcp-call-codex-0001",
+    "type": "mcp_tool_call",
+    "server": "filesystem",
+    "tool": "read_file",
+    "arguments": {
+      "path": "C:\\Users\\alice\\projects\\demo\\README.md"
+    },
+    "result": null,
+    "error": null,
+    "status": "in_progress"
+  }
+}

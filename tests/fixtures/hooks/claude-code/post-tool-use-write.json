@@ -1,0 +1,23 @@
+{
+  "_source": {
+    "description": "Claude Code PostToolUse hook stdin — official example shape (PostToolUse input section). tool_response is the tool's structured Output object.",
+    "url": "https://code.claude.com/docs/en/hooks",
+    "accessed": "2026-08-14"
+  },
+  "session_id": "claude-sess-0001",
+  "transcript_path": "/Users/alice/.claude/projects/demo/00893aaf-19fa-41d2-8238-13269b9b3ca0.jsonl",
+  "cwd": "/Users/alice/projects/demo",
+  "permission_mode": "default",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "C:\\Users\\alice\\projects\\demo\\src\\app.ts",
+    "content": "export const app = 1;"
+  },
+  "tool_response": {
+    "filePath": "C:\\Users\\alice\\projects\\demo\\src\\app.ts",
+    "success": true
+  },
+  "tool_use_id": "toolu_claude_01write",
+  "duration_ms": 12
+}

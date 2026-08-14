@@ -1,0 +1,15 @@
+{
+  "_source": {
+    "description": "Codex UserPromptSubmit hook stdin (user-prompt-submit.command.input.schema.json).",
+    "url": "https://developers.openai.com/codex/hooks",
+    "accessed": "2026-08-14"
+  },
+  "session_id": "codex-sess-0001",
+  "cwd": "C:\\Users\\alice\\projects\\demo",
+  "hook_event_name": "UserPromptSubmit",
+  "model": "gpt-5.1-codex",
+  "permission_mode": "default",
+  "prompt": "Fix the failing test in src/app.ts",
+  "turn_id": "turn-codex-0001",
+  "transcript_path": "C:\\Users\\alice\\.codex\\sessions\\codex-sess-0001.jsonl"
+}

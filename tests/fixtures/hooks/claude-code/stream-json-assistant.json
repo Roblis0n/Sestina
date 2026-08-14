@@ -1,0 +1,24 @@
+{
+  "_source": {
+    "description": "claude -p --output-format stream-json line: assistant message carrying one tool_use block (claude-sdk-streaming.md message flow).",
+    "url": "https://code.claude.com/docs/en/agent-sdk/streaming-output",
+    "accessed": "2026-08-14"
+  },
+  "type": "assistant",
+  "session_id": "claude-sess-0001",
+  "message": {
+    "role": "assistant",
+    "content": [
+      {
+        "type": "tool_use",
+        "id": "toolu_claude_01bash",
+        "name": "Bash",
+        "input": {
+          "command": "npm test",
+          "description": "Run test suite"
+        }
+      }
+    ]
+  },
+  "uuid": "a1b2c3d4-0000-0000-0000-000000000002"
+}

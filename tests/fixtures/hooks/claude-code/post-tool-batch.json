@@ -1,0 +1,26 @@
+{
+  "_source": {
+    "description": "Claude Code PostToolBatch hook stdin — official example shape (PostToolBatch input section). tool_response here is the serialized tool_result content the model sees, NOT the structured PostToolUse output.",
+    "url": "https://code.claude.com/docs/en/hooks",
+    "accessed": "2026-08-14"
+  },
+  "session_id": "claude-sess-0001",
+  "transcript_path": "/Users/alice/.claude/projects/demo/00893aaf-19fa-41d2-8238-13269b9b3ca0.jsonl",
+  "cwd": "/Users/alice/projects/demo",
+  "permission_mode": "default",
+  "hook_event_name": "PostToolBatch",
+  "tool_calls": [
+    {
+      "tool_name": "Read",
+      "tool_input": { "file_path": "/Users/alice/projects/demo/ledger/accounts.py" },
+      "tool_use_id": "toolu_claude_01read1",
+      "tool_response": "     1\tfrom __future__ import annotations\n     2\t..."
+    },
+    {
+      "tool_name": "Read",
+      "tool_input": { "file_path": "/Users/alice/projects/demo/ledger/transactions.py" },
+      "tool_use_id": "toolu_claude_01read2",
+      "tool_response": "     1\tfrom __future__ import annotations\n     2\t..."
+    }
+  ]
+}

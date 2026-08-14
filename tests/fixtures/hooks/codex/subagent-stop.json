@@ -1,0 +1,19 @@
+{
+  "_source": {
+    "description": "Codex SubagentStop hook stdin (subagent-stop.command.input.schema.json). agent_transcript_path points at the subagent's own transcript.",
+    "url": "https://developers.openai.com/codex/hooks",
+    "accessed": "2026-08-14"
+  },
+  "session_id": "codex-sess-0001",
+  "cwd": "C:\\Users\\alice\\projects\\demo",
+  "hook_event_name": "SubagentStop",
+  "agent_id": "agent-codex-0001",
+  "agent_type": "general-purpose",
+  "agent_transcript_path": "C:\\Users\\alice\\.codex\\sessions\\codex-sess-0001-subagents\\agent-codex-0001.jsonl",
+  "last_assistant_message": "Subagent analysis complete.",
+  "model": "gpt-5.1-codex",
+  "permission_mode": "default",
+  "stop_hook_active": false,
+  "turn_id": "turn-codex-0010",
+  "transcript_path": "C:\\Users\\alice\\.codex\\sessions\\codex-sess-0001.jsonl"
+}
