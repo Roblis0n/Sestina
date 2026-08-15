@@ -235,7 +235,7 @@ describe("Id-scoped reads stay inside their project (docs/22 Task 6 invariant)",
         performedBy: { actor: "user", channel: "desktop", directUser: true },
         performedAt: "2026-08-13T00:01:00.000Z",
       });
-      u.contracts.insert(contractB);
+      u.contracts.insert(projectB, contractB);
       u.sessions.insert(projectB, sessionB);
       u.hostStream.append({
         streamEventId: generateId(), sessionId: sessionB.sessionId, sequence: 1,

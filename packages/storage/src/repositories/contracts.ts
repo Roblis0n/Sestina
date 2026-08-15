@@ -10,8 +10,14 @@ import { validateJson } from "../schema-check.js";
 import { assertInTransaction, toMs } from "./shared.js";
 
 export interface ContractRepository {
-  /** Inserts the contract plus its first version in one transaction. */
-  insert(contract: TaskContract): void;
+  /**
+   * Inserts the contract plus its first version in one transaction.
+   *
+   * Task 9 hardening: the contract's task must belong to `projectId`
+   * (a foreign task fails with the same task_not_found a missing task
+   * produces — no existence leak), and the first version must be exactly 1.
+   */
+  insert(projectId: string, contract: TaskContract): void;
   get(projectId: string, contractId: string): TaskContract | undefined;
   getCurrentByTask(projectId: string, taskId: string): TaskContract | undefined;
   /**
@@ -53,8 +59,25 @@ function assembleContract(row: ContractRow): TaskContract {
 
 export function createContractRepository(tx: StorageTransaction): ContractRepository {
   return {
-    insert(contract) {
+    insert(projectId, contract) {
       assertInTransaction(tx);
+      if (contract.version !== 1) {
+        throw new SestinaError(
+          SestinaErrorCode.validation_failed,
+          "Initial contract version must be 1",
+        );
+      }
+      // Fence before writing: the contract's task must belong to the
+      // caller's project. A missing task and a foreign task share the
+      // same error face.
+      const attributed = tx.get<{ task_id: string }>(
+        "SELECT task_id FROM tasks WHERE task_id = ? AND project_id = ?",
+        contract.taskId,
+        projectId,
+      );
+      if (!attributed) {
+        throw new SestinaError(SestinaErrorCode.task_not_found, "Task not found");
+      }
       tx.run(
         "INSERT INTO contracts (contract_id, task_id, status, data) VALUES (?, ?, ?, ?)",
         contract.contractId,

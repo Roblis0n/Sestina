@@ -1,6 +1,74 @@
 import { z } from "zod";
 import { ContractIdSchema, TaskIdSchema } from "./ids.js";
 import { HOST_SCHEMA, TimestampSchema } from "./common.js";
+import { HandoffPreauthorizationSchema } from "./collaboration-authority.js";
+
+// ── Source span ──
+//
+// Index unit: UTF-16 code units into the original user text. `start` is
+// inclusive, `end` is exclusive. A span must never split a surrogate pair;
+// `sourceSpanExtract` is the single sanctioned way to slice a span out of
+// the source text and returns undefined for unclean boundaries.
+
+export const SourceSpanSchema = z.object({
+  start: z.number().int().nonnegative(),
+  end: z.number().int().nonnegative(),
+}).refine((s) => s.end >= s.start, { message: "span end must be >= start" });
+export type SourceSpan = z.infer<typeof SourceSpanSchema>;
+
+export function sourceSpanExtract(source: string, span: SourceSpan): string | undefined {
+  if (span.start < 0 || span.end > source.length || span.end < span.start) return undefined;
+  if (span.start < span.end) {
+    const first = source.charCodeAt(span.start);
+    if (first >= 0xd800 && first <= 0xdbff && span.end === span.start + 1) return undefined;
+    const last = source.charCodeAt(span.end - 1);
+    if (last >= 0xdc00 && last <= 0xdfff && span.start === span.end - 1) return undefined;
+  }
+  return source.slice(span.start, span.end);
+}
+
+// ── Source tiers ──
+//
+// The fixed seven-level precedence used for patch merging and boundary
+// compilation (docs/09 §6): non-overridable system safety > current user
+// directives > confirmed corrections > project rules > user defaults >
+// templates > inference. Higher tiers win conflicts, but a higher tier
+// never automatically means "hard".
+
+export const ContractSourceTierSchema = z.enum([
+  "system_safety",
+  "user_directive",
+  "confirmed_correction",
+  "project_rule",
+  "user_default",
+  "template",
+  "inferred",
+]);
+export type ContractSourceTier = z.infer<typeof ContractSourceTierSchema>;
+
+export const CONTRACT_SOURCE_TIER_PRECEDENCE: readonly ContractSourceTier[] = [
+  "system_safety",
+  "user_directive",
+  "confirmed_correction",
+  "project_rule",
+  "user_default",
+  "template",
+  "inferred",
+];
+
+const SOURCE_TYPE_TO_TIER: Record<string, ContractSourceTier> = {
+  system_safety: "system_safety",
+  user_directive: "user_directive",
+  correction: "confirmed_correction",
+  project_rule: "project_rule",
+  user_default: "user_default",
+  template: "template",
+  inferred: "inferred",
+};
+
+export function sourceTypeToTier(type: string): ContractSourceTier | undefined {
+  return SOURCE_TYPE_TO_TIER[type];
+}
 
 // ── Objective ──
 export const ObjectiveSchema = z.object({
@@ -78,11 +146,13 @@ export const BoundarySourceSchema = z.object({
     "project_rule",
     "system_safety",
     "correction",
+    "user_default",
     "template",
     "inferred",
   ]),
   ref: z.string().optional(),
   confidence: z.number().min(0).max(1),
+  sourceSpan: SourceSpanSchema.optional(),
 });
 export type BoundarySource = z.infer<typeof BoundarySourceSchema>;
 
@@ -174,6 +244,24 @@ export const ContractStatusSchema = z.enum([
 ]);
 export type ContractStatus = z.infer<typeof ContractStatusSchema>;
 
+/**
+ * Honest carrier for semantic completeness. A deterministic no-provider
+ * compile can only reach `schema_valid_only` (or `user_confirmed` once the
+ * user confirms). There is no state that claims semantic verification.
+ */
+export const SemanticCompletenessSchema = z
+  .object({
+    semanticExtractorRan: z.boolean(),
+    completeness: z.enum(["schema_valid_only", "provider_assisted", "user_confirmed"]),
+    unknownFields: z.array(z.string().min(1).max(100)),
+    notes: z.string().max(500),
+  })
+  .refine(
+    (s) => s.semanticExtractorRan || s.completeness !== "provider_assisted",
+    { message: "provider_assisted requires a semantic extractor run" },
+  );
+export type SemanticCompleteness = z.infer<typeof SemanticCompletenessSchema>;
+
 export const TaskContractSchema = z.object({
   schemaVersion: z.literal("1.0.0"),
   contractId: ContractIdSchema,
@@ -195,6 +283,8 @@ export const TaskContractSchema = z.object({
   assumptions: z.array(AssumptionSchema),
   correctionRefs: z.array(z.string()),
   sourceRefs: z.array(SourceRefSchema),
+  semanticCompleteness: SemanticCompletenessSchema.optional(),
+  preauthorizations: z.array(HandoffPreauthorizationSchema).optional(),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
 });

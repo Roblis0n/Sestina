@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "strategy",
+  "projectId": "F0BYY2BB6X6MQDR1E28GJ4E4VM",
+  "taskId": "CNHPPHPWT129X96W92TGS7R9T4",
+  "title": "路线图讨论",
+  "userPrompt": "帮我梳理一下这个项目的技术路线，看看接下来怎么走比较好。",
+  "userExcerpts": [],
+  "templateId": "sestina/strategy",
+  "now": "2026-08-15T00:00:00.000Z"
+}

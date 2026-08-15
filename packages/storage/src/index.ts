@@ -174,6 +174,9 @@ export type {
   ContractRepository,
 } from "./repositories/contracts.js";
 export type {
+  CorrectionRepository,
+} from "./repositories/corrections.js";
+export type {
   EventRepository,
   EventReserveResult,
 } from "./repositories/events.js";

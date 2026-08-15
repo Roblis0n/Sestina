@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "1.0.0",
+  "correctionId": "GZ7BYA7DV153F7BS4901TYY74W",
+  "projectId": "D441CK828115Z988RM5F21HP5C",
+  "taskId": "F3TAA0D4M14NS4J5N5SAHCQ3MC",
+  "scope": "task",
+  "summary": "MCP 工具尝试把这条纠正标记为已确认",
+  "normalizedInstruction": "先跑测试",
+  "originalEventRef": "EVT-2026-08-15-002",
+  "failureClass": "rule",
+  "severity": "moderate",
+  "actor": {
+    "actor": "agent",
+    "channel": "mcp",
+    "directUser": false
+  },
+  "confirmed": true,
+  "recurrenceCount": 0,
+  "recurrenceFingerprint": "0x11aa22bb",
+  "createdAt": "2026-08-15T09:00:00.000Z"
+}

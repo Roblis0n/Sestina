@@ -513,7 +513,7 @@ describe("Task 8 storage repositories (docs/22 Task 8, docs/30)", () => {
       uow.commit((u) => {
         u.projects.insert(project);
         u.tasks.insert(makeTask(project.projectId, { taskId: contract.taskId }));
-        u.contracts.insert(contract);
+        u.contracts.insert(project.projectId, contract);
       });
       const v2 = { ...contract, version: 2, updatedAt: "2026-08-14T01:00:00.000Z" };
       uow.commit((u) => {

@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { TaskIdSchema } from "./ids.js";
 import { TimestampSchema } from "./common.js";
-import { DriftClassSchema } from "./decisions.js";
 
 // ── Evidence ──
 export const EvidenceTypeSchema = z.enum([
@@ -94,31 +93,6 @@ export const ClaimSchema = z.object({
   limitations: z.array(z.string()),
 });
 export type Claim = z.infer<typeof ClaimSchema>;
-
-// ── Corrections ──
-export const CorrectionScopeSchema = z.enum([
-  "session",
-  "task",
-  "project",
-  "user",
-]);
-export type CorrectionScope = z.infer<typeof CorrectionScopeSchema>;
-
-export const CorrectionSchema = z.object({
-  correctionId: z.string(),
-  taskId: TaskIdSchema,
-  userFeedback: z.string().min(1).max(3000),
-  originalEventRef: z.string().optional(),
-  normalizedInstruction: z.string(),
-  failureClass: DriftClassSchema,
-  scope: CorrectionScopeSchema,
-  severity: z.number().int().min(0).max(4),
-  confirmed: z.boolean(),
-  recurrenceCount: z.number().int().nonnegative(),
-  expiresWhen: TimestampSchema.optional(),
-  supersededBy: z.string().optional(),
-});
-export type Correction = z.infer<typeof CorrectionSchema>;
 
 // Re-exports from assertions.ts
 export {

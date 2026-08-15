@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "1.0.0",
+  "correctionId": "WNDSGSW76N4KBAY6YGFT24GYR0",
+  "projectId": "D441CK828115Z988RM5F21HP5C",
+  "taskId": "F3TAA0D4M14NS4J5N5SAHCQ3MC",
+  "scope": "task",
+  "summary": "核查步骤不能替代主交付物，主报告必须完成",
+  "normalizedInstruction": "完成主报告后再补充核查附录，核查只覆盖第 3 节",
+  "originalEventRef": "EVT-2026-08-15-001",
+  "failureClass": "contract",
+  "severity": "major",
+  "actor": {
+    "actor": "user",
+    "channel": "desktop",
+    "directUser": true,
+    "challengeId": "CH-001"
+  },
+  "confirmed": true,
+  "recurrenceCount": 0,
+  "recurrenceFingerprint": "0x9a2f1c33",
+  "confirmedAt": "2026-08-15T08:00:00.000Z",
+  "createdAt": "2026-08-15T08:00:00.000Z"
+}

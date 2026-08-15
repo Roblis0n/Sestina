@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "1.0.0",
+  "preauthorizationId": "QWC4F6J7BN7P51X594ZVDFJKYR",
+  "projectId": "D441CK828115Z988RM5F21HP5C",
+  "taskId": "F3TAA0D4M14NS4J5N5SAHCQ3MC",
+  "source": {
+    "endpointId": "FMWX0D3RAS2F72Z83D8QTKHAPM",
+    "host": "codex"
+  },
+  "target": {
+    "endpointId": "VFTX02138N6W93BBCHB0BDR3CC",
+    "host": "claude_code"
+  },
+  "deliverableIds": ["D-001"],
+  "pathScope": ["src/parser"],
+  "actionCategories": ["read"],
+  "deadline": "2026-08-20T23:59:59.000Z",
+  "budget": {
+    "maxMessages": 4
+  },
+  "confirmedBy": {
+    "actor": "agent",
+    "channel": "host",
+    "directUser": false
+  },
+  "contractVersion": 3,
+  "status": "active",
+  "confirmedAt": "2026-08-15T07:30:00.000Z"
+}

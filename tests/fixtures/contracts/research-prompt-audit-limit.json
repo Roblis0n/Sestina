@@ -1,0 +1,11 @@
+{
+  "schemaVersion": "1.0.0",
+  "kind": "research",
+  "projectId": "QCK8734P493E1A2692YKPAS8B4",
+  "taskId": "KE568A1SQ91VX3ANPW9PPW58E4",
+  "title": "主题分析任务",
+  "userPrompt": "请完成主题分析《Sestina 合同编译》，形成一份完整报告。\n\n交付物：\n1. 主题分析报告（需包含数据来源）\n2. 风险核查清单\n\n必须：\n- 必须先完成主题分析，再开始风险核查\n- 风险核查不得替代主任务\n\n不要：\n- 不要修改 data/ 目录之外的任何文件\n\n只允许：\n- 只允许写入 ./outputs/ 目录\n\n预算：最多 100 次工具调用\n截止日期：2026-09-01\n停止条件：当交付物 1 完成且风险核查清单完成时停止。",
+  "userExcerpts": [],
+  "templateId": "sestina/research",
+  "now": "2026-08-15T00:00:00.000Z"
+}

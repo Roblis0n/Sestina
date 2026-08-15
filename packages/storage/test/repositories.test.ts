@@ -186,7 +186,7 @@ describe("Typed repositories round-trip (docs/22 Task 6)", () => {
       u.projects.insert(project);
       // The contract's FK points at its own task id (fixture id).
       u.tasks.insert(makeTask(project.projectId, { taskId: contract.taskId }));
-      u.contracts.insert(contract);
+      u.contracts.insert(project.projectId, contract);
     });
     expect(uow.contracts.getCurrentByTask(project.projectId, contract.taskId)?.contractId).toBe(contract.contractId);
 

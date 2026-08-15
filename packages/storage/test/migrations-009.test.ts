@@ -46,7 +46,7 @@ describe("Migration 009 (project scope)", () => {
     );
     expect(row?.name).toBe("009-project-scope");
     expect(row?.status).toBe("completed");
-    expect(MIGRATIONS.at(-1)?.version).toBe(10);
+    expect(MIGRATIONS.at(-1)?.version).toBe(11);
   });
 
   it("makes host_sessions.task_id nullable", () => {

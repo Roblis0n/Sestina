@@ -4,6 +4,7 @@ import { createProjectRepository, type ProjectRepository } from "./repositories/
 import { createTaskRepository, type TaskRepository } from "./repositories/tasks.js";
 import { createSessionRepository, type HostSessionRepository } from "./repositories/sessions.js";
 import { createContractRepository, type ContractRepository } from "./repositories/contracts.js";
+import { createCorrectionRepository, type CorrectionRepository } from "./repositories/corrections.js";
 import { createEventRepository, type EventRepository } from "./repositories/events.js";
 import { createDecisionRepository, type DecisionRepository } from "./repositories/decisions.js";
 import { createDecisionTraceRepository, type DecisionTraceRepository } from "./repositories/traces.js";
@@ -38,6 +39,7 @@ export interface StorageUnitOfWork {
   sessionAttachments: SessionAttachmentRepository;
   unownedActivity: UnownedActivityRepository;
   contracts: ContractRepository;
+  corrections: CorrectionRepository;
   events: EventRepository;
   decisions: DecisionRepository;
   traces: DecisionTraceRepository;
@@ -62,6 +64,7 @@ export function createUnitOfWork(db: StorageDatabase): StorageUnitOfWork {
     sessionAttachments: createSessionAttachmentRepository(tx),
     unownedActivity: createUnownedActivityRepository(tx),
     contracts: createContractRepository(tx),
+    corrections: createCorrectionRepository(tx),
     events: createEventRepository(tx),
     decisions: createDecisionRepository(tx),
     traces: createDecisionTraceRepository(tx),
