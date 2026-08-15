@@ -116,7 +116,7 @@ describe("task lifecycle state machine (docs/30 §6)", () => {
     seed(db, (u) => {
       u.projects.insert(project);
       u.tasks.insert(task);
-      u.contracts.insert(contract);
+      u.contracts.insert(project.projectId, contract);
     });
 
     const reopened = tasks.transition(project.projectId, {
@@ -169,7 +169,7 @@ describe("task lifecycle state machine (docs/30 §6)", () => {
     seed(db, (u) => {
       u.projects.insert(project);
       u.tasks.insert(task);
-      u.contracts.insert(contract);
+      u.contracts.insert(project.projectId, contract);
     });
     const restored = tasks.transition(project.projectId, { taskId: task.taskId, to: "active" });
     expect(restored.status).toBe("active");

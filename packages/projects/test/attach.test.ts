@@ -341,8 +341,8 @@ describe("session resolution and task attach (docs/22 Task 8 Step 1, docs/30 §5
       u.projects.insert(project);
       u.tasks.insert(task1);
       u.tasks.insert(task2);
-      u.contracts.insert(contract1);
-      u.contracts.insert(contract2);
+      u.contracts.insert(project.projectId, contract1);
+      u.contracts.insert(project.projectId, contract2);
       u.sessions.insert(project.projectId, session);
       u.reviews.insertItem({ ...openReview });
     });
