@@ -55,6 +55,36 @@ export const HandoffPreauthorizationSchema = z
   });
 export type HandoffPreauthorization = z.infer<typeof HandoffPreauthorizationSchema>;
 
+// ── One-shot user confirmation (Task 9 §九) ──
+//
+// A direct-user confirmation recorded for ONE held handoff. It releases that
+// handoff and nothing else. The identity fields are required precisely so a
+// copied confirmation can never authorize a different request:
+// handoffRef/projectId/taskId/source/target must equal the request's, and the
+// request's deliverables, paths and action categories must be covered by the
+// confirmed ones. It grants no permanence, no peer promotion, and no approval
+// of the target agent's later tool actions.
+
+export const HandoffUserConfirmationSchema = z
+  .object({
+    userConfirmationId: ID_SCHEMA,
+    handoffRef: z.string().min(1).max(200),
+    projectId: ProjectIdSchema,
+    taskId: TaskIdSchema,
+    source: HandoffEndpointRefSchema,
+    target: HandoffEndpointRefSchema,
+    deliverableIds: z.array(z.string().min(1).max(100)),
+    requestedPaths: z.array(z.string().min(1).max(1000)),
+    actionCategories: z.array(HandoffActionCategorySchema),
+    confirmedBy: ActorProvenanceSchema,
+    confirmedAt: TimestampSchema,
+    messageRef: z.string().min(1).max(200),
+  })
+  .refine((c) => canActAsDirectUser(c.confirmedBy), {
+    message: "user confirmation must come from a direct user",
+  });
+export type HandoffUserConfirmation = z.infer<typeof HandoffUserConfirmationSchema>;
+
 // ── Authority resolution request/result (docs/42 §6.2) ──
 //
 // resolveCollaborationAuthority only resolves authorization evidence and
@@ -74,17 +104,7 @@ export const HandoffAuthorizationRequestSchema = z
     requestedPaths: z.array(z.string().min(1).max(1000)),
     actionCategories: z.array(HandoffActionCategorySchema),
     now: TimestampSchema,
-    userConfirmation: z
-      .object({
-        userConfirmationId: ID_SCHEMA,
-        confirmedBy: ActorProvenanceSchema,
-        confirmedAt: TimestampSchema,
-        messageRef: z.string().min(1).max(200),
-      })
-      .refine((c) => canActAsDirectUser(c.confirmedBy), {
-        message: "user confirmation must come from a direct user",
-      })
-      .optional(),
+    userConfirmation: HandoffUserConfirmationSchema.optional(),
   })
   .strict();
 export type HandoffAuthorizationRequest = z.infer<typeof HandoffAuthorizationRequestSchema>;

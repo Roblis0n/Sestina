@@ -310,6 +310,24 @@ describe("summarizeContract (Task 9 §十 contract summary)", () => {
     expect(summary.utf8Bytes).toBeLessThanOrEqual(1_000_000);
   });
 
+  it("omits personal path mentions even when a non-ASCII character or lowercase follows the directory name", () => {
+    const contract = makeContract({
+      boundaries: [
+        { kind: "privacy", statement: "密钥在/home用户目录下" },
+        { kind: "privacy", statement: "参考 /users/alice/ 即可" },
+        { kind: "scope", statement: "使用 /homebrew 工具链" },
+        { kind: "scope", statement: "只允许写入 ./outputs/ 目录" },
+      ],
+    });
+    const summary = summarizeContract(contract, 1_000_000);
+    expect(summary.boundaries).toEqual(["使用 /homebrew 工具链", "只允许写入 ./outputs/ 目录"]);
+    expect(summary.omittedBoundaries).toBe(2);
+    expect(summary.truncated).toBe(true);
+    const rendered = renderedOf(summary);
+    expect(rendered).not.toContain("/home用户");
+    expect(rendered).not.toContain("/users/");
+  });
+
   it("never copies sourceRefs excerpts, correction refs, preauthorizations, stop conditions, or assumptions", () => {
     const secret = "sk-1234abcdSECRET";
     const preauthorization = makePreauthorization();

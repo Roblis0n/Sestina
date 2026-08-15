@@ -130,8 +130,18 @@ export function recordCorrection(input: RecordCorrectionInput): RecordCorrection
   }
 }
 
+/**
+ * Direct-user recheck on top of the schema refine: a cast-forged provenance
+ * with directUser on a direct channel (desktop/cli) passes canActAsDirectUser
+ * alone, so the actor must also be "user". Mirrors the same defensive recheck
+ * in collaboration-authority.ts.
+ */
+function isDirectUser(actor: ActorProvenance): boolean {
+  return canActAsDirectUser(actor) && actor.actor === "user";
+}
+
 function buildCorrection(input: RecordCorrectionInput, scope: CorrectionScope): Correction {
-  const confirmed = canActAsDirectUser(input.actor);
+  const confirmed = isDirectUser(input.actor);
   const normalizedInstruction = normalizeInstruction(input.normalizedInstruction);
   return {
     schemaVersion: "1.0.0",
@@ -165,7 +175,7 @@ function buildPromotion(
   toScope: "project" | "user",
   taskLevelCorrection: Correction,
 ): CorrectionPromotion {
-  const directUser = canActAsDirectUser(input.actor);
+  const directUser = isDirectUser(input.actor);
   const proposedBoundary: Boundary = {
     boundaryId: generateId(),
     kind: "process",

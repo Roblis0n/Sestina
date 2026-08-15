@@ -10,9 +10,9 @@ import { assertInTransaction, fromMs, toMs } from "./shared.js";
 
 /**
  * Project-fenced correction history (docs/33 §7, docs/22 Task 9). History
- * is append-only by structure: `markSuperseded` may only link a newer
- * record onto an older one (the older row's data JSON is never rewritten)
- * and `incrementRecurrence` is the only other allowed mutation (a monotonic
+ * is append-only by structure: supersession is a link written on the NEW
+ * record at insert time (the older row is never rewritten), and
+ * `incrementRecurrence` is the only other allowed mutation (a monotonic
  * counter, mirrored into both the column and the data JSON). There is
  * deliberately no generic rewrite method.
  */
@@ -22,6 +22,12 @@ export interface CorrectionRepository {
    * project: it must exist, and the correction's task, when present, must
    * belong to it (a foreign task fails with the same task_not_found as a
    * missing one — no existence leak).
+   *
+   * A `supersededBy` link on the inserted record is validated as it lands:
+   * the target must exist in the same project (missing or foreign fail with
+   * the same contract_not_found), its createdAt must be strictly older than
+   * the new record's, and it must not already be superseded. The link is
+   * written on this NEW row only — the target row is never updated.
    */
   insert(projectId: string, correction: Correction): void;
   /** A correction owned by another project behaves exactly like a missing one. */
@@ -30,11 +36,6 @@ export interface CorrectionRepository {
   listByTask(projectId: string, taskId: string): Correction[];
   /** Ordered by data.createdAt ascending, then correctionId. */
   listByProject(projectId: string): Correction[];
-  /**
-   * Append-only supersession: updates ONLY the target row's superseded_by
-   * column. Missing and foreign-project ids fail with the same code.
-   */
-  markSuperseded(projectId: string, correctionId: string, supersededById: string): void;
   /**
    * Monotonic recurrence counter: updates the recurrence_count column and
    * the recurrenceCount field inside the data JSON; every other field of
@@ -98,7 +99,9 @@ export function createCorrectionRepository(tx: StorageTransaction): CorrectionRe
       if (!project) {
         throw new SestinaError(SestinaErrorCode.project_not_found, "Project not found");
       }
-      // ...and the correction's task, when present, must belong to it.
+      // ...and the correction's task, when present, must belong to it (a
+      // foreign task fails with the same task_not_found as a missing one, no
+      // matter what projectId the record itself claims — no existence leak).
       if (correction.taskId !== undefined) {
         const task = tx.get<{ task_id: string }>(
           "SELECT task_id FROM tasks WHERE task_id = ? AND project_id = ?",
@@ -107,6 +110,47 @@ export function createCorrectionRepository(tx: StorageTransaction): CorrectionRe
         );
         if (!task) {
           throw new SestinaError(SestinaErrorCode.task_not_found, "Task not found");
+        }
+      }
+      // The record's own projectId must agree with the fence project, or the
+      // stored row would have a project_id column of one project and a data
+      // JSON claiming another.
+      if (correction.projectId !== projectId) {
+        throw new SestinaError(
+          SestinaErrorCode.validation_failed,
+          "correction projectId does not match the fence project",
+        );
+      }
+      // A supersededBy link is validated as it lands (append-only direction:
+      // new→old, written on THIS row, never as a rewrite of the older one).
+      if (correction.supersededBy !== undefined) {
+        const target = tx.get<{ data: string }>(
+          "SELECT data FROM corrections WHERE correction_id = ? AND project_id = ?",
+          correction.supersededBy,
+          projectId,
+        );
+        if (!target) {
+          throw new SestinaError(SestinaErrorCode.contract_not_found, "Correction not found");
+        }
+        // At most one record may supersede a given target; the existing link
+        // lives on the OTHER record, so look it up in reverse.
+        const alreadySuperseded = tx.get<{ one: number }>(
+          "SELECT 1 AS one FROM corrections WHERE superseded_by = ? AND project_id = ?",
+          correction.supersededBy,
+          projectId,
+        );
+        if (alreadySuperseded !== undefined) {
+          throw new SestinaError(
+            SestinaErrorCode.validation_failed,
+            "supersededBy target is already superseded",
+          );
+        }
+        const targetCorrection = CorrectionSchema.parse(JSON.parse(target.data) as unknown);
+        if (!(targetCorrection.createdAt < correction.createdAt)) {
+          throw new SestinaError(
+            SestinaErrorCode.validation_failed,
+            "supersededBy must point at a strictly older correction",
+          );
         }
       }
       tx.run(
@@ -159,25 +203,6 @@ export function createCorrectionRepository(tx: StorageTransaction): CorrectionRe
         projectId,
       );
       return rows.map(assembleCorrection).sort(byCreatedAtThenId);
-    },
-
-    markSuperseded(projectId, correctionId, supersededById) {
-      assertInTransaction(tx);
-      // Same face for a missing row and a foreign-project row (no existence leak).
-      const row = tx.get<{ correction_id: string }>(
-        "SELECT correction_id FROM corrections WHERE correction_id = ? AND project_id = ?",
-        correctionId,
-        projectId,
-      );
-      if (!row) {
-        throw new SestinaError(SestinaErrorCode.contract_not_found, "Correction not found");
-      }
-      tx.run(
-        "UPDATE corrections SET superseded_by = ? WHERE correction_id = ? AND project_id = ?",
-        supersededById,
-        correctionId,
-        projectId,
-      );
     },
 
     incrementRecurrence(projectId, correctionId, newCount) {

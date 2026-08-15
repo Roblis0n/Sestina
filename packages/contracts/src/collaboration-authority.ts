@@ -5,6 +5,7 @@ import type {
   HandoffAuthorizationRequest,
   HandoffEndpointRef,
   HandoffPreauthorization,
+  HandoffUserConfirmation,
 } from "@sestina/schema";
 
 // ── Handoff authority resolution (Task 9 §九, docs/42 §6.2/6.3) ──
@@ -26,14 +27,18 @@ import type {
 // - Path matching normalizes trailing slashes on both sides and accepts
 //   requestedPath === grantedPath or requestedPath startsWith(grantedPath + "/");
 //   grantedPath "." covers the whole project; a leading "./" is NOT normalized;
-//   an empty or all-slash granted path covers nothing.
+//   an empty or all-slash granted path covers nothing. A path containing a
+//   ".." segment never matches as a request and covers nothing as a grant —
+//   fail closed, with no normalization attempted.
 // - Deadline comparison is lexical over ISO-8601 strings, exactly
 //   request.now < grant.deadline; timestamps in this codebase are UTC "Z"
 //   strings where lexical order equals chronological order.
-// - userConfirmation carries no project/task/source/target fields by schema —
-//   its "match" is its attachment to this one request. It releases exactly this
-//   held handoff and nothing more: no permanent preauthorization, no peer
-//   promotion, no approval of the target agent's later tool actions.
+// - userConfirmation is bound by schema to the held handoff it releases:
+//   handoffRef/projectId/taskId/source/target must equal the request's and the
+//   request's deliverables, paths and action categories must be covered by the
+//   confirmed ones. A confirmation copied from a different handoff is ignored.
+//   It still grants no permanence, no peer promotion, and no approval of the
+//   target agent's later tool actions.
 // - A preauthorization whose confirmedBy fails the direct-user recheck is
 //   invisible evidence: it never matches and never classifies the outcome.
 // - Budget presence never blocks a match — the request carries no usage
@@ -63,9 +68,21 @@ function stripTrailingSlashes(path: string): string {
   return path.slice(0, end);
 }
 
+/**
+ * A ".." path segment escapes the project root, so paths containing one are
+ * never matched syntactically: a request containing ".." is never covered,
+ * and a grant containing ".." covers nothing. Fail closed on both sides —
+ * normalization that could differ from the host's own resolution is
+ * deliberately not attempted.
+ */
+function hasParentTraversal(path: string): boolean {
+  return path.split("/").some((segment) => segment === "..");
+}
+
 function pathCoveredByGrant(requestedPath: string, grantedPath: string): boolean {
   const requested = stripTrailingSlashes(requestedPath);
   const granted = stripTrailingSlashes(grantedPath);
+  if (hasParentTraversal(requested) || hasParentTraversal(granted)) return false;
   if (granted === ".") return true; // whole project
   if (granted === "") return false; // empty or all-slash scope covers nothing
   if (requested === granted) return true;
@@ -82,6 +99,36 @@ function sameIdentity(
     endpointMatches(request.source, grant.source) &&
     endpointMatches(request.target, grant.target)
   );
+}
+
+function confirmationMatchesRequest(
+  request: HandoffAuthorizationRequest,
+  confirmation: HandoffUserConfirmation,
+): boolean {
+  // Identity fields must equal the request's; scope fields must COVER it. The
+  // confirmation acts as the pinned side, so a confirmation recorded with an
+  // endpointId does not match a request that omits it.
+  if (confirmation.handoffRef !== request.handoffRef) return false;
+  if (confirmation.projectId !== request.projectId) return false;
+  if (confirmation.taskId !== request.taskId) return false;
+  if (!endpointMatches(request.source, confirmation.source)) return false;
+  if (!endpointMatches(request.target, confirmation.target)) return false;
+  for (const deliverableId of request.deliverableIds) {
+    if (!confirmation.deliverableIds.includes(deliverableId)) return false;
+  }
+  for (const requestedPath of request.requestedPaths) {
+    if (
+      !confirmation.requestedPaths.some((confirmedPath) =>
+        pathCoveredByGrant(requestedPath, confirmedPath),
+      )
+    ) {
+      return false;
+    }
+  }
+  for (const actionCategory of request.actionCategories) {
+    if (!confirmation.actionCategories.includes(actionCategory)) return false;
+  }
+  return true;
 }
 
 function grantIsAlive(
@@ -219,8 +266,15 @@ export function resolveCollaborationAuthority(
     }
   }
 
-  // 2. A direct-user confirmation releases exactly this held handoff.
-  if (isDirectUserProvenance(request.userConfirmation?.confirmedBy)) {
+  // 2. A direct-user confirmation bound to exactly this held handoff releases
+  // it. A confirmation copied from a different handoff is ignored and falls
+  // through to classification below — it authorizes nothing.
+  const confirmation = request.userConfirmation;
+  if (
+    confirmation !== undefined &&
+    isDirectUserProvenance(confirmation.confirmedBy) &&
+    confirmationMatchesRequest(request, confirmation)
+  ) {
     return { decision: "authorized", by: "user_confirmation" };
   }
 

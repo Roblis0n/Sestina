@@ -77,12 +77,31 @@ function makeRequest(
 
 function makeConfirmation(
   confirmedBy: ActorProvenance = directUser(),
+  boundOverrides: {
+    handoffRef?: string;
+    projectId?: string;
+    taskId?: string;
+    source?: { endpointId?: string; host: string };
+    target?: { endpointId?: string; host: string };
+    deliverableIds?: string[];
+    requestedPaths?: string[];
+    actionCategories?: string[];
+  } = {},
 ): NonNullable<HandoffAuthorizationRequest["userConfirmation"]> {
   return {
     userConfirmationId: deterministicId(300),
+    handoffRef: "handoff-1",
+    projectId: PROJECT_ID,
+    taskId: TASK_ID,
+    source: { endpointId: SOURCE_ENDPOINT, host: "codex" },
+    target: { endpointId: TARGET_ENDPOINT, host: "claude_code" },
+    deliverableIds: [DELIVERABLE_A, DELIVERABLE_B],
+    requestedPaths: ["outputs"],
+    actionCategories: ["read", "write"],
     confirmedBy,
     confirmedAt: NOW,
     messageRef: "held-handoff-1",
+    ...boundOverrides,
   };
 }
 
@@ -302,6 +321,40 @@ describe("resolveCollaborationAuthority (Task 9 §九 handoff authority resoluti
     expect(expectReasons(slashOnlyResult).some((reason) => reason.includes("/x"))).toBe(true);
   });
 
+  it("never authorizes a request path that escapes the project via a \"..\" segment", () => {
+    // A whole-project grant covers nothing outside the project root, so a
+    // ".." request must fall through to confirmation.
+    const wholeProject = makeGrant({ pathScope: ["."] });
+    const grantResult = resolveCollaborationAuthority(
+      makeRequest({
+        preauthorizations: [wholeProject],
+        requestedPaths: ["../secrets/keys.md"],
+      }),
+    );
+    expect(grantResult.decision).toBe("needs_user_confirmation");
+    expect(expectReasons(grantResult).join("\n")).toContain("does not cover path");
+
+    // A one-shot confirmation granting the whole project must not release it
+    // either — the requested path escapes the project entirely.
+    const confirmation = makeConfirmation(directUser(), { requestedPaths: ["."] });
+    const confirmationResult = resolveCollaborationAuthority(
+      makeRequest({ userConfirmation: confirmation, requestedPaths: ["../secrets/keys.md"] }),
+    );
+    expect(confirmationResult.decision).toBe("no_authority");
+  });
+
+  it("never treats a grant path containing a \"..\" segment as covering anything", () => {
+    const traversalGrant = makeGrant({ pathScope: ["outputs/.."] });
+    const result = resolveCollaborationAuthority(
+      makeRequest({
+        preauthorizations: [traversalGrant],
+        requestedPaths: ["outputs/../elsewhere/x.txt"],
+      }),
+    );
+    expect(result.decision).toBe("needs_user_confirmation");
+    expect(expectReasons(result).join("\n")).toContain("does not cover path");
+  });
+
   it("never authorizes vague grants and requires user confirmation for them", () => {
     const vagueCases = [
       { grant: makeGrant({ deliverableIds: [] }), field: "deliverableIds" },
@@ -352,6 +405,63 @@ describe("resolveCollaborationAuthority (Task 9 §九 handoff authority resoluti
       decision: "authorized",
       by: "user_confirmation",
     });
+  });
+
+  it("never authorizes a confirmation copied from a different held handoff", () => {
+    // A confirmation is one-shot evidence for ONE held handoff. A copied or
+    // replayed confirmation must not release a different handoff, even when
+    // its provenance is a genuine direct user.
+    const copiedCases: [
+      label: string,
+      boundOverrides: Parameters<typeof makeConfirmation>[1],
+      requestOverrides: Partial<HandoffAuthorizationRequest>,
+    ][] = [
+      [
+        "different handoffRef",
+        { handoffRef: "handoff-1" },
+        { handoffRef: "handoff-2" },
+      ],
+      [
+        "different project",
+        { projectId: deterministicId(400) },
+        { projectId: PROJECT_ID },
+      ],
+      [
+        "different task",
+        { taskId: deterministicId(401) },
+        { taskId: TASK_ID },
+      ],
+      [
+        "different target endpoint",
+        { target: { endpointId: deterministicId(402), host: "claude_code" } },
+        { target: { endpointId: TARGET_ENDPOINT, host: "claude_code" } },
+      ],
+      [
+        "extra deliverable beyond the confirmed handoff",
+        { deliverableIds: [DELIVERABLE_A] },
+        { deliverableIds: [DELIVERABLE_A, DELIVERABLE_B] },
+      ],
+      [
+        "path outside the confirmed handoff",
+        { requestedPaths: ["outputs"] },
+        { requestedPaths: ["../secrets/keys.md"] },
+      ],
+      [
+        "action category beyond the confirmed handoff",
+        { actionCategories: ["read"] },
+        { actionCategories: ["read", "delete"] },
+      ],
+    ];
+    for (const [label, boundOverrides, requestOverrides] of copiedCases) {
+      const result = resolveCollaborationAuthority(
+        makeRequest({
+          userConfirmation: makeConfirmation(directUser(), boundOverrides),
+          ...requestOverrides,
+        }),
+      );
+      expect(result.decision, label).not.toBe("authorized");
+      expect(expectReasons(result).length, label).toBeGreaterThan(0);
+    }
   });
 
   it("never authorizes a peer-forged directUser confirmation", () => {

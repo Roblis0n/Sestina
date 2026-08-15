@@ -163,7 +163,11 @@ interface ParsedPrompt {
   prohibitions: ParsedDirective[];
   allowOnly: ParsedDirective[];
   budget: { maxToolCallsPerTask?: number; maxProviderCallsPerTask?: number };
-  deadline: { statement: string; end: string } | undefined;
+  // Budget policy values are plain numbers (BudgetPolicySchema) and cannot
+  // carry spans; the matched directive lines are preserved verbatim instead
+  // and surface as sourceRefs so the numbers stay traceable.
+  budgetLines: ParsedDirective[];
+  deadline: { statement: string; end: string; span: SourceSpan } | undefined;
   stopConditions: ParsedDirective[];
   skipped: number;
 }
@@ -180,6 +184,14 @@ function splitLines(source: string): LineInfo[] {
     index = end + 1;
   }
   return lines;
+}
+
+function daysInMonth(year: number, month: number): number {
+  if (month === 2) {
+    const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+    return leap ? 29 : 28;
+  }
+  return month === 4 || month === 6 || month === 9 || month === 11 ? 30 : 31;
 }
 
 const OBJECTIVE_LEAD = /请[^\n]*?[。！？!?]/;
@@ -201,6 +213,7 @@ function parsePrompt(source: string): ParsedPrompt {
     prohibitions: [],
     allowOnly: [],
     budget: {},
+    budgetLines: [],
     deadline: undefined,
     stopConditions: [],
     skipped: 0,
@@ -266,32 +279,92 @@ function parsePrompt(source: string): ParsedPrompt {
 
     if (trimmed.startsWith("预算")) {
       section = null;
-      const count = /(?:最多|不超过|上限)\s*(\d+)\s*次/.exec(trimmed);
-      const countValue = count?.[1];
-      if (countValue === undefined) {
+      // Every (cap, label) pair on the line gets its own category; a pair
+      // whose label names no category is ambiguous and is skipped, never
+      // guessed.
+      const pairs = [
+        ...trimmed.matchAll(/(?:最多|不超过|上限)\s*(\d+)\s*次\s*([^，。,\n]*)/g),
+      ];
+      if (pairs.length === 0) {
         result.skipped += 1;
         continue;
       }
-      const value = Number(countValue);
-      if (/provider|模型|api/i.test(trimmed)) result.budget.maxProviderCallsPerTask = value;
-      else result.budget.maxToolCallsPerTask = value;
+      let landed = 0;
+      for (const pair of pairs) {
+        const value = Number(pair[1]);
+        const label = (pair[2] ?? "").trim();
+        if (/provider|模型|api/i.test(label)) {
+          result.budget.maxProviderCallsPerTask = value;
+          landed += 1;
+        } else if (/工具|tool|命令|操作/i.test(label)) {
+          result.budget.maxToolCallsPerTask = value;
+          landed += 1;
+        } else {
+          result.skipped += 1;
+        }
+      }
+      // Preserve the directive line verbatim only when it actually contributed
+      // a budget value — a line whose pairs all failed attribution is skipped,
+      // not recorded as a budget source.
+      if (landed > 0) {
+        result.budgetLines.push({
+          text: trimmed,
+          span: directiveSpan(line, trimmed),
+        });
+      }
       continue;
     }
 
     if (trimmed.startsWith("截止")) {
       section = null;
-      const date = /(\d{4})-(\d{2})-(\d{2})/.exec(trimmed);
+      const date =
+        /(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{1,2}):(\d{2})(?::(\d{2}))?)?/.exec(
+          trimmed,
+        );
       const year = date?.[1];
       const month = date?.[2];
       const day = date?.[3];
+      const hour = date?.[4];
+      const minute = date?.[5];
+      const second = date?.[6] ?? "00";
       if (year === undefined || month === undefined || day === undefined) {
         result.skipped += 1;
         continue;
       }
-      // The deadline is a date, not a time of day — do not fabricate a time.
+      const y = Number(year);
+      const mo = Number(month);
+      const d = Number(day);
+      const validDate = mo >= 1 && mo <= 12 && d >= 1 && d <= daysInMonth(y, mo);
+      const validTime =
+        hour === undefined ||
+        (Number(hour) < 24 && Number(minute) < 60 && Number(second) < 60);
+      // A time-of-day that is present but unparseable, a calendar-invalid
+      // date, or a statement over the schema bound: skip and report rather
+      // than fabricate a deadline or fail as an internal error.
+      const restAfterDate = trimmed.slice(
+        (date?.index ?? 0) + (date?.[0]?.length ?? 0),
+      );
+      const timePresentButUnparseable =
+        hour === undefined && /\d{1,2}:\d{2}/.test(restAfterDate);
+      if (
+        !validDate ||
+        !validTime ||
+        timePresentButUnparseable ||
+        trimmed.length > 2000
+      ) {
+        result.skipped += 1;
+        continue;
+      }
+      // The deadline is a date; a time of day is only recorded when the user
+      // stated one — never fabricated.
+      const time =
+        hour === undefined
+          ? "00:00:00.000Z"
+          : `${hour.padStart(2, "0")}:${minute}:${second.padStart(2, "0")}.000Z`;
       result.deadline = {
         statement: trimmed,
-        end: `${year}-${month}-${day}T00:00:00.000Z`,
+        end: `${year}-${month}-${day}T${time}`,
+        span: directiveSpan(line, trimmed),
       };
       continue;
     }
@@ -364,13 +437,54 @@ function parsePrompt(source: string): ParsedPrompt {
         else if (section === "prohibition") pushDirective(result.prohibitions, text, line, 3000);
         else if (section === "allowOnly") pushDirective(result.allowOnly, text, line, 3000);
         else if (section === "stop") pushDirective(result.stopConditions, text, line, 2000);
-        else pushDirective(result.deliverables, text, line, 2000);
+        else if (
+          MUST_HEADER.test(text) ||
+          PROHIBITION_HEADER.test(text) ||
+          ALLOW_ONLY_HEADER.test(text)
+        ) {
+          // A directive bullet inside the deliverables section is a
+          // requirement, not a producible artifact — skip it and report.
+          result.skipped += 1;
+        } else {
+          pushDirective(result.deliverables, text, line, 2000);
+        }
         continue;
       }
       // A non-blank, non-item line inside a list section cannot be parsed
       // safely; leave it out and document the skip instead of guessing.
       result.skipped += 1;
       continue;
+    }
+
+    // Outside any section: recognizable directive markers must never vanish
+    // silently. A bare list item starting with a directive marker is an
+    // explicit directive; marker-bearing prose is counted as skipped so the
+    // honesty notes report it. The objective line is exempt — its verbatim
+    // text is already preserved as objective.primary.
+    const objectiveSpan = result.objective?.span;
+    const lineEnd = line.start + line.text.length;
+    const coversObjective =
+      objectiveSpan !== undefined &&
+      objectiveSpan.start >= line.start &&
+      objectiveSpan.end <= lineEnd;
+    if (!coversObjective) {
+      const bareItem = ITEM_LINE.exec(line.text)?.[1]?.trim();
+      const bare = bareItem ?? trimmed;
+      if (MUST_HEADER.test(bare)) {
+        pushDirective(result.musts, bare, line, 3000);
+        continue;
+      }
+      if (PROHIBITION_HEADER.test(bare)) {
+        pushDirective(result.prohibitions, bare, line, 3000);
+        continue;
+      }
+      if (ALLOW_ONLY_HEADER.test(bare)) {
+        pushDirective(result.allowOnly, bare, line, 3000);
+        continue;
+      }
+      if (/(?:必须|不要|禁止|只允许|仅允许|只能)/.test(bare)) {
+        result.skipped += 1;
+      }
     }
   }
 
@@ -389,6 +503,13 @@ function prohibitionBoundaryKind(text: string): Boundary["kind"] {
   if (/(?:读取|查看|访问|浏览|隐私|数据)/.test(text)) return "privacy";
   return "action";
 }
+
+// A prohibition is hard (non-overridable) only when it has a clear safety or
+// protection sense — irreversibility, data/privacy, credentials, network,
+// publishing, permissions. A stylistic preference ("不要使用红色字体") is
+// demoted to a soft, overridable boundary.
+const SAFETY_SENSE =
+  /(?:修改|写入|编辑|删除|移除|移动|执行|运行|访问|读取|数据|隐私|秘密|密钥|密码|凭据|上传|发布|共享|泄露|泄漏|网络|外部|覆盖|安装|卸载|重启|格式化|关闭|禁用|授权|权限)/;
 
 function extractPaths(text: string): string[] {
   const paths: string[] = [];
@@ -611,7 +732,12 @@ function deterministicId(seed: string): string {
 
 function clip(text: string, max: number): string {
   if (text.length <= max) return text;
-  return `${text.slice(0, max - 1)}…`;
+  let end = max - 1;
+  // If the cut lands on the low half of a surrogate pair, the slice would
+  // end with its lone high half. Drop the pair so the result is always
+  // well-formed UTF-16.
+  if ((text.charCodeAt(end) & 0xfc00) === 0xdc00) end -= 1;
+  return `${text.slice(0, end)}…`;
 }
 
 // ── Compilation pipeline ──
@@ -698,13 +824,14 @@ function compileContract(
     );
   }
   for (const prohibition of parse.prohibitions) {
+    const safetySense = SAFETY_SENSE.test(prohibition.text);
     boundaries.push(
       userBoundary(
         ports.ids.boundaryId(),
         prohibition,
         prohibitionBoundaryKind(prohibition.text),
-        "hard",
-        false,
+        safetySense ? "hard" : "soft",
+        !safetySense,
         {},
         input.now,
       ),
@@ -738,6 +865,7 @@ function compileContract(
       statement: parse.deadline.statement,
       source: "user_directive",
       appliesTo: { timeRange: { end: parse.deadline.end } },
+      sourceSpan: parse.deadline.span,
       readonly: true,
       writable: false,
       outbound: false,
@@ -769,6 +897,16 @@ function compileContract(
     type: "user_message",
     excerpt,
   }));
+  // Budget policy values are plain numbers and cannot carry spans; the
+  // matched directive lines ride along as sourceRefs so the numbers stay
+  // traceable to the prompt.
+  sourceRefs.push(
+    ...parse.budgetLines.map((line, index) => ({
+      ref: `budget-directive-${index}`,
+      type: "user_message" as const,
+      excerpt: line.text,
+    })),
+  );
   sourceRefs.push(...findings.sourceRefs);
 
   const contract: TaskContract = {

@@ -432,6 +432,44 @@ function upsertDeliverableFor(
   return { op: "upsert_deliverable", deliverable };
 }
 
+/**
+ * Idempotent re-statements collapse into one operation: a deliverable named
+ * twice in a row is one deliverable. Keyed by deliverableId (consecutive
+ * directives about an existing deliverable reuse its identity and would
+ * otherwise make strict apply reject the second upsert) AND by description
+ * (consecutive directives about a not-yet-existing deliverable would
+ * otherwise generate two ids for one intent). Only CONSECUTIVE duplicates
+ * collapse — an intervening op touching the same deliverable changes the net
+ * effect, so it is preserved. Extractor-supplied operations are NOT collapsed
+ * here: they were already schema-validated as a complete proposal and strict
+ * apply still guards duplicate identities.
+ */
+function collapseRepeatedUpserts(
+  ops: readonly ContractPatchOperation[],
+): ContractPatchOperation[] {
+  const collapsed: ContractPatchOperation[] = [];
+  let previous:
+    | { idKey: string; descriptionKey: string }
+    | undefined = undefined;
+  for (const op of ops) {
+    if (op.op === "upsert_deliverable") {
+      const idKey = `id:${op.deliverable.deliverableId}`;
+      const descriptionKey = `desc:${op.deliverable.description}`;
+      if (
+        previous !== undefined &&
+        (previous.idKey === idKey || previous.descriptionKey === descriptionKey)
+      ) {
+        continue;
+      }
+      previous = { idKey, descriptionKey };
+    } else {
+      previous = undefined;
+    }
+    collapsed.push(op);
+  }
+  return collapsed;
+}
+
 function unresolvedRemoval(
   kind: MaterialAmbiguity["kind"],
   part: string,
@@ -1072,16 +1110,26 @@ function parseProposalSafely(proposal: ContractPatchProposal): ContractPatchProp
 
 /**
  * Deterministic parser over the instruction. Recognizes ONLY explicit
- * directives on whitelisted paths. Anything unrecognized: when an extractor
- * is provided its proposal's operations are included (inferred tier, always
- * — extractor output is inference regardless of the actor); otherwise
- * validation_failed is thrown. Never invents operations. Direct-user actors
- * (canActAsDirectUser) author user_directive proposals; peers can never
- * author user directives.
+ * directives on whitelisted paths. Never invents operations.
+ *
+ * The extractor port is consulted ONLY when the parser recognized nothing
+ * (the whole instruction is unrecognized): its proposal's operations are
+ * included at inferred tier. It is deliberately NOT consulted when the
+ * parser recognized directives, because a proposal carries a single
+ * sourceTier and extractor output must always stay "inferred" — appending
+ * extractor ops to a user_directive proposal would misattribute inference
+ * as user authorship, and relabeling the user's own ops as inferred would
+ * be equally dishonest. Mixed-tier proposals are unrepresentable.
+ *
+ * Direct-user actors (canActAsDirectUser + actor "user") author
+ * user_directive proposals; peers can never author user directives.
  */
 export function proposeContractPatch(input: PatchProposalInput): ContractPatchProposal {
   const { contract, instruction, actor, createdAt } = input;
-  const directUser = canActAsDirectUser(actor);
+  // Defensive recheck on top of the schema refine: a cast-forged provenance
+  // with directUser on a direct channel passes canActAsDirectUser alone, so
+  // user_directive attribution additionally requires actor === "user".
+  const directUser = canActAsDirectUser(actor) && actor.actor === "user";
   let tier: ContractSourceTier = directUser ? "user_directive" : "inferred";
   let owner: BoundaryOwner = directUser ? "user" : "inferred";
   let { ops, ambiguities } = parseExplicitDirectives(
@@ -1091,6 +1139,7 @@ export function proposeContractPatch(input: PatchProposalInput): ContractPatchPr
     owner,
     createdAt,
   );
+  ops = collapseRepeatedUpserts(ops);
   let sourceRefs: SourceRef[] = [...(input.sourceRefs ?? [])];
 
   if (ops.length === 0) {

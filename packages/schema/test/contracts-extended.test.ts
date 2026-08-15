@@ -537,6 +537,14 @@ describe("HandoffAuthorizationRequest", () => {
         ...request,
         userConfirmation: {
           userConfirmationId: generateId(),
+          handoffRef: "handoff-message-ref",
+          projectId: request.projectId,
+          taskId: request.taskId,
+          source: request.source,
+          target: request.target,
+          deliverableIds: request.deliverableIds,
+          requestedPaths: request.requestedPaths,
+          actionCategories: request.actionCategories,
           confirmedBy: {
             actor: "user",
             channel: "desktop",
@@ -549,12 +557,40 @@ describe("HandoffAuthorizationRequest", () => {
     ).toBe(true);
   });
 
+  it("rejects a user confirmation that does not bind to the held handoff", () => {
+    // Without the held-handoff identity a copied confirmation could authorize
+    // an arbitrary different request — the schema must require the binding.
+    expect(
+      HandoffAuthorizationRequestSchema.safeParse({
+        ...request,
+        userConfirmation: {
+          userConfirmationId: generateId(),
+          confirmedBy: {
+            actor: "user",
+            channel: "desktop",
+            directUser: true,
+          },
+          confirmedAt: "2026-08-15T00:00:00.000Z",
+          messageRef: "handoff-message-ref",
+        },
+      }).success,
+    ).toBe(false);
+  });
+
   it("rejects a peer-channel confirmation", () => {
     expect(
       HandoffAuthorizationRequestSchema.safeParse({
         ...request,
         userConfirmation: {
           userConfirmationId: generateId(),
+          handoffRef: "handoff-message-ref",
+          projectId: request.projectId,
+          taskId: request.taskId,
+          source: request.source,
+          target: request.target,
+          deliverableIds: request.deliverableIds,
+          requestedPaths: request.requestedPaths,
+          actionCategories: request.actionCategories,
           confirmedBy: {
             actor: "user",
             channel: "host",

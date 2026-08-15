@@ -20,6 +20,7 @@
  *      relative imports must not escape the package root
  *   9. Renderer must not depend on core/storage/secrets/providers
  *  10. No unexpanded variables in release/artifacts/packaging manifests
+ *  11. No NUL bytes in text-like tracked files (git would classify them binary)
  */
 
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
@@ -572,6 +573,46 @@ checkUnexpanded("packaging");
 
 if (unexpandedErrors === 0) {
   ok("No unexpanded variables detected in release/artifacts/packaging");
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Check 11 — No NUL bytes in text-like tracked files
+// ═══════════════════════════════════════════════════════════════════════════
+process.stderr.write("\n=== Check 11: NUL bytes in text-like files ===\n");
+
+// Media/binary asset extensions that legitimately contain NUL bytes.
+const BINARY_EXTENSIONS = new Set([
+  "png", "jpg", "jpeg", "gif", "ico", "icns", "webp", "bmp", "tif", "tiff",
+  "woff", "woff2", "ttf", "otf", "eot",
+  "mp3", "mp4", "wav", "ogg", "webm", "avi", "mov",
+  "pdf", "zip", "gz", "tar", "bz2", "xz", "7z", "rar",
+  "dll", "exe", "so", "dylib", "wasm", "node", "db", "sqlite",
+  "snap", "asar", "pak",
+]);
+
+let nulErrors = 0;
+// Git classifies a file as binary when a NUL appears within the first 8000
+// bytes; scan that window only, mirroring git's own heuristic.
+for (const fileRel of walkFiles(".")) {
+  const ext = fileRel.split(".").pop()?.toLowerCase();
+  if (BINARY_EXTENSIONS.has(ext)) continue;
+  let buf;
+  try {
+    buf = readFileSync(resolve(ROOT, fileRel));
+  } catch {
+    continue;
+  }
+  const window = buf.subarray(0, Math.min(8000, buf.length));
+  if (window.includes(0)) {
+    err(
+      `${fileRel} contains a NUL byte — git classifies the file as binary; remove it`,
+    );
+    nulErrors++;
+  }
+}
+
+if (nulErrors === 0) {
+  ok("No NUL bytes in text-like files");
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

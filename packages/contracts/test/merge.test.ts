@@ -468,6 +468,68 @@ describe("mergeConcurrentPatches", () => {
     expect(patches[1]).toBe(p2);
   });
 
+  it("orders same-tier patches by real time when fractional-second precision differs", () => {
+    const base = makeContract();
+    const pMilliseconds = makePatch(base, [setTitle("毫秒版")], {
+      tier: "user_directive",
+      createdAt: "2026-08-15T00:00:00.500Z",
+    });
+    const pWholeSecond = makePatch(base, [setTitle("整秒版")], {
+      tier: "user_directive",
+      createdAt: "2026-08-15T00:00:00Z",
+    });
+    const outcome = mergeConcurrentPatches(base, [pWholeSecond, pMilliseconds]);
+    expect(outcome.kind).toBe("merged");
+    if (outcome.kind !== "merged") throw new Error("unreachable");
+    expect(outcome.contract.title).toBe("毫秒版");
+    expect(outcome.superseded).toEqual([
+      {
+        winnerProposalId: pMilliseconds.proposalId,
+        supersededProposalId: pWholeSecond.proposalId,
+        winnerTier: "user_directive",
+        winnerCreatedAt: "2026-08-15T00:00:00.500Z",
+        supersededCreatedAt: "2026-08-15T00:00:00Z",
+      },
+    ]);
+  });
+
+  it("conflicts when same-tier createdAt values denote the same instant with different precision", () => {
+    const base = makeContract();
+    const pFractional = makePatch(base, [setTitle("甲")], {
+      tier: "user_directive",
+      createdAt: "2026-08-15T00:00:00.000Z",
+    });
+    const pWhole = makePatch(base, [setTitle("乙")], {
+      tier: "user_directive",
+      createdAt: "2026-08-15T00:00:00Z",
+    });
+    expect(mergeConcurrentPatches(base, [pFractional, pWhole]).kind).toBe("conflicted");
+  });
+
+  it("rejects a schema-invalid proposal with validation_failed instead of an untyped crash", () => {
+    const base = makeContract();
+    const bad = makePatch(base, [{ op: "explode" } as unknown as ContractPatchOperation]);
+    const e = captureSestinaError(() => mergeConcurrentPatches(base, [bad]));
+    expect(e.code).toBe(SestinaErrorCode.validation_failed);
+  });
+
+  it("rejects a proposal whose tier/owner combination the proposal schema forbids", () => {
+    const base = makeContract();
+    const bad: ContractPatchProposal = {
+      ...makePatch(base, [setTitle("x")], { tier: "inferred" }),
+      owner: "user",
+    };
+    const e = captureSestinaError(() => mergeConcurrentPatches(base, [bad]));
+    expect(e.code).toBe(SestinaErrorCode.validation_failed);
+  });
+
+  it("rejects an empty-operations proposal with validation_failed", () => {
+    const base = makeContract();
+    const empty = makePatch(base, []);
+    const e = captureSestinaError(() => mergeConcurrentPatches(base, [empty]));
+    expect(e.code).toBe(SestinaErrorCode.validation_failed);
+  });
+
   it("rejects patches with mismatched identity or version using contract_version_mismatch", () => {
     const base = makeContract();
     const other = makeContract();

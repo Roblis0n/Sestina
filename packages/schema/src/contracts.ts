@@ -115,6 +115,10 @@ export const ScopeItemSchema = z.object({
       })
       .optional(),
   }),
+  // Optional: present on user-directive scope items compiled from explicit
+  // prompt lines (e.g. a stated deadline) so the statement can be verified
+  // against the source text; absent on synthesized or patch-added items.
+  sourceSpan: SourceSpanSchema.optional(),
   readonly: z.boolean(),
   writable: z.boolean(),
   outbound: z.boolean(),

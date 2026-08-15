@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  canActAsDirectUser,
   ContractPatchOperationSchema,
   ContractPatchProposalSchema,
   generateId,
@@ -618,6 +619,55 @@ describe("proposeContractPatch extractor fallback", () => {
     expect(recognized.operations[0]).toMatchObject({ op: "set_field", value: "已知" });
   });
 
+  it("collapses repeated upsert directives for the same deliverable into one operation", () => {
+    // Existing deliverable: both matches reuse the same identity; two upsert
+    // ops with one deliverableId would make strict apply throw.
+    const existingContract = makeContract();
+    const existingProposal = proposeContractPatch({
+      contract: existingContract,
+      instruction: "新增交付物：报告。新增交付物：报告。",
+      actor: DIRECT_USER,
+      createdAt: ISO_PROPOSAL,
+    });
+    expect(existingProposal.operations).toHaveLength(1);
+    expect(existingProposal.operations[0]).toMatchObject({ op: "upsert_deliverable" });
+    const appliedExisting = applyContractPatch(existingContract, existingProposal);
+    expect(appliedExisting.deliverables).toHaveLength(1);
+    expect(appliedExisting.deliverables[0].deliverableId).toBe("d1");
+
+    // New deliverable: the same description stated twice in one instruction
+    // is one deliverable, not two identical entries.
+    const freshContract = makeContract();
+    const freshProposal = proposeContractPatch({
+      contract: freshContract,
+      instruction: "新增交付物：核查清单。新增交付物：核查清单。",
+      actor: DIRECT_USER,
+      createdAt: ISO_PROPOSAL,
+    });
+    expect(freshProposal.operations).toHaveLength(1);
+    const appliedFresh = applyContractPatch(freshContract, freshProposal);
+    expect(appliedFresh.deliverables.map((d) => d.description)).toEqual(["报告", "核查清单"]);
+  });
+
+  it("an intervening removal keeps the upserts apart but same-field conflict resolution keeps the last directive", () => {
+    // add, remove, add on one identity is a same-field conflict: the last
+    // directive wins and a conflicting_directives ambiguity is surfaced (the
+    // established policy for repeated directives, not this collapse).
+    const contract = makeContract();
+    const proposal = proposeContractPatch({
+      contract,
+      instruction: "新增交付物：报告。删除交付物：报告。新增交付物：报告。",
+      actor: DIRECT_USER,
+      createdAt: ISO_PROPOSAL,
+    });
+    expect(proposal.operations).toHaveLength(1);
+    expect(proposal.operations[0]?.op).toBe("upsert_deliverable");
+    expect(proposal.ambiguities.filter((a) => a.kind === "conflicting_directives")).toHaveLength(2);
+    const applied = applyContractPatch(contract, proposal);
+    expect(applied.deliverables).toHaveLength(1);
+    expect(applied.deliverables[0].deliverableId).toBe("d1");
+  });
+
   it("keeps extractor-derived proposals inferred even for a direct user, and throws when nothing remains", () => {
     const contract = makeContract();
     const proposal = proposeContractPatch({
@@ -654,6 +704,23 @@ describe("proposeContractPatch extractor fallback", () => {
       }),
     );
     expect(emptyErr.code).toBe(SestinaErrorCode.validation_failed);
+  });
+
+  it("a forged directUser cast on a direct channel can never author user directives", () => {
+    // Cast-forged provenance that bypasses the schema refine: directUser on
+    // a direct channel, but the actor is an agent. canActAsDirectUser alone
+    // is true here; user_directive attribution must additionally require
+    // actor === "user".
+    const forged = { actor: "agent", channel: "desktop", directUser: true } as ActorProvenance;
+    expect(canActAsDirectUser(forged)).toBe(true); // documents the gap
+    const proposal = proposeContractPatch({
+      contract: makeContract(),
+      instruction: "标题改为 伪造指令。",
+      actor: forged,
+      createdAt: ISO_PROPOSAL,
+    });
+    expect(proposal.sourceTier).toBe("inferred");
+    expect(proposal.owner).toBe("inferred");
   });
 });
 

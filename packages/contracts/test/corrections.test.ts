@@ -170,6 +170,29 @@ describe("recordCorrection (docs/22 Task 9)", () => {
     expect(result.correction.confirmedAt).toBeUndefined();
   });
 
+  it("never confirms a directUser flag on a direct channel when the actor is not a user", () => {
+    // A cast-forged provenance that bypasses the schema refine: directUser on
+    // a direct channel, but the actor is an agent. canActAsDirectUser alone is
+    // true here; confirmation must additionally require actor === "user".
+    const forged = makeActor({ actor: "agent", channel: "desktop", directUser: true });
+    expect(canActAsDirectUser(forged)).toBe(true); // documents the gap
+    const result = recordCorrection(makeInput({ actor: forged }));
+    expect(result.kind).toBe("recorded");
+    if (result.kind !== "recorded") throw new Error("unreachable");
+    expect(result.correction.confirmed).toBe(false);
+    expect(result.correction.confirmedAt).toBeUndefined();
+  });
+
+  it("promotion: a forged non-user actor on a direct channel cannot claim user authorship", () => {
+    const forged = makeActor({ actor: "agent", channel: "cli", directUser: true });
+    const result = recordCorrection(makeInput({ scope: "project", actor: forged }));
+    expect(result.kind).toBe("promotion_required");
+    if (result.kind !== "promotion_required") throw new Error("unreachable");
+    expect(result.proposal.proposedBoundary.source.type).toBe("correction");
+    expect(result.proposal.proposedBoundary.owner).toBe("inferred");
+    expect(result.taskLevelCorrection.confirmed).toBe(false);
+  });
+
   it("defaults recurrenceCount to 0 and honours an override", () => {
     const defaulted = recordCorrection(makeInput());
     if (defaulted.kind !== "recorded") throw new Error("unreachable");

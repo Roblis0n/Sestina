@@ -262,6 +262,26 @@ describe("compileInitialContract (research-prompt-audit-limit fixture)", () => {
     expect(contract.scope.out).toEqual([]);
   });
 
+  it("the deadline scope item carries a source span that round-trips to its statement", () => {
+    const contract = compileInitialContract(researchInput());
+    const deadline = contract.scope.in.find((s) => s.appliesTo.timeRange !== undefined);
+    expect(deadline?.sourceSpan).toBeDefined();
+    if (deadline?.sourceSpan === undefined) {
+      throw new Error("expected the deadline scope item to carry a source span");
+    }
+    expect(sourceSpanExtract(researchFixture.userPrompt, deadline.sourceSpan)).toBe(
+      "截止日期：2026-09-01",
+    );
+  });
+
+  it("preserves the matched budget directive line verbatim as a sourceRef", () => {
+    const contract = compileInitialContract(researchInput());
+    const budgetRefs = contract.sourceRefs.filter((r) => r.ref.startsWith("budget-directive"));
+    expect(budgetRefs).toHaveLength(1);
+    expect(budgetRefs[0]?.type).toBe("user_message");
+    expect(budgetRefs[0]?.excerpt).toBe("预算：最多 100 次工具调用");
+  });
+
   it("leaves undeclared fields absent instead of inventing them", () => {
     const contract = compileInitialContract(researchInput());
     expect(contract.objective.rationale).toBeUndefined();
@@ -851,5 +871,135 @@ describe("runSemanticExtractor", () => {
       observed = err;
     }
     expect(observed).toBe(boom);
+  });
+});
+
+// ── Review regression: fidelity-parser edge cases (Task 9 final review) ──
+
+describe("fidelity parser edge cases", () => {
+  it("extracts bare-bullet directives outside any section, with round-tripping spans", () => {
+    const userPrompt = "请完成报告。\n- 必须用Python编写\n- 不要访问网络";
+    const contract = compileInitialContract(
+      makeInput({ userPrompt }),
+      { ids: FIXED_IDS },
+    );
+    const must = contract.boundaries.find((b) => b.statement === "必须用Python编写");
+    expect(must).toBeDefined();
+    expect(must?.severity).toBe("soft");
+    const prohibition = contract.boundaries.find((b) => b.statement === "不要访问网络");
+    expect(prohibition).toBeDefined();
+    expect(prohibition?.severity).toBe("hard");
+    for (const boundary of [must, prohibition]) {
+      if (!boundary?.source.sourceSpan) throw new Error("expected a source span");
+      expect(sourceSpanExtract(userPrompt, boundary.source.sourceSpan)).toBe(
+        boundary.statement,
+      );
+    }
+  });
+
+  it("counts marker-bearing prose outside sections as skipped instead of dropping it silently", () => {
+    const input = makeInput({
+      userPrompt: "请完成报告。\n完成后必须发邮件通知我",
+    });
+    const contract = compileInitialContract(input, { ids: FIXED_IDS });
+    expect(contract.boundaries.filter((b) => b.owner === "user")).toHaveLength(0);
+    expect(contract.semanticCompleteness?.notes).toContain("跳过无法解析的内容 1 处");
+  });
+
+  it("demotes prohibitions without safety sense to soft overridable boundaries", () => {
+    const contract = compileInitialContract(
+      makeInput({
+        userPrompt: "请完成报告。\n不要：\n- 不要使用红色字体",
+      }),
+      { ids: FIXED_IDS },
+    );
+    const boundary = contract.boundaries.find((b) => b.statement === "不要使用红色字体");
+    expect(boundary).toBeDefined();
+    expect(boundary?.severity).toBe("soft");
+    expect(boundary?.overridable).toBe(true);
+  });
+
+  it("preserves an explicit time of day in a deadline line", () => {
+    const contract = compileInitialContract(
+      makeInput({ userPrompt: "请完成报告。\n截止日期：2026-09-01 23:59" }),
+      { ids: FIXED_IDS },
+    );
+    expect(contract.scope.in).toHaveLength(1);
+    expect(contract.scope.in[0]?.appliesTo.timeRange?.end).toBe("2026-09-01T23:59:00.000Z");
+  });
+
+  it("skips a calendar-invalid deadline date instead of surfacing internal_error", () => {
+    const contract = compileInitialContract(
+      makeInput({ userPrompt: "请完成报告。\n截止日期：2026-02-30" }),
+      { ids: FIXED_IDS },
+    );
+    expect(contract.scope.in).toHaveLength(0);
+    expect(contract.semanticCompleteness?.notes).toContain("跳过无法解析的内容 1 处");
+  });
+
+  it("skips an oversized deadline line instead of surfacing internal_error", () => {
+    const contract = compileInitialContract(
+      makeInput({ userPrompt: `请完成报告。\n截止日期：2026-09-01 ${"长".repeat(2100)}` }),
+      { ids: FIXED_IDS },
+    );
+    expect(contract.scope.in).toHaveLength(0);
+    expect(contract.semanticCompleteness?.notes).toContain("跳过无法解析的内容 1 处");
+  });
+
+  it("records every count in a multi-count budget line under its own category", () => {
+    const contract = compileInitialContract(
+      makeInput({
+        userPrompt: "请完成报告。\n预算：最多 100 次工具调用，最多 50 次 provider 调用",
+      }),
+      { ids: FIXED_IDS },
+    );
+    expect(contract.budgets.maxToolCallsPerTask).toBe(100);
+    expect(contract.budgets.maxProviderCallsPerTask).toBe(50);
+  });
+
+  it("skips an ambiguous budget count instead of guessing its category", () => {
+    const contract = compileInitialContract(
+      makeInput({ userPrompt: "请完成报告。\n预算：最多 100 次调用" }),
+      { ids: FIXED_IDS },
+    );
+    expect(contract.budgets.maxToolCallsPerTask).toBeUndefined();
+    expect(contract.budgets.maxProviderCallsPerTask).toBeUndefined();
+    expect(contract.semanticCompleteness?.notes).toContain("跳过无法解析的内容 1 处");
+  });
+
+  it("does not compile a directive bullet inside the deliverables section as a deliverable", () => {
+    const contract = compileInitialContract(
+      makeInput({
+        userPrompt: "请完成报告。\n交付物：\n1. 报告\n- 必须包含数据来源",
+      }),
+      { ids: FIXED_IDS },
+    );
+    expect(contract.deliverables.map((d) => d.description)).toEqual(["报告"]);
+    expect(contract.semanticCompleteness?.notes).toContain("跳过无法解析的内容 1 处");
+  });
+
+  it("never leaves a lone surrogate when clipping ambiguity text at a wide character", () => {
+    const mustA = `使用甲方法编写${"a".repeat(492)}`;
+    const mustB = `使用乙方法编写${"b".repeat(477)}📊${"c".repeat(2)}`;
+    const contract = compileInitialContract(
+      makeInput({
+        userPrompt: `请完成报告。\n必须：${mustA}\n必须：${mustB}`,
+      }),
+      { ids: FIXED_IDS },
+    );
+    expect(contract.boundaries.some((b) => b.severity === "open")).toBe(true);
+    const detailed = compileContractDetailed(
+      makeInput({
+        userPrompt: `请完成报告。\n必须：${mustA}\n必须：${mustB}`,
+      }),
+      { ids: FIXED_IDS },
+    );
+    const ambiguity = detailed.ambiguities.find(
+      (a) => a.kind === "conflicting_directives",
+    );
+    expect(ambiguity).toBeDefined();
+    if (!ambiguity) throw new Error("unreachable");
+    expect(ambiguity.description.endsWith("…")).toBe(true);
+    expect(ambiguity.description).not.toMatch(/[\uD800-\uDBFF]$/);
   });
 });

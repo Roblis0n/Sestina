@@ -46,11 +46,14 @@ function utf8Length(text: string): number {
 }
 
 // Windows drive-letter absolute paths ("C:\...", "D:/...") and POSIX personal
-// home directories ("/home/...", "/Users/...", "/root/..."). Statements
-// containing such paths are dropped whole. The check deliberately errs toward
-// omission (privacy-safe direction); casing follows the documented patterns.
+// home directories ("/home", "/Users", "/root" — any casing). The directory
+// name must end at a path separator or at a non-word boundary, so "/homebrew"
+// or "home用户手册" do not trigger the check while "/home用户目录" (a
+// non-ASCII character following the directory name) does. Statements
+// containing such paths are dropped whole; the check deliberately errs toward
+// omission (privacy-safe direction).
 const ABSOLUTE_PERSONAL_PATH_PATTERN =
-  /(?:^|[^\w])(?:[A-Za-z]:[\\/]|\/(?:home|Users|root)(?:\/|$))/;
+  /(?:^|[^\w])(?:[A-Za-z]:[\\/]|\/(?:home|users|root)(?=$|[^\w]|\/))/i;
 
 function containsAbsolutePersonalPath(statement: string): boolean {
   return ABSOLUTE_PERSONAL_PATH_PATTERN.test(statement);
