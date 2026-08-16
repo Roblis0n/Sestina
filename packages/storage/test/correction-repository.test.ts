@@ -170,6 +170,74 @@ describe("CorrectionRepository (docs/22 Task 9)", () => {
     expect(uow.corrections.listByTask(projectA, taskA)).toHaveLength(1);
   });
 
+  it("compares createdAt as instants, not lexically (fractional precision)", () => {
+    // Lexically "...:00.500Z" < "...:00Z" ('.' < 'Z'), but chronologically
+    // 00.500 is LATER than 00. Ordering and the strictly-older supersede
+    // check must compare parsed instants.
+    const plain = makeCorrection(projectA, taskA, {
+      createdAt: "2026-08-14T02:00:00Z",
+    });
+    const fractional = makeCorrection(projectA, taskA, {
+      createdAt: "2026-08-14T02:00:00.500Z",
+    });
+    const uow = createUnitOfWork(db);
+    uow.commit((u) => {
+      u.corrections.insert(projectA, fractional);
+      u.corrections.insert(projectA, plain);
+    });
+    expect(uow.corrections.listByTask(projectA, taskA).map((c) => c.createdAt)).toEqual([
+      "2026-08-14T02:00:00Z",
+      "2026-08-14T02:00:00.500Z",
+    ]);
+  });
+
+  it("supersede accepts a strictly older instant written with different precision", () => {
+    const target = makeCorrection(projectA, taskA, {
+      createdAt: "2026-08-14T02:00:00Z",
+    });
+    const uow = createUnitOfWork(db);
+    uow.commit((u) => {
+      u.corrections.insert(projectA, target);
+    });
+    // Same second, half a second later: chronologically strictly older
+    // target, even though the lexical comparison would order it backwards.
+    const newer = makeCorrection(projectA, taskA, {
+      createdAt: "2026-08-14T02:00:00.500Z",
+      supersededBy: target.correctionId,
+    });
+    uow.commit((u) => {
+      u.corrections.insert(projectA, newer);
+    });
+    expect(uow.corrections.get(projectA, newer.correctionId)?.supersededBy).toBe(
+      target.correctionId,
+    );
+  });
+
+  it("supersede rejects an equal instant written with different precision", () => {
+    const target = makeCorrection(projectA, taskA, {
+      createdAt: "2026-08-14T02:00:00Z",
+    });
+    const uow = createUnitOfWork(db);
+    uow.commit((u) => {
+      u.corrections.insert(projectA, target);
+    });
+    // "02:00:00.000Z" is the SAME instant as "02:00:00Z": not strictly older.
+    const sameInstant = makeCorrection(projectA, taskA, {
+      createdAt: "2026-08-14T02:00:00.000Z",
+      supersededBy: target.correctionId,
+    });
+    expectSestinaCode(() => {
+      uow.commit((u) => {
+        u.corrections.insert(projectA, sameInstant);
+      });
+    }, SestinaErrorCode.validation_failed);
+    const count = db.get<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM corrections WHERE project_id = ?",
+      projectA,
+    );
+    expect(count?.n).toBe(1);
+  });
+
   it("orders listByTask by data.createdAt ascending, then correctionId", () => {
     const baseId = "01H" + "0".repeat(22);
     const early = makeCorrection(projectA, taskA, {

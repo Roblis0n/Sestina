@@ -17,7 +17,11 @@ import {
   type SourceSpan,
   type TaskContract,
 } from "@sestina/schema";
-import type { ContractSemanticExtractor } from "./extractor-port.js";
+import {
+  runSemanticExtractor,
+  assertInferredOperationsAdmissible,
+  type ContractSemanticExtractor,
+} from "./extractor-port.js";
 import { assertExpectedVersion, nextContractVersion } from "./versioning.js";
 
 // ── Proposal input ──
@@ -355,7 +359,7 @@ const DIRECTIVE_PATTERNS: readonly DirectivePattern[] = [
       `(executorCanChooseMethods|executorCanProposeScope|executorCanSelfReview|` +
       `overridesRequireUserConfirmation|requireSourceForClaims|allowUserTestimony)` +
       `\\s*${SETTER}\\s*(true|false|是|否|允许|禁止|真|假)`,
-    build: (m) => {
+    build: (m, ctx) => {
       const field = m[1];
       const word = m[2];
       if (!field || !word) return [];
@@ -365,6 +369,16 @@ const DIRECTIVE_PATTERNS: readonly DirectivePattern[] = [
         field === "requireSourceForClaims" || field === "allowUserTestimony"
           ? "evidencePolicy"
           : "authority";
+      // The authority policy belongs to the user. A peer/agent/inferred
+      // actor stating an explicit authority directive gets a decision-
+      // required ambiguity instead of an operation - the same fence the
+      // apply layer enforces on forged inferred proposals.
+      if (section === "authority" && ctx.tier !== "user_directive") {
+        ctx.ambiguities.push(
+          unresolvedAuthority(field, m),
+        );
+        return [];
+      }
       return [
         {
           op: "set_field",
@@ -482,6 +496,17 @@ function unresolvedRemoval(
     description,
     excerpt: clampExcerpt(part),
     sourceSpans: [span],
+    decisionRequired: true,
+  };
+}
+
+function unresolvedAuthority(field: string, match: RegExpExecArray): MaterialAmbiguity {
+  return {
+    ambiguityId: generateId(),
+    kind: "authority_unclear",
+    description: `authority field ${field} can only be changed by the user; this actor cannot execute the directive`,
+    excerpt: clampExcerpt(match[0] === "" ? field : match[0]),
+    sourceSpans: [spanOf(match)],
     decisionRequired: true,
   };
 }
@@ -1143,6 +1168,18 @@ export function proposeContractPatch(input: PatchProposalInput): ContractPatchPr
   let sourceRefs: SourceRef[] = [...(input.sourceRefs ?? [])];
 
   if (ops.length === 0) {
+    // All recognized directives were rejected for this actor (an authority
+    // directive from a non-direct-user, see the pattern build below): the
+    // instruction is not executable by this actor, full stop. An extractor
+    // must not be used to smuggle the rejected directive back in.
+    if (ambiguities.some((a) => a.kind === "authority_unclear")) {
+      throw new SestinaError(
+        SestinaErrorCode.validation_failed,
+        "authority directives can only be executed by a direct user",
+        undefined,
+        { ambiguities },
+      );
+    }
     const extractor = input.extractor;
     if (!extractor) {
       throw new SestinaError(
@@ -1150,32 +1187,22 @@ export function proposeContractPatch(input: PatchProposalInput): ContractPatchPr
         "no explicit patch operations recognized",
       );
     }
-    const extracted = extractor.propose({
-      contract,
-      sourceText: instruction,
-      now: input.now ?? createdAt,
-    });
+    // The fallback reuses runSemanticExtractor verbatim: schema validation,
+    // contract identity/version checks and the operation-level authority
+    // fence are identical to the compile path - there is no second, weaker
+    // validation fork for fallback proposals.
+    const extracted = runSemanticExtractor(
+      extractor,
+      {
+        contract,
+        sourceText: instruction,
+        now: input.now ?? createdAt,
+      },
+    );
     if (extracted !== undefined) {
-      const validated = parseProposalSafely(extracted);
-      if (
-        validated.contractId !== contract.contractId ||
-        validated.taskId !== contract.taskId ||
-        validated.expectedVersion !== contract.version
-      ) {
-        throw new SestinaError(
-          SestinaErrorCode.validation_failed,
-          "extractor proposal does not match the contract",
-          undefined,
-          {
-            contractId: validated.contractId,
-            taskId: validated.taskId,
-            expectedVersion: validated.expectedVersion,
-          },
-        );
-      }
-      ops = validated.operations;
-      ambiguities = [...ambiguities, ...validated.ambiguities];
-      sourceRefs = [...sourceRefs, ...validated.sourceRefs];
+      ops = extracted.operations;
+      ambiguities = [...ambiguities, ...extracted.ambiguities];
+      sourceRefs = [...sourceRefs, ...extracted.sourceRefs];
       tier = "inferred";
       owner = "inferred";
     }
@@ -1245,6 +1272,17 @@ export function applyContractPatch(
     );
   }
   assertExpectedVersion(contract, validated.expectedVersion);
+
+  // Defense-in-depth: the schema refine constrains only the envelope owner,
+  // so a cast-forged or storage-sourced schema-valid inferred proposal can
+  // still carry forbidden per-operation content. Apply re-runs the same
+  // non-forkable operation fence used by every producer of inferred
+  // proposals - inferred output can never reach the contract with user
+  // ownership, hard/non-overridable/authority boundaries, authority policy
+  // writes or preauthorizations.
+  if (validated.sourceTier === "inferred") {
+    assertInferredOperationsAdmissible(validated.operations);
+  }
 
   deepFreeze(contract);
   deepFreeze(proposal);

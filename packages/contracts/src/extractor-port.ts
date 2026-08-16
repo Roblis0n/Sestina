@@ -2,6 +2,7 @@ import {
   ContractPatchProposalSchema,
   SestinaError,
   SestinaErrorCode,
+  type ContractPatchOperation,
   type ContractPatchProposal,
   type TaskContract,
 } from "@sestina/schema";
@@ -23,6 +24,51 @@ export interface ContractSemanticExtractor {
 
 export const DEFAULT_MAX_EXTRACTOR_INPUT_CHARS = 200_000;
 export const DEFAULT_MAX_EXTRACTOR_OUTPUT_BYTES = 64_000;
+
+/**
+ * The single, non-forkable operation-level fence for inferred-tier proposal
+ * content. Shared by runSemanticExtractor, the proposeContractPatch
+ * extractor fallback, and applyContractPatch (defense-in-depth), so an
+ * inferred proposal can never claim - regardless of which path built or
+ * delivered it:
+ *
+ * - boundary ownership above "inferred" (user/system boundaries included);
+ * - hard severity or non-overridable boundaries;
+ * - authority boundaries;
+ * - authority policy writes (set_field on authority.*);
+ * - preauthorizations.
+ *
+ * The schema refine on ContractPatchProposal constrains only the ENVELOPE
+ * owner; every operation is checked here because a schema-valid inferred
+ * envelope can still smuggle forbidden per-operation content.
+ */
+export function assertInferredOperationsAdmissible(
+  operations: readonly ContractPatchOperation[],
+): void {
+  const invalid = (message: string): never => {
+    throw new SestinaError(SestinaErrorCode.validation_failed, message);
+  };
+  for (const operation of operations) {
+    if (operation.op === "add_boundary") {
+      if (operation.boundary.owner !== "inferred") {
+        invalid("inferred extractor output must carry inferred boundary ownership");
+      }
+      if (operation.boundary.severity === "hard") {
+        invalid("inferred extractor output must not create hard boundaries");
+      }
+      if (!operation.boundary.overridable) {
+        invalid("inferred extractor output must not create non-overridable boundaries");
+      }
+      if (operation.boundary.kind === "authority") {
+        invalid("inferred extractor output must not create authority boundaries");
+      }
+    } else if (operation.op === "set_field" && operation.path.section === "authority") {
+      invalid("inferred extractor output must not alter the authority policy");
+    } else if (operation.op === "add_preauthorization") {
+      invalid("inferred extractor output must not create preauthorizations");
+    }
+  }
+}
 
 /**
  * Runs a semantic extractor against the given context and validates its
@@ -97,23 +143,7 @@ export function runSemanticExtractor(
       expected: "inferred",
     });
   }
-  for (const operation of valid.operations) {
-    if (operation.op === "add_boundary") {
-      if (operation.boundary.severity === "hard") {
-        invalid("inferred extractor output must not create hard boundaries");
-      }
-      if (!operation.boundary.overridable) {
-        invalid("inferred extractor output must not create non-overridable boundaries");
-      }
-      if (operation.boundary.kind === "authority") {
-        invalid("inferred extractor output must not create authority boundaries");
-      }
-    } else if (operation.op === "set_field" && operation.path.section === "authority") {
-      invalid("inferred extractor output must not alter the authority policy");
-    } else if (operation.op === "add_preauthorization") {
-      invalid("inferred extractor output must not create preauthorizations");
-    }
-  }
+  assertInferredOperationsAdmissible(valid.operations);
 
   const outputBytes = new TextEncoder().encode(JSON.stringify(valid)).length;
   if (outputBytes > maxOutputBytes) {

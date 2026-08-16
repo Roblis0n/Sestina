@@ -273,6 +273,37 @@ describe("summarizeContract (Task 9 §十 contract summary)", () => {
     expect(summary.utf8Bytes).toBe(utf8(renderedOf(summary)));
   });
 
+  it("omits absolute personal path mentions in the objective and deliverables too", () => {
+    const contract = makeContract({
+      objective: "阅读 C:\\Users\\Someone\\Documents\\brief.md 后完成分析",
+      deliverables: [
+        "报告 ./outputs/report.md",
+        "基于 /home/alice/notes.txt 的清单",
+        "归档在 D:/Users/Someone/Desktop 的附录",
+        "普通交付物",
+      ],
+      boundaries: [{ kind: "scope", statement: "只允许写入 ./outputs/ 目录" }],
+    });
+    const summary = summarizeContract(contract, 1_000_000);
+
+    // The objective is one whole unit: a personal path inside it omits the
+    // objective entirely, exactly like the budget-exceeded case.
+    expect(summary.objective).toBe("");
+    expect(summary.truncated).toBe(true);
+    expect(summary.deliverables).toEqual(["报告 ./outputs/report.md", "普通交付物"]);
+    expect(summary.omittedDeliverables).toBe(2);
+
+    const rendered = renderedOf(summary);
+    for (const forbidden of [
+      "C:\\Users\\Someone",
+      "/home/alice",
+      "D:/Users/Someone",
+    ]) {
+      expect(rendered).not.toContain(forbidden);
+    }
+    expect(summary.utf8Bytes).toBe(utf8(rendered));
+  });
+
   it("omits absolute personal path boundaries and keeps project-relative paths", () => {
     const contract = makeContract({
       boundaries: [

@@ -216,6 +216,61 @@ describe("resolveCollaborationAuthority (Task 9 §九 handoff authority resoluti
     expect(expectReasons(equal).some((reason) => reason.includes(NOW))).toBe(true);
   });
 
+  it("compares deadlines as instants, not lexically (timezone offsets fail closed)", () => {
+    // Minimal counterexample: the deadline is 2026-01-01T00:00:00+08:00 =
+    // 2025-12-31T16:00:00Z, which is ALREADY EXPIRED at the request time
+    // 2025-12-31T20:00:00.000Z. Lexical comparison would call "2025-..." <
+    // "2026-..." alive. Offset deadlines reach this code in real flows only
+    // via cast/forged objects or unvalidated storage (TimestampSchema rejects
+    // offsets), so this is a defense-in-depth check.
+    const lexicallyAliveButActuallyExpired = resolveCollaborationAuthority(
+      makeRequest({
+        now: "2025-12-31T20:00:00.000Z",
+        preauthorizations: [
+          makeGrant({ deadline: "2026-01-01T00:00:00+08:00" }),
+        ],
+      }),
+    );
+    expect(lexicallyAliveButActuallyExpired.decision).toBe("no_authority");
+    expect(
+      expectReasons(lexicallyAliveButActuallyExpired).some((reason) =>
+        reason.includes("deadline"),
+      ),
+    ).toBe(true);
+
+    // The same instant written two ways: expired either way, and equality
+    // of instants is expiry.
+    const sameInstant = resolveCollaborationAuthority(
+      makeRequest({
+        now: "2026-08-15T12:00:00.000Z",
+        preauthorizations: [
+          makeGrant({ deadline: "2026-08-15T20:00:00+08:00" }),
+        ],
+      }),
+    );
+    expect(sameInstant.decision).toBe("no_authority");
+
+    // A still-future offset deadline must stay alive - epoch comparison must
+    // not break valid grants.
+    const alive = resolveCollaborationAuthority(
+      makeRequest({
+        now: "2026-08-15T04:00:00.000Z",
+        preauthorizations: [
+          makeGrant({ deadline: "2026-08-15T20:00:00+08:00" }),
+        ],
+      }),
+    );
+    expect(alive.decision).toBe("authorized");
+
+    // Unparseable deadline strings fail closed, never open.
+    const invalid = resolveCollaborationAuthority(
+      makeRequest({
+        preauthorizations: [makeGrant({ deadline: "not-a-timestamp" })],
+      }),
+    );
+    expect(invalid.decision).toBe("no_authority");
+  });
+
   it("returns no_authority for superseded or expired preauthorizations", () => {
     const superseded = resolveCollaborationAuthority(
       makeRequest({ preauthorizations: [makeGrant({ status: "superseded" })] }),

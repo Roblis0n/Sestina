@@ -12,6 +12,7 @@ import {
   type ContractTemplate,
   type Deliverable,
   type MaterialAmbiguity,
+  type ContractPatchProposal,
   type Objective,
   type ScopeItem,
   type SemanticCompleteness,
@@ -58,6 +59,8 @@ export interface CompileContractDetailedResult {
   contract: TaskContract;
   ambiguities: readonly MaterialAmbiguity[]; // high-impact only, decisionRequired true
   assumptions: readonly string[]; // methodological, resolved by the executor
+  /** The extractor's proposal, exposed verbatim (never auto-applied). */
+  extractorProposal?: ContractPatchProposal;
 }
 
 /**
@@ -167,7 +170,10 @@ interface ParsedPrompt {
   // carry spans; the matched directive lines are preserved verbatim instead
   // and surface as sourceRefs so the numbers stay traceable.
   budgetLines: ParsedDirective[];
-  deadline: { statement: string; end: string; span: SourceSpan } | undefined;
+  // A deadline without a stated time of day keeps only the statement: no
+  // midnight-UTC instant is fabricated for an ambiguous date. The missing
+  // time of day surfaces as a completion_criteria_unclear ambiguity instead.
+  deadline: { statement: string; end: string | undefined; span: SourceSpan } | undefined;
   stopConditions: ParsedDirective[];
   skipped: number;
 }
@@ -359,11 +365,11 @@ function parsePrompt(source: string): ParsedPrompt {
       // stated one — never fabricated.
       const time =
         hour === undefined
-          ? "00:00:00.000Z"
+          ? undefined
           : `${hour.padStart(2, "0")}:${minute}:${second.padStart(2, "0")}.000Z`;
       result.deadline = {
         statement: trimmed,
-        end: `${year}-${month}-${day}T${time}`,
+        end: time === undefined ? undefined : `${year}-${month}-${day}T${time}`,
         span: directiveSpan(line, trimmed),
       };
       continue;
@@ -598,6 +604,28 @@ function detectAmbiguities(
     assumptions: [],
   };
 
+  // A date-only deadline: the date is explicit but the time of day is not.
+  // No midnight (or any-timezone) instant is fabricated; the missing time of
+  // day is a decision-required completion-criteria ambiguity, and the scope
+  // item keeps only the verbatim statement.
+  if (parse.deadline !== undefined && parse.deadline.end === undefined) {
+    findings.ambiguities.push({
+      ambiguityId: deterministicId(
+        `deadline_time_unclear:${parse.deadline.span.start}:${parse.deadline.span.end}`,
+      ),
+      kind: "completion_criteria_unclear",
+      description: clip("截止日期缺少时刻：仅日期无法确定精确截止时刻（不会默认为某个时区的午夜）", 1000),
+      excerpt: clip(parse.deadline.statement, 2000),
+      sourceSpans: [parse.deadline.span],
+      decisionRequired: true,
+    });
+    findings.sourceRefs.push({
+      ref: "user-message",
+      type: "user_message",
+      excerpt: clip(parse.deadline.statement, 2000),
+    });
+  }
+
   // Conflicting 必须 directives: reversed explicit ordering, or two
   // directives mandating different named methods for the same activity.
   const musts = parse.musts;
@@ -712,6 +740,30 @@ function detectAmbiguities(
 // ── Deterministic content-derived identifiers ──
 
 const CROCKFORD_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+
+function finalizeCompleteness(
+  extractorConfigured: boolean,
+  proposalReturned: boolean,
+  skipped: number,
+): SemanticCompleteness {
+  let notes: string;
+  if (proposalReturned) {
+    notes = "语义提取器已运行；其提案未自动应用，仅作为提案与歧义暴露";
+  } else if (extractorConfigured) {
+    notes = "语义提取器已运行但未返回提案；未按语义提取结果增强";
+  } else {
+    notes = "Provider 未运行、语义可能不完整";
+  }
+  if (skipped > 0) {
+    notes = `${notes}；跳过无法解析的内容 ${skipped} 处`;
+  }
+  return {
+    semanticExtractorRan: proposalReturned,
+    completeness: proposalReturned ? "provider_assisted" : "schema_valid_only",
+    unknownFields: [],
+    notes,
+  };
+}
 
 function deterministicId(seed: string): string {
   const digest = createHash("sha256").update(seed, "utf8").digest();
@@ -861,10 +913,16 @@ function compileContract(
 
   const scopeIn: ScopeItem[] = [];
   if (parse.deadline !== undefined) {
+    // A deadline with a stated time of day carries a precise instant; a
+    // date-only deadline deliberately omits timeRange rather than coercing
+    // the date to UTC midnight (see detectAmbiguities).
     scopeIn.push({
       statement: parse.deadline.statement,
       source: "user_directive",
-      appliesTo: { timeRange: { end: parse.deadline.end } },
+      appliesTo:
+        parse.deadline.end === undefined
+          ? {}
+          : { timeRange: { end: parse.deadline.end } },
       sourceSpan: parse.deadline.span,
       readonly: true,
       writable: false,
@@ -879,17 +937,15 @@ function compileContract(
     evidenceRequired: EVIDENCE_WORDING.test(stop.text),
   }));
 
-  const extractorRan = ports.semanticExtractor !== undefined;
-  let notes = extractorRan ? "" : "Provider 未运行、语义可能不完整";
-  if (parse.skipped > 0) {
-    const suffix = `跳过无法解析的内容 ${parse.skipped} 处`;
-    notes = notes === "" ? suffix : `${notes}；${suffix}`;
-  }
+  // Initial value only: the real value is finalized AFTER the extractor
+  // actually runs (finalizeCompleteness below). A configured-but-silent
+  // extractor is not provider-assisted, and a proposal that was produced
+  // must be disclosed in the notes rather than silently discarded.
   const semanticCompleteness: SemanticCompleteness = {
-    semanticExtractorRan: extractorRan,
-    completeness: extractorRan ? "provider_assisted" : "schema_valid_only",
+    semanticExtractorRan: false,
+    completeness: "schema_valid_only",
     unknownFields: [],
-    notes,
+    notes: "Provider 未运行、语义可能不完整",
   };
 
   const sourceRefs: SourceRef[] = (input.userExcerpts ?? []).map((excerpt, index) => ({
@@ -932,6 +988,32 @@ function compileContract(
     updatedAt: input.now,
   };
 
+  let extractorAmbiguities: MaterialAmbiguity[] = [];
+  let extractorProposal: ContractPatchProposal | undefined;
+  if (ports.semanticExtractor !== undefined) {
+    const proposal = runSemanticExtractor(
+      ports.semanticExtractor,
+      { contract, sourceText: input.userPrompt, now: input.now },
+      {
+        maxInputChars: ports.maxExtractorInputChars,
+        maxOutputBytes: ports.maxExtractorOutputBytes,
+      },
+    );
+    if (proposal !== undefined) {
+      extractorProposal = proposal;
+      extractorAmbiguities = proposal.ambiguities.filter((a) => a.decisionRequired);
+    }
+  }
+
+  // Finalize semantic completeness from what actually happened, then
+  // re-validate: the contract must still re-parse after the completeness
+  // block is finalized (provider_assisted only when a proposal came back).
+  contract.semanticCompleteness = finalizeCompleteness(
+    ports.semanticExtractor !== undefined,
+    extractorProposal !== undefined,
+    parse.skipped,
+  );
+
   try {
     TaskContractSchema.parse(contract);
   } catch (err) {
@@ -943,24 +1025,10 @@ function compileContract(
     );
   }
 
-  let extractorAmbiguities: MaterialAmbiguity[] = [];
-  if (ports.semanticExtractor !== undefined) {
-    const proposal = runSemanticExtractor(
-      ports.semanticExtractor,
-      { contract, sourceText: input.userPrompt, now: input.now },
-      {
-        maxInputChars: ports.maxExtractorInputChars,
-        maxOutputBytes: ports.maxExtractorOutputBytes,
-      },
-    );
-    if (proposal !== undefined) {
-      extractorAmbiguities = proposal.ambiguities.filter((a) => a.decisionRequired);
-    }
-  }
-
   return {
     contract,
     ambiguities: [...findings.ambiguities, ...extractorAmbiguities],
     assumptions: findings.assumptions,
+    extractorProposal,
   };
 }

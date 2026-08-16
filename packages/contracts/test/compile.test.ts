@@ -246,10 +246,13 @@ describe("compileInitialContract (research-prompt-audit-limit fixture)", () => {
     const contract = compileInitialContract(researchInput(), { ids: FIXED_IDS });
     expect(contract.budgets).toEqual({ maxToolCallsPerTask: 100 });
 
-    const deadline = contract.scope.in.find((s) => s.appliesTo.timeRange !== undefined);
+    // Date-only deadline: the statement is preserved verbatim, but no
+    // midnight-UTC instant is fabricated - a date without a time of day is
+    // surfaced as an ambiguity, never recorded as a precise instant.
+    const deadline = contract.scope.in.find((s) => s.statement.startsWith("截止"));
     expect(deadline).toBeDefined();
     expect(deadline?.statement).toBe("截止日期：2026-09-01");
-    expect(deadline?.appliesTo.timeRange).toEqual({ end: "2026-09-01T00:00:00.000Z" });
+    expect(deadline?.appliesTo.timeRange).toBeUndefined();
     expect(deadline?.source).toBe("user_directive");
     expect(deadline?.confidence).toBe(1);
 
@@ -264,7 +267,7 @@ describe("compileInitialContract (research-prompt-audit-limit fixture)", () => {
 
   it("the deadline scope item carries a source span that round-trips to its statement", () => {
     const contract = compileInitialContract(researchInput());
-    const deadline = contract.scope.in.find((s) => s.appliesTo.timeRange !== undefined);
+    const deadline = contract.scope.in.find((s) => s.statement.startsWith("截止"));
     expect(deadline?.sourceSpan).toBeDefined();
     if (deadline?.sourceSpan === undefined) {
       throw new Error("expected the deadline scope item to carry a source span");
@@ -272,6 +275,16 @@ describe("compileInitialContract (research-prompt-audit-limit fixture)", () => {
     expect(sourceSpanExtract(researchFixture.userPrompt, deadline.sourceSpan)).toBe(
       "截止日期：2026-09-01",
     );
+  });
+
+  it("a date-only deadline becomes a decision-required ambiguity, not a fabricated instant", () => {
+    const detailed = compileContractDetailed(researchInput(), { ids: FIXED_IDS });
+    const deadlineAmbiguity = detailed.ambiguities.find(
+      (a) => a.kind === "completion_criteria_unclear" && a.description.includes("截止"),
+    );
+    expect(deadlineAmbiguity).toBeDefined();
+    expect(deadlineAmbiguity?.decisionRequired).toBe(true);
+    expect(deadlineAmbiguity?.excerpt).toContain("2026-09-01");
   });
 
   it("preserves the matched budget directive line verbatim as a sourceRef", () => {
@@ -495,11 +508,15 @@ describe("built-in contract templates", () => {
 // ══════════════════════════════════════════════════════════════════════
 
 describe("compileContractDetailed", () => {
-  it("matches compileInitialContract and reports no ambiguities for the fixture", () => {
+  it("matches compileInitialContract; the fixture's only ambiguity is its date-only deadline", () => {
     const detailed = compileContractDetailed(researchInput(), { ids: FIXED_IDS });
     const initial = compileInitialContract(researchInput(), { ids: FIXED_IDS });
     expect(detailed.contract).toEqual(initial);
-    expect(detailed.ambiguities).toEqual([]);
+    // The research fixture carries a date-only deadline (截止日期：2026-09-01),
+    // which is exactly one decision-required completion_criteria_unclear
+    // ambiguity - never a fabricated midnight instant.
+    expect(detailed.ambiguities).toHaveLength(1);
+    expect(detailed.ambiguities[0]?.kind).toBe("completion_criteria_unclear");
     expect(detailed.assumptions).toEqual([]);
   });
 
@@ -567,7 +584,7 @@ describe("compileContractDetailed", () => {
 // ══════════════════════════════════════════════════════════════════════
 
 describe("semantic extractor integration in compile", () => {
-  it("reports provider_assisted but never applies extractor proposals", () => {
+  it("reports provider_assisted with honest notes and never applies extractor proposals", () => {
     const contract = compileInitialContract(minimalInput(), { ids: FIXED_IDS });
     const proposal = validProposal(contract);
     const compiled = compileInitialContract(minimalInput(), {
@@ -578,13 +595,40 @@ describe("semantic extractor integration in compile", () => {
       semanticExtractorRan: true,
       completeness: "provider_assisted",
       unknownFields: [],
-      notes: "",
+      // The proposal is NOT silently swallowed: the notes say so.
+      notes: "语义提取器已运行；其提案未自动应用，仅作为提案与歧义暴露",
     });
     // The proposal's add_boundary op must not appear anywhere in the contract.
     expect(
       compiled.boundaries.some((b) => b.statement.includes("建议先阅读现有文档")),
     ).toBe(false);
     expect(compiled.boundaries).toEqual(contract.boundaries);
+  });
+
+  it("exposes the extractor proposal itself in the detailed result", () => {
+    const base = compileInitialContract(minimalInput(), { ids: FIXED_IDS });
+    const proposal = validProposal(base);
+    const detailed = compileContractDetailed(minimalInput(), {
+      ids: FIXED_IDS,
+      semanticExtractor: fakeExtractor(proposal),
+    });
+    expect(detailed.extractorProposal).toEqual(proposal);
+  });
+
+  it("does not claim provider_assisted when the extractor returned no proposal", () => {
+    // Configured-but-silent is not provider-assisted: the completeness flag
+    // must reflect an actual run with an actual proposal.
+    const compiled = compileInitialContract(minimalInput(), {
+      ids: FIXED_IDS,
+      semanticExtractor: fakeExtractor(undefined),
+    });
+    expect(compiled.semanticCompleteness?.semanticExtractorRan).toBe(false);
+    expect(compiled.semanticCompleteness?.completeness).toBe("schema_valid_only");
+    const detailed = compileContractDetailed(minimalInput(), {
+      ids: FIXED_IDS,
+      semanticExtractor: fakeExtractor(undefined),
+    });
+    expect(detailed.extractorProposal).toBeUndefined();
   });
 
   it("surfaces decision-required extractor ambiguities in the detailed result only", () => {
@@ -791,6 +835,27 @@ describe("runSemanticExtractor", () => {
     expectSestinaCode(
       () =>
         runSemanticExtractor(fakeExtractor(authorityPolicy), {
+          contract,
+          sourceText: "",
+          now: minimalFixture.now,
+        }),
+      SestinaErrorCode.validation_failed,
+    );
+  });
+
+  it("rejects inferred boundaries that claim user ownership", () => {
+    // The schema refine constrains only the proposal ENVELOPE owner; a
+    // per-operation boundary with owner "user" inside an inferred proposal
+    // is schema-valid and must be caught by the operation-level fence.
+    const contract = baseContract();
+    const userOwned = validProposal(contract, {
+      operations: [
+        { op: "add_boundary", boundary: extractorBoundary({ owner: "user" }) },
+      ],
+    });
+    expectSestinaCode(
+      () =>
+        runSemanticExtractor(fakeExtractor(userOwned), {
           contract,
           sourceText: "",
           now: minimalFixture.now,

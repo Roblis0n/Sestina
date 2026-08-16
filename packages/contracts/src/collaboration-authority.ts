@@ -30,9 +30,12 @@ import type {
 //   an empty or all-slash granted path covers nothing. A path containing a
 //   ".." segment never matches as a request and covers nothing as a grant —
 //   fail closed, with no normalization attempted.
-// - Deadline comparison is lexical over ISO-8601 strings, exactly
-//   request.now < grant.deadline; timestamps in this codebase are UTC "Z"
-//   strings where lexical order equals chronological order.
+// - Deadline comparison is over PARSED INSTANTS (epoch milliseconds), never
+//   over the raw strings: lexical order diverges from chronological order as
+//   soon as a non-Z offset representation reaches this code (a cast-forged
+//   object or an unvalidated storage row). Exactly request.now < deadline as
+//   instants keeps a grant alive; equality is expiry; an unparseable or
+//   non-finite timestamp on either side fails closed.
 // - userConfirmation is bound by schema to the held handoff it releases:
 //   handoffRef/projectId/taskId/source/target must equal the request's and the
 //   request's deliverables, paths and action categories must be covered by the
@@ -131,13 +134,24 @@ function confirmationMatchesRequest(
   return true;
 }
 
+function epochMsOf(value: string): number | undefined {
+  const ms = Date.parse(value);
+  return Number.isFinite(ms) ? ms : undefined;
+}
+
 function grantIsAlive(
   request: HandoffAuthorizationRequest,
   grant: HandoffPreauthorization,
 ): boolean {
   if (grant.status !== "active") return false;
   if (grant.supersededBy !== undefined) return false;
-  if (grant.deadline !== undefined && !(request.now < grant.deadline)) return false;
+  if (grant.deadline !== undefined) {
+    const deadlineMs = epochMsOf(grant.deadline);
+    const nowMs = epochMsOf(request.now);
+    if (deadlineMs === undefined || nowMs === undefined || nowMs >= deadlineMs) {
+      return false;
+    }
+  }
   return true;
 }
 
