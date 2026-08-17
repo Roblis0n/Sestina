@@ -486,11 +486,12 @@ describe("Retention preview and apply (docs/22 Task 6)", () => {
       for (let i = 0; i < MEMBER_INLINE_LIMIT + 1; i++) {
         tx.run(
           `INSERT INTO evidence_items (evidence_id, project_id, task_id, type, status, excerpt, content_hash, recorded_by, observed_at, expires_at, data)
-           VALUES (?, ?, ?, 'primary_source', 'verified', ?, 'h', 'user', ?, ?, '{}')`,
+           VALUES (?, ?, ?, 'primary_source', 'verified', ?, ?, 'user', ?, ?, '{}')`,
           `ev-${i}`,
           projectId,
           taskId,
           `bulk-sensitive-${i}`,
+          `hash-${i}`,
           oldMs,
           oldMs - 30 * DAY_MS,
         );

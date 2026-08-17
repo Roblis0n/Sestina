@@ -1,4 +1,10 @@
-import { SestinaError, SestinaErrorCode, isValidId } from "@sestina/schema";
+import {
+  ActorProvenanceSchema,
+  SestinaError,
+  SestinaErrorCode,
+  isValidId,
+  type ActorProvenance,
+} from "@sestina/schema";
 import type { StorageTransaction } from "../transaction.js";
 
 // ── Shared repository primitives ──
@@ -40,6 +46,205 @@ export function assertValidProjectId(projectId: string): void {
   if (!isValidId(projectId)) {
     throw new SestinaError(SestinaErrorCode.validation_failed, "projectId is not a valid ULID");
   }
+}
+
+// ── Append-only ledger history (docs/22 Task 10) ──
+// Every status transition on assertions/evidence/claims/deliverables writes
+// one history row; history rows are never updated or deleted.
+
+export interface LedgerHistoryWrite {
+  historyId: string;
+  action: string;
+  fromStatus: string | null;
+  toStatus: string;
+  /** The CAS version the caller expected to update from. */
+  expectedVersion: number;
+  /** Serialized ActorProvenance JSON. */
+  actorJson: string;
+  reason?: string;
+  /** Epoch milliseconds. */
+  atMs: number;
+}
+
+export interface LedgerHistoryRead {
+  historyId: string;
+  action: string;
+  fromStatus: string | null;
+  toStatus: string;
+  expectedVersion: number;
+  actor: unknown;
+  reason: string | null;
+  at: string;
+}
+
+/** Parses and canonicalizes the authenticated actor carried by a ledger write. */
+export function parseLedgerActor(entry: LedgerHistoryWrite): ActorProvenance {
+  let actor: unknown;
+  try {
+    actor = JSON.parse(entry.actorJson) as unknown;
+  } catch {
+    throw new SestinaError(SestinaErrorCode.validation_failed, "Ledger actor is invalid JSON");
+  }
+  const parsedActor = ActorProvenanceSchema.safeParse(actor);
+  if (!parsedActor.success) {
+    throw new SestinaError(
+      SestinaErrorCode.validation_failed,
+      "Ledger actor is not valid provenance",
+    );
+  }
+  return parsedActor.data;
+}
+
+/** Validates caller context and derives state/version fields from the row. */
+export function deriveLedgerHistory(
+  entry: LedgerHistoryWrite,
+  expectedVersion: number,
+  fromStatus: string | null,
+  toStatus: string,
+  action = entry.action,
+): LedgerHistoryWrite {
+  if (
+    entry.expectedVersion !== expectedVersion ||
+    entry.toStatus !== toStatus ||
+    (entry.fromStatus !== null && entry.fromStatus !== fromStatus)
+  ) {
+    throw new SestinaError(
+      SestinaErrorCode.validation_failed,
+      "Ledger history does not match the authoritative transition",
+    );
+  }
+  const parsedActor = parseLedgerActor(entry);
+  if (
+    entry.historyId.length === 0 ||
+    entry.historyId.length > 64 ||
+    !Number.isSafeInteger(entry.atMs) ||
+    entry.atMs < 0 ||
+    action.length === 0 ||
+    action.length > 100 ||
+    (entry.reason?.length ?? 0) > 2000
+  ) {
+    throw new SestinaError(
+      SestinaErrorCode.validation_failed,
+      "Ledger history metadata is invalid",
+    );
+  }
+  return {
+    ...entry,
+    action,
+    fromStatus,
+    toStatus,
+    expectedVersion,
+    actorJson: JSON.stringify(parsedActor),
+  };
+}
+
+export function insertLedgerHistory(
+  tx: StorageTransaction,
+  table: "assertion_history" | "evidence_history" | "claim_history" | "deliverable_history",
+  entityIdColumn: "assertion_id" | "evidence_id" | "claim_id" | "deliverable_id",
+  projectId: string,
+  entityId: string,
+  entry: LedgerHistoryWrite,
+  taskId?: string,
+): void {
+  // Inserts and contract syncs also pass through provenance/shape validation.
+  const validated = deriveLedgerHistory(
+    entry,
+    entry.expectedVersion,
+    entry.fromStatus,
+    entry.toStatus,
+  );
+  if (table === "deliverable_history") {
+    if (taskId === undefined) {
+      throw new SestinaError(
+        SestinaErrorCode.internal_error,
+        "Deliverable history requires a task scope",
+      );
+    }
+    tx.run(
+      `INSERT INTO deliverable_history
+         (history_id, project_id, task_id, deliverable_id, action, from_status, to_status,
+          expected_version, actor, reason, at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      validated.historyId,
+      projectId,
+      taskId,
+      entityId,
+      validated.action,
+      validated.fromStatus,
+      validated.toStatus,
+      validated.expectedVersion,
+      validated.actorJson,
+      validated.reason ?? null,
+      validated.atMs,
+    );
+    return;
+  }
+  tx.run(
+    `INSERT INTO ${table}
+       (history_id, project_id, ${entityIdColumn}, action, from_status, to_status,
+        expected_version, actor, reason, at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    validated.historyId,
+    projectId,
+    entityId,
+    validated.action,
+    validated.fromStatus,
+    validated.toStatus,
+    validated.expectedVersion,
+    validated.actorJson,
+    validated.reason ?? null,
+    validated.atMs,
+  );
+}
+
+export function readLedgerHistory(
+  tx: StorageTransaction,
+  table: "assertion_history" | "evidence_history" | "claim_history" | "deliverable_history",
+  entityIdColumn: "assertion_id" | "evidence_id" | "claim_id" | "deliverable_id",
+  projectId: string,
+  entityId: string,
+  taskId?: string,
+): LedgerHistoryRead[] {
+  if (table === "deliverable_history" && taskId === undefined) {
+    throw new SestinaError(
+      SestinaErrorCode.internal_error,
+      "Deliverable history requires a task scope",
+    );
+  }
+  const rows = tx.all<{
+    history_id: string;
+    action: string;
+    from_status: string | null;
+    to_status: string;
+    expected_version: number;
+    actor: string;
+    reason: string | null;
+    at: number;
+  }>(
+    table === "deliverable_history"
+      ? `SELECT history_id, action, from_status, to_status, expected_version, actor, reason, at
+         FROM deliverable_history
+         WHERE project_id = ? AND task_id = ? AND deliverable_id = ?
+         ORDER BY rowid`
+      : `SELECT history_id, action, from_status, to_status, expected_version, actor, reason, at
+         FROM ${table}
+         WHERE project_id = ? AND ${entityIdColumn} = ?
+         ORDER BY rowid`,
+    ...(table === "deliverable_history"
+      ? [projectId, taskId, entityId]
+      : [projectId, entityId]),
+  );
+  return rows.map((row) => ({
+    historyId: row.history_id,
+    action: row.action,
+    fromStatus: row.from_status,
+    toStatus: row.to_status,
+    expectedVersion: row.expected_version,
+    actor: JSON.parse(row.actor) as unknown,
+    reason: row.reason,
+    at: fromMs(row.at),
+  }));
 }
 
 /** Cursor pagination limit sanity (no offset scans of 100k history). */

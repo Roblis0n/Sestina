@@ -1,5 +1,5 @@
 {
-  "name": "@sestina/storage",
+  "name": "@sestina/evidence",
   "version": "0.1.0",
   "type": "module",
   "main": "./src/index.ts",
@@ -14,11 +14,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@sestina/schema": "workspace:*",
-    "zod": "^4.0.0"
+    "@sestina/schema": "workspace:*"
   },
   "devDependencies": {
-    "@sestina/evidence": "workspace:*",
     "typescript": "^5.8.0",
     "vitest": "^3.0.0"
   }

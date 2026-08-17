@@ -400,11 +400,35 @@ export async function applyRetentionPreview(
           }
           case "expired_evidence_excerpts": {
             for (const id of recomputed) {
+              const row = tx.get<{ evidence_id: string; project_id: string; excerpt: string | null }>(
+                `SELECT evidence_id, project_id, excerpt
+                 FROM evidence_items
+                 WHERE evidence_id = ? AND excerpt IS NOT NULL`,
+                id,
+              );
+              if (!row) continue;
+              // Tombstone FIRST, with the irreversible hash of the excerpt -
+              // the same discipline as every other target: the excerpt is
+              // sensitive content and its removal must leave an auditable,
+              // non-reconstructable record (docs/22 Task 10).
+              tombstones.insert({
+                tombstoneId: makeTombstoneId(),
+                entityKind: "evidence_excerpt",
+                entityId: row.evidence_id,
+                projectId: row.project_id,
+                timeRangeFrom: null,
+                timeRangeTo: target.timeRange.to,
+                reason: "expired",
+                contentHash: sha256(row.excerpt ?? ""),
+                summary: "evidence excerpt removed by retention",
+                createdAt: now,
+              });
+              targetTombstones += 1;
               const changed = tx.run(
                 "UPDATE evidence_items SET excerpt = NULL, data = json_remove(data, '$.excerpt') WHERE evidence_id = ?",
                 id,
               );
-              targetTombstones += Number(changed.changes);
+              if (Number(changed.changes) === 0) targetTombstones -= 1;
             }
             break;
           }

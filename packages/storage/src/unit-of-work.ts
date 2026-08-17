@@ -10,6 +10,8 @@ import { createDecisionRepository, type DecisionRepository } from "./repositorie
 import { createDecisionTraceRepository, type DecisionTraceRepository } from "./repositories/traces.js";
 import { createAssertionRepository, type AssertionRepository } from "./repositories/assertions.js";
 import { createEvidenceRepository, type EvidenceRepository } from "./repositories/evidence.js";
+import { createClaimRepository, type ClaimRepository } from "./repositories/claims.js";
+import { createDeliverableRepository, type DeliverableRepository } from "./repositories/deliverables.js";
 import { createConversationRepository, type ConversationRepository } from "./repositories/conversations.js";
 import { createCollaborationRepository, type CollaborationRepository } from "./repositories/collaboration.js";
 import { createReviewRepository, type ReviewRepository } from "./repositories/reviews.js";
@@ -45,6 +47,8 @@ export interface StorageUnitOfWork {
   traces: DecisionTraceRepository;
   assertions: AssertionRepository;
   evidence: EvidenceRepository;
+  claims: ClaimRepository;
+  deliverables: DeliverableRepository;
   conversations: ConversationRepository;
   collaboration: CollaborationRepository;
   reviews: ReviewRepository;
@@ -70,6 +74,8 @@ export function createUnitOfWork(db: StorageDatabase): StorageUnitOfWork {
     traces: createDecisionTraceRepository(tx),
     assertions: createAssertionRepository(tx),
     evidence: createEvidenceRepository(tx),
+    claims: createClaimRepository(tx),
+    deliverables: createDeliverableRepository(tx),
     conversations: createConversationRepository(tx),
     collaboration: createCollaborationRepository(tx),
     reviews: createReviewRepository(tx),

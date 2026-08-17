@@ -52,24 +52,26 @@ describe("Minimal privacy-preserving export (docs/22 Task 6)", () => {
         body: `${SENSITIVE_PHRASE} in the conversation body`, contextRefs: [], confirmable: false,
         status: "complete", createdAt: oldIso,
       } satisfies ConversationMessage);
-      u.evidence.insert({
+      u.evidence.insert(projectId, {
         evidenceId: "EXP-EV-1", taskId, type: "primary_source",
         locator: { type: "path", value: join(dir, "raw.csv") },
         excerpt: `${SENSITIVE_PHRASE} in the evidence excerpt`,
-        status: "verified", provenance: "upload", recordedBy: "user",
+        status: "unverified", provenance: "upload", recordedBy: "user",
         observedAt: oldIso,
         expiresAt: new Date(Date.now() - 30 * DAY_MS).toISOString(),
+        version: 1,
       });
       // A locator whose value already contains the JSON-escaped form of an
       // absolute path (literal doubled backslashes): minimiseJson must still
       // shrink it to the basename.
-      u.evidence.insert({
+      u.evidence.insert(projectId, {
         evidenceId: "EXP-EV-ESC", taskId, type: "primary_source",
         locator: { type: "path", value: `${dir.replaceAll("\\", "\\\\")}\\raw-escaped.csv` },
         excerpt: `${SENSITIVE_PHRASE} in the escaped evidence`,
-        status: "verified", provenance: "upload", recordedBy: "user",
+        status: "unverified", provenance: "upload", recordedBy: "user",
         observedAt: oldIso,
         expiresAt: new Date(Date.now() - 30 * DAY_MS).toISOString(),
+        version: 1,
       });
     });
   });
@@ -206,12 +208,13 @@ describe("Minimal privacy-preserving export (docs/22 Task 6)", () => {
   it("keeps a real new evidence item out of retention when it is not expired", async () => {
     const uow = createUnitOfWork(db);
     uow.commit((u) => {
-      u.evidence.insert({
+      u.evidence.insert(projectId, {
         evidenceId: "EXP-EV-2", taskId, type: "primary_source",
         locator: { type: "path", value: join(dir, "fresh.csv") },
         excerpt: `${SENSITIVE_PHRASE} but recent`,
-        status: "verified", provenance: "upload", recordedBy: "user",
+        status: "unverified", provenance: "upload", recordedBy: "user",
         observedAt: new Date().toISOString(),
+        version: 1,
       });
     });
     const preview = previewRetention(db, retentionConfig());

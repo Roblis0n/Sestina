@@ -139,6 +139,7 @@ describe("Schema round-trips", () => {
       status: "verified" as const,
       provenance: "User uploaded dataset",
       recordedBy: "user" as const,
+      version: 1,
     };
     const result = EvidenceItemSchema.safeParse(evidence);
     expect(result.success).toBe(true);
@@ -159,6 +160,9 @@ describe("Schema round-trips", () => {
       evidenceRefs: ["E-001"],
       status: "supported" as const,
       limitations: ["Based on format validation only"],
+      provenance: { actor: "agent", channel: "runtime", directUser: false },
+      createdAt: "2026-08-10T10:00:00.000Z",
+      version: 1,
     };
     const result = ClaimSchema.safeParse(claim);
     expect(result.success).toBe(true);

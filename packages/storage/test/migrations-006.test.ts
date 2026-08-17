@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+﻿import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { join } from "node:path";
 import {
   openDatabase,
@@ -45,7 +45,7 @@ describe("Migration 006 (retention snapshot)", () => {
     );
     expect(row?.name).toBe("006-retention-snapshot");
     expect(row?.status).toBe("completed");
-    expect(MIGRATIONS.at(-1)?.version).toBe(11);
+    expect(MIGRATIONS.at(-1)?.version).toBe(12);
   });
 
   it("creates retention_previews and retention_applied with the snapshot columns", () => {

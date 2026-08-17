@@ -193,6 +193,12 @@ export type {
   EvidenceRepository,
 } from "./repositories/evidence.js";
 export type {
+  ClaimRepository,
+} from "./repositories/claims.js";
+export type {
+  DeliverableRepository,
+} from "./repositories/deliverables.js";
+export type {
   ConversationRepository,
 } from "./repositories/conversations.js";
 export type {

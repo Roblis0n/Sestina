@@ -22,6 +22,7 @@ export interface ReviewRepository {
   insertItem(item: ReviewItem): void;
   getItem(projectId: string, reviewId: string): ReviewItem | undefined;
   listByProject(projectId: string, input: CursorInput): Page<ReviewItem>;
+  listByTask(projectId: string, taskId: string, input: CursorInput): Page<ReviewItem>;
   /** Actions are append-only (docs/36). */
   appendAction(action: ReviewAction): void;
   listActions(projectId: string, reviewId: string): ReviewAction[];
@@ -94,6 +95,22 @@ export function createReviewRepository(tx: StorageTransaction): ReviewRepository
         projectId,
         cursor: input.cursor,
         limit: input.limit,
+      });
+      return { items: page.items.map(assembleReview), nextCursor: page.nextCursor };
+    },
+
+    listByTask(projectId, taskId, input) {
+      const page = keysetPage<ReviewRow>(tx, {
+        table: "review_items",
+        columns: "review_id, project_id, task_id, decision_id, status, created_at, updated_at, data",
+        keyColumn: "created_at",
+        idColumn: "review_id",
+        projectColumn: "project_id",
+        projectId,
+        cursor: input.cursor,
+        limit: input.limit,
+        extraWhere: "task_id = ?",
+        extraParams: [taskId],
       });
       return { items: page.items.map(assembleReview), nextCursor: page.nextCursor };
     },

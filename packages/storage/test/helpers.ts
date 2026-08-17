@@ -197,11 +197,12 @@ export function seedCollaboration(db: StorageDatabase): {
   for (const ref of (message.evidenceRefs as string[] | undefined) ?? []) {
     db.run(
       `INSERT INTO evidence_items (evidence_id, project_id, task_id, type, status, content_hash, recorded_by, observed_at, expires_at, data)
-       VALUES (?, ?, ?, 'primary_source', 'verified', 'h', 'user', ?, NULL, '{}')
+       VALUES (?, ?, ?, 'primary_source', 'verified', 'h' || ?, 'user', ?, NULL, '{}')
        ON CONFLICT(evidence_id) DO NOTHING`,
       ref,
       thread.projectId,
       thread.taskId,
+      ref,
       Date.now(),
     );
   }
