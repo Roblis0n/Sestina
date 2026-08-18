@@ -13,6 +13,7 @@
  *             WORK-BOARD current_task field
  *   AUTH-R004 no stale-authority phrasing inside active regions (text after
  *             SESTINA_SUPERSEDED_BASELINE_START is history and is ignored)
+ *   AUTH-R005 the exact product invariant is present in every active region
  */
 import { describe, it, expect } from "vitest";
 import {
@@ -38,12 +39,17 @@ const ENTRY_FILES = [
   "docs/execution/WORK-BOARD.md",
 ];
 
+const PRODUCT_INVARIANT =
+  "Sestina 是一个本地科研过程调试器。它让 AI 始终围绕当前研究问题工作，记住已经作出的研究决定，识别目标替换、重复审计、论证跳跃和伪深度，并要求每一轮修改说明真正增加了什么。";
+
 /** The canonical active-authority marker block every entry must carry. */
 function activeBlock(currentTask: string): string {
   return [
     "<!-- SESTINA_ACTIVE_AUTHORITY_START -->",
     "<!-- sestina-canonical-repo: D:\\Sestina -->",
-    "<!-- sestina-direction: local-research-process-integrity -->",
+    "<!-- sestina-direction: local-research-process-debugger -->",
+    "<!-- sestina-product-invariant: local-research-process-debugger -->",
+    "<!-- sestina-prework-direction-gate: required -->",
     `<!-- sestina-current-task: ${currentTask} -->`,
     "<!-- sestina-ri00: accepted_for_continuation -->",
     "<!-- sestina-ri01: deferred_by_current_user_for_direct_development -->",
@@ -51,6 +57,7 @@ function activeBlock(currentTask: string): string {
     "<!-- sestina-old-task-11: not-current -->",
     "<!-- sestina-remote-visibility: private -->",
     "<!-- sestina-push-policy: commit-and-push-current-branch -->",
+    PRODUCT_INVARIANT,
     "<!-- SESTINA_ACTIVE_AUTHORITY_END -->",
   ].join("\n");
 }
@@ -242,5 +249,40 @@ describe("verify-authority negative fixtures", () => {
     });
     expect(r.exitCode).toBe(1);
     expect(r.stderr).toContain("[AUTH-R002]");
+  });
+
+  it("N9. missing exact product invariant fails as AUTH-R005", () => {
+    const r = runAuthority("neg-missing-invariant", (root) => {
+      writeValidEntries(root, {
+        "README.md": activeBlock("RI-03").replace(PRODUCT_INVARIANT, ""),
+      });
+    });
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toContain("[AUTH-R005]");
+    expect(r.stderr).toContain("README.md");
+  });
+
+  it("N10. changing one product-invariant concept fails as AUTH-R005", () => {
+    const r = runAuthority("neg-mutated-invariant", (root) => {
+      writeValidEntries(root, {
+        "CLAUDE.md": activeBlock("RI-03").replace("论证跳跃", "论证润色"),
+      });
+    });
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toContain("[AUTH-R005]");
+    expect(r.stderr).toContain("CLAUDE.md");
+  });
+
+  it("N11. invariant only in superseded history does not satisfy the active gate", () => {
+    const r = runAuthority("neg-invariant-in-history", (root) => {
+      writeValidEntries(root, {
+        "AGENTS.md":
+          activeBlock("RI-03").replace(PRODUCT_INVARIANT, "") +
+          `\n<!-- SESTINA_SUPERSEDED_BASELINE_START -->\n${PRODUCT_INVARIANT}\n`,
+      });
+    });
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toContain("[AUTH-R005]");
+    expect(r.stderr).toContain("AGENTS.md");
   });
 });

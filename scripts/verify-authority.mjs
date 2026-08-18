@@ -21,6 +21,7 @@
  *   AUTH-R003 sestina-current-task agrees across entries and with the
  *             WORK-BOARD yaml current_task field
  *   AUTH-R004 no stale-authority phrasing inside active regions
+ *   AUTH-R005 exact product invariant present in every active region
  */
 
 import { readFileSync, existsSync } from "node:fs";
@@ -50,6 +51,8 @@ const ENTRY_FILES = [
 
 const ACTIVE_START = "<!-- SESTINA_ACTIVE_AUTHORITY_START -->";
 const ACTIVE_END = "<!-- SESTINA_ACTIVE_AUTHORITY_END -->";
+const PRODUCT_INVARIANT =
+  "Sestina 是一个本地科研过程调试器。它让 AI 始终围绕当前研究问题工作，记住已经作出的研究决定，识别目标替换、重复审计、论证跳跃和伪深度，并要求每一轮修改说明真正增加了什么。";
 
 // ── Marker contract ──
 // Each active region must carry every marker exactly once. Value checks:
@@ -62,8 +65,16 @@ const MARKER_CONTRACT = {
     why: "the sole canonical development repository is fixed by standing user decision",
   },
   "sestina-direction": {
-    exact: "local-research-process-integrity",
-    why: "Sestina is a local research process integrity tool",
+    exact: "local-research-process-debugger",
+    why: "Sestina is a local research process debugger",
+  },
+  "sestina-product-invariant": {
+    exact: "local-research-process-debugger",
+    why: "the product invariant must identify the local research process debugger",
+  },
+  "sestina-prework-direction-gate": {
+    exact: "required",
+    why: "every task must pass the product-direction gate before work begins",
   },
   "sestina-current-task": {
     pattern: /^RI-\d+$/,
@@ -196,6 +207,14 @@ for (const entry of ENTRY_FILES) {
         `[AUTH-R004] ${entry}: active region contains stale authority phrasing (${label}); move it below SESTINA_SUPERSEDED_BASELINE_START or remove it`,
       );
     }
+  }
+
+  // AUTH-R005: the user's product definition is immutable and active.
+  const invariantOccurrences = region.split(PRODUCT_INVARIANT).length - 1;
+  if (invariantOccurrences !== 1) {
+    err(
+      `[AUTH-R005] ${entry}: active region must contain the exact product invariant once; found ${invariantOccurrences}`,
+    );
   }
   ok(`${entry}: active authority region checked`);
 }
