@@ -32,6 +32,18 @@ function makeEvent(projectId: string, taskId: string, n: number): StandardEvent 
   };
 }
 
+function evidenceHistory() {
+  return {
+    historyId: generateId(),
+    action: "verify",
+    fromStatus: null,
+    toStatus: "verified",
+    expectedVersion: 1,
+    actorJson: JSON.stringify({ actor: "user", channel: "desktop", directUser: true }),
+    atMs: Date.parse("2026-08-13T00:00:00.000Z"),
+  };
+}
+
 describe("Project isolation across repositories (docs/22 Task 6 invariant)", () => {
   let dir: string;
   let db: StorageDatabase;
@@ -58,9 +70,11 @@ describe("Project isolation across repositories (docs/22 Task 6 invariant)", () 
           u.events.reserve(makeEvent(projectId, taskId, n), { ownerId: `owner-${label}-${n}` });
         }
         u.assertions.insert({
-          assertionId: generateId(), projectId, taskId, kind: "confirmed_fact",
-          statement: `assertion-${label}`, sourceRefs: [], limitations: [],
+          assertionId: generateId(), projectId, taskId, kind: "inference",
+          statement: `assertion-${label}`, sourceRefs: [{ refType: "user_statement", refId: "U-1" }], limitations: [],
           status: "active", validFrom: "2026-08-13T00:00:00.000Z",
+          provenance: { actor: "agent", channel: "runtime", directUser: false },
+          createdAt: "2026-08-13T00:00:00.000Z", version: 1,
         });
       }
     });
@@ -218,14 +232,17 @@ describe("Id-scoped reads stay inside their project (docs/22 Task 6 invariant)",
         });
       }
       u.assertions.insert({
-        assertionId: assertionB, projectId: projectB, taskId: taskB, kind: "confirmed_fact",
-        statement: "assertion-b", sourceRefs: [], limitations: [],
+        assertionId: assertionB, projectId: projectB, taskId: taskB, kind: "inference",
+        statement: "assertion-b", sourceRefs: [{ refType: "user_statement", refId: "U-1" }], limitations: [],
         status: "active", validFrom: "2026-08-13T00:00:00.000Z",
+        provenance: { actor: "agent", channel: "runtime", directUser: false },
+        createdAt: "2026-08-13T00:00:00.000Z", version: 1,
       });
-      u.evidence.insert({
+      u.evidence.insert(projectB, {
         evidenceId: evidenceB, taskId: taskB, type: "primary_source",
-        locator: { type: "path", value: "/data/b.csv" }, status: "verified",
+        locator: { type: "path", value: "/data/b.csv" }, status: "unverified",
         provenance: "test", recordedBy: "user", observedAt: "2026-08-13T00:00:00.000Z",
+        version: 1,
       });
       u.conversations.insertConversation(conversationB);
       u.conversations.insertMessage(messageB);
@@ -386,11 +403,11 @@ describe("Id-scoped reads stay inside their project (docs/22 Task 6 invariant)",
     }, SestinaErrorCode.contract_not_found);
     expect(uow.contracts.listVersions(projectB, contractBefore.contractId)).toHaveLength(1);
 
-    // Cross-project evidence.updateStatus fails like a missing item and the
+    // Cross-project evidence transition fails like a missing item and the
     // status stays put.
     expectSestinaCode(() => {
       uow.commit((u) => {
-        u.evidence.updateStatus(projectA, evidenceB, "verified");
+        u.evidence.transition(projectA, evidenceB, 1, "verified", evidenceHistory());
       });
     }, SestinaErrorCode.evidence_not_found);
     expect(uow.evidence.get(projectB, evidenceB)?.status).toBe(evidenceBefore?.status);
@@ -431,17 +448,7 @@ describe("Id-scoped reads stay inside their project (docs/22 Task 6 invariant)",
   it("leaves no project-less evidence.updateStatus path (scoping must fail closed)", () => {
     const uow = createUnitOfWork(db);
     const before = uow.evidence.get(projectB, evidenceB);
-    // The pre-fence repository exposed a project-less update; the call below
-    // is cast to that old shape. With the fence the first argument lands on
-    // projectId, the shuffled call resolves nothing, and the row is safe.
-    const projectLess = uow.evidence.updateStatus.bind(uow.evidence) as unknown as
-      (evidenceId: string, status: string) => void;
-    expectSestinaCode(() => {
-      uow.commit((u) => {
-        void u;
-        projectLess(evidenceB, "verified");
-      });
-    }, SestinaErrorCode.evidence_not_found);
+    expect("updateStatus" in uow.evidence).toBe(false);
     expect(uow.evidence.get(projectB, evidenceB)?.status).toBe(before?.status);
   });
 
@@ -460,7 +467,7 @@ describe("Id-scoped reads stay inside their project (docs/22 Task 6 invariant)",
     }, SestinaErrorCode.task_not_found);
     expectSestinaCode(() => {
       uow.commit((u) => {
-        u.evidence.updateStatus(projectB, generateId(), "verified");
+        u.evidence.transition(projectB, generateId(), 1, "verified", evidenceHistory());
       });
     }, SestinaErrorCode.evidence_not_found);
     expectSestinaCode(() => {

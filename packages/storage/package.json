@@ -18,6 +18,7 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
+    "@sestina/evidence": "workspace:*",
     "typescript": "^5.8.0",
     "vitest": "^3.0.0"
   }

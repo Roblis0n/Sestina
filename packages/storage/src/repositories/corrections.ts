@@ -74,10 +74,18 @@ function assembleCorrection(row: CorrectionRow): Correction {
   });
 }
 
-/** Deterministic order: data.createdAt ascending, then correctionId. */
+/**
+ * Deterministic order: createdAt as a PARSED INSTANT ascending (never a
+ * lexical string compare - "...:00.500Z" sorts lexically before "...:00Z"
+ * because "." < "Z", and mixed fractional precision would invert the order),
+ * then correctionId. An unparseable instant (impossible for schema-valid
+ * rows, defended anyway) falls through to the id tie-break.
+ */
 function byCreatedAtThenId(a: Correction, b: Correction): number {
-  if (a.createdAt < b.createdAt) return -1;
-  if (a.createdAt > b.createdAt) return 1;
+  const aMs = toMs(a.createdAt);
+  const bMs = toMs(b.createdAt);
+  if (aMs < bMs) return -1;
+  if (aMs > bMs) return 1;
   if (a.correctionId < b.correctionId) return -1;
   if (a.correctionId > b.correctionId) return 1;
   return 0;
@@ -146,7 +154,12 @@ export function createCorrectionRepository(tx: StorageTransaction): CorrectionRe
           );
         }
         const targetCorrection = CorrectionSchema.parse(JSON.parse(target.data) as unknown);
-        if (!(targetCorrection.createdAt < correction.createdAt)) {
+        // Strictly older as a PARSED INSTANT (fail closed when either side
+        // is unparseable): a lexical compare would misorder mixed fractional
+        // precision ("...:00.500Z" sorts before "...:00Z").
+        const targetMs = toMs(targetCorrection.createdAt);
+        const newMs = toMs(correction.createdAt);
+        if (!Number.isFinite(targetMs) || !Number.isFinite(newMs) || !(targetMs < newMs)) {
           throw new SestinaError(
             SestinaErrorCode.validation_failed,
             "supersededBy must point at a strictly older correction",

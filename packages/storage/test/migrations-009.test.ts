@@ -46,7 +46,7 @@ describe("Migration 009 (project scope)", () => {
     );
     expect(row?.name).toBe("009-project-scope");
     expect(row?.status).toBe("completed");
-    expect(MIGRATIONS.at(-1)?.version).toBe(11);
+    expect(MIGRATIONS.at(-1)?.version).toBe(12);
   });
 
   it("makes host_sessions.task_id nullable", () => {
@@ -55,7 +55,7 @@ describe("Migration 009 (project scope)", () => {
     );
     expect(column?.notnull).toBe(0);
 
-    // An unattached session can be stored (docs/30 §5: "未关联会话").
+    // An unattached session can be stored (docs/30 §5).
     seedProjectAndTask(1_000_000);
     db.run(
       `INSERT INTO host_sessions (session_id, project_id, task_id, host, host_session_id, status, started_at, data)

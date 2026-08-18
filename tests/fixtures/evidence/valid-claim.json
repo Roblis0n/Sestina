@@ -1,0 +1,14 @@
+{
+  "claimId": "cl-fixture-1",
+  "taskId": "01TESTTASK0000000000000000",
+  "text": "synthetic claim text for fixtures",
+  "type": "factual",
+  "importance": "critical",
+  "confidence": 0.5,
+  "evidenceRefs": ["ev-fixture-1"],
+  "status": "unverified",
+  "limitations": [],
+  "provenance": { "actor": "agent", "channel": "runtime", "directUser": false },
+  "createdAt": "2026-08-01T00:00:00.000Z",
+  "version": 1
+}

@@ -17,6 +17,7 @@ export const TombstoneSchema = z.object({
     "decision_trace",
     "collaboration_message",
     "conversation_message",
+    "evidence_excerpt",
   ]),
   entityId: z.string().min(1).max(64),
   projectId: z.string(),
@@ -33,7 +34,11 @@ export type Tombstone = z.infer<typeof TombstoneSchema>;
 
 export interface TombstoneRepository {
   insert(record: Tombstone): void;
-  get(tombstoneId: string): Tombstone | undefined;
+  /**
+   * Project-fenced: a tombstone id from another project (or a missing one)
+   * returns undefined - no cross-project existence leak.
+   */
+  get(projectId: string, tombstoneId: string): Tombstone | undefined;
   listByProject(projectId: string, input: CursorInput): Page<Tombstone>;
 }
 
@@ -61,10 +66,12 @@ export function createTombstoneRepository(tx: StorageTransaction): TombstoneRepo
       );
     },
 
-    get(tombstoneId) {
+    get(projectId, tombstoneId) {
+      assertValidProjectId(projectId);
       const row = tx.get<{ data: string }>(
-        "SELECT data FROM retention_tombstones WHERE tombstone_id = ?",
+        "SELECT data FROM retention_tombstones WHERE tombstone_id = ? AND project_id = ?",
         tombstoneId,
+        projectId,
       );
       return row ? TombstoneSchema.parse(JSON.parse(row.data) as unknown) : undefined;
     },

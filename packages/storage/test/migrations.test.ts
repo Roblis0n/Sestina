@@ -413,7 +413,11 @@ describe("Migration failure keeps the original database readable", () => {
     expect(backups.length).toBeGreaterThan(0);
     const sidecars = readdirSync(backupsDir).filter((f) => f.endsWith(".sha256"));
     expect(sidecars.length).toBe(backups.length);
-  });
+    // This exercises the complete published migration chain plus a hashed
+    // backup. Under the full-repo run it shares the maintenance/IO domain
+    // with process-heavy storage suites, so use the same bounded allowance
+    // as the other maintenance backup test rather than the 5 s unit default.
+  }, 15_000);
 
   it("keeps at most 3 successful migration backups", async () => {
     const path = join(dir, "sestina.db");

@@ -24,6 +24,13 @@ export type EventReserveResult =
   | { kind: "created"; eventId: EventId; lease: EventLease }
   | { kind: "completed"; decisionId: string };
 
+export interface RecentToolFailureRow {
+  eventId: string;
+  toolName: string;
+  error: string;
+  occurredAt: string;
+}
+
 export interface EventRepository {
   /**
    * Reserves the processing lease for an event idempotency key
@@ -43,6 +50,12 @@ export interface EventRepository {
   appendAssociation(event: StandardEvent): void;
   get(projectId: string, eventId: string): StandardEvent | undefined;
   listByProject(projectId: string, input: CursorInput): Page<StandardEvent>;
+  listRecentToolFailures(
+    projectId: string,
+    taskId: string,
+    sinceMs: number,
+    limit: number,
+  ): RecentToolFailureRow[];
 }
 
 interface EventRow {
@@ -298,6 +311,39 @@ export function createEventRepository(tx: StorageTransaction): EventRepository {
             ? encodeEventCursor(projectId, last.stream_sequence, last.event_id)
             : undefined,
       };
+    },
+
+    listRecentToolFailures(projectId, taskId, sinceMs, limit) {
+      assertValidProjectId(projectId);
+      assertCursorLimit(limit);
+      if (!Number.isSafeInteger(sinceMs) || sinceMs < 0) {
+        throw new SestinaError(
+          SestinaErrorCode.validation_failed,
+          "sinceMs must be a non-negative safe integer",
+        );
+      }
+      const rows = tx.all<EventRow>(
+        `SELECT event_id, idempotency_key, project_id, task_id, session_id, event_type,
+                occurred_at, received_at, privacy_class, stream_sequence, data
+         FROM events
+         WHERE project_id = ? AND task_id = ? AND event_type = 'tool_failure'
+           AND occurred_at >= ?
+         ORDER BY occurred_at DESC, event_id DESC
+         LIMIT ?`,
+        projectId,
+        taskId,
+        sinceMs,
+        limit,
+      );
+      return rows.map((row) => {
+        const event = assembleEvent(row);
+        return {
+          eventId: event.eventId,
+          toolName: event.action?.toolName ?? "unknown_tool",
+          error: event.action?.securitySummary ?? "tool failure",
+          occurredAt: event.occurredAt,
+        };
+      });
     },
   };
 }

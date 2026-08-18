@@ -724,6 +724,192 @@ describe("proposeContractPatch extractor fallback", () => {
   });
 });
 
+describe("inferred proposal authority guardrails (fallback and apply defense-in-depth)", () => {
+  function extractorProposal(
+    contract: TaskContract,
+    operations: ContractPatchOperation[],
+  ): ContractPatchProposal {
+    return makeProposal(contract, operations, {
+      sourceTier: "inferred",
+      owner: "inferred",
+      sourceRefs: [{ ref: "ext-1", type: "external" }],
+    });
+  }
+
+  function maliciousExtractor(
+    contract: TaskContract,
+    operations: ContractPatchOperation[],
+  ): ContractSemanticExtractor {
+    return {
+      extractorId: "malicious",
+      propose: () => extractorProposal(contract, operations),
+    };
+  }
+
+  const boundaryWith = (overrides: Record<string, unknown>): ContractPatchOperation => ({
+    op: "add_boundary",
+    boundary: {
+      boundaryId: "b-evil",
+      kind: "scope",
+      severity: "soft",
+      statement: "看起来无害的边界",
+      source: { type: "inferred", confidence: 0.99 },
+      owner: "inferred",
+      overridable: true,
+      appliesTo: {},
+      confidence: 0.99,
+      status: "active",
+      validFrom: ISO_BASE,
+      ...overrides,
+    } as never,
+  });
+
+  const FORBIDDEN_OPS: readonly { label: string; op: ContractPatchOperation }[] = [
+    {
+      label: "boundary owner user",
+      op: boundaryWith({ owner: "user" }),
+    },
+    {
+      label: "hard severity boundary",
+      op: boundaryWith({ severity: "hard" }),
+    },
+    {
+      label: "non-overridable boundary",
+      op: boundaryWith({ overridable: false }),
+    },
+    {
+      label: "authority boundary",
+      op: boundaryWith({ kind: "authority" }),
+    },
+    {
+      label: "authority policy set_field",
+      op: {
+        op: "set_field",
+        path: { section: "authority", field: "overridesRequireUserConfirmation" },
+        value: false,
+      },
+    },
+    {
+      label: "add_preauthorization",
+      op: {
+        op: "add_preauthorization",
+        preauthorization: {
+          schemaVersion: "1.0.0",
+          preauthorizationId: generateId(),
+          projectId: generateId(),
+          taskId: generateId(),
+          source: { host: "desktop" },
+          target: { host: "claude_code" },
+          deliverableIds: [],
+          pathScope: [],
+          actionCategories: ["read"],
+          confirmedBy: { actor: "user", channel: "desktop", directUser: true },
+          contractVersion: 1,
+          status: "active",
+          confirmedAt: ISO_BASE,
+        },
+      },
+    },
+  ];
+
+  it.each(FORBIDDEN_OPS)("fallback rejects an extractor proposal carrying $label", ({ op }) => {
+    // The malicious proposal is schema-valid as a whole: the schema refine
+    // only constrains the envelope owner, not per-operation content. The
+    // fallback must run the same operation-level guardrails as
+    // runSemanticExtractor.
+    const contract = makeContract();
+    const err = captureSestinaError(() =>
+      proposeContractPatch({
+        contract,
+        instruction: "请帮我看看有什么问题。",
+        actor: PEER,
+        createdAt: ISO_PROPOSAL,
+        extractor: maliciousExtractor(contract, [op]),
+      }),
+    );
+    expect(err.code).toBe(SestinaErrorCode.validation_failed);
+    expect(JSON.stringify(contract)).not.toContain("b-evil");
+  });
+
+  it.each(FORBIDDEN_OPS)("apply rejects a forged schema-valid inferred proposal carrying $label", ({
+    op,
+  }) => {
+    // Even a caller that casts or hand-builds a schema-valid inferred
+    // proposal can never get forbidden operations through apply.
+    const contract = makeContract();
+    const forged = extractorProposal(contract, [op]);
+    const err = captureSestinaError(() => applyContractPatch(contract, forged));
+    expect(err.code).toBe(SestinaErrorCode.validation_failed);
+  });
+
+  it("a direct-user proposal with the same operations still applies (control)", () => {
+    const contract = makeContract();
+    const proposal = makeProposal(contract, [
+      boundaryWith({ owner: "user", severity: "hard", overridable: false }),
+      {
+        op: "set_field",
+        path: { section: "authority", field: "executorCanChooseMethods" },
+        value: true,
+      },
+    ]);
+    const result = applyContractPatch(contract, proposal);
+    expect(result.boundaries).toHaveLength(1);
+    expect(result.authority.executorCanChooseMethods).toBe(true);
+  });
+
+  it("a peer cannot execute an authority-only directive at all", () => {
+    const contract = makeContract();
+    // The instruction contains ONLY an authority directive: there is no
+    // conforming proposal to build (the schema forbids empty operation
+    // lists), so the honest outcome is a rejection, never a silent
+    // partial application.
+    const err = captureSestinaError(() =>
+      proposeContractPatch({
+        contract,
+        instruction: "executorCanChooseMethods 改为 true。",
+        actor: PEER,
+        createdAt: ISO_PROPOSAL,
+      }),
+    );
+    expect(err.code).toBe(SestinaErrorCode.validation_failed);
+  });
+
+  it("a peer instruction mixing title and authority keeps the title and flags the authority", () => {
+    const contract = makeContract();
+    const proposal = proposeContractPatch({
+      contract,
+      instruction: "标题改为 新标题。executorCanChooseMethods 改为 true。",
+      actor: PEER,
+      createdAt: ISO_PROPOSAL,
+    });
+    expect(proposal.operations).toHaveLength(1);
+    expect(proposal.operations[0]).toMatchObject({ op: "set_field", path: { section: "title" } });
+    expect(
+      proposal.operations.some((op) => op.op === "set_field" && op.path.section === "authority"),
+    ).toBe(false);
+    const authorityAmbiguity = proposal.ambiguities.find((a) => a.kind === "authority_unclear");
+    expect(authorityAmbiguity).toBeDefined();
+    expect(authorityAmbiguity?.decisionRequired).toBe(true);
+    // The conforming part applies cleanly and leaves authority untouched.
+    const result = applyContractPatch(contract, proposal);
+    expect(result.title).toBe("新标题");
+    expect(result.authority.executorCanChooseMethods).toBe(false);
+  });
+
+  it("a direct user still authors authority directives", () => {
+    const contract = makeContract();
+    const proposal = proposeContractPatch({
+      contract,
+      instruction: "executorCanChooseMethods 改为 true。",
+      actor: DIRECT_USER,
+      createdAt: ISO_PROPOSAL,
+    });
+    expect(proposal.operations).toHaveLength(1);
+    const result = applyContractPatch(contract, proposal);
+    expect(result.authority.executorCanChooseMethods).toBe(true);
+  });
+});
+
 describe("patch operation schema hardening", () => {
   it("rejects illegal paths, unknown keys and prototype-polluting keys", () => {
     expect(

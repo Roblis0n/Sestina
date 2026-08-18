@@ -214,36 +214,77 @@ describe("Typed repositories round-trip (docs/22 Task 6)", () => {
       type: "primary_source",
       locator: { type: "path", value: "/data/raw.csv" },
       excerpt: "sensitive excerpt",
-      status: "verified",
+      contentHash: "a".repeat(64),
+      status: "unverified",
       provenance: "user upload",
       recordedBy: "user",
       observedAt: "2026-08-13T00:00:00.000Z",
+      version: 1,
     };
     const assertion: SituationAssertion = {
       assertionId: generateId(),
       projectId: project.projectId,
       taskId: task.taskId,
-      kind: "confirmed_fact",
+      kind: "reported_fact",
       statement: "dataset contains 100 rows",
-      sourceRefs: [],
+      sourceRefs: [{ refType: "evidence", refId: "E-001" }],
       limitations: [],
       status: "active",
       validFrom: "2026-08-13T00:00:00.000Z",
+      provenance: { actor: "agent", channel: "runtime", directUser: false },
+      createdAt: "2026-08-13T00:00:00.000Z",
+      version: 1,
     };
     uow.commit((u) => {
       u.projects.insert(project);
       u.tasks.insert(task);
-      u.evidence.insert(evidence);
+      u.evidence.insert(project.projectId, evidence);
       u.assertions.insert(assertion);
+      u.evidence.transition(project.projectId, evidence.evidenceId, 1, "verified", {
+        historyId: generateId(),
+        action: "verify",
+        fromStatus: null,
+        toStatus: "verified",
+        expectedVersion: 1,
+        actorJson: JSON.stringify({ actor: "agent", channel: "runtime", directUser: false }),
+        atMs: Date.parse("2026-08-13T00:00:00.000Z"),
+      });
+      u.assertions.confirm(
+        project.projectId,
+        assertion.assertionId,
+        1,
+        {
+          sourceType: "verified_evidence",
+          evidenceId: evidence.evidenceId,
+          contentHash: evidence.contentHash ?? "",
+        },
+        { actor: "agent", channel: "runtime", directUser: false },
+        {
+          historyId: generateId(),
+          action: "confirm",
+          fromStatus: null,
+          toStatus: "active",
+          expectedVersion: 1,
+          actorJson: JSON.stringify({ actor: "system", channel: "runtime", directUser: false }),
+          atMs: Date.parse("2026-08-13T00:00:00.000Z"),
+        },
+      );
     });
     const loaded = uow.evidence.get(project.projectId, "E-001");
     expect(loaded?.excerpt).toBe("sensitive excerpt");
+    expect(uow.assertions.get(project.projectId, assertion.assertionId)?.kind)
+      .toBe("confirmed_fact");
     expect(uow.assertions.listByProject(project.projectId, { limit: 10 }).items).toHaveLength(1);
 
     // Invalid JSON data must be rejected before storage.
     expectSestinaCode(() =>
       { uow.commit((u) => {
-        u.evidence.insert({ ...evidence, evidenceId: "E-002", type: "not-a-type" } as never);
+        u.evidence.insert(project.projectId, {
+          ...evidence,
+          evidenceId: "E-002",
+          contentHash: "b".repeat(64),
+          type: "not-a-type",
+        } as never);
       }); },
       SestinaErrorCode.validation_failed);
   });

@@ -1,0 +1,13 @@
+{
+  "evidenceId": "ev-fixture-1",
+  "taskId": "01TESTTASK0000000000000000",
+  "type": "primary_source",
+  "locator": { "type": "path", "value": "synthetic/relative/report.txt" },
+  "excerpt": "synthetic excerpt content for fixtures",
+  "contentHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "status": "verified",
+  "provenance": "{\"actor\":\"user\",\"channel\":\"desktop\",\"directUser\":true}",
+  "recordedBy": "user",
+  "observedAt": "2026-08-01T00:00:00.000Z",
+  "version": 1
+}
