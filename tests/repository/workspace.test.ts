@@ -319,22 +319,25 @@ describe("CI workflow", () => {
     expect(content).toMatch(/pnpm install.*--frozen-lockfile/);
   });
 
-  it("CI runs pnpm test (not test:integration which has no tests yet)", () => {
+  it("CI runs the unified pnpm verify entry (not test:integration which has no tests yet)", () => {
     const content = readFileSync(ciPath, "utf-8");
-    // Must have pnpm test
-    expect(content).toMatch(/pnpm test\b/);
+    // Single unified entry; verify itself chains test/build/repo:check plus
+    // the RI-03 boundary verifiers (see package.json and
+    // docs/architecture/01-DEPENDENCY-RULES.md).
+    expect(content).toMatch(/pnpm verify\b/);
     // Must NOT have pnpm test:integration (would fail with no tests)
     expect(content).not.toMatch(/pnpm test:integration/);
   });
 
-  it("CI runs pnpm build", () => {
+  it("CI keeps the unified verify entry as its only quality step after install", () => {
     const content = readFileSync(ciPath, "utf-8");
-    expect(content).toMatch(/pnpm build/);
-  });
-
-  it("CI runs pnpm repo:check", () => {
-    const content = readFileSync(ciPath, "utf-8");
-    expect(content).toMatch(/pnpm repo:check/);
+    // After the frozen install there must be exactly one quality run: verify.
+    const runSteps = content.match(/^\s*- run:.*$/gm) ?? [];
+    const afterInstall = runSteps.slice(
+      runSteps.findIndex((s) => s.includes("pnpm install")) + 1,
+    );
+    expect(afterInstall).toHaveLength(1);
+    expect(afterInstall[0]).toMatch(/pnpm verify\b/);
   });
 
   it("CI uses Node 24 across all platforms", () => {

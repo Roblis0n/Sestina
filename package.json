@@ -19,7 +19,11 @@
     "lint": "eslint . --max-warnings 0",
     "docs:check": "node scripts/check-doc-links.mjs",
     "release:check": "pnpm lint && pnpm typecheck && pnpm test && pnpm docs:check && node scripts/check-no-placeholders.mjs",
-    "repo:check": "node scripts/check-repository-shape.mjs"
+    "repo:check": "node scripts/check-repository-shape.mjs",
+    "verify:architecture": "node scripts/verify-architecture.mjs",
+    "verify:authority": "node scripts/verify-authority.mjs",
+    "verify:package": "node scripts/verify-clean-package.mjs",
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm docs:check && pnpm repo:check && pnpm verify:architecture && pnpm verify:authority && pnpm verify:package"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
