@@ -8,15 +8,24 @@ import { resolve, dirname, relative, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const ROOT = resolve(__dirname, "..");
+const args = process.argv.slice(2);
+let ROOT = resolve(__dirname, "..");
+for (let index = 0; index < args.length; index++) {
+  if (args[index] === "--root" && index + 1 < args.length) {
+    ROOT = resolve(args[index + 1]);
+    break;
+  }
+}
 const DOCS_DIR = resolve(ROOT, "docs");
 
-// Find all .md files in docs/
+// Find all .md files in docs/ and its nested directories.
 function findMdFiles(dir) {
   const results = [];
   const entries = readdirSync(dir, { withFileTypes: true });
   for (const entry of entries) {
-    if (entry.isFile() && entry.name.endsWith(".md")) {
+    if (entry.isDirectory()) {
+      results.push(...findMdFiles(resolve(dir, entry.name)));
+    } else if (entry.isFile() && entry.name.endsWith(".md")) {
       results.push(resolve(dir, entry.name));
     }
   }

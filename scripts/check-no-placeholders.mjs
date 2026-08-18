@@ -50,6 +50,9 @@ const EXCLUDE_DIRS = new Set([
   // Gitignored working notes (CLAUDE.md: keep resumption guides and research
   // notes there; they legitimately quote upstream docs and are never committed).
   ".tmp",
+  // Local, gitignored pre-pivot archives can contain private session extracts,
+  // historical research packets, and machine-specific helper scripts.
+  ".frozen-local",
 ]);
 
 // Files at the repo root to exclude (historical materials)

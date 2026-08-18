@@ -1,0 +1,7 @@
+# The 2026-08-18 planning inputs are provenance-preserving copies of external
+# Markdown sources. Keep their original bytes; do not treat intentional source
+# line-break spaces as repository whitespace failures.
+docs/pivot-inputs/2026-08-18/current/*.md whitespace=-trailing-space
+docs/pivot-inputs/2026-08-18/retained/*.md whitespace=-trailing-space
+docs/pivot-inputs/2026-08-18/deferred/*.md whitespace=-trailing-space
+docs/pivot-inputs/2026-08-18/frozen/* whitespace=-trailing-space

@@ -473,3 +473,23 @@ describe("check-no-placeholders negative fixtures", () => {
     expect(r.stderr).toMatch(/placeholder\(s\) found/i);
   });
 });
+
+describe("check-no-placeholders local archive isolation", () => {
+  it("10. ignores placeholders stored under .frozen-local", () => {
+    const r = runPlaceholderCheck("frozen-local", (root) => {
+      const frozenDir = join(root, ".frozen-local", "pre-pivot");
+      mkdirSync(frozenDir, { recursive: true });
+      writeFileSync(
+        join(frozenDir, "historical-notes.md"),
+        "Historical material can legitimately quote a TODO marker.\n",
+      );
+      writeFileSync(
+        join(root, "packages", "source.ts"),
+        "export const activeSource = true;\n",
+      );
+    });
+
+    expect(r.exitCode).toBe(0);
+    expect(r.stderr).toBe("");
+  });
+});

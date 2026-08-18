@@ -49,3 +49,8 @@ desktop.ini
 .tmp/
 tmp/
 temp/
+
+# Local frozen material (private session extracts, superseded research packets,
+# and machine-specific helper scripts). A sanitized inventory lives under
+# docs/pivot-inputs/; never commit the contents of this directory.
+.frozen-local/
