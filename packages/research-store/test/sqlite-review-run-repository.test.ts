@@ -10,7 +10,7 @@ import {
 } from "@sestina/review";
 import { openDatabase, type StorageDatabase } from "@sestina/storage";
 import { createSqliteReviewRunRepository } from "../src/index.js";
-import { makeTempDir, removeTempDir } from "../../storage/test/helpers.js";
+import { makeTempDir, removeTempDir } from "./helpers.js";
 
 const ids = new SequenceIdFactory(3000);
 const PROJECT_ID = ids.create("rprj_");
