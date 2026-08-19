@@ -27,3 +27,9 @@ export type { BlockChange, BlockChangeOperation, BlockDiff } from "./diff/block-
 export { parseMarkdownStructure } from "./diff/markdown-structure.js";
 export type { MarkdownBlock, MarkdownHeading, MarkdownStructure } from "./diff/markdown-structure.js";
 export { parseProjectRelativePath } from "./diff/path-policy.js";
+export { findingToIssueCandidate } from "./issue/finding-to-issue-candidate.js";
+export type { FindingIssueCandidate } from "./issue/finding-to-issue-candidate.js";
+export { decideFindingSuppression } from "./issue/suppression-decision.js";
+export type { IssueLookupResult, SuppressionDecision } from "./issue/suppression-decision.js";
+export { IssueIntegrityChecker } from "./checkers/issue-integrity-checker.js";
+export type { IssueIntegrityInput } from "./checkers/issue-integrity-checker.js";

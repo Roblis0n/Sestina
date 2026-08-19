@@ -10,6 +10,8 @@ export interface IssueReopenContext {
   readonly currentBriefVersionId?: string;
   readonly currentFrozenDecisionIds?: readonly string[];
   readonly newEvidenceContradicts?: boolean;
+  readonly evidenceBoundaryChanged?: boolean;
+  readonly reviewInputChanged?: boolean;
   readonly userRequested?: boolean;
 }
 
@@ -55,6 +57,8 @@ export function evaluateIssueReopenReasons(resolution: IssueResolutionContext | 
     if (resolution !== undefined && JSON.stringify(current) !== JSON.stringify(resolution.frozenDecisionIds)) reasons.push("frozen_decisions_changed");
   }
   if (contextInput.newEvidenceContradicts === true) reasons.push("contradicting_evidence");
+  if (contextInput.evidenceBoundaryChanged === true) reasons.push("evidence_boundary_changed");
+  if (contextInput.reviewInputChanged === true) reasons.push("review_input_changed");
   if (contextInput.userRequested === true) reasons.push("user_requested");
   return ok(cloneFrozen(reasons));
 }
