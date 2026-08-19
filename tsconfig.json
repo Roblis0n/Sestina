@@ -8,6 +8,12 @@
       "@sestina/schema": [
         "packages/schema/src/index.ts"
       ],
+      "@sestina/research": [
+        "packages/research/src/index.ts"
+      ],
+      "@sestina/review": [
+        "packages/review/src/index.ts"
+      ],
       "@sestina/storage": [
         "packages/storage/src/index.ts"
       ]
@@ -17,6 +23,7 @@
     "packages/*/src/**/*.ts",
     "packages/*/test/**/*.ts",
     "packages/*/vitest.config.ts",
+    "researchbench/tools/**/*.ts",
     "tests/**/*.ts",
     "vitest.config.ts",
     "eslint.config.mjs",

@@ -40,3 +40,14 @@ export type { CoverageStatus, ObligationAssessment, ObligationCoverage } from ".
 export { compareFindingSeverity, isBlockingCoverageStatus, isForegroundFinding } from "./outcome/severity-policy.js";
 export { deriveReviewOutcome } from "./outcome/derive-outcome.js";
 export type { DimensionOutcome, ReviewOutcome, UserReviewDisposition } from "./outcome/derive-outcome.js";
+export { SEMANTIC_FINDING_KINDS, isSemanticFindingKind } from "./semantic/semantic-finding-kind.js";
+export type { SemanticFindingKind } from "./semantic/semantic-finding-kind.js";
+export { createStableTextDocument, createStableTextSpan, normalizeStableText, validateStableTextSpan, STABLE_TEXT_INDEX_UNIT, STABLE_TEXT_NORMALIZATION_VERSION } from "./semantic/stable-text-span.js";
+export type { StableTextDocument, StableTextDocumentInput, StableTextSpan } from "./semantic/stable-text-span.js";
+export { SEMANTIC_REVIEW_RESPONSE_SCHEMA } from "./semantic/semantic-review-schema.js";
+export { prepareSemanticReview } from "./semantic/prepare-semantic-review.js";
+export type { PrepareSemanticReviewInput, SemanticBriefContext, SemanticCriterion, SemanticDecisionContext, SemanticReviewLimits, SemanticReviewRequest } from "./semantic/semantic-review-request.js";
+export { submitSemanticReview } from "./semantic/submit-semantic-review.js";
+export type { SemanticFindingProposal, SemanticReviewerMetadata, SemanticReviewProposal } from "./semantic/semantic-review-response.js";
+export { parseUntrustedJson, semanticReviewErr, semanticReviewOk } from "./semantic/untrusted-response.js";
+export type { SemanticReviewError, SemanticReviewErrorCode, SemanticReviewResult } from "./semantic/untrusted-response.js";
