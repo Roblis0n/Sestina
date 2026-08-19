@@ -59,7 +59,10 @@ export type ResearchErrorCode =
   | "invalid_pagination"
   | "research_record_not_found"
   | "research_storage_unavailable"
-  | "research_storage_readonly";
+  | "research_storage_readonly"
+  | "invalid_claim"
+  | "invalid_mechanism_link"
+  | "invalid_argument_delta";
 
 export type ResearchErrorDetails = Readonly<
   Record<string, string | number | boolean>
@@ -133,4 +136,7 @@ const MESSAGES: Readonly<Record<ResearchErrorCode, string>> = {
   research_record_not_found: "research record was not found in the requested project",
   research_storage_unavailable: "research storage is unavailable",
   research_storage_readonly: "research storage is read-only",
+  invalid_claim: "claim is missing or malformed",
+  invalid_mechanism_link: "mechanism link is missing or malformed",
+  invalid_argument_delta: "argument delta is missing or malformed",
 };

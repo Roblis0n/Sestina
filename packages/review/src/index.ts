@@ -61,3 +61,7 @@ export { SEMANTIC_SCOPE_RUBRIC, resolveScopeAssessment, validateSemanticScopeAss
 export type { DeterministicScopeResult, ResolvedScopeAssessment, ScopeChangeRelationship, SemanticScopeAssessment, SemanticScopeCategory, SemanticScopeChange } from "./semantic/rubrics/semantic-scope.js";
 export { DECISION_INTEGRITY_RUBRIC, validateDecisionIntegrityAssessment } from "./semantic/rubrics/decision-integrity.js";
 export type { DecisionConflict, DecisionConflictRelationship, DecisionIntegrityAssessment, SuppliedDecisionContext } from "./semantic/rubrics/decision-integrity.js";
+export { ARGUMENT_DELTA_RUBRIC, validateArgumentDeltaAssessment } from "./semantic/rubrics/argument-delta.js";
+export type { ArgumentDeltaAssessment } from "./semantic/rubrics/argument-delta.js";
+export { SHALLOW_ABSTRACTION_RUBRIC, validateShallowAbstractionAssessment } from "./semantic/rubrics/shallow-abstraction.js";
+export type { ShallowAbstractionAssessment } from "./semantic/rubrics/shallow-abstraction.js";

@@ -250,6 +250,13 @@ export {
 } from "./snapshot/research-snapshot.js";
 export type { ResearchSnapshot } from "./snapshot/research-snapshot.js";
 
+export { CLAIM_KINDS, parseArgumentClaim, parseClaim } from "./argument/claim.js";
+export type { ArgumentClaim, Claim, ClaimKind } from "./argument/claim.js";
+export { parseMechanismLink } from "./argument/mechanism-link.js";
+export type { MechanismLink } from "./argument/mechanism-link.js";
+export { NON_DELTA_KINDS, SUBSTANTIVE_ARGUMENT_DELTA_KINDS, parseArgumentDelta, parseModelProposedArgumentDelta } from "./argument/argument-delta.js";
+export type { ArgumentDelta, ArgumentDeltaKind, ArgumentSpanReference, NonDeltaKind, SubstantiveArgumentDeltaKind } from "./argument/argument-delta.js";
+
 export {
   RESEARCH_PAGE_LIMIT_MAX,
   parseResearchPageRequest,
