@@ -12,11 +12,6 @@ import {
   type ResearchSource,
 } from "../src/index.js";
 
-const USER: ResearchSource = {
-  actor: { kind: "user", actorId: "lead" },
-  authority: "user_recorded",
-  recordedAt: "2026-08-19T03:00:00.000Z",
-};
 const MODEL: ResearchSource = {
   actor: { kind: "model", model: "research-model" },
   authority: "model_proposed",

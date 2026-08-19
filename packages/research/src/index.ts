@@ -212,6 +212,41 @@ export type {
 export { matchResearchIssue } from "./issue/issue-matcher.js";
 export type { IssueMatch } from "./issue/issue-matcher.js";
 
+export { EPISODE_STATUSES, parseEpisodeStatus } from "./episode/episode-status.js";
+export type { EpisodeStatus } from "./episode/episode-status.js";
+export { parseEpisodeOutcome } from "./episode/episode-outcome.js";
+export type {
+  EpisodeOutcome,
+  WaivableOutcomeDimension,
+} from "./episode/episode-outcome.js";
+export {
+  createRevisionEpisode,
+  parseRevisionEpisode,
+  activateRevisionEpisode,
+  submitEpisodeCandidate,
+  recordEpisodeReview,
+  requireEpisodeUserAction,
+  applyEpisodeWaiver,
+  disposeRevisionEpisode,
+} from "./episode/revision-episode.js";
+export type {
+  LockedIssueState,
+  LockedDecisionState,
+  EpisodeLockedStart,
+  EpisodeTransition,
+  EpisodeWaiver,
+  CreateRevisionEpisodeInput,
+  RevisionEpisode,
+} from "./episode/revision-episode.js";
+export { calculateResearchSnapshotHash } from "./snapshot/snapshot-hash.js";
+export {
+  createResearchSnapshot,
+  parseResearchSnapshot,
+  verifyResearchSnapshotHash,
+  rebuildEpisodeFromSnapshot,
+} from "./snapshot/research-snapshot.js";
+export type { ResearchSnapshot } from "./snapshot/research-snapshot.js";
+
 import type { ResearchIdPrefix } from "./identity/research-id.js";
 
 export interface IdFactory {

@@ -61,7 +61,7 @@ export function normalizedScopeTargetKey(scope: ScopeRule): ResearchResult<strin
 }
 
 export function findScopeRuleConflict(allowed: readonly ScopeRule[], forbidden: readonly ScopeRule[]): ResearchResult<boolean> {
-  const allowedRules: Array<{ key: string; operations: readonly ScopeOperation[] }> = [];
+  const allowedRules: { key: string; operations: readonly ScopeOperation[] }[] = [];
   for (const value of allowed) {
     const rule = parseScopeRule(value); if (!rule.ok) return rule;
     const key = normalizedScopeTargetKey(rule.value); if (!key.ok) return key;

@@ -57,7 +57,9 @@ export function parseResearchIssue(input: unknown): ResearchResult<ResearchIssue
   const updatedAt = validateUtcTimestamp(input.updatedAt); if (!updatedAt.ok) return updatedAt;
   const transitions: IssueTransition[] = [];
   for (const value of input.transitions) { const parsed = parseIssueTransition(value); if (!parsed.ok) return parsed; const previous = transitions[transitions.length - 1]; if ((previous === undefined && (parsed.value.from !== null || parsed.value.to !== "open")) || (previous !== undefined && (parsed.value.from !== previous.to || parsed.value.at < previous.at))) return err(researchError("invalid_issue_transition")); transitions.push(parsed.value); }
-  if (transitions.length === 0 || transitions[transitions.length - 1]!.to !== status.value || transitions[0]!.at !== createdAt.value || transitions[transitions.length - 1]!.at !== updatedAt.value) return err(researchError("invalid_research_issue"));
+  const firstTransition = transitions.at(0);
+  const lastTransition = transitions.at(-1);
+  if (firstTransition?.at !== createdAt.value || lastTransition?.to !== status.value || lastTransition.at !== updatedAt.value) return err(researchError("invalid_research_issue"));
   let resolution: IssueResolution | undefined;
   if (input.resolution !== undefined) {
     if (!isRecord(input.resolution) || !isNonBlankString(input.resolution.reason)) return err(researchError("invalid_research_issue"));

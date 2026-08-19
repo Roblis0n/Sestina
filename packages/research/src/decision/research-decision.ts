@@ -69,7 +69,9 @@ export function parseResearchDecision(input: unknown): ResearchResult<ResearchDe
     if ((previous === undefined && (parsed.value.from !== null || parsed.value.to !== "proposed")) || (previous !== undefined && (parsed.value.from !== previous.to || parsed.value.at < previous.at))) return err(researchError("invalid_decision_transition"));
     transitions.push(parsed.value);
   }
-  if (transitions.length === 0 || transitions[transitions.length - 1]!.to !== status.value || transitions[0]!.at !== createdAt.value || transitions[transitions.length - 1]!.at !== updatedAt.value) return err(researchError("invalid_research_decision"));
+  const firstTransition = transitions.at(0);
+  const lastTransition = transitions.at(-1);
+  if (firstTransition?.at !== createdAt.value || lastTransition?.to !== status.value || lastTransition.at !== updatedAt.value) return err(researchError("invalid_research_decision"));
   let supersedesDecisionId: string | undefined;
   if (input.supersedesDecisionId !== undefined) { const parsed = parseResearchIdFor(input.supersedesDecisionId, "rdec_"); if (!parsed.ok) return parsed; supersedesDecisionId = parsed.value.id; }
   let supersededByDecisionId: string | undefined;

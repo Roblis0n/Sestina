@@ -45,7 +45,17 @@ export type ResearchErrorCode =
   | "invalid_issue_fingerprint"
   | "invalid_issue_transition"
   | "issue_reopen_not_allowed"
-  | "user_issue_action_required";
+  | "user_issue_action_required"
+  | "invalid_revision_episode"
+  | "invalid_episode_status"
+  | "invalid_episode_transition"
+  | "invalid_episode_outcome"
+  | "episode_lock_mismatch"
+  | "stale_episode_brief"
+  | "user_episode_action_required"
+  | "invalid_episode_waiver"
+  | "invalid_research_snapshot"
+  | "snapshot_hash_mismatch";
 
 export type ResearchErrorDetails = Readonly<
   Record<string, string | number | boolean>
@@ -105,4 +115,14 @@ const MESSAGES: Readonly<Record<ResearchErrorCode, string>> = {
   invalid_issue_transition: "issue status transition is not allowed",
   issue_reopen_not_allowed: "no issue reopen condition is satisfied",
   user_issue_action_required: "an explicit user issue action is required",
+  invalid_revision_episode: "revision episode is missing or malformed",
+  invalid_episode_status: "revision episode status is unknown",
+  invalid_episode_transition: "revision episode transition is not allowed",
+  invalid_episode_outcome: "episode outcome is missing or malformed",
+  episode_lock_mismatch: "episode locked start state does not match its original lock",
+  stale_episode_brief: "the active brief no longer matches the episode lock",
+  user_episode_action_required: "an explicit user episode action is required",
+  invalid_episode_waiver: "episode waiver is missing or malformed",
+  invalid_research_snapshot: "research snapshot is missing or malformed",
+  snapshot_hash_mismatch: "research snapshot content hash does not match",
 };

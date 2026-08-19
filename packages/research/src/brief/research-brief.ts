@@ -135,7 +135,7 @@ function parseBriefChangeProposal(input: unknown, base: ResearchBriefVersion): R
   const source = parseResearchSource(input.source); if (!source.ok) return source;
   const createdAt = validateUtcTimestamp(input.createdAt); if (!createdAt.ok) return createdAt;
   if (!isRecord(input.changes)) return err(researchError("invalid_brief_change"));
-  const merged = mergeFields(base, input.changes as BriefChangeSet); if (!merged.ok) return merged;
+  const merged = mergeFields(base, input.changes); if (!merged.ok) return merged;
   const diffFields = Object.keys(input.changes).sort();
   if (input.diffFields.length !== diffFields.length || input.diffFields.some((value, index) => value !== diffFields[index])) return err(researchError("invalid_brief_change"));
   const common = { id: id.value.id, briefId: briefId.value.id, baseVersionId: baseVersionId.value.id, changes: cloneFrozen(input.changes as BriefChangeSet), diffFields, reason: input.reason.trim(), source: source.value, createdAt: createdAt.value };
@@ -163,7 +163,7 @@ export function parseResearchBrief(input: unknown): ResearchResult<ResearchBrief
     versions.push(parsed.value);
   }
   const active = versions[versions.length - 1];
-  if (active === undefined || active.id !== currentVersionId.value.id) return err(researchError("invalid_research_brief"));
+  if (active?.id !== currentVersionId.value.id) return err(researchError("invalid_research_brief"));
   const proposals: BriefChangeProposal[] = [];
   for (const value of input.proposals) {
     if (!isRecord(value)) return err(researchError("invalid_brief_change"));
@@ -192,7 +192,8 @@ export function createBriefChangeProposal(briefInput: ResearchBrief, input: Crea
   const brief = parseResearchBrief(briefInput); if (!brief.ok) return brief;
   if (!isRecord(input) || !isNonBlankString(input.reason) || !isRecord(input.changes)) return err(researchError("invalid_brief_change"));
   const source = parseResearchSource(input.source); if (!source.ok) return source;
-  const active = brief.value.versions[brief.value.versions.length - 1]!;
+  const active = brief.value.versions.at(-1);
+  if (active === undefined) return err(researchError("invalid_research_brief"));
   const merged = mergeFields(active, input.changes); if (!merged.ok) return merged;
   const id = parseResearchIdFor(ports.idFactory.create("rbrf_"), "rbrf_"); if (!id.ok) return id;
   const at = readClock(ports.clock); if (!at.ok) return at;
@@ -212,9 +213,11 @@ export function confirmBriefChangeProposal(briefInput: ResearchBrief, proposalId
   const id = parseResearchIdFor(proposalId, "rbrf_"); if (!id.ok) return id;
   const proposalIndex = brief.value.proposals.findIndex((item) => item.id === id.value.id);
   if (proposalIndex < 0) return err(researchError("brief_change_not_found"));
-  const proposal = brief.value.proposals[proposalIndex]!;
+  const proposal = brief.value.proposals.at(proposalIndex);
+  if (proposal === undefined) return err(researchError("brief_change_not_found"));
   if (proposal.status !== "pending") return err(researchError("brief_change_already_decided"));
-  const active = brief.value.versions[brief.value.versions.length - 1]!;
+  const active = brief.value.versions.at(-1);
+  if (active === undefined) return err(researchError("invalid_research_brief"));
   if (proposal.baseVersionId !== active.id) return err(researchError("version_conflict"));
   const fields = mergeFields(active, proposal.changes); if (!fields.ok) return fields;
   const confirmed = confirmResearchSource(proposal.source, actor.value, ports.clock); if (!confirmed.ok) return confirmed;
@@ -228,7 +231,8 @@ export function confirmBriefChangeProposal(briefInput: ResearchBrief, proposalId
 
 export function getActiveResearchBriefVersion(briefInput: ResearchBrief): ResearchBriefVersion | undefined {
   const brief = parseResearchBrief(briefInput); if (!brief.ok) return undefined;
-  return cloneFrozen(brief.value.versions[brief.value.versions.length - 1]!);
+  const active = brief.value.versions.at(-1);
+  return active === undefined ? undefined : cloneFrozen(active);
 }
 
 export function getResearchBriefVersion(briefInput: ResearchBrief, versionId: string): ResearchBriefVersion | undefined {
@@ -240,7 +244,7 @@ export function getResearchBriefVersion(briefInput: ResearchBrief, versionId: st
 
 export function exportResearchBriefYaml(versionInput: ResearchBriefVersion): ResearchResult<string> {
   const version = parseResearchBriefVersion(versionInput); if (!version.ok) return version;
-  const fields: Array<[string, unknown]> = [
+  const fields: [string, unknown][] = [
     ["id", version.value.id], ["projectId", version.value.projectId], ["version", version.value.versionNumber],
     ["projectQuestion", version.value.projectQuestion], ["currentStage", version.value.currentStage], ["currentTask", version.value.currentTask],
     ["targetArtifacts", version.value.targetArtifacts], ["fixedDecisions", version.value.fixedDecisions], ["allowedChanges", version.value.allowedChanges],

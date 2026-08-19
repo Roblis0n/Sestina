@@ -114,7 +114,7 @@ export function updateResearchProject(
     expected.value,
   );
   if (!nextVersion.ok) return nextVersion;
-  const title = input.title === undefined ? parsed.value.title : input.title;
+  const title = input.title ?? parsed.value.title;
   if (!isNonBlankString(title)) return err(researchError("invalid_project"));
   const root =
     input.rootPath === undefined

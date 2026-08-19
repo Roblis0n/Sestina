@@ -115,12 +115,13 @@ describe("versioned Research Brief", () => {
     expect(created.ok).toBe(true);
     if (!created.ok) return;
     const activeBefore = getActiveResearchBriefVersion(created.value);
+    if (activeBefore === undefined) throw new Error("active brief missing");
     const proposal = createBriefChangeProposal(
       created.value,
       {
         changes: {
           allowedChanges: [
-            ...activeBefore!.allowedChanges,
+            ...activeBefore.allowedChanges,
             { target: { kind: "project_path", relativePath: "data/new.json" }, operations: ["data_replace"] },
           ],
         },
@@ -131,7 +132,7 @@ describe("versioned Research Brief", () => {
     );
     expect(proposal.ok).toBe(true);
     if (!proposal.ok) return;
-    expect(getActiveResearchBriefVersion(proposal.value.brief)?.id).toBe(activeBefore?.id);
+    expect(getActiveResearchBriefVersion(proposal.value.brief)?.id).toBe(activeBefore.id);
     expect(proposal.value.proposal.status).toBe("pending");
     expect(proposal.value.proposal.diffFields).toEqual(["allowedChanges"]);
     expect(Object.isFrozen(proposal.value.proposal)).toBe(true);
@@ -142,7 +143,8 @@ describe("versioned Research Brief", () => {
     const created = createResearchBrief(validInput(), environment);
     expect(created.ok).toBe(true);
     if (!created.ok) return;
-    const activeV1 = getActiveResearchBriefVersion(created.value)!;
+    const activeV1 = getActiveResearchBriefVersion(created.value);
+    if (activeV1 === undefined) throw new Error("active brief missing");
     const proposed = createBriefChangeProposal(
       created.value,
       { changes: { currentTask: "Tighten limitations" }, reason: "Change task", source: MODEL },
@@ -187,8 +189,10 @@ describe("versioned Research Brief", () => {
     const created = createResearchBrief(validInput(), ports());
     expect(created.ok).toBe(true);
     if (!created.ok) return;
-    const first = exportResearchBriefYaml(getActiveResearchBriefVersion(created.value)!);
-    const second = exportResearchBriefYaml(getActiveResearchBriefVersion(created.value)!);
+    const active = getActiveResearchBriefVersion(created.value);
+    if (active === undefined) throw new Error("active brief missing");
+    const first = exportResearchBriefYaml(active);
+    const second = exportResearchBriefYaml(active);
     expect(first).toEqual(second);
     expect(first.ok).toBe(true);
     if (first.ok) {
