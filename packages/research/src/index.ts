@@ -123,6 +123,8 @@ export type {
 } from "./brief/brief-change.js";
 export {
   createResearchBrief,
+  createImportedResearchBriefDraft,
+  activateImportedResearchBriefDraft,
   parseResearchBrief,
   parseResearchBriefVersion,
   createBriefChangeProposal,

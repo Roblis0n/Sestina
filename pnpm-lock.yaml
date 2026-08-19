@@ -33,6 +33,28 @@ importers:
         specifier: ^3.0.0
         version: 3.2.7(@types/node@24.13.3)(supports-color@7.2.0)
 
+  integrations/legacy-import:
+    dependencies:
+      '@sestina/research':
+        specifier: workspace:*
+        version: link:../../packages/research
+      '@sestina/research-store':
+        specifier: workspace:*
+        version: link:../../packages/research-store
+      '@sestina/schema':
+        specifier: workspace:*
+        version: link:../../packages/schema
+      '@sestina/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
+    devDependencies:
+      typescript:
+        specifier: ^5.8.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.7(@types/node@24.13.3)(supports-color@7.2.0)
+
   packages/config:
     dependencies:
       '@sestina/schema':

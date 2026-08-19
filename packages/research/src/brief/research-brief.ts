@@ -56,6 +56,11 @@ export interface ResearchBrief {
   readonly versions: readonly ResearchBriefVersion[];
   readonly proposals: readonly BriefChangeProposal[];
   readonly version: EntityVersion;
+  readonly importState?: {
+    readonly status: "draft";
+    readonly source: ResearchSource;
+  };
+  readonly activationSource?: ResearchSource;
 }
 
 const FIELD_NAMES: readonly (keyof ResearchBriefVersionFields)[] = [
@@ -172,7 +177,21 @@ export function parseResearchBrief(input: unknown): ResearchResult<ResearchBrief
     if (parsed.value.status === "confirmed" && !versions.some((item) => item.id === parsed.value.activatedVersionId)) return err(researchError("invalid_brief_change"));
     proposals.push(parsed.value);
   }
-  return ok(cloneFrozen({ id: id.value.id, projectId: projectId.value.id, currentVersionId: currentVersionId.value.id, versions, proposals, version: version.value }));
+  let importState: ResearchBrief["importState"];
+  if (input.importState !== undefined) {
+    if (!isRecord(input.importState) || input.importState.status !== "draft") return err(researchError("invalid_research_brief"));
+    const draftSource = parseResearchSource(input.importState.source); if (!draftSource.ok) return draftSource;
+    if (draftSource.value.authority !== "imported_unconfirmed") return err(researchError("invalid_research_brief"));
+    importState = cloneFrozen({ status: "draft" as const, source: draftSource.value });
+  }
+  let activationSource: ResearchSource | undefined;
+  if (input.activationSource !== undefined) {
+    const parsed = parseResearchSource(input.activationSource); if (!parsed.ok) return parsed;
+    if (parsed.value.authority !== "user_confirmed") return err(researchError("user_confirmation_required"));
+    activationSource = parsed.value;
+  }
+  if (importState !== undefined && activationSource !== undefined) return err(researchError("invalid_research_brief"));
+  return ok(cloneFrozen({ id: id.value.id, projectId: projectId.value.id, currentVersionId: currentVersionId.value.id, versions, proposals, version: version.value, ...(importState ? { importState } : {}), ...(activationSource ? { activationSource } : {}) }));
 }
 
 export function createResearchBrief(input: ResearchBriefInput, ports: { readonly clock: Clock; readonly idFactory: IdFactory }): ResearchResult<ResearchBrief> {
@@ -186,6 +205,30 @@ export function createResearchBrief(input: ResearchBriefInput, ports: { readonly
   const version = parseResearchBriefVersion({ id: versionId.value.id, projectId: projectId.value.id, versionNumber: 1, ...fields.value, source: source.value, createdAt: now.value });
   if (!version.ok) return version;
   return parseResearchBrief({ id: briefId.value.id, projectId: projectId.value.id, currentVersionId: version.value.id, versions: [version.value], proposals: [], version: initialEntityVersion() });
+}
+
+export function createImportedResearchBriefDraft(
+  input: ResearchBriefInput,
+  ports: { readonly clock: Clock; readonly idFactory: IdFactory },
+): ResearchResult<ResearchBrief> {
+  const source = parseResearchSource(input.source); if (!source.ok) return source;
+  if (source.value.authority !== "imported_unconfirmed") return err(researchError("invalid_research_brief"));
+  const brief = createResearchBrief(input, ports); if (!brief.ok) return brief;
+  return parseResearchBrief({ ...brief.value, importState: { status: "draft", source: source.value } });
+}
+
+export function activateImportedResearchBriefDraft(
+  briefInput: ResearchBrief,
+  actorInput: ResearchActor,
+  expectedVersion: EntityVersion,
+  clock: Clock,
+): ResearchResult<ResearchBrief> {
+  const brief = parseResearchBrief(briefInput); if (!brief.ok) return brief;
+  if (brief.value.importState === undefined) return err(researchError("invalid_research_brief"));
+  const actor = validateResearchActor(actorInput); if (!actor.ok || actor.value.kind !== "user") return err(researchError("user_confirmation_required"));
+  const next = advanceEntityVersion(brief.value.version, expectedVersion); if (!next.ok) return next;
+  const confirmed = confirmResearchSource(brief.value.importState.source, actor.value, clock); if (!confirmed.ok) return confirmed;
+  return parseResearchBrief({ ...brief.value, importState: undefined, version: next.value, activationSource: confirmed.value.source });
 }
 
 export function createBriefChangeProposal(briefInput: ResearchBrief, input: CreateBriefChangeProposalInput, ports: { readonly clock: Clock; readonly idFactory: IdFactory }): ResearchResult<{ readonly brief: ResearchBrief; readonly proposal: BriefChangeProposal }> {
@@ -231,6 +274,7 @@ export function confirmBriefChangeProposal(briefInput: ResearchBrief, proposalId
 
 export function getActiveResearchBriefVersion(briefInput: ResearchBrief): ResearchBriefVersion | undefined {
   const brief = parseResearchBrief(briefInput); if (!brief.ok) return undefined;
+  if (brief.value.importState !== undefined) return undefined;
   const active = brief.value.versions.at(-1);
   return active === undefined ? undefined : cloneFrozen(active);
 }
