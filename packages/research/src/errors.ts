@@ -55,7 +55,11 @@ export type ResearchErrorCode =
   | "user_episode_action_required"
   | "invalid_episode_waiver"
   | "invalid_research_snapshot"
-  | "snapshot_hash_mismatch";
+  | "snapshot_hash_mismatch"
+  | "invalid_pagination"
+  | "research_record_not_found"
+  | "research_storage_unavailable"
+  | "research_storage_readonly";
 
 export type ResearchErrorDetails = Readonly<
   Record<string, string | number | boolean>
@@ -125,4 +129,8 @@ const MESSAGES: Readonly<Record<ResearchErrorCode, string>> = {
   invalid_episode_waiver: "episode waiver is missing or malformed",
   invalid_research_snapshot: "research snapshot is missing or malformed",
   snapshot_hash_mismatch: "research snapshot content hash does not match",
+  invalid_pagination: "research repository page request is invalid",
+  research_record_not_found: "research record was not found in the requested project",
+  research_storage_unavailable: "research storage is unavailable",
+  research_storage_readonly: "research storage is read-only",
 };

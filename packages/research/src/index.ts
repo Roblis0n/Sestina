@@ -247,6 +247,25 @@ export {
 } from "./snapshot/research-snapshot.js";
 export type { ResearchSnapshot } from "./snapshot/research-snapshot.js";
 
+export {
+  RESEARCH_PAGE_LIMIT_MAX,
+  parseResearchPageRequest,
+} from "./ports/repositories.js";
+export type {
+  ResearchPageRequest,
+  ResearchPage,
+  ResearchProjectRepository,
+  ResearchArtifactRepository,
+  ArtifactRevisionRepository,
+  ResearchBriefRepository,
+  ResearchDecisionRepository,
+  ResearchIssueRepository,
+  RevisionEpisodeRepository,
+  ResearchSnapshotRepository,
+  ResearchRepositories,
+  ResearchUnitOfWork,
+} from "./ports/repositories.js";
+
 import type { ResearchIdPrefix } from "./identity/research-id.js";
 
 export interface IdFactory {

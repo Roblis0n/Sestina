@@ -10,6 +10,7 @@ import { migration009 } from "./009-project-scope.js";
 import { migration010 } from "./010-lookup-indexes.js";
 import { migration011 } from "./011-correction-indexes.js";
 import { migration012 } from "./012-evidence-ledger.js";
+import { migration013 } from "./013-research-core.js";
 import type { Migration } from "../migrator.js";
 
 // ── Ordered migration manifest (docs/22 Task 5: migrations/{001,002,manifest}) ──
@@ -28,6 +29,7 @@ export const MIGRATIONS: readonly Migration[] = [
   migration010,
   migration011,
   migration012,
+  migration013,
 ];
 
 /** Highest schema version this runtime understands. */

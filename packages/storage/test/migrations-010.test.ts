@@ -32,7 +32,7 @@ describe("Migration 010 (lookup indexes)", () => {
     );
     expect(row?.name).toBe("010-lookup-indexes");
     expect(row?.status).toBe("completed");
-    expect(MIGRATIONS.at(-1)?.version).toBe(12);
+    expect(MIGRATIONS.at(-1)?.version).toBe(13);
   });
 
   it("serves the project session keyset page from an index without a temp b-tree", () => {
