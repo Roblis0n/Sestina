@@ -84,6 +84,13 @@ describe("CLI local research integrity workflow", () => {
     const issueRows = issues.json?.issues as readonly { readonly id: string }[];
     const issueId = String(issueRows[0]?.id);
     expect((await command(sandbox, ["issue", "resolve", issueId, "--project", project, "--reason", "The user accepts a documented correction", "--evidence-id", "manual-correction", "--yes"]))).toMatchObject({ code: 0, json: { status: "resolved" } });
+    const repeatedEpisode = await command(sandbox, ["episode", "start", "--project", project, "--artifact", artifactId, "--baseline", baselineId]);
+    const repeatedEpisodeId = String(repeatedEpisode.json?.episodeId);
+    expect((await command(sandbox, ["episode", "submit", repeatedEpisodeId, "--project", project, "--revision", candidateId])).code).toBe(0);
+    const repeatedReview = await command(sandbox, ["review", "run", repeatedEpisodeId, "--project", project, "--deterministic", "--verbose"]);
+    expect(repeatedReview).toMatchObject({ code: 0, json: { reviewReady: false } });
+    const repeatedFindings = repeatedReview.json?.findings as readonly { readonly presentation: string; readonly issueIds: readonly string[] }[];
+    expect(repeatedFindings.some((finding) => finding.presentation === "suppressed" && finding.issueIds.includes(issueId))).toBe(true);
     expect((await command(sandbox, ["issue", "reopen", issueId, "--project", project, "--reason", "User requests another review", "--yes"]))).toMatchObject({ code: 0, json: { status: "reopened", reopenAuthority: "user_requested" } });
     const waived = await command(sandbox, ["issue", "waive", issueId, "--project", project, "--scope", `issue:${issueId}`, "--reason", "Accept this bounded risk", "--invalidation", "New evidence arrives", "--yes"]);
     expect(waived.code, waived.stderr).toBe(0);

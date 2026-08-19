@@ -1,0 +1,10 @@
+{
+  "title": "Resolved audit repetition demo",
+  "projectQuestion": "Can an unchanged resolved problem stay out of the foreground?",
+  "currentTask": "Review only edits under the allowed path",
+  "allowedPath": "allowed",
+  "expectedDelta": "Keep the resolved scope issue closed when its inputs are unchanged",
+  "nonGoal": "Repeat a completed audit as a new foreground task",
+  "artifactPath": "outside/audit.md",
+  "candidatePath": "outside/audit-r2.md"
+}

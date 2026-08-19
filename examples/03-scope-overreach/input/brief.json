@@ -1,0 +1,10 @@
+{
+  "title": "Scope overreach demo",
+  "projectQuestion": "Did the revision stay inside the confirmed section?",
+  "currentTask": "Revise only the allowed section",
+  "allowedPath": "allowed",
+  "expectedDelta": "Clarify only the confirmed section",
+  "nonGoal": "Rewrite material outside the confirmed path",
+  "artifactPath": "outside/scope.md",
+  "candidatePath": "outside/scope-r2.md"
+}

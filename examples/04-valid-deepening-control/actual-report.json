@@ -1,0 +1,11 @@
+{
+  "demo": "04-valid-deepening-control",
+  "reviewExitCode": 0,
+  "foregroundFindings": 0,
+  "checkerHealth": "healthy",
+  "scopeCoverage": "checked_satisfied",
+  "decisionIntegrity": "not_applicable",
+  "issueIntegrity": "not_applicable",
+  "fulfillmentCoverage": "unproven",
+  "semanticStatus": "semantic_pending"
+}

@@ -1,0 +1,10 @@
+{
+  "title": "Valid deepening control",
+  "projectQuestion": "Can the mechanism chain be deepened within the confirmed section?",
+  "currentTask": "Add a bounded mechanism chain without changing scope",
+  "allowedPath": "allowed",
+  "expectedDelta": "Connect exposure, mediator, and measured response",
+  "nonGoal": "Claim that the mechanism is semantically proven",
+  "artifactPath": "allowed/deepening.md",
+  "candidatePath": "allowed/deepening-r2.md"
+}

@@ -23,7 +23,8 @@
     "verify:architecture": "node scripts/verify-architecture.mjs",
     "verify:authority": "node scripts/verify-authority.mjs",
     "verify:package": "node scripts/verify-clean-package.mjs",
-    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm docs:check && pnpm repo:check && pnpm verify:architecture && pnpm verify:authority && pnpm verify:package"
+    "demo:offline": "pnpm --filter @sestina/cli build && node scripts/run-offline-demos.mjs",
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm docs:check && pnpm repo:check && pnpm verify:architecture && pnpm verify:authority && pnpm verify:package && pnpm demo:offline"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -1,0 +1,6 @@
+{
+  "reviewExitCode": 0,
+  "foregroundFindings": 0,
+  "minimumSuppressedFindings": 1,
+  "reportShowsSuppressedAudit": true
+}

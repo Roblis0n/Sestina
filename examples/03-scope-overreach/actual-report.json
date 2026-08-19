@@ -1,0 +1,8 @@
+{
+  "demo": "03-scope-overreach",
+  "reviewExitCode": 5,
+  "blockingKind": "scope_violation",
+  "targetKind": "block",
+  "reportNamesRecovery": true,
+  "semanticStatus": "semantic_pending"
+}

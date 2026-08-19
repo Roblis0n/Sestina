@@ -54,8 +54,11 @@ import {
   deriveReviewObligations,
   deriveReviewOutcome,
   FreshnessChecker,
+  findingToIssueCandidate,
+  IssueIntegrityChecker,
   parseProjectRelativePath,
   parseReviewContext,
+  parseReviewRun,
   runReview,
   ScopeChecker,
   diffMarkdownBlocks,
@@ -565,26 +568,29 @@ export class SestinaCore {
       allowedChanges: brief.value.version.allowedChanges,
       forbiddenChanges: brief.value.version.forbiddenChanges,
     });
-    const run = await runReview(context.value, new CheckerRegistry([freshness, scope]), { ...this.ports, mode: "sequential" });
+    const rawRun = await runReview(context.value, new CheckerRegistry([freshness, scope]), { ...this.ports, mode: "sequential" });
+    if (!rawRun.ok) return { ok: false, error: mapDomainError(rawRun.error) };
+    const issues = this.listIssues(input.projectId); if (!issues.ok) return issues;
+    const decisions = this.listDecisions(input.projectId); if (!decisions.ok) return decisions;
+    const recordedAt = now(this.#clock); if (recordedAt === undefined) return coreErr("infrastructure_failure");
+    const integrated = await new IssueIntegrityChecker({
+      findings: rawRun.value.findings,
+      issueLookup: { ok: true, issues: issues.value },
+      recordedAt,
+      reopenContext: {
+        currentRevisionContentHash: candidate.value.content.contentHash,
+        currentBriefVersionId: brief.value.version.id,
+        currentFrozenDecisionIds: decisions.value.filter((item) => item.status === "frozen").map((item) => item.id),
+      },
+    }).run(context.value);
+    const run = parseReviewRun({ ...rawRun.value, findings: integrated.findings });
     if (!run.ok) return { ok: false, error: mapDomainError(run.error) };
     const products = reviewProducts(run.value, episode.value);
-    const issueSource = sourceFor(SYSTEM_ACTOR, this.#clock); if (!issueSource.ok) return issueSource;
     const generatedIssues: ResearchIssue[] = [];
     for (const finding of run.value.findings) {
-      if (!["scope_violation", "scope_rule_conflict"].includes(finding.kind) || finding.target.kind !== "block" || finding.target.artifactId === undefined || finding.target.blockId === undefined) continue;
-      const issue = fromDomain(createResearchIssue({
-        projectId: input.projectId,
-        kind: "scope_violation",
-        target: { kind: "block", artifactId: finding.target.artifactId, blockId: finding.target.blockId },
-        violatedCriterion: "confirmed_scope",
-        rationaleConcepts: [finding.kind],
-        summary: finding.rationale,
-        sourceArtifactId: artifact.value.id,
-        sourceRevisionId: candidate.value.id,
-        sourceRevisionContentHash: candidate.value.content.contentHash,
-        lineageRootRevisionId: baseline.value.id,
-        source: issueSource.value,
-      }, this.ports));
+      if (finding.kind !== "scope_violation" || finding.presentation !== "foreground") continue;
+      const candidateIssue = findingToIssueCandidate(finding, context.value, recordedAt); if (!candidateIssue.ok) return { ok: false, error: mapDomainError(candidateIssue.error) };
+      const issue = fromDomain(createResearchIssue(candidateIssue.value.input, this.ports));
       if (!issue.ok) return issue;
       generatedIssues.push(issue.value);
     }
@@ -655,7 +661,10 @@ export class SestinaCore {
         run: bundle.value.run,
         ...products,
         preservedContent: [],
-        userActions: bundle.value.episode.status === "user_action_required" ? ["Accept, reject, or abandon this reviewed candidate explicitly."] : [`Episode disposition: ${bundle.value.episode.status}.`],
+        userActions: [
+          "Semantic review status: semantic_pending. Fulfillment, evidence quality, target substitution, argument depth, and Argument Delta remain unproven.",
+          ...(bundle.value.episode.status === "user_action_required" ? ["Accept, reject, or abandon this reviewed candidate explicitly."] : [`Episode disposition: ${bundle.value.episode.status}.`]),
+        ],
       };
       return coreOk(input.format === "markdown" ? renderReviewMarkdown(reportInput) : renderReviewJson(reportInput));
     } catch {

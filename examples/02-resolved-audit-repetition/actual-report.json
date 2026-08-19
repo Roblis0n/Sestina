@@ -1,0 +1,8 @@
+{
+  "demo": "02-resolved-audit-repetition",
+  "reviewExitCode": 0,
+  "foregroundFindings": 0,
+  "suppressedFindings": 1,
+  "reportShowsSuppressedAudit": true,
+  "semanticStatus": "semantic_pending"
+}

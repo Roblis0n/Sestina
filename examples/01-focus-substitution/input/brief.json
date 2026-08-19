@@ -1,0 +1,10 @@
+{
+  "title": "Focus substitution demo",
+  "projectQuestion": "What mechanism links treatment to the measured response?",
+  "currentTask": "Explain the target mechanism rather than adjacent background",
+  "allowedPath": "allowed",
+  "expectedDelta": "Add the mechanism chain for the target response",
+  "nonGoal": "Replace the target with a neighboring background question",
+  "artifactPath": "allowed/focus.md",
+  "candidatePath": "allowed/focus-r2.md"
+}

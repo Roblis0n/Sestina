@@ -1,0 +1,6 @@
+{
+  "reviewExitCode": 5,
+  "blockingKind": "scope_violation",
+  "targetKind": "block",
+  "reportNamesRecovery": true
+}
