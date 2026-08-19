@@ -14,7 +14,16 @@ export type ResearchErrorCode =
   | "authority_conflict"
   | "invalid_timestamp"
   | "invalid_source"
-  | "canonicalization_failed";
+  | "canonicalization_failed"
+  | "invalid_project"
+  | "invalid_artifact"
+  | "invalid_artifact_kind"
+  | "invalid_content_reference"
+  | "unsafe_relative_path"
+  | "invalid_revision"
+  | "invalid_revision_parent"
+  | "revision_not_found"
+  | "artifact_tombstoned";
 
 export type ResearchErrorDetails = Readonly<
   Record<string, string | number | boolean>
@@ -43,4 +52,13 @@ const MESSAGES: Readonly<Record<ResearchErrorCode, string>> = {
   invalid_timestamp: "timestamp is not a valid UTC instant",
   invalid_source: "research source is missing required fields",
   canonicalization_failed: "value cannot be canonically serialized",
+  invalid_project: "research project is missing or malformed",
+  invalid_artifact: "research artifact is missing or malformed",
+  invalid_artifact_kind: "artifact kind is unknown",
+  invalid_content_reference: "content reference is missing or malformed",
+  unsafe_relative_path: "project-relative path is unsafe",
+  invalid_revision: "artifact revision is missing or malformed",
+  invalid_revision_parent: "artifact revision parent is invalid",
+  revision_not_found: "artifact revision was not found",
+  artifact_tombstoned: "research artifact is tombstoned",
 };

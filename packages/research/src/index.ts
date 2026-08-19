@@ -53,6 +53,49 @@ export type { ConfirmedSource } from "./authority/confirmation.js";
 
 export { FixedClock, SequenceIdFactory } from "./testing/fakes.js";
 
+export {
+  createResearchProject,
+  updateResearchProject,
+  parseResearchProject,
+} from "./project/research-project.js";
+export type {
+  ResearchProject,
+  CreateResearchProjectInput,
+  UpdateResearchProjectInput,
+} from "./project/research-project.js";
+
+export { ARTIFACT_KINDS, parseArtifactKind } from "./artifact/artifact-kind.js";
+export type { ArtifactKind } from "./artifact/artifact-kind.js";
+export {
+  contentReferenceForInline,
+  parseContentReference,
+} from "./artifact/content-reference.js";
+export type {
+  ContentReference,
+  ResearchMediaType,
+} from "./artifact/content-reference.js";
+export {
+  createArtifactRevision,
+  parseArtifactRevision,
+  rebuildArtifactRevisionChain,
+} from "./artifact/artifact-revision.js";
+export type {
+  ArtifactRevision,
+  CreateArtifactRevisionInput,
+} from "./artifact/artifact-revision.js";
+export {
+  createResearchArtifact,
+  parseResearchArtifact,
+  addArtifactRevision,
+  chooseArtifactBranch,
+  tombstoneResearchArtifact,
+  getArtifactRevision,
+} from "./artifact/research-artifact.js";
+export type {
+  ResearchArtifact,
+  ArtifactTombstone,
+} from "./artifact/research-artifact.js";
+
 import type { ResearchIdPrefix } from "./identity/research-id.js";
 
 export interface IdFactory {
