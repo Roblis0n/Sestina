@@ -32,7 +32,7 @@ export interface SubmitCandidateRevisionCommand { readonly projectId: string; re
 export interface RunDeterministicReviewCommand { readonly projectId: string; readonly episodeId: string; readonly buildFingerprint?: string; readonly environmentFingerprint?: string; }
 export interface RecordUserDispositionCommand { readonly projectId: string; readonly episodeId: string; readonly disposition: "accepted" | "rejected" | "abandoned"; readonly reason: string; readonly actor: ResearchActor; }
 export interface CreateResearchSnapshotCommand { readonly projectId: string; readonly episodeId: string; readonly buildVersion: string; readonly limitations: readonly string[]; }
-export interface RenderReviewReportCommand { readonly projectId: string; readonly episodeId: string; readonly format: "markdown"; }
+export interface RenderReviewReportCommand { readonly projectId: string; readonly episodeId: string; readonly format: string; }
 export interface ExportCapsuleCommand { readonly projectId: string; readonly episodeId: string; readonly includePermittedFullText?: boolean; }
 
 export type InitialBriefFields = ResearchBriefVersionFields;

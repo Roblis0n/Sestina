@@ -11,6 +11,8 @@ import {
   createReviewInputSnapshot,
   createRevisionEpisode,
   disposeRevisionEpisode,
+  exportResearchBriefYaml,
+  getActiveResearchBriefVersion,
   getResearchBriefVersion,
   parseResearchSource,
   recordEpisodeReview,
@@ -53,7 +55,15 @@ import {
   type ReviewRunRepository,
 } from "@sestina/review";
 import { exportCapsule as exportReviewCapsule, renderReviewMarkdown, type ReviewCapsule } from "@sestina/reports";
-import { openDatabase, type StorageDatabase } from "@sestina/storage";
+import {
+  backupDatabase,
+  checkDatabaseIntegrity,
+  openDatabase,
+  readSchemaVersion,
+  RUNTIME_VERSION,
+  SCHEMA_VERSION,
+  type StorageDatabase,
+} from "@sestina/storage";
 import type {
   ActivateBriefCommand,
   CreateArtifactCommand,
@@ -94,6 +104,12 @@ export interface DeterministicReviewResult {
   readonly obligations: readonly ReviewObligation[];
   readonly coverage: readonly ObligationCoverage[];
   readonly outcome: ReviewOutcome;
+}
+
+export interface CoreDatabaseDiagnostics {
+  readonly database: { readonly readable: true; readonly writable: boolean; readonly integrity: "ok" };
+  readonly schema: { readonly current: number; readonly expected: number; readonly runtimeVersion: string; readonly status: "current" | "behind" | "too_new" };
+  readonly backup: { readonly status: "ok"; readonly schemaVersion: number; readonly hash: string; readonly sizeBytes: number };
 }
 
 function now(clock: Clock): string | undefined {
@@ -422,6 +438,44 @@ export class SestinaCore {
   }
 
   getProject(projectId: string): CoreResult<ResearchProject | undefined> { return fromDomain(this.#store.projects.getById(projectId)); }
+  listProjects(): CoreResult<readonly ResearchProject[]> {
+    const page = fromDomain(this.#store.projects.list(PAGE));
+    if (!page.ok) return page;
+    return page.value.nextCursor === undefined ? coreOk(page.value.items) : coreErr("state_conflict");
+  }
+
+  getActiveBriefProjection(projectId: string): CoreResult<{ readonly briefId: string; readonly versionId: string; readonly yaml: string } | undefined> {
+    const page = fromDomain(this.#store.briefs.listByProject(projectId, PAGE));
+    if (!page.ok) return page;
+    if (page.value.nextCursor !== undefined) return coreErr("state_conflict");
+    const versions = page.value.items.flatMap((brief) => {
+      const version = getActiveResearchBriefVersion(brief);
+      return version === undefined ? [] : [{ brief, version }];
+    }).sort((left, right) => right.version.createdAt.localeCompare(left.version.createdAt) || right.version.id.localeCompare(left.version.id));
+    const active = versions[0];
+    if (active === undefined) return coreOk(undefined);
+    const yaml = fromDomain(exportResearchBriefYaml(active.version));
+    return yaml.ok ? coreOk(Object.freeze({ briefId: active.brief.id, versionId: active.version.id, yaml: yaml.value })) : yaml;
+  }
+
+  async diagnoseDatabase(input: { readonly backupDirectory: string; readonly dataRoot: string }): Promise<CoreResult<CoreDatabaseDiagnostics>> {
+    const integrity = checkDatabaseIntegrity(this.#database.path);
+    if (!integrity.ok) return coreErr("infrastructure_failure");
+    const current = readSchemaVersion(this.#database);
+    const status = current === SCHEMA_VERSION ? "current" as const : current < SCHEMA_VERSION ? "behind" as const : "too_new" as const;
+    if (this.#database.readOnly) return coreErr("infrastructure_failure");
+    try {
+      const backup = await backupDatabase(this.#database, { backupDirectory: input.backupDirectory, dataRoot: input.dataRoot });
+      return coreOk(Object.freeze({
+        database: Object.freeze({ readable: true as const, writable: true, integrity: "ok" as const }),
+        schema: Object.freeze({ current, expected: SCHEMA_VERSION, runtimeVersion: RUNTIME_VERSION, status }),
+        backup: Object.freeze({ status: "ok" as const, schemaVersion: backup.version, hash: backup.hash, sizeBytes: backup.sizeBytes }),
+      }));
+    } catch (error) {
+      return { ok: false, error: mapDomainError(typeof error === "object" && error !== null ? error : {}) };
+    }
+  }
+
   getEpisode(projectId: string, episodeId: string): CoreResult<RevisionEpisode | undefined> { return fromDomain(this.#store.episodes.getById(projectId, episodeId)); }
   getReviewRun(projectId: string, reviewRunId: string): CoreResult<ReviewRun | undefined> {
     const result = this.#reviews.getById(projectId, reviewRunId);
@@ -461,6 +515,6 @@ export async function openSestina(options: OpenSestinaOptions): Promise<CoreResu
     const database = await openDatabase({ path: options.databasePath, readOnly: options.readOnly });
     return coreOk(new SestinaCore(database, options.clock ?? new SystemClock(), options.idFactory ?? new RandomIdFactory()));
   } catch (error) {
-    return { ok: false, error: mapDomainError(typeof error === "object" && error !== null ? error as { code?: unknown } : {}) };
+    return { ok: false, error: mapDomainError(typeof error === "object" && error !== null ? error : {}) };
   }
 }

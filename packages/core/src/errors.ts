@@ -41,7 +41,7 @@ function coreError(code: CoreErrorCode): CoreError {
 }
 
 export function mapDomainError(error: { readonly code?: unknown }): CoreError {
-  const code = String(error.code ?? "");
+  const code = typeof error.code === "string" ? error.code : "";
   if (["research_record_not_found", "review_not_found", "revision_not_found"].includes(code)) return coreError("not_found");
   if (["version_conflict", "review_version_conflict", "stale_episode_brief", "review_input_hash_mismatch", "snapshot_hash_mismatch"].includes(code)) return coreError("stale_state");
   if (["user_confirmation_required", "user_decision_required", "user_issue_action_required", "user_episode_action_required"].includes(code)) return coreError("user_confirmation_required");
