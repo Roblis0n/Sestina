@@ -47,6 +47,7 @@ export { migration006 } from "./migrations/006-retention-snapshot.js";
 export { migration007 } from "./migrations/007-keyset-indexes.js";
 export { migration009 } from "./migrations/009-project-scope.js";
 export { migration013 } from "./migrations/013-research-core.js";
+export { migration014 } from "./migrations/014-review-runs.js";
 
 // Leases
 export {

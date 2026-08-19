@@ -31,7 +31,7 @@ describe("Migration 013 (research core persistence)", () => {
 
   beforeEach(async () => {
     dir = makeTempDir("sestina-research-013-");
-    db = await openDatabase({ path: join(dir, "sestina.db") });
+    db = await openDatabase({ path: join(dir, "sestina.db"), migrate: { migrations: MIGRATIONS.slice(0, 13) } });
   });
 
   afterEach(() => {
@@ -40,8 +40,8 @@ describe("Migration 013 (research core persistence)", () => {
   });
 
   it("advances the schema to 13 and creates only the RI-16 research tables", () => {
-    expect(SCHEMA_VERSION).toBe(13);
-    expect(MIGRATIONS.at(-1)?.name).toBe("013-research-core");
+    expect(SCHEMA_VERSION).toBeGreaterThanOrEqual(13);
+    expect(MIGRATIONS[12]?.name).toBe("013-research-core");
     const tables = new Set(
       db.all<{ name: string }>("SELECT name FROM sqlite_schema WHERE type = 'table'")
         .map((row) => row.name),

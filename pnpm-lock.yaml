@@ -149,9 +149,28 @@ importers:
       '@sestina/research':
         specifier: workspace:*
         version: link:../research
+      '@sestina/review':
+        specifier: workspace:*
+        version: link:../review
       '@sestina/storage':
         specifier: workspace:*
         version: link:../storage
+    devDependencies:
+      typescript:
+        specifier: ^5.8.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.7(@types/node@24.13.3)(supports-color@7.2.0)
+
+  packages/review:
+    dependencies:
+      '@sestina/research':
+        specifier: workspace:*
+        version: link:../research
+      '@sestina/schema':
+        specifier: workspace:*
+        version: link:../schema
     devDependencies:
       typescript:
         specifier: ^5.8.0

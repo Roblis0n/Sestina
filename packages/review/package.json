@@ -1,5 +1,5 @@
 {
-  "name": "@sestina/research-store",
+  "name": "@sestina/review",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -11,13 +11,12 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "vitest run --root ../.. --project unit packages/research-store/test",
+    "test": "vitest run --root ../.. --project unit packages/review/test",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@sestina/research": "workspace:*",
-    "@sestina/review": "workspace:*",
-    "@sestina/storage": "workspace:*"
+    "@sestina/schema": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.8.0",

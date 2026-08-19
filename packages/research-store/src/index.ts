@@ -18,3 +18,4 @@ export function createResearchStore(db: StorageDatabase): ResearchStore {
 export { createResearchRepositories } from "./repositories/sqlite-repositories.js";
 export { mapResearchStorageError } from "./repositories/base.js";
 export { createResearchUnitOfWork } from "./transactions/research-unit-of-work.js";
+export { createSqliteReviewRunRepository } from "./repositories/sqlite-review-run-repository.js";
