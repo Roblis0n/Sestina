@@ -1,7 +1,9 @@
 import {
   activateRevisionEpisode,
   addArtifactRevision,
+  confirmBriefChangeProposal,
   createArtifactRevision,
+  createBriefChangeProposal,
   createResearchArtifact,
   createResearchBrief,
   createResearchDecision,
@@ -21,6 +23,8 @@ import {
   submitEpisodeCandidate,
   transitionResearchDecision,
   type ArtifactRevision,
+  type BriefChangeProposal,
+  type BriefChangeSet,
   type Clock,
   type EpisodeOutcome,
   type IdFactory,
@@ -47,7 +51,9 @@ import {
   parseReviewContext,
   runReview,
   ScopeChecker,
+  diffMarkdownBlocks,
   type ObligationAssessment,
+  type BlockDiff,
   type ObligationCoverage,
   type ReviewObligation,
   type ReviewOutcome,
@@ -66,12 +72,16 @@ import {
 } from "@sestina/storage";
 import type {
   ActivateBriefCommand,
+  AcceptBriefChangeCommand,
   CreateArtifactCommand,
+  CreateArtifactWithRevisionCommand,
   CreateResearchSnapshotCommand,
   CreateRevisionCommand,
+  EditBriefCommand,
   ExportCapsuleCommand,
   InitializeProjectCommand,
   OpenIssueCommand,
+  ProposeBriefChangeCommand,
   RecordDecisionCommand,
   RecordUserDispositionCommand,
   RenderReviewReportCommand,
@@ -112,6 +122,18 @@ export interface CoreDatabaseDiagnostics {
   readonly backup: { readonly status: "ok"; readonly schemaVersion: number; readonly hash: string; readonly sizeBytes: number };
 }
 
+export interface CoreBriefState {
+  readonly brief: ResearchBrief;
+  readonly version: ResearchBriefVersion;
+  readonly yaml: string;
+}
+
+export interface CoreBriefMutation {
+  readonly brief: ResearchBrief;
+  readonly version: ResearchBriefVersion;
+  readonly changedFields: readonly string[];
+}
+
 function now(clock: Clock): string | undefined {
   try {
     const value = clock.now();
@@ -140,6 +162,15 @@ function requireUser(actor: ResearchActor): CoreResult<ResearchActor & { readonl
 
 function hash(value: unknown): CoreResult<string> {
   return fromDomain(stableResearchHash(value));
+}
+
+function materializeBriefChanges(changes: BriefChangeSet, idFactory: IdFactory): BriefChangeSet {
+  return {
+    ...changes,
+    ...(changes.fixedDecisions === undefined ? {} : { fixedDecisions: changes.fixedDecisions.map((item) => ({ ...item, id: item.id || idFactory.create("rbrf_") })) }),
+    ...(changes.expectedDeltas === undefined ? {} : { expectedDeltas: changes.expectedDeltas.map((item) => ({ ...item, id: item.id || idFactory.create("rbrf_") })) }),
+    ...(changes.evidenceBoundaries === undefined ? {} : { evidenceBoundaries: changes.evidenceBoundaries.map((item) => ({ ...item, id: item.id || idFactory.create("rbrf_") })) }),
+  };
 }
 
 function found<T>(result: CoreResult<T | undefined>): CoreResult<T> {
@@ -237,12 +268,88 @@ export class SestinaCore {
     return brief.ok ? fromDomain(this.#store.briefs.create(brief.value)) : brief;
   }
 
+  getBriefState(projectId: string): CoreResult<CoreBriefState | undefined> {
+    const active = this.findActiveBrief(projectId); if (!active.ok) return active;
+    if (active.value === undefined) return coreOk(undefined);
+    const yaml = fromDomain(exportResearchBriefYaml(active.value.version));
+    return yaml.ok ? coreOk(Object.freeze({ ...active.value, yaml: yaml.value })) : yaml;
+  }
+
+  editBrief(input: EditBriefCommand): CoreResult<CoreBriefMutation> {
+    const user = requireUser(input.actor); if (!user.ok) return user;
+    const active = this.findActiveBrief(input.projectId); if (!active.ok) return active;
+    if (active.value === undefined) {
+      if (input.expectedVersion !== undefined && input.expectedVersion !== 0) return coreErr("stale_state");
+      const created = this.activateBrief(input); if (!created.ok) return created;
+      const version = getActiveResearchBriefVersion(created.value); if (version === undefined) return coreErr("infrastructure_failure");
+      return coreOk(Object.freeze({ brief: created.value, version, changedFields: Object.freeze(["projectQuestion", "currentStage", "currentTask", "targetArtifacts", "fixedDecisions", "allowedChanges", "forbiddenChanges", "expectedDeltas", "evidenceBoundaries", "explicitNonGoals"]) }));
+    }
+    const currentBrief = active.value.brief;
+    if (input.expectedVersion !== undefined && input.expectedVersion !== currentBrief.version) return coreErr("stale_state");
+    const source = sourceFor(user.value, this.#clock, true); if (!source.ok) return source;
+    const changes = materializeBriefChanges({
+      projectQuestion: input.projectQuestion,
+      currentStage: input.currentStage,
+      currentTask: input.currentTask,
+      targetArtifacts: input.targetArtifacts,
+      fixedDecisions: input.fixedDecisions.map((item) => ({ ...item, id: item.id ?? this.#idFactory.create("rbrf_") })),
+      allowedChanges: input.allowedChanges,
+      forbiddenChanges: input.forbiddenChanges,
+      expectedDeltas: input.expectedDeltas.map((item) => ({ ...item, id: item.id ?? this.#idFactory.create("rbrf_") })),
+      evidenceBoundaries: input.evidenceBoundaries.map((item) => ({ ...item, id: item.id ?? this.#idFactory.create("rbrf_") })),
+      explicitNonGoals: input.explicitNonGoals,
+    }, this.#idFactory);
+    const proposed = fromDomain(createBriefChangeProposal(currentBrief, { changes, reason: "User imported an edited Research Brief", source: source.value }, this.ports)); if (!proposed.ok) return proposed;
+    const confirmed = fromDomain(confirmBriefChangeProposal(proposed.value.brief, proposed.value.proposal.id, user.value, proposed.value.brief.version, this.ports)); if (!confirmed.ok) return confirmed;
+    return this.#unitOfWork.commit(() => {
+      const storedProposal = fromDomain(this.#store.briefs.compareAndSwap(proposed.value.brief, currentBrief.version)); if (!storedProposal.ok) return storedProposal;
+      const storedBrief = fromDomain(this.#store.briefs.compareAndSwap(confirmed.value, proposed.value.brief.version)); if (!storedBrief.ok) return storedBrief;
+      const version = getActiveResearchBriefVersion(storedBrief.value); if (version === undefined) return coreErr("infrastructure_failure");
+      return coreOk(Object.freeze({ brief: storedBrief.value, version, changedFields: proposed.value.proposal.diffFields }));
+    });
+  }
+
+  proposeBriefChange(input: ProposeBriefChangeCommand): CoreResult<{ readonly brief: ResearchBrief; readonly proposal: BriefChangeProposal }> {
+    const active = this.findActiveBrief(input.projectId); if (!active.ok) return active;
+    if (active.value === undefined) return coreErr("state_conflict");
+    if (input.expectedVersion !== undefined && input.expectedVersion !== active.value.brief.version) return coreErr("stale_state");
+    const source = sourceFor(input.actor, this.#clock); if (!source.ok) return source;
+    const proposed = fromDomain(createBriefChangeProposal(active.value.brief, { changes: materializeBriefChanges(input.changes, this.#idFactory), reason: input.reason, source: source.value }, this.ports));
+    if (!proposed.ok) return proposed;
+    const stored = fromDomain(this.#store.briefs.compareAndSwap(proposed.value.brief, active.value.brief.version));
+    return stored.ok ? coreOk(Object.freeze({ brief: stored.value, proposal: proposed.value.proposal })) : stored;
+  }
+
+  acceptBriefChange(input: AcceptBriefChangeCommand): CoreResult<CoreBriefMutation> {
+    const user = requireUser(input.actor); if (!user.ok) return user;
+    const located = this.findBriefProposal(input.projectId, input.proposalId); if (!located.ok) return located;
+    if (input.expectedVersion !== undefined && input.expectedVersion !== located.value.brief.version) return coreErr("stale_state");
+    const confirmed = fromDomain(confirmBriefChangeProposal(located.value.brief, input.proposalId, user.value, located.value.brief.version, this.ports)); if (!confirmed.ok) return confirmed;
+    const stored = fromDomain(this.#store.briefs.compareAndSwap(confirmed.value, located.value.brief.version)); if (!stored.ok) return stored;
+    const version = getActiveResearchBriefVersion(stored.value); if (version === undefined) return coreErr("infrastructure_failure");
+    return coreOk(Object.freeze({ brief: stored.value, version, changedFields: located.value.proposal.diffFields }));
+  }
+
   createArtifact(input: CreateArtifactCommand): CoreResult<ResearchArtifact> {
     const project = found(this.getProject(input.projectId)); if (!project.ok) return project;
     const path = parseProjectRelativePath(input.relativePath); if (!path.ok) return coreErr("invalid_input");
     const source = sourceFor(input.actor, this.#clock); if (!source.ok) return source;
     const artifact = fromDomain(createResearchArtifact({ projectId: input.projectId, kind: input.kind, title: path.value, source: source.value }, this.ports));
     return artifact.ok ? fromDomain(this.#store.artifacts.create(artifact.value)) : artifact;
+  }
+
+  createArtifactWithInitialRevision(input: CreateArtifactWithRevisionCommand): CoreResult<{ readonly artifact: ResearchArtifact; readonly revision: ArtifactRevision }> {
+    const project = found(this.getProject(input.projectId)); if (!project.ok) return project;
+    const path = parseProjectRelativePath(input.relativePath); if (!path.ok) return coreErr("invalid_input");
+    const source = sourceFor(input.actor, this.#clock); if (!source.ok) return source;
+    const artifact = fromDomain(createResearchArtifact({ projectId: input.projectId, kind: input.kind, title: path.value, source: source.value }, this.ports)); if (!artifact.ok) return artifact;
+    const revision = fromDomain(createArtifactRevision({ projectId: input.projectId, artifactId: artifact.value.id, content: input.content, mediaType: input.mediaType, source: source.value }, this.ports)); if (!revision.ok) return revision;
+    const updated = fromDomain(addArtifactRevision(artifact.value, revision.value, artifact.value.version)); if (!updated.ok) return updated;
+    return this.#unitOfWork.commit(() => {
+      const storedArtifact = fromDomain(this.#store.artifacts.create(artifact.value)); if (!storedArtifact.ok) return storedArtifact;
+      const storedRevision = fromDomain(this.#store.revisions.append(revision.value)); if (!storedRevision.ok) return storedRevision;
+      return coreOk(Object.freeze({ artifact: updated.value, revision: storedRevision.value }));
+    });
   }
 
   createRevision(input: CreateRevisionCommand): CoreResult<ArtifactRevision> {
@@ -458,6 +565,44 @@ export class SestinaCore {
     return yaml.ok ? coreOk(Object.freeze({ briefId: active.brief.id, versionId: active.version.id, yaml: yaml.value })) : yaml;
   }
 
+  getArtifact(projectId: string, artifactId: string): CoreResult<ResearchArtifact | undefined> { return fromDomain(this.#store.artifacts.getById(projectId, artifactId)); }
+
+  listArtifacts(projectId: string): CoreResult<readonly ResearchArtifact[]> {
+    const page = fromDomain(this.#store.artifacts.listByProject(projectId, PAGE));
+    if (!page.ok) return page;
+    return page.value.nextCursor === undefined ? coreOk(page.value.items) : coreErr("state_conflict");
+  }
+
+  listRevisions(projectId: string, artifactId: string): CoreResult<readonly ArtifactRevision[]> {
+    const page = fromDomain(this.#store.revisions.listByArtifact(projectId, artifactId, PAGE));
+    if (!page.ok) return page;
+    return page.value.nextCursor === undefined ? coreOk(page.value.items) : coreErr("state_conflict");
+  }
+
+  getRevision(projectId: string, revisionId: string): CoreResult<ArtifactRevision | undefined> {
+    const artifacts = this.listArtifacts(projectId); if (!artifacts.ok) return artifacts;
+    for (const artifact of artifacts.value) {
+      const revision = fromDomain(this.#store.revisions.getById(projectId, artifact.id, revisionId));
+      if (!revision.ok) return revision;
+      if (revision.value !== undefined) return revision;
+    }
+    return coreOk(undefined);
+  }
+
+  diffRevisions(projectId: string, baselineRevisionId: string, candidateRevisionId: string): CoreResult<BlockDiff> {
+    const baseline = found(this.getRevision(projectId, baselineRevisionId)); if (!baseline.ok) return baseline;
+    const candidate = found(this.getRevision(projectId, candidateRevisionId)); if (!candidate.ok) return candidate;
+    if (baseline.value.artifactId !== candidate.value.artifactId) return coreErr("state_conflict");
+    const diff = diffMarkdownBlocks(baseline.value.inlineContent ?? "", candidate.value.inlineContent ?? "");
+    return diff.ok ? coreOk(diff.value) : { ok: false, error: mapDomainError(diff.error) };
+  }
+
+  listEpisodes(projectId: string): CoreResult<readonly RevisionEpisode[]> {
+    const page = fromDomain(this.#store.episodes.listByProject(projectId, PAGE));
+    if (!page.ok) return page;
+    return page.value.nextCursor === undefined ? coreOk(page.value.items) : coreErr("state_conflict");
+  }
+
   async diagnoseDatabase(input: { readonly backupDirectory: string; readonly dataRoot: string }): Promise<CoreResult<CoreDatabaseDiagnostics>> {
     const integrity = checkDatabaseIntegrity(this.#database.path);
     if (!integrity.ok) return coreErr("infrastructure_failure");
@@ -491,6 +636,26 @@ export class SestinaCore {
     for (const brief of page.value.items) {
       const version = getResearchBriefVersion(brief, versionId);
       if (version !== undefined) return coreOk(Object.freeze({ brief, version }));
+    }
+    return coreErr("not_found");
+  }
+
+  private findActiveBrief(projectId: string): CoreResult<{ readonly brief: ResearchBrief; readonly version: ResearchBriefVersion } | undefined> {
+    const page = fromDomain(this.#store.briefs.listByProject(projectId, PAGE)); if (!page.ok) return page;
+    if (page.value.nextCursor !== undefined) return coreErr("state_conflict");
+    const active = page.value.items.flatMap((brief) => {
+      const version = getActiveResearchBriefVersion(brief);
+      return version === undefined ? [] : [{ brief, version }];
+    }).sort((left, right) => right.version.createdAt.localeCompare(left.version.createdAt) || right.version.id.localeCompare(left.version.id));
+    return coreOk(active[0]);
+  }
+
+  private findBriefProposal(projectId: string, proposalId: string): CoreResult<{ readonly brief: ResearchBrief; readonly proposal: BriefChangeProposal }> {
+    const page = fromDomain(this.#store.briefs.listByProject(projectId, PAGE)); if (!page.ok) return page;
+    if (page.value.nextCursor !== undefined) return coreErr("state_conflict");
+    for (const brief of page.value.items) {
+      const proposal = brief.proposals.find((item) => item.id === proposalId);
+      if (proposal !== undefined) return coreOk(Object.freeze({ brief, proposal }));
     }
     return coreErr("not_found");
   }

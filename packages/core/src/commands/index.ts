@@ -1,5 +1,6 @@
 import type {
   ArtifactKind,
+  BriefChangeSet,
   DecisionScope,
   DecisionStatus,
   EvidenceBoundaryRule,
@@ -23,7 +24,11 @@ export interface ActivateBriefCommand {
   readonly evidenceBoundaries: readonly { readonly id?: string; readonly scope: ScopeRule; readonly statement: string; readonly forbiddenInferenceKinds: readonly ForbiddenInferenceKind[] }[];
   readonly explicitNonGoals: readonly string[];
 }
+export type EditBriefCommand = Omit<ActivateBriefCommand, "projectId" | "actor"> & { readonly projectId: string; readonly actor: ResearchActor; readonly expectedVersion?: number };
+export interface ProposeBriefChangeCommand { readonly projectId: string; readonly actor: ResearchActor; readonly changes: BriefChangeSet; readonly reason: string; readonly expectedVersion?: number; }
+export interface AcceptBriefChangeCommand { readonly projectId: string; readonly actor: ResearchActor; readonly proposalId: string; readonly expectedVersion?: number; }
 export interface CreateArtifactCommand { readonly projectId: string; readonly kind: ArtifactKind; readonly relativePath: string; readonly actor: ResearchActor; }
+export interface CreateArtifactWithRevisionCommand extends CreateArtifactCommand { readonly content: string; readonly mediaType: ResearchMediaType; }
 export interface CreateRevisionCommand { readonly projectId: string; readonly artifactId: string; readonly parentRevisionId?: string; readonly content: string; readonly mediaType: ResearchMediaType; readonly actor: ResearchActor; readonly allowFork?: boolean; }
 export interface RecordDecisionCommand { readonly projectId: string; readonly actor: ResearchActor; readonly statement: string; readonly scope: DecisionScope; readonly rationale: string; readonly effectiveBriefVersionId: string; readonly reopenConditions: readonly string[]; readonly status?: Extract<DecisionStatus, "proposed" | "accepted" | "frozen">; }
 export interface OpenIssueCommand { readonly projectId: string; readonly actor: ResearchActor; readonly kind: IssueKind; readonly target: ScopeTarget; readonly violatedCriterion: string; readonly rationaleConcepts: readonly string[]; readonly summary: string; readonly sourceArtifactId: string; readonly sourceRevisionId: string; readonly sourceRevisionContentHash: string; readonly lineageRootRevisionId: string; }
