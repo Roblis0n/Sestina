@@ -68,9 +68,10 @@ export function parseResearchIssue(input: unknown): ResearchResult<ResearchIssue
     const resolvedAt = validateUtcTimestamp(input.resolution.resolvedAt); if (!resolvedAt.ok) return resolvedAt;
     resolution = { ...context.value, reason: input.resolution.reason.trim(), source: resolutionSource.value, resolvedAt: resolvedAt.value };
   }
-  if (["resolved", "suppressed", "reopened"].includes(status.value) !== (resolution !== undefined)) return err(researchError("invalid_research_issue"));
   const reopenHistory: IssueReopenRecord[] = [];
   for (const value of input.reopenHistory) { if (!isRecord(value) || !Array.isArray(value.reasons) || value.reasons.length === 0 || value.reasons.some((reason) => !isNonBlankString(reason))) return err(researchError("invalid_research_issue")); const reopenSource = parseResearchSource(value.source); if (!reopenSource.ok) return reopenSource; const reopenedAt = validateUtcTimestamp(value.reopenedAt); if (!reopenedAt.ok) return reopenedAt; reopenHistory.push({ reasons: value.reasons.map((reason) => String(reason)), source: reopenSource.value, reopenedAt: reopenedAt.value }); }
+  const resolutionRequired = ["resolved", "suppressed", "reopened"].includes(status.value) || (["waived", "disputed"].includes(status.value) && reopenHistory.length > 0);
+  if (resolutionRequired !== (resolution !== undefined)) return err(researchError("invalid_research_issue"));
   return ok(cloneFrozen({ id: id.value.id, projectId: projectId.value.id, kind: kind.value, target: target.value.target, violatedCriterion: input.violatedCriterion.trim(), rationaleConcepts: concepts.value, summary: input.summary.trim(), sourceArtifactId: sourceArtifactId.value.id, sourceRevisionId: sourceRevisionId.value.id, sourceRevisionContentHash: input.sourceRevisionContentHash, lineageRootRevisionId: lineageRootRevisionId.value.id, source: source.value, fingerprint: fingerprint.value, status: status.value, transitions, version: version.value, createdAt: createdAt.value, updatedAt: updatedAt.value, ...(resolution ? { resolution } : {}), reopenHistory }));
 }
 

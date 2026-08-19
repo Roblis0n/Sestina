@@ -1,6 +1,7 @@
 import {
   activateRevisionEpisode,
   addArtifactRevision,
+  applyEpisodeWaiver,
   confirmBriefChangeProposal,
   createArtifactRevision,
   createBriefChangeProposal,
@@ -12,6 +13,7 @@ import {
   createResearchSnapshot as createFinalResearchSnapshot,
   createReviewInputSnapshot,
   createRevisionEpisode,
+  disputeResearchIssue,
   disposeRevisionEpisode,
   exportResearchBriefYaml,
   getActiveResearchBriefVersion,
@@ -19,9 +21,14 @@ import {
   parseResearchSource,
   recordEpisodeReview,
   requireEpisodeUserAction,
+  reopenResearchIssue,
+  resolveResearchIssue,
   stableResearchHash,
   submitEpisodeCandidate,
+  supersedeResearchDecision,
   transitionResearchDecision,
+  verifyResearchSnapshotHash,
+  waiveResearchIssue,
   type ArtifactRevision,
   type BriefChangeProposal,
   type BriefChangeSet,
@@ -60,7 +67,14 @@ import {
   type ReviewRun,
   type ReviewRunRepository,
 } from "@sestina/review";
-import { exportCapsule as exportReviewCapsule, renderReviewMarkdown, type ReviewCapsule } from "@sestina/reports";
+import {
+  exportCapsule as exportReviewCapsule,
+  importCapsuleResponse as importReviewCapsuleResponse,
+  renderReviewJson,
+  renderReviewMarkdown,
+  type CapsuleCandidateResponse,
+  type ReviewCapsule,
+} from "@sestina/reports";
 import {
   backupDatabase,
   checkDatabaseIntegrity,
@@ -73,6 +87,7 @@ import {
 import type {
   ActivateBriefCommand,
   AcceptBriefChangeCommand,
+  ApplyEpisodeWaiverCommand,
   CreateArtifactCommand,
   CreateArtifactWithRevisionCommand,
   CreateResearchSnapshotCommand,
@@ -82,12 +97,18 @@ import type {
   InitializeProjectCommand,
   OpenIssueCommand,
   ProposeBriefChangeCommand,
+  ReopenIssueCommand,
   RecordDecisionCommand,
   RecordUserDispositionCommand,
   RenderReviewReportCommand,
+  ResolveIssueCommand,
   RunDeterministicReviewCommand,
   StartRevisionEpisodeCommand,
   SubmitCandidateRevisionCommand,
+  SupersedeDecisionCommand,
+  TransitionDecisionCommand,
+  DisputeIssueCommand,
+  WaiveIssueCommand,
 } from "./commands/index.js";
 import { coreErr, coreOk, fromDomain, mapDomainError, type CoreResult } from "./errors.js";
 import { RandomIdFactory, SystemClock } from "./id-factory.js";
@@ -132,6 +153,22 @@ export interface CoreBriefMutation {
   readonly brief: ResearchBrief;
   readonly version: ResearchBriefVersion;
   readonly changedFields: readonly string[];
+}
+
+export interface EpisodeIntegritySummary {
+  readonly unresolved: readonly string[];
+  readonly stale: readonly string[];
+  readonly disputed: readonly string[];
+  readonly unproven: readonly string[];
+  readonly checkerFailed: readonly string[];
+}
+
+export interface CoreReviewSummary {
+  readonly run: ReviewRun;
+  readonly episode: RevisionEpisode;
+  readonly obligations: readonly ReviewObligation[];
+  readonly coverage: readonly ObligationCoverage[];
+  readonly outcome: ReviewOutcome;
 }
 
 function now(clock: Clock): string | undefined {
@@ -379,12 +416,76 @@ export class SestinaCore {
     });
   }
 
+  transitionDecision(input: TransitionDecisionCommand): CoreResult<ResearchDecision> {
+    const user = requireUser(input.actor); if (!user.ok) return user;
+    const current = found(fromDomain(this.#store.decisions.getById(input.projectId, input.decisionId))); if (!current.ok) return current;
+    if (input.expectedVersion !== undefined && input.expectedVersion !== current.value.version) return coreErr("stale_state");
+    const transitioned = fromDomain(transitionResearchDecision(current.value, input.target, user.value, current.value.version, input.reason, this.#clock));
+    return transitioned.ok ? fromDomain(this.#store.decisions.appendTransition(transitioned.value, current.value.version)) : transitioned;
+  }
+
+  supersedeDecision(input: SupersedeDecisionCommand): CoreResult<{ readonly superseded: ResearchDecision; readonly replacement: ResearchDecision }> {
+    const user = requireUser(input.actor); if (!user.ok) return user;
+    const current = found(fromDomain(this.#store.decisions.getById(input.projectId, input.decisionId))); if (!current.ok) return current;
+    if (input.expectedVersion !== undefined && input.expectedVersion !== current.value.version) return coreErr("stale_state");
+    const brief = this.findBriefVersion(input.projectId, input.effectiveBriefVersionId); if (!brief.ok) return brief;
+    const source = sourceFor(user.value, this.#clock); if (!source.ok) return source;
+    const replacement = fromDomain(createResearchDecision({ projectId: input.projectId, statement: input.statement, scope: input.scope, rationale: input.rationale, effectiveBriefVersionId: input.effectiveBriefVersionId, reopenConditions: input.reopenConditions, source: source.value }, this.ports)); if (!replacement.ok) return replacement;
+    const superseded = fromDomain(supersedeResearchDecision(current.value, replacement.value, user.value, current.value.version, replacement.value.version, input.reason, this.#clock)); if (!superseded.ok) return superseded;
+    return this.#unitOfWork.commit(() => {
+      const storedReplacement = fromDomain(this.#store.decisions.create(replacement.value)); if (!storedReplacement.ok) return storedReplacement;
+      const storedCurrent = fromDomain(this.#store.decisions.appendTransition(superseded.value.superseded, current.value.version)); if (!storedCurrent.ok) return storedCurrent;
+      const storedAccepted = fromDomain(this.#store.decisions.appendTransition(superseded.value.replacement, replacement.value.version)); if (!storedAccepted.ok) return storedAccepted;
+      return coreOk(Object.freeze({ superseded: storedCurrent.value, replacement: storedAccepted.value }));
+    });
+  }
+
   openIssue(input: OpenIssueCommand): CoreResult<ResearchIssue> {
     const revision = found(fromDomain(this.#store.revisions.getById(input.projectId, input.sourceArtifactId, input.sourceRevisionId))); if (!revision.ok) return revision;
     if (revision.value.content.contentHash !== input.sourceRevisionContentHash) return coreErr("stale_state");
     const source = sourceFor(input.actor, this.#clock); if (!source.ok) return source;
     const issue = fromDomain(createResearchIssue({ ...input, source: source.value }, this.ports));
     return issue.ok ? fromDomain(this.#store.issues.create(issue.value)) : issue;
+  }
+
+  resolveIssue(input: ResolveIssueCommand): CoreResult<ResearchIssue> {
+    const user = requireUser(input.actor); if (!user.ok) return user;
+    const current = found(fromDomain(this.#store.issues.getById(input.projectId, input.issueId))); if (!current.ok) return current;
+    if (input.expectedVersion !== undefined && input.expectedVersion !== current.value.version) return coreErr("stale_state");
+    const active = this.findActiveBrief(input.projectId); if (!active.ok) return active;
+    const decisions = this.listDecisions(input.projectId); if (!decisions.ok) return decisions;
+    const resolved = fromDomain(resolveResearchIssue(current.value, user.value, current.value.version, input.reason, {
+      resolutionEvidenceId: input.resolutionEvidenceId,
+      ...(active.value ? { briefVersionId: active.value.version.id } : {}),
+      frozenDecisionIds: decisions.value.filter((item) => item.status === "frozen").map((item) => item.id),
+    }, this.#clock));
+    return resolved.ok ? fromDomain(this.#store.issues.appendTransition(resolved.value, current.value.version)) : resolved;
+  }
+
+  waiveIssue(input: WaiveIssueCommand): CoreResult<ResearchIssue> {
+    const user = requireUser(input.actor); if (!user.ok) return user;
+    if (input.scope.kind !== "issue" || input.scope.issueId !== input.issueId) return coreErr("invalid_input");
+    const current = found(fromDomain(this.#store.issues.getById(input.projectId, input.issueId))); if (!current.ok) return current;
+    if (input.expectedVersion !== undefined && input.expectedVersion !== current.value.version) return coreErr("stale_state");
+    const reason = input.invalidationCondition === undefined ? input.reason : `${input.reason} Invalidation condition: ${input.invalidationCondition}`;
+    const waived = fromDomain(waiveResearchIssue(current.value, user.value, current.value.version, reason, this.#clock));
+    return waived.ok ? fromDomain(this.#store.issues.appendTransition(waived.value, current.value.version)) : waived;
+  }
+
+  disputeIssue(input: DisputeIssueCommand): CoreResult<ResearchIssue> {
+    const user = requireUser(input.actor); if (!user.ok) return user;
+    const current = found(fromDomain(this.#store.issues.getById(input.projectId, input.issueId))); if (!current.ok) return current;
+    if (input.expectedVersion !== undefined && input.expectedVersion !== current.value.version) return coreErr("stale_state");
+    const disputed = fromDomain(disputeResearchIssue(current.value, user.value, current.value.version, input.reason, this.#clock));
+    return disputed.ok ? fromDomain(this.#store.issues.appendTransition(disputed.value, current.value.version)) : disputed;
+  }
+
+  reopenIssue(input: ReopenIssueCommand): CoreResult<ResearchIssue> {
+    const user = requireUser(input.actor); if (!user.ok) return user;
+    const current = found(fromDomain(this.#store.issues.getById(input.projectId, input.issueId))); if (!current.ok) return current;
+    if (input.expectedVersion !== undefined && input.expectedVersion !== current.value.version) return coreErr("stale_state");
+    const reopened = fromDomain(reopenResearchIssue(current.value, user.value, current.value.version, input.reason, { ...input.context, userRequested: true }, this.#clock));
+    return reopened.ok ? fromDomain(this.#store.issues.appendTransition(reopened.value, current.value.version)) : reopened;
   }
 
   startRevisionEpisode(input: StartRevisionEpisodeCommand): CoreResult<RevisionEpisode> {
@@ -467,11 +568,32 @@ export class SestinaCore {
     const run = await runReview(context.value, new CheckerRegistry([freshness, scope]), { ...this.ports, mode: "sequential" });
     if (!run.ok) return { ok: false, error: mapDomainError(run.error) };
     const products = reviewProducts(run.value, episode.value);
+    const issueSource = sourceFor(SYSTEM_ACTOR, this.#clock); if (!issueSource.ok) return issueSource;
+    const generatedIssues: ResearchIssue[] = [];
+    for (const finding of run.value.findings) {
+      if (!["scope_violation", "scope_rule_conflict"].includes(finding.kind) || finding.target.kind !== "block" || finding.target.artifactId === undefined || finding.target.blockId === undefined) continue;
+      const issue = fromDomain(createResearchIssue({
+        projectId: input.projectId,
+        kind: "scope_violation",
+        target: { kind: "block", artifactId: finding.target.artifactId, blockId: finding.target.blockId },
+        violatedCriterion: "confirmed_scope",
+        rationaleConcepts: [finding.kind],
+        summary: finding.rationale,
+        sourceArtifactId: artifact.value.id,
+        sourceRevisionId: candidate.value.id,
+        sourceRevisionContentHash: candidate.value.content.contentHash,
+        lineageRootRevisionId: baseline.value.id,
+        source: issueSource.value,
+      }, this.ports));
+      if (!issue.ok) return issue;
+      generatedIssues.push(issue.value);
+    }
     const reviewed = fromDomain(recordEpisodeReview(episode.value, run.value.id, run.value.findings.map((item) => item.id), SYSTEM_ACTOR, episode.value.version, this.#clock)); if (!reviewed.ok) return reviewed;
     const required = fromDomain(requireEpisodeUserAction(reviewed.value, episodeOutcomeFromCoverage(products.coverage), SYSTEM_ACTOR, reviewed.value.version, this.#clock)); if (!required.ok) return required;
     const persisted = this.#unitOfWork.commit(() => {
       const storedSnapshot = fromDomain(this.#store.snapshots.create(snapshot.value)); if (!storedSnapshot.ok) return storedSnapshot;
       const storedRun = this.#reviews.create(run.value); if (!storedRun.ok) return { ok: false, error: mapDomainError(storedRun.error) };
+      for (const issue of generatedIssues) { const storedIssue = fromDomain(this.#store.issues.create(issue)); if (!storedIssue.ok) return storedIssue; }
       const storedReviewed = fromDomain(this.#store.episodes.compareAndSwap(reviewed.value, episode.value.version)); if (!storedReviewed.ok) return storedReviewed;
       const storedRequired = fromDomain(this.#store.episodes.compareAndSwap(required.value, reviewed.value.version)); if (!storedRequired.ok) return storedRequired;
       return coreOk(Object.freeze({ run: storedRun.value, episode: storedRequired.value, snapshot: storedSnapshot.value, ...products }));
@@ -487,28 +609,63 @@ export class SestinaCore {
     return disposed.ok ? fromDomain(this.#store.episodes.compareAndSwap(disposed.value, episode.value.version)) : disposed;
   }
 
+  applyEpisodeWaiver(input: ApplyEpisodeWaiverCommand): CoreResult<RevisionEpisode> {
+    const user = requireUser(input.actor); if (!user.ok) return user;
+    const episode = found(this.getEpisode(input.projectId, input.episodeId)); if (!episode.ok) return episode;
+    const reason = input.invalidationCondition === undefined ? input.reason : `${input.reason} Invalidation condition: ${input.invalidationCondition}`;
+    const waived = fromDomain(applyEpisodeWaiver(episode.value, { dimension: input.dimension, scope: input.scope, reason }, user.value, episode.value.version, this.#clock));
+    return waived.ok ? fromDomain(this.#store.episodes.compareAndSwap(waived.value, episode.value.version)) : waived;
+  }
+
+  getEpisodeIntegritySummary(projectId: string, episodeId: string): CoreResult<EpisodeIntegritySummary> {
+    const bundle = this.loadReviewBundle(projectId, episodeId); if (!bundle.ok) return bundle;
+    const issues = this.listIssues(projectId); if (!issues.ok) return issues;
+    const unresolved = issues.value.filter((item) => ["open", "acknowledged", "reopened"].includes(item.status)).map((item) => item.id).sort();
+    const disputed = issues.value.filter((item) => item.status === "disputed").map((item) => item.id).sort();
+    const currentById = new Map(issues.value.map((item) => [item.id, item]));
+    const stale = bundle.value.episode.lockedStart.relevantIssues.filter((locked) => {
+      const current = currentById.get(locked.issueId);
+      return current?.version !== locked.version || current.status !== locked.status;
+    }).map((item) => item.issueId).sort();
+    const products = reviewProducts(bundle.value.run, bundle.value.episode);
+    const unproven = products.coverage.filter((item) => item.status === "unproven").map((item) => item.obligationId).sort();
+    const checkerFailed = [...new Set([...products.coverage.filter((item) => item.status === "checker_failed").map((item) => item.obligationId), ...bundle.value.run.checkerErrors.map((item) => item.checker.id)])].sort();
+    return coreOk(Object.freeze({ unresolved: Object.freeze(unresolved), stale: Object.freeze(stale), disputed: Object.freeze(disputed), unproven: Object.freeze(unproven), checkerFailed: Object.freeze(checkerFailed) }));
+  }
+
   createResearchSnapshot(input: CreateResearchSnapshotCommand): CoreResult<ResearchSnapshot> {
     const episode = found(this.getEpisode(input.projectId, input.episodeId)); if (!episode.ok) return episode;
     const snapshot = fromDomain(createFinalResearchSnapshot(episode.value, { buildVersion: input.buildVersion, limitations: input.limitations }, this.ports));
     return snapshot.ok ? fromDomain(this.#store.snapshots.create(snapshot.value)) : snapshot;
   }
 
+  verifyResearchSnapshot(projectId: string, snapshotId: string): CoreResult<boolean> {
+    const snapshot = found(this.getSnapshot(projectId, snapshotId)); if (!snapshot.ok) return snapshot;
+    return fromDomain(verifyResearchSnapshotHash(snapshot.value));
+  }
+
   renderReviewReport(input: RenderReviewReportCommand): CoreResult<string> {
-    if (input.format !== "markdown") return coreErr("unsupported_format");
+    if (input.format !== "markdown" && input.format !== "json") return coreErr("unsupported_format");
     const bundle = this.loadReviewBundle(input.projectId, input.episodeId); if (!bundle.ok) return bundle;
     const products = reviewProducts(bundle.value.run, bundle.value.episode);
     try {
-      return coreOk(renderReviewMarkdown({
+      const reportInput = {
         title: `Review of ${bundle.value.artifact.title}`,
         taskSummary: bundle.value.brief.version.currentTask,
         run: bundle.value.run,
         ...products,
         preservedContent: [],
         userActions: bundle.value.episode.status === "user_action_required" ? ["Accept, reject, or abandon this reviewed candidate explicitly."] : [`Episode disposition: ${bundle.value.episode.status}.`],
-      }));
+      };
+      return coreOk(input.format === "markdown" ? renderReviewMarkdown(reportInput) : renderReviewJson(reportInput));
     } catch {
       return coreErr("review_blocked");
     }
+  }
+
+  renderReviewReportForRun(projectId: string, reviewRunId: string, format: "markdown" | "json"): CoreResult<string> {
+    const episode = this.findEpisodeByReviewRun(projectId, reviewRunId); if (!episode.ok) return episode;
+    return this.renderReviewReport({ projectId, episodeId: episode.value.id, format });
   }
 
   exportCapsule(input: ExportCapsuleCommand): CoreResult<{ readonly capsule: ReviewCapsule; readonly json: string }> {
@@ -542,6 +699,29 @@ export class SestinaCore {
       checkerVersions: bundle.value.run.context.checkerSet,
     }, { includePermittedFullText: input.includePermittedFullText });
     return exported.ok ? coreOk(exported.value) : { ok: false, error: mapDomainError(exported.error) };
+  }
+
+  importCapsuleResponse(projectId: string, json: string): CoreResult<CapsuleCandidateResponse> {
+    let raw: Record<string, unknown>;
+    try { const parsed = JSON.parse(json) as unknown; if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return coreErr("invalid_input"); raw = parsed as Record<string, unknown>; }
+    catch { return coreErr("invalid_input"); }
+    if (typeof raw.reviewInputHash !== "string") return coreErr("invalid_input");
+    const episodes = this.listEpisodes(projectId); if (!episodes.ok) return episodes;
+    for (const episode of episodes.value) {
+      const runId = episode.reviewRunIds.at(-1); if (runId === undefined) continue;
+      const run = found(this.getReviewRun(projectId, runId)); if (!run.ok) return run;
+      if (run.value.inputHash !== raw.reviewInputHash || episode.candidateRevisionId === undefined) continue;
+      const snapshot = found(this.getSnapshot(projectId, run.value.snapshotId)); if (!snapshot.ok) return snapshot;
+      const imported = importReviewCapsuleResponse(json, {
+        projectId,
+        snapshotHash: snapshot.value.hash,
+        reviewInputHash: run.value.inputHash,
+        briefVersionId: episode.lockedStart.briefVersionId,
+        artifactRevisionId: episode.candidateRevisionId,
+      });
+      return imported.ok ? coreOk(imported.value) : { ok: false, error: mapDomainError(imported.error) };
+    }
+    return coreErr("stale_state");
   }
 
   getProject(projectId: string): CoreResult<ResearchProject | undefined> { return fromDomain(this.#store.projects.getById(projectId)); }
@@ -603,6 +783,34 @@ export class SestinaCore {
     return page.value.nextCursor === undefined ? coreOk(page.value.items) : coreErr("state_conflict");
   }
 
+  listDecisions(projectId: string): CoreResult<readonly ResearchDecision[]> {
+    const page = fromDomain(this.#store.decisions.listByScope(projectId, undefined, PAGE));
+    if (!page.ok) return page;
+    return page.value.nextCursor === undefined ? coreOk(page.value.items) : coreErr("state_conflict");
+  }
+
+  getDecision(projectId: string, decisionId: string): CoreResult<ResearchDecision | undefined> { return fromDomain(this.#store.decisions.getById(projectId, decisionId)); }
+
+  listIssues(projectId: string): CoreResult<readonly ResearchIssue[]> {
+    const page = fromDomain(this.#store.issues.listByStatus(projectId, undefined, PAGE));
+    if (!page.ok) return page;
+    return page.value.nextCursor === undefined ? coreOk(page.value.items) : coreErr("state_conflict");
+  }
+
+  getIssue(projectId: string, issueId: string): CoreResult<ResearchIssue | undefined> { return fromDomain(this.#store.issues.getById(projectId, issueId)); }
+
+  listSnapshots(projectId: string, episodeId: string): CoreResult<readonly ResearchSnapshot[]> {
+    const page = fromDomain(this.#store.snapshots.listByEpisode(projectId, episodeId, PAGE));
+    if (!page.ok) return page;
+    return page.value.nextCursor === undefined ? coreOk(page.value.items) : coreErr("state_conflict");
+  }
+
+  getReviewSummary(projectId: string, reviewRunId: string): CoreResult<CoreReviewSummary> {
+    const episode = this.findEpisodeByReviewRun(projectId, reviewRunId); if (!episode.ok) return episode;
+    const run = found(this.getReviewRun(projectId, reviewRunId)); if (!run.ok) return run;
+    return coreOk(Object.freeze({ run: run.value, episode: episode.value, ...reviewProducts(run.value, episode.value) }));
+  }
+
   async diagnoseDatabase(input: { readonly backupDirectory: string; readonly dataRoot: string }): Promise<CoreResult<CoreDatabaseDiagnostics>> {
     const integrity = checkDatabaseIntegrity(this.#database.path);
     if (!integrity.ok) return coreErr("infrastructure_failure");
@@ -658,6 +866,12 @@ export class SestinaCore {
       if (proposal !== undefined) return coreOk(Object.freeze({ brief, proposal }));
     }
     return coreErr("not_found");
+  }
+
+  private findEpisodeByReviewRun(projectId: string, reviewRunId: string): CoreResult<RevisionEpisode> {
+    const episodes = this.listEpisodes(projectId); if (!episodes.ok) return episodes;
+    const episode = episodes.value.find((item) => item.reviewRunIds.includes(reviewRunId));
+    return episode === undefined ? coreErr("not_found") : coreOk(episode);
   }
 
   private loadReviewBundle(projectId: string, episodeId: string): CoreResult<{

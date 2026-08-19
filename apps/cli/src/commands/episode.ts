@@ -3,10 +3,14 @@ import { stringOption, type ParsedCliArguments } from "../arguments.js";
 import { EXIT_CODES, type CliExitCode } from "../exit-codes.js";
 import { commandExitCode, openLocalProject } from "../local-project.js";
 import { failure, success, type CliIo } from "../output.js";
+import { parseDecisionScope } from "../research-options.js";
 
 function coreFailure<T>(result: Exclude<CoreResult<T>, { readonly ok: true }>, io: CliIo, json: boolean): CliExitCode {
   return failure(io, json, commandExitCode(result.error.code), result.error.code, "The Revision Episode command could not be completed.");
 }
+
+const WAIVABLE_DIMENSIONS = ["fulfillment", "evidence", "scope", "decisionIntegrity", "issueIntegrity"] as const;
+function isWaivableDimension(value: string | undefined): value is typeof WAIVABLE_DIMENSIONS[number] { return value !== undefined && WAIVABLE_DIMENSIONS.some((item) => item === value); }
 
 function view(episode: unknown): Readonly<Record<string, unknown>> {
   const value = episode as { readonly id: string; readonly status: string; readonly artifactId: string; readonly candidateRevisionId?: string; readonly reviewRunIds: readonly string[]; readonly findingIds: readonly string[]; readonly lockedStart: { readonly briefVersionId: string; readonly baselineRevisionId: string; readonly activeDecisions: readonly unknown[]; readonly relevantIssues: readonly unknown[]; readonly evidenceBoundaryIds: readonly string[]; readonly checkerVersion: string; readonly projectStateFingerprint: string; readonly repositoryStateFingerprint: string } };
@@ -45,7 +49,27 @@ export async function runEpisode(args: ParsedCliArguments, io: CliIo): Promise<C
       success(io, json, { command: "episode show", ...view(episode.value) }, JSON.stringify(view(episode.value), null, 2));
       return EXIT_CODES.success;
     }
-    return failure(io, json, EXIT_CODES.invalidInput, "invalid_input", "Use episode start, submit, or show.");
+    if (["accept", "reject"].includes(String(subcommand)) && args.positionals.length === 3) {
+      const episodeId = args.positionals[2] ?? ""; const reason = stringOption(args, "reason");
+      if (!reason) return failure(io, json, EXIT_CODES.invalidInput, "invalid_input", `episode ${subcommand} requires --reason.`);
+      if (args.options.yes !== true) return failure(io, json, EXIT_CODES.userConfirmationRequired, "user_confirmation_required", "Explicit --yes confirmation is required.");
+      const integrity = local.core.getEpisodeIntegritySummary(local.project.id, episodeId); if (!integrity.ok) return coreFailure(integrity, io, json);
+      const disposed = local.core.recordUserDisposition({ projectId: local.project.id, episodeId, disposition: subcommand === "accept" ? "accepted" : "rejected", reason, actor: { kind: "user", actorId: "cli-user" } });
+      if (!disposed.ok) return coreFailure(disposed, io, json);
+      const riskCount = integrity.value.unresolved.length + integrity.value.stale.length + integrity.value.disputed.length + integrity.value.unproven.length + integrity.value.checkerFailed.length;
+      success(io, json, { command: `episode ${subcommand}`, episodeId, status: disposed.value.status, integrity: integrity.value, verified: false, semanticStatus: "unproven", riskAccepted: subcommand === "accept" && riskCount > 0 }, `Episode ${episodeId} is ${disposed.value.status}; integrity receipt remains unproven.`);
+      return EXIT_CODES.success;
+    }
+    if (subcommand === "waive" && args.positionals.length === 3) {
+      const episodeId = args.positionals[2] ?? ""; const reason = stringOption(args, "reason"); const scope = parseDecisionScope(stringOption(args, "scope")); const dimension = stringOption(args, "dimension"); const invalidationCondition = stringOption(args, "invalidation");
+      if (!reason || !scope || !isWaivableDimension(dimension)) return failure(io, json, EXIT_CODES.invalidInput, "invalid_input", "episode waive requires --dimension, --scope, and --reason.");
+      if (args.options.yes !== true) return failure(io, json, EXIT_CODES.userConfirmationRequired, "user_confirmation_required", "Explicit --yes confirmation is required.");
+      const waived = local.core.applyEpisodeWaiver({ projectId: local.project.id, episodeId, actor: { kind: "user", actorId: "cli-user" }, dimension, scope, reason, ...(invalidationCondition ? { invalidationCondition } : {}) });
+      if (!waived.ok) return coreFailure(waived, io, json);
+      success(io, json, { command: "episode waive", episodeId, status: waived.value.status, userDisposition: waived.value.outcome?.userDisposition, dimension, scope, invalidationCondition, verified: false }, `Waived ${dimension} only for the explicit scope; Episode remains ${waived.value.status}.`);
+      return EXIT_CODES.success;
+    }
+    return failure(io, json, EXIT_CODES.invalidInput, "invalid_input", "Use episode start, submit, show, accept, reject, or waive.");
   } finally {
     local.core.close();
   }
