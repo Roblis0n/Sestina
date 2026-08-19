@@ -57,3 +57,7 @@ export { FOCUS_SUBSTITUTION_RUBRIC, validateFocusSubstitutionAssessment } from "
 export type { FocusSubstitutionAssessment, FocusSubstitutionVerdict, IntentRelationship } from "./semantic/rubrics/focus-substitution.js";
 export { AUDIT_HIJACKING_RUBRIC, validateAuditHijackingAssessment } from "./semantic/rubrics/audit-hijacking.js";
 export type { AuditClassification, AuditHijackingAssessment } from "./semantic/rubrics/audit-hijacking.js";
+export { SEMANTIC_SCOPE_RUBRIC, resolveScopeAssessment, validateSemanticScopeAssessment } from "./semantic/rubrics/semantic-scope.js";
+export type { DeterministicScopeResult, ResolvedScopeAssessment, ScopeChangeRelationship, SemanticScopeAssessment, SemanticScopeCategory, SemanticScopeChange } from "./semantic/rubrics/semantic-scope.js";
+export { DECISION_INTEGRITY_RUBRIC, validateDecisionIntegrityAssessment } from "./semantic/rubrics/decision-integrity.js";
+export type { DecisionConflict, DecisionConflictRelationship, DecisionIntegrityAssessment, SuppliedDecisionContext } from "./semantic/rubrics/decision-integrity.js";
