@@ -1,4 +1,4 @@
-export type { CheckerResult, ResearchChecker } from "./checker.js";
+export type { CheckerObservation, CheckerResult, ResearchChecker } from "./checker.js";
 export { CheckerRegistry } from "./registry.js";
 export { calculateReviewInputHash, parseReviewContext } from "./review-context.js";
 export type {
@@ -15,3 +15,8 @@ export type { CheckerErrorRecord, ReviewRun, ReviewRunStatus } from "./review-ru
 export { reviewErr, reviewError, reviewOk } from "./review-result.js";
 export type { ReviewError, ReviewErrorCode, ReviewResult } from "./review-result.js";
 export type { ReviewRunRepository } from "./repository/review-run-repository.js";
+export { FreshnessChecker } from "./checkers/freshness-checker.js";
+export type { FreshnessObservation } from "./checkers/freshness-checker.js";
+export { FRESHNESS_REASONS, FRESHNESS_RATIONALE, FRESHNESS_RECOVERY } from "./checkers/freshness-reasons.js";
+export type { FreshnessReason } from "./checkers/freshness-reasons.js";
+export { findingIdFromFingerprint, reviewFingerprint } from "./checkers/fingerprint.js";

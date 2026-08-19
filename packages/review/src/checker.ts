@@ -1,7 +1,8 @@
 import type { Finding } from "./finding.js";
 import type { CheckerKind, ReviewContext } from "./review-context.js";
 
-export interface CheckerResult { readonly findings: readonly Finding[]; }
+export interface CheckerObservation { readonly code: string; readonly message: string; }
+export interface CheckerResult { readonly findings: readonly Finding[]; readonly observations?: readonly CheckerObservation[]; }
 
 export interface ResearchChecker {
   readonly id: string;
