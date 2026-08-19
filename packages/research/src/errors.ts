@@ -39,7 +39,13 @@ export type ResearchErrorCode =
   | "invalid_decision_status"
   | "invalid_decision_transition"
   | "user_decision_required"
-  | "decision_supersede_required";
+  | "decision_supersede_required"
+  | "invalid_research_issue"
+  | "invalid_issue_kind"
+  | "invalid_issue_fingerprint"
+  | "invalid_issue_transition"
+  | "issue_reopen_not_allowed"
+  | "user_issue_action_required";
 
 export type ResearchErrorDetails = Readonly<
   Record<string, string | number | boolean>
@@ -93,4 +99,10 @@ const MESSAGES: Readonly<Record<ResearchErrorCode, string>> = {
   invalid_decision_transition: "decision status transition is not allowed",
   user_decision_required: "an explicit user decision is required",
   decision_supersede_required: "conflicting decisions require explicit supersede",
+  invalid_research_issue: "research issue is missing or malformed",
+  invalid_issue_kind: "issue kind is unknown",
+  invalid_issue_fingerprint: "issue fingerprint input is missing or malformed",
+  invalid_issue_transition: "issue status transition is not allowed",
+  issue_reopen_not_allowed: "no issue reopen condition is satisfied",
+  user_issue_action_required: "an explicit user issue action is required",
 };

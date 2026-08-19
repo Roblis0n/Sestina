@@ -166,6 +166,52 @@ export type {
   ActiveDecisionMatch,
 } from "./decision/research-decision.js";
 
+export { ISSUE_KINDS, parseIssueKind } from "./issue/issue-kind.js";
+export type { IssueKind } from "./issue/issue-kind.js";
+export {
+  createIssueFingerprint,
+  normalizeIssueFingerprintInput,
+} from "./issue/issue-fingerprint.js";
+export type {
+  IssueFingerprintInput,
+  NormalizedIssueFingerprintInput,
+} from "./issue/issue-fingerprint.js";
+export {
+  parseIssueResolutionContext,
+  evaluateIssueReopenReasons,
+} from "./issue/reopen-condition.js";
+export type {
+  IssueReopenContext,
+  IssueResolutionContext,
+} from "./issue/reopen-condition.js";
+export {
+  ISSUE_STATUSES,
+  parseIssueStatus,
+  parseIssueTransition,
+} from "./issue/issue-transition.js";
+export type {
+  IssueStatus,
+  IssueTransition,
+} from "./issue/issue-transition.js";
+export {
+  createResearchIssue,
+  parseResearchIssue,
+  acknowledgeResearchIssue,
+  disputeResearchIssue,
+  waiveResearchIssue,
+  resolveResearchIssue,
+  suppressResolvedIssue,
+  reopenResearchIssue,
+} from "./issue/research-issue.js";
+export type {
+  ResearchIssueInput,
+  ResearchIssue,
+  IssueResolution,
+  IssueReopenRecord,
+} from "./issue/research-issue.js";
+export { matchResearchIssue } from "./issue/issue-matcher.js";
+export type { IssueMatch } from "./issue/issue-matcher.js";
+
 import type { ResearchIdPrefix } from "./identity/research-id.js";
 
 export interface IdFactory {
