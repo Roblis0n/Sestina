@@ -18,8 +18,9 @@ export function deriveCoverage(obligations: readonly ReviewObligation[], assessm
   if ([...byObligation.keys()].some((id) => !obligationIds.has(id))) throw new Error("Assessment names an unknown obligation");
   return cloneReviewValue(obligations.map((obligation) => {
     const assessment = byObligation.get(obligation.id);
+    const explanation = assessment?.explanation?.trim();
     return assessment
-      ? { ...assessment, findingIds: [...new Set(assessment.findingIds)].sort(), explanation: assessment.explanation?.trim() || `Coverage recorded as ${assessment.status}` }
+      ? { ...assessment, findingIds: [...new Set(assessment.findingIds)].sort(), explanation: explanation && explanation.length > 0 ? explanation : `Coverage recorded as ${assessment.status}` }
       : { obligationId: obligation.id, status: "unproven" as const, findingIds: [], explanation: "No checker result proved or disproved this obligation" };
   }));
 }

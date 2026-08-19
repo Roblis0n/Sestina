@@ -46,15 +46,15 @@ export class ScopeChecker implements ResearchChecker {
   }
   supports(): boolean { return true; }
 
-  async run(context: ReviewContext): Promise<CheckerResult> {
+  run(context: ReviewContext): Promise<CheckerResult> {
     const finding = (kind: "scope_unknown" | "scope_violation" | "scope_rule_conflict", rationale: string, change?: LocatedChange): Finding => {
       const before = change?.baseline; const after = change?.candidate;
       const created = createFinding({
         id: findingIdFromFingerprint({ checker: this.id, inputHash: context.inputHash, kind, path: change?.relativePath, blockId: change?.blockId, operation: change?.operation }),
         kind, severity: kind === "scope_unknown" ? "warning" : "error",
         target: change ? { kind: "block", artifactId: change.artifactId, relativePath: change.relativePath, blockId: change.blockId } : { kind: "project" },
-        baselineEvidence: before ? [{ artifactId: change?.artifactId, revisionId: context.baselineRevision.id, startLine: before.startLine, endLine: before.endLine, excerptHash: before.contentHash }] : [],
-        candidateEvidence: after ? [{ artifactId: change?.artifactId, revisionId: context.candidateRevision.id, startLine: after.startLine, endLine: after.endLine, excerptHash: after.contentHash }] : [],
+        baselineEvidence: before ? [{ artifactId: change.artifactId, revisionId: context.baselineRevision.id, startLine: before.startLine, endLine: before.endLine, excerptHash: before.contentHash }] : [],
+        candidateEvidence: after ? [{ artifactId: change.artifactId, revisionId: context.candidateRevision.id, startLine: after.startLine, endLine: after.endLine, excerptHash: after.contentHash }] : [],
         briefVersionId: context.briefVersion.id, decisionIds: context.activeDecisions.map((item) => item.id), issueIds: context.relevantIssues.map((item) => item.id),
         checker: { id: this.id, version: this.version, kind: this.kind }, confidence: { source: "rule", value: kind === "scope_unknown" ? 0 : 1 }, rationale,
         minimumRecovery: kind === "scope_unknown" ? "Rebind the changed heading or path, then re-run scope review" : "Restore the specific block or obtain a user-confirmed scope proposal",
@@ -62,7 +62,7 @@ export class ScopeChecker implements ResearchChecker {
       });
       if (!created.ok) throw new Error("Scope Finding construction failed"); return created.value;
     };
-    if (!this.#valid) return { findings: [finding("scope_unknown", "A project path, rule, or user confirmation could not be validated")], observations: [{ code: "scope_unknown", message: "Scope inputs could not be located safely" }] };
+    if (!this.#valid) return Promise.resolve({ findings: [finding("scope_unknown", "A project path, rule, or user confirmation could not be validated")], observations: [{ code: "scope_unknown", message: "Scope inputs could not be located safely" }] });
     const before = new Map(this.#input.baselineDocuments.map((document) => [`${document.artifactId}\u0000${document.relativePath}`, document]));
     const after = new Map(this.#input.candidateDocuments.map((document) => [`${document.artifactId}\u0000${document.relativePath}`, document]));
     const changes: LocatedChange[] = []; const unknowns: Finding[] = [];
@@ -88,6 +88,6 @@ export class ScopeChecker implements ResearchChecker {
       if (allow && forbid) findings.push(finding("scope_rule_conflict", `The ${operation} change matches both an allowed and forbidden rule`, change));
       else if (forbid || !allow) findings.push(finding("scope_violation", `The ${operation} change is outside the confirmed allowed scope`, change));
     }
-    return cloneReviewValue({ findings, observations });
+    return Promise.resolve(cloneReviewValue({ findings, observations }));
   }
 }

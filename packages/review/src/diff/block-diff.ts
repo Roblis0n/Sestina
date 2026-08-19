@@ -13,7 +13,7 @@ export function diffMarkdownBlocks(baselineMarkdown: string, candidateMarkdown: 
   if (!baseline.ok) return reviewErr(baseline.error);
   if (!candidate.ok) return reviewErr(candidate.error);
   const headingRename = baseline.value.headings.length === candidate.value.headings.length && baseline.value.headings.some((heading, index) => {
-    const other = candidate.value.headings[index]; return other !== undefined && heading.level === other.level && heading.title !== other.title;
+    const other = candidate.value.headings[index]; return other?.level === heading.level && heading.title !== other.title;
   });
   if (headingRename) return reviewOk(cloneReviewValue({ changes: [], scopeUnknown: true, unknownReason: "heading_location_changed" as const }));
 

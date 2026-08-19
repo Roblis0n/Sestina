@@ -51,7 +51,7 @@ function normalizeSqliteValue(value: unknown): unknown {
 }
 
 function allRows(db: StorageDatabase, table: string): readonly Record<string, unknown>[] {
-  const rows = db.all<Record<string, unknown>>(`SELECT * FROM ${quoteIdentifier(table)}`)
+  const rows = db.all(`SELECT * FROM ${quoteIdentifier(table)}`)
     .map((row) => normalizeSqliteValue(row) as Record<string, unknown>);
   return rows.toSorted((left, right) => hashCanonical(left).localeCompare(hashCanonical(right)));
 }
@@ -80,7 +80,8 @@ export async function loadLegacySnapshot(sourcePath: string): Promise<LegacySnap
     const tables = db.all<{ name: string }>(
       "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
     ).map((row) => row.name);
-    const fullDigestInput = tables.map((table) => ({ table, rows: allRows(db as StorageDatabase, table) }));
+    const readableDb = db;
+    const fullDigestInput = tables.map((table) => ({ table, rows: allRows(readableDb, table) }));
 
     const projects: LegacyProjectRow[] = tableExists(db, "projects")
       ? db.all<{ project_id: string; display_name: string; created_at: string | number; data: string }>(

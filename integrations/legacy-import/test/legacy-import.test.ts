@@ -310,9 +310,10 @@ describe("read-only legacy research importer", () => {
       const selection = { planItemIds: project ? [project.planItemId] : [], selectedBy: { kind: "user" as const, actorId: "user-1" } };
       expect(await executeLegacyImport({ sourcePath: source, targetDatabase: db, plan, selection })).toMatchObject({ ok: true });
       const row = db.get<{ project_id: string; data: string }>("SELECT project_id, data FROM research_projects");
-      const changed = JSON.parse(row?.data ?? "{}");
-      changed.title = "conflicting title";
-      db.run("UPDATE research_projects SET title = ?, data = ? WHERE project_id = ?", changed.title, JSON.stringify(changed), row?.project_id);
+      const parsed: unknown = JSON.parse(row?.data ?? "{}");
+      if (typeof parsed !== "object" || parsed === null || typeof row?.project_id !== "string") throw new Error("invalid project fixture");
+      const changed = { ...parsed, title: "conflicting title" };
+      db.run("UPDATE research_projects SET title = ?, data = ? WHERE project_id = ?", changed.title, JSON.stringify(changed), row.project_id);
       expect(await executeLegacyImport({ sourcePath: source, targetDatabase: db, plan, selection })).toMatchObject({
         ok: false,
         error: { code: "legacy_import_conflict" },

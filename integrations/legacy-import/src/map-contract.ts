@@ -5,7 +5,6 @@ import {
   type ResearchArtifact,
   type ResearchBrief,
   type ResearchSource,
-  type ResearchIdPrefix,
 } from "@sestina/research";
 import { TaskContractSchema } from "@sestina/schema";
 import type { LegacyContractRow } from "./types.js";
@@ -13,7 +12,7 @@ import type { LegacyContractRow } from "./types.js";
 class FixedIds implements IdFactory {
   private index = 0;
   constructor(private readonly ids: readonly string[]) {}
-  create(_prefix: ResearchIdPrefix): string { return this.ids[this.index++] ?? ""; }
+  create(): string { return this.ids[this.index++] ?? ""; }
 }
 
 export function mapLegacyContract(

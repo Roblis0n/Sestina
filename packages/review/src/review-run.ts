@@ -65,12 +65,12 @@ export async function runReview(contextInput: ReviewContext, registry: CheckerRe
   const context = parseReviewContext(contextInput); if (!context.ok) return context;
   const started = createReviewRun(context.value, ports); if (!started.ok) return started;
   const bound = context.value.checkerSet.map((identity) => ({ identity, checker: registry.get(identity.id, identity.version) }));
-  const executions: Array<{ identity: CheckerIdentity; result: CheckerResult | undefined }> = [];
+  const executions: { identity: CheckerIdentity; result: CheckerResult | undefined }[] = [];
   if (ports.mode === "parallel") {
-    const values = await Promise.all(bound.map(async ({ identity, checker }) => ({ identity, result: checker && checker.kind === identity.kind ? await execute(checker, context.value) : undefined })));
+    const values = await Promise.all(bound.map(async ({ identity, checker }) => ({ identity, result: checker?.kind === identity.kind ? await execute(checker, context.value) : undefined })));
     executions.push(...values);
   } else {
-    for (const { identity, checker } of bound) executions.push({ identity, result: checker && checker.kind === identity.kind ? await execute(checker, context.value) : undefined });
+    for (const { identity, checker } of bound) executions.push({ identity, result: checker?.kind === identity.kind ? await execute(checker, context.value) : undefined });
   }
   executions.sort((a, b) => a.identity.id.localeCompare(b.identity.id) || a.identity.version.localeCompare(b.identity.version));
   const findings: Finding[] = []; const errors: CheckerErrorRecord[] = [];

@@ -123,10 +123,8 @@ describe("checker registry and ReviewRun", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.status).toBe("completed_with_checker_errors");
-    expect(result.value.findings).toEqual(expect.arrayContaining([
-      expect.objectContaining({ checker: expect.objectContaining({ id: "alpha" }) }),
-      expect.objectContaining({ kind: "checker_error", checker: expect.objectContaining({ id: "beta" }) }),
-    ]));
+    expect(result.value.findings.some((item) => item.checker.id === "alpha")).toBe(true);
+    expect(result.value.findings.some((item) => item.kind === "checker_error" && item.checker.id === "beta")).toBe(true);
     expect(JSON.stringify(result)).not.toContain("private provider response");
   });
 

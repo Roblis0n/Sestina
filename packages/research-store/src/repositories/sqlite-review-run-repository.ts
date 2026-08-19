@@ -1,11 +1,10 @@
-import { canonicalStringify, parseEntityVersion, parseResearchIdFor, type EntityVersion } from "@sestina/research";
+import { canonicalStringify, parseEntityVersion, parseResearchIdFor } from "@sestina/research";
 import {
   appendReviewFindings,
   parseFinding,
   parseReviewRun,
   reviewErr,
   reviewError,
-  type CheckerErrorRecord,
   type Finding,
   type ReviewResult,
   type ReviewRun,
@@ -112,7 +111,7 @@ export function createSqliteReviewRunRepository(db: StorageDatabase): ReviewRunR
         const next = parseReviewRun(value); const expectedVersion = parseEntityVersion(expectedVersionInput);
         if (!next.ok || !expectedVersion.ok || next.value.status === "running" || next.value.version !== expectedVersion.value + 1) return reviewErr(reviewError("review_version_conflict"));
         const current = repository.getById(next.value.projectId, next.value.id); if (!current.ok) return current;
-        if (!current.value || current.value.status !== "running" || current.value.version !== expectedVersion.value) return reviewErr(reviewError("review_version_conflict"));
+        if (current.value?.status !== "running" || current.value.version !== expectedVersion.value) return reviewErr(reviewError("review_version_conflict"));
         const currentData = encode(current.value.findings); const nextData = encode(next.value.findings);
         if (!currentData.ok || !nextData.ok || currentData.value !== nextData.value) return reviewErr(reviewError("invalid_review_run"));
         const data = encode(next.value); if (!data.ok) return data;

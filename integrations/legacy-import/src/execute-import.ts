@@ -49,7 +49,7 @@ function sourceFor(item: LegacyScanItem, recordedAt: string) {
   });
 }
 
-function getExisting(repositories: ResearchRepositories, write: PlannedWrite): ResearchResult<unknown | undefined> {
+function getExisting(repositories: ResearchRepositories, write: PlannedWrite): ResearchResult<unknown> {
   switch (write.kind) {
     case "project": return repositories.projects.getById(write.value.id);
     case "artifact": return repositories.artifacts.getById(write.value.projectId, write.value.id);

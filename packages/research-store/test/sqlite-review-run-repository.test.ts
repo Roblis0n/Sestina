@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { join } from "node:path";
 import { SequenceIdFactory } from "@sestina/research";
 import {
-  appendReviewFindings,
   calculateReviewInputHash,
   createFinding,
   createReviewRun,
@@ -86,7 +85,10 @@ describe("SQLite ReviewRun repository", () => {
     expect(repository.create(started.value).ok).toBe(true);
     expect(repository.appendFindings(PROJECT_ID, started.value.id, [], [], 99)).toMatchObject({ ok: false, error: { code: "review_version_conflict" } });
     const raw = db.get<{ data: string }>("SELECT data FROM review_runs WHERE review_run_id = ?", started.value.id);
-    const corrupted = JSON.parse(raw?.data ?? "{}");
+    const parsed: unknown = JSON.parse(raw?.data ?? "{}");
+    if (typeof parsed !== "object" || parsed === null || !("context" in parsed)) throw new Error("invalid ReviewRun fixture");
+    const corrupted = structuredClone(parsed) as { context: { checkerSet: { kind: string }[] } };
+    if (!corrupted.context.checkerSet[0]) throw new Error("missing checker fixture");
     corrupted.context.checkerSet[0].kind = "future";
     db.run("UPDATE review_runs SET data = ? WHERE review_run_id = ?", JSON.stringify(corrupted), started.value.id);
     expect(repository.getById(PROJECT_ID, started.value.id)).toMatchObject({ ok: false, error: { code: "invalid_review_run" } });

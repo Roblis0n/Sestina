@@ -31,7 +31,7 @@ export class IssueIntegrityChecker {
   constructor(input: IssueIntegrityInput) { this.#input = input; }
   supports(): boolean { return true; }
 
-  async run(context: ReviewContext): Promise<CheckerResult> {
+  run(context: ReviewContext): Promise<CheckerResult> {
     const findings: Finding[] = []; const observations: { code: string; message: string }[] = [];
     for (const raw of this.#input.findings) {
       const mapped = findingToIssueCandidate(raw, context, this.#input.recordedAt);
@@ -53,6 +53,6 @@ export class IssueIntegrityChecker {
       if (!updated.ok) throw new Error("Issue integration Finding construction failed");
       findings.push(updated.value);
     }
-    return cloneReviewValue({ findings, observations });
+    return Promise.resolve(cloneReviewValue({ findings, observations }));
   }
 }

@@ -14,6 +14,13 @@ export function createLegacyImportPlan(scan: LegacyScanResult): LegacyImportPlan
 }
 
 export function verifyLegacyImportPlan(plan: LegacyImportPlan): boolean {
-  const { planHash: _ignored, ...body } = plan;
+  const body = {
+    mappingVersion: plan.mappingVersion,
+    sourceFingerprint: plan.sourceFingerprint,
+    sourceDatabaseFingerprint: plan.sourceDatabaseFingerprint,
+    items: plan.items,
+    deferred: plan.deferred,
+    unrecognized: plan.unrecognized,
+  };
   return hashCanonical(body) === plan.planHash;
 }

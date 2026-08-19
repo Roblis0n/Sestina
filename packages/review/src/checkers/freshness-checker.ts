@@ -23,7 +23,7 @@ export class FreshnessChecker implements ResearchChecker {
   constructor(observation: FreshnessObservation) { this.#observation = cloneReviewValue(observation); }
   supports(): boolean { return true; }
 
-  async run(context: ReviewContext): Promise<CheckerResult> {
+  run(context: ReviewContext): Promise<CheckerResult> {
     const reasons: FreshnessReason[] = [];
     if (this.#observation.currentBriefVersionId !== context.briefVersion.id) reasons.push("brief_superseded");
     if (context.candidateRevision.parentRevisionId !== context.episode.baselineRevisionId) reasons.push("candidate_parent_mismatch");
@@ -50,11 +50,11 @@ export class FreshnessChecker implements ResearchChecker {
       if (!created.ok) throw new Error("Freshness Finding construction failed");
       return created.value;
     });
-    return cloneReviewValue({
+    return Promise.resolve(cloneReviewValue({
       findings,
       observations: reasons.length === 0
         ? [{ code: "freshness_current", message: "Review inputs remain current" }]
         : reasons.map((reason) => ({ code: reason, message: FRESHNESS_RATIONALE[reason] })),
-    });
+    }));
   }
 }

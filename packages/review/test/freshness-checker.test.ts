@@ -46,18 +46,18 @@ function observation(context: ReviewContext): FreshnessObservation {
 }
 
 describe("FreshnessChecker", () => {
-  const cases: readonly [string, (context: ReviewContext, value: FreshnessObservation) => { context?: ReviewContext; observation?: FreshnessObservation }][] = [
-    ["brief_superseded", (context, value) => ({ observation: { ...value, currentBriefVersionId: ids.create("rbrf_") } })],
-    ["candidate_parent_mismatch", (context, value) => ({ context: reviewContext({ candidateRevision: { ...context.candidateRevision, parentRevisionId: ids.create("rrev_") } }) })],
-    ["artifact_advanced", (context, value) => ({ observation: { ...value, artifactActiveRevisionId: ids.create("rrev_") } })],
-    ["review_input_mismatch", (context, value) => ({ observation: { ...value, boundReportInputHash: "f".repeat(64) } })],
-    ["checker_version_missing", (context, value) => ({ observation: { ...value, availableCheckerVersions: [], environmentFingerprint: undefined } })],
-    ["cross_project_reference", (context, value) => ({ context: reviewContext({ snapshot: { ...context.snapshot, projectId: ids.create("rprj_") } }) })],
+  const cases: readonly [string, (input: { context: ReviewContext; value: FreshnessObservation }) => { context?: ReviewContext; observation?: FreshnessObservation }][] = [
+    ["brief_superseded", ({ value }) => ({ observation: { ...value, currentBriefVersionId: ids.create("rbrf_") } })],
+    ["candidate_parent_mismatch", ({ context }) => ({ context: reviewContext({ candidateRevision: { ...context.candidateRevision, parentRevisionId: ids.create("rrev_") } }) })],
+    ["artifact_advanced", ({ value }) => ({ observation: { ...value, artifactActiveRevisionId: ids.create("rrev_") } })],
+    ["review_input_mismatch", ({ value }) => ({ observation: { ...value, boundReportInputHash: "f".repeat(64) } })],
+    ["checker_version_missing", ({ value }) => ({ observation: { ...value, availableCheckerVersions: [], environmentFingerprint: undefined } })],
+    ["cross_project_reference", ({ context }) => ({ context: reviewContext({ snapshot: { ...context.snapshot, projectId: ids.create("rprj_") } }) })],
   ];
 
   it.each(cases)("emits the specific %s reason and remains deterministic", async (reason, mutate) => {
     const original = reviewContext();
-    const changed = mutate(original, observation(original));
+    const changed = mutate({ context: original, value: observation(original) });
     const context = changed.context ?? original;
     const checker = new FreshnessChecker(changed.observation ?? observation(context));
     const first = await checker.run(context);

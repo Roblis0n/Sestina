@@ -1,6 +1,8 @@
 import type { ResearchChecker } from "./checker.js";
 
-function valid(checker: ResearchChecker): boolean {
+function valid(value: unknown): value is ResearchChecker {
+  if (typeof value !== "object" || value === null) return false;
+  const checker = value as Record<string, unknown>;
   return typeof checker.id === "string" && checker.id.trim().length > 0 && typeof checker.version === "string" && checker.version.trim().length > 0 && (checker.kind === "deterministic" || checker.kind === "semantic") && typeof checker.supports === "function" && typeof checker.run === "function";
 }
 

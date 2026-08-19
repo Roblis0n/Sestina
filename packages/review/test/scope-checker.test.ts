@@ -54,7 +54,9 @@ describe("deterministic scope and path checking", () => {
   it("flags an Introduction edit when only Literature Review is allowed", async () => {
     const candidate = baseline.replace("The introduction is stable.", "The introduction now makes a new claim.");
     const result = await new ScopeChecker(input(candidate, { allowedChanges: [{ target: { kind: "heading", artifactId, heading: "Literature Review" }, operations: ["rewrite"] }] })).run(context());
-    expect(result.findings).toEqual([expect.objectContaining({ kind: "scope_violation", target: expect.objectContaining({ relativePath: "paper/manuscript.md" }) })]);
+    expect(result.findings).toHaveLength(1);
+    expect(result.findings[0]?.kind).toBe("scope_violation");
+    expect(result.findings[0]?.target).toMatchObject({ relativePath: "paper/manuscript.md" });
   });
 
   it("distinguishes data replacement from a theory rewrite", async () => {
