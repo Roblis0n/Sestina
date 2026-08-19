@@ -135,6 +135,22 @@ importers:
         specifier: ^3.0.0
         version: 3.2.7(@types/node@24.13.3)(supports-color@7.2.0)
 
+  packages/reports:
+    dependencies:
+      '@sestina/research':
+        specifier: workspace:*
+        version: link:../research
+      '@sestina/review':
+        specifier: workspace:*
+        version: link:../review
+    devDependencies:
+      typescript:
+        specifier: ^5.8.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.7(@types/node@24.13.3)(supports-color@7.2.0)
+
   packages/research:
     devDependencies:
       typescript:
