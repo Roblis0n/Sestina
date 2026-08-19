@@ -3,6 +3,7 @@ import { join } from "node:path";
 import {
   openDatabase,
   MIGRATIONS,
+  SCHEMA_VERSION,
   type StorageDatabase,
 } from "../src/index.js";
 import { makeTempDir, removeTempDir } from "./helpers.js";
@@ -45,7 +46,7 @@ describe("Migration 006 (retention snapshot)", () => {
     );
     expect(row?.name).toBe("006-retention-snapshot");
     expect(row?.status).toBe("completed");
-    expect(MIGRATIONS.at(-1)?.version).toBe(14);
+    expect(MIGRATIONS.at(-1)?.version).toBe(SCHEMA_VERSION);
   });
 
   it("creates retention_previews and retention_applied with the snapshot columns", () => {

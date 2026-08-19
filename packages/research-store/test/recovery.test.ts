@@ -8,7 +8,7 @@ import {
   type StorageDatabase,
 } from "@sestina/storage";
 import { createResearchStore } from "../src/index.js";
-import { makeScenario } from "./fixtures.js";
+import { makeScenario, USER_SOURCE } from "./fixtures.js";
 import { makeTempDir, removeTempDir } from "./helpers.js";
 
 function expectOk<T>(result: ResearchResult<T>): T {
@@ -45,6 +45,8 @@ describe("research backup and restore", () => {
     expectOk(store.issues.create(scenario.issue));
     expectOk(store.episodes.create(scenario.episode));
     expectOk(store.snapshots.create(scenario.snapshot));
+    const graphClaim = { id: scenario.ids.create("rclm_"), projectId: scenario.project.id, artifactId: scenario.emptyArtifact.id, revisionId: scenario.revision2.id, kind: "descriptive" as const, statement: "Restored graph claim", source: USER_SOURCE, version: 1 };
+    expectOk(store.claims.create(graphClaim));
     const backup = await backupDatabase(db, { backupDirectory: join(dir, "backups") });
 
     const later = expectOk(createResearchProject(
@@ -62,5 +64,6 @@ describe("research backup and restore", () => {
     expect(expectOk(restored.artifacts.getById(scenario.project.id, scenario.artifact.id)))
       .toEqual(scenario.artifact);
     expect(expectOk(restored.projects.getById(later.id))).toBeUndefined();
+    expect(expectOk(restored.claims.getById(scenario.project.id, graphClaim.id))).toEqual(graphClaim);
   });
 });

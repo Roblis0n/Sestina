@@ -41,6 +41,7 @@ import {
   writeResult,
 } from "./base.js";
 import { decodeCursor, encodeCursor } from "./pagination.js";
+import { createArgumentGraphRepositories } from "./sqlite-argument-repositories.js";
 
 interface StoredRow {
   readonly project_id: string;
@@ -951,5 +952,5 @@ export function createResearchRepositories(db: StorageDatabase): ResearchReposit
     },
   };
 
-  return Object.freeze({ projects, artifacts, revisions, briefs, decisions, issues, episodes, snapshots });
+  return Object.freeze({ projects, artifacts, revisions, briefs, decisions, issues, episodes, snapshots, ...createArgumentGraphRepositories(db) });
 }

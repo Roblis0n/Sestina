@@ -3,6 +3,7 @@ import { parseResearchSource } from "../authority/source.js";
 import { cloneFrozen, isNonBlankString, isRecord } from "../domain-validation.js";
 import { researchError } from "../errors.js";
 import { parseResearchIdFor } from "../identity/research-id.js";
+import { parseEntityVersion, type EntityVersion } from "../identity/entity-version.js";
 import { err, ok, type ResearchResult } from "../result.js";
 
 export const SUBSTANTIVE_ARGUMENT_DELTA_KINDS = ["mechanism_relation", "conceptual_distinction", "evidence_link", "counterexample_or_negative_case", "boundary_condition", "alternative_explanation", "causal_step_clarification", "theoretical_contribution", "research_object_transformation"] as const;
@@ -38,6 +39,7 @@ export interface ArgumentDelta {
   readonly evidenceLinkIds: readonly string[];
   readonly limitations: readonly string[];
   readonly source: ResearchSource;
+  readonly version: EntityVersion;
 }
 
 function parseSpan(input: unknown, binding: { projectId: string; artifactId: string; revisionId: string }): ResearchResult<ArgumentSpanReference> {
@@ -47,8 +49,8 @@ function parseSpan(input: unknown, binding: { projectId: string; artifactId: str
 
 export function parseArgumentDelta(input: unknown): ResearchResult<ArgumentDelta> {
   if (!isRecord(input) || !Array.isArray(input.baselineGapSpans) || !Array.isArray(input.candidateAdditionSpans) || input.baselineGapSpans.length === 0 || input.candidateAdditionSpans.length === 0 || !isNonBlankString(input.relation) || !Array.isArray(input.evidenceLinkIds) || !Array.isArray(input.limitations)) return err(researchError("invalid_argument_delta"));
-  const id = parseResearchIdFor(input.id, "rdlt_"); const project = parseResearchIdFor(input.projectId, "rprj_"); const artifact = parseResearchIdFor(input.artifactId, "rart_"); const baseline = parseResearchIdFor(input.baselineRevisionId, "rrev_"); const candidate = parseResearchIdFor(input.candidateRevisionId, "rrev_"); const source = parseResearchSource(input.source);
-  if (!id.ok || !project.ok || !artifact.ok || !baseline.ok || !candidate.ok || baseline.value.id === candidate.value.id || !source.ok) return err(researchError("invalid_argument_delta"));
+  const id = parseResearchIdFor(input.id, "rdlt_"); const project = parseResearchIdFor(input.projectId, "rprj_"); const artifact = parseResearchIdFor(input.artifactId, "rart_"); const baseline = parseResearchIdFor(input.baselineRevisionId, "rrev_"); const candidate = parseResearchIdFor(input.candidateRevisionId, "rrev_"); const source = parseResearchSource(input.source); const version = parseEntityVersion(input.version);
+  if (!id.ok || !project.ok || !artifact.ok || !baseline.ok || !candidate.ok || baseline.value.id === candidate.value.id || !source.ok || !version.ok) return err(researchError("invalid_argument_delta"));
   const kind = input.kind;
   if (kind !== "no_substantive_delta" && !SUBSTANTIVE_ARGUMENT_DELTA_KINDS.includes(kind as SubstantiveArgumentDeltaKind)) return err(researchError("invalid_argument_delta"));
   let nonDeltaKind: NonDeltaKind | undefined;
@@ -59,7 +61,7 @@ export function parseArgumentDelta(input: unknown): ResearchResult<ArgumentDelta
   let expected: string | undefined; if (input.supportsExpectedDeltaId !== undefined) { const parsed = parseResearchIdFor(input.supportsExpectedDeltaId, "rbrf_"); if (!parsed.ok) return err(researchError("invalid_argument_delta")); expected = parsed.value.id; }
   const evidence: string[] = []; for (const raw of input.evidenceLinkIds) { const parsed = parseResearchIdFor(raw, "revd_"); if (!parsed.ok || evidence.includes(parsed.value.id)) return err(researchError("invalid_argument_delta")); evidence.push(parsed.value.id); }
   const limitations: string[] = []; for (const raw of input.limitations) { if (!isNonBlankString(raw) || limitations.includes(raw.trim())) return err(researchError("invalid_argument_delta")); limitations.push(raw.trim()); }
-  return ok(cloneFrozen({ id: id.value.id, projectId: project.value.id, artifactId: artifact.value.id, baselineRevisionId: baseline.value.id, candidateRevisionId: candidate.value.id, kind: kind as ArgumentDeltaKind, ...(nonDeltaKind ? { nonDeltaKind } : {}), baselineGapSpans: baselineSpans, candidateAdditionSpans: candidateSpans, relation: input.relation.trim(), ...(expected ? { supportsExpectedDeltaId: expected } : {}), evidenceLinkIds: evidence, limitations, source: source.value }));
+  return ok(cloneFrozen({ id: id.value.id, projectId: project.value.id, artifactId: artifact.value.id, baselineRevisionId: baseline.value.id, candidateRevisionId: candidate.value.id, kind: kind as ArgumentDeltaKind, ...(nonDeltaKind ? { nonDeltaKind } : {}), baselineGapSpans: baselineSpans, candidateAdditionSpans: candidateSpans, relation: input.relation.trim(), ...(expected ? { supportsExpectedDeltaId: expected } : {}), evidenceLinkIds: evidence, limitations, source: source.value, version: version.value }));
 }
 
 export function parseModelProposedArgumentDelta(input: unknown): ResearchResult<ArgumentDelta> {

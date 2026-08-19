@@ -48,6 +48,7 @@ export { migration007 } from "./migrations/007-keyset-indexes.js";
 export { migration009 } from "./migrations/009-project-scope.js";
 export { migration013 } from "./migrations/013-research-core.js";
 export { migration014 } from "./migrations/014-review-runs.js";
+export { migration015 } from "./migrations/015-argument-graph.js";
 
 // Leases
 export {

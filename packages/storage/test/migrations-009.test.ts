@@ -3,6 +3,7 @@ import { join } from "node:path";
 import {
   openDatabase,
   MIGRATIONS,
+  SCHEMA_VERSION,
   type StorageDatabase,
 } from "../src/index.js";
 import { makeTempDir, removeTempDir } from "./helpers.js";
@@ -46,7 +47,7 @@ describe("Migration 009 (project scope)", () => {
     );
     expect(row?.name).toBe("009-project-scope");
     expect(row?.status).toBe("completed");
-    expect(MIGRATIONS.at(-1)?.version).toBe(14);
+    expect(MIGRATIONS.at(-1)?.version).toBe(SCHEMA_VERSION);
   });
 
   it("makes host_sessions.task_id nullable", () => {

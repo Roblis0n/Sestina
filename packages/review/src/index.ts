@@ -65,3 +65,7 @@ export { ARGUMENT_DELTA_RUBRIC, validateArgumentDeltaAssessment } from "./semant
 export type { ArgumentDeltaAssessment } from "./semantic/rubrics/argument-delta.js";
 export { SHALLOW_ABSTRACTION_RUBRIC, validateShallowAbstractionAssessment } from "./semantic/rubrics/shallow-abstraction.js";
 export type { ShallowAbstractionAssessment } from "./semantic/rubrics/shallow-abstraction.js";
+export { EVIDENCE_BOUNDARY_RUBRIC, evaluateEvidenceBoundary } from "./semantic/rubrics/evidence-boundary.js";
+export type { EvidenceBoundaryCode, EvidenceBoundaryFinding, EvidenceBoundaryInput } from "./semantic/rubrics/evidence-boundary.js";
+export { EvidenceFreshnessChecker, evaluateEvidenceFreshness } from "./checkers/evidence-freshness-checker.js";
+export type { CurrentEvidenceRevision, EvidenceFreshnessIssue } from "./checkers/evidence-freshness-checker.js";

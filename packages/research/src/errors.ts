@@ -62,7 +62,9 @@ export type ResearchErrorCode =
   | "research_storage_readonly"
   | "invalid_claim"
   | "invalid_mechanism_link"
-  | "invalid_argument_delta";
+  | "invalid_argument_delta"
+  | "invalid_argument_evidence"
+  | "invalid_evidence_link";
 
 export type ResearchErrorDetails = Readonly<
   Record<string, string | number | boolean>
@@ -139,4 +141,6 @@ const MESSAGES: Readonly<Record<ResearchErrorCode, string>> = {
   invalid_claim: "claim is missing or malformed",
   invalid_mechanism_link: "mechanism link is missing or malformed",
   invalid_argument_delta: "argument delta is missing or malformed",
+  invalid_argument_evidence: "argument evidence is missing or malformed",
+  invalid_evidence_link: "claim or mechanism evidence link is missing or malformed",
 };

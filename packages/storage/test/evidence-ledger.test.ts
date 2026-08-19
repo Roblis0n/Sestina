@@ -15,6 +15,7 @@ import {
   openDatabase,
   createUnitOfWork,
   MIGRATIONS,
+  SCHEMA_VERSION,
   previewRetention,
   applyRetentionPreview,
   createTombstoneRepository,
@@ -223,7 +224,7 @@ describe("Evidence ledger storage (docs/22 Task 10)", () => {
     );
     expect(row?.name).toBe("012-evidence-ledger");
     expect(row?.status).toBe("completed");
-    expect(MIGRATIONS.at(-1)?.version).toBe(14);
+    expect(MIGRATIONS.at(-1)?.version).toBe(SCHEMA_VERSION);
     const tables = new Set(
       db.all<{ name: string }>("SELECT name FROM sqlite_schema WHERE type = 'table'")
         .map((r) => r.name),

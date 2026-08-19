@@ -14,7 +14,7 @@ const source: ResearchSource = { actor: { kind: "model", model: "fixture" }, aut
 function substantive() {
   return {
     verdict: "substantive_delta", rationale: "The shorter candidate adds an explicit mediator relation.",
-    delta: { id: ids.create("rdlt_"), projectId, artifactId, baselineRevisionId, candidateRevisionId, kind: "mechanism_relation", baselineGapSpans: [gap.value], candidateAdditionSpans: [addition.value], relation: "X changes M and M changes Y", evidenceLinkIds: [], limitations: [], source },
+    delta: { id: ids.create("rdlt_"), projectId, artifactId, baselineRevisionId, candidateRevisionId, kind: "mechanism_relation", baselineGapSpans: [gap.value], candidateAdditionSpans: [addition.value], relation: "X changes M and M changes Y", evidenceLinkIds: [], limitations: [], source, version: 1 },
   };
 }
 

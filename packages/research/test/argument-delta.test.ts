@@ -29,7 +29,7 @@ function span(revisionId: string, start: number) {
 
 function delta(overrides: Partial<ArgumentDelta> = {}) {
   return {
-    id: ids.create("rdlt_"), projectId, artifactId, baselineRevisionId, candidateRevisionId,
+    id: ids.create("rdlt_"), projectId, artifactId, baselineRevisionId, candidateRevisionId, version: 1,
     kind: "mechanism_relation", baselineGapSpans: [span(baselineRevisionId, 0)], candidateAdditionSpans: [span(candidateRevisionId, 5)],
     relation: "The condition changes the mediator, which changes the outcome.", supportsExpectedDeltaId: expectedDeltaId,
     evidenceLinkIds: [evidenceId], limitations: ["The direction still requires empirical confirmation"], source: MODEL_SOURCE,
@@ -39,10 +39,10 @@ function delta(overrides: Partial<ArgumentDelta> = {}) {
 
 describe("argument graph primitives", () => {
   it("validates and freezes a Claim and MechanismLink at runtime", () => {
-    const claim = parseArgumentClaim({ id: claimA, projectId, artifactId, revisionId: candidateRevisionId, kind: "mechanistic", statement: "The mediator carries the effect.", source: USER_SOURCE });
+    const claim = parseArgumentClaim({ id: claimA, projectId, artifactId, revisionId: candidateRevisionId, kind: "mechanistic", statement: "The mediator carries the effect.", source: USER_SOURCE, version: 1 });
     expect(claim).toMatchObject({ ok: true, value: { kind: "mechanistic" } });
     if (claim.ok) expect(Object.isFrozen(claim.value)).toBe(true);
-    const mechanism = parseMechanismLink({ id: ids.create("rmec_"), projectId, artifactId, revisionId: candidateRevisionId, fromClaimId: claimA, toClaimId: claimB, relation: "mediates", intermediateSteps: ["condition changes mediator", "mediator changes outcome"], source: USER_SOURCE });
+    const mechanism = parseMechanismLink({ id: ids.create("rmec_"), projectId, artifactId, revisionId: candidateRevisionId, fromClaimId: claimA, toClaimId: claimB, relation: "mediates", intermediateSteps: ["condition changes mediator", "mediator changes outcome"], source: USER_SOURCE, version: 1 });
     expect(mechanism).toMatchObject({ ok: true, value: { fromClaimId: claimA, toClaimId: claimB } });
   });
 

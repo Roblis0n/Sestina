@@ -13,6 +13,12 @@ import type { ResearchProject } from "../project/research-project.js";
 import { err, ok } from "../result.js";
 import type { ResearchResult } from "../result.js";
 import type { ResearchSnapshot } from "../snapshot/research-snapshot.js";
+import type { ArgumentClaim } from "../argument/claim.js";
+import type { ArgumentEvidence } from "../argument/evidence.js";
+import type { MechanismLink } from "../argument/mechanism-link.js";
+import type { ClaimEvidenceLink } from "../argument/claim-evidence-link.js";
+import type { MechanismEvidenceLink } from "../argument/mechanism-evidence-link.js";
+import type { ArgumentDelta } from "../argument/argument-delta.js";
 
 export const RESEARCH_PAGE_LIMIT_MAX = 200;
 
@@ -98,7 +104,38 @@ export interface ResearchSnapshotRepository {
   listByEpisode(projectId: string, episodeId: string, page: ResearchPageRequest): ResearchResult<ResearchPage<ResearchSnapshot>>;
 }
 
-export interface ResearchRepositories {
+export interface ArgumentNodeRepository<T> {
+  create(value: T): ResearchResult<T>;
+  getById(projectId: string, id: string): ResearchResult<T | undefined>;
+  listByProject(projectId: string, page: ResearchPageRequest): ResearchResult<ResearchPage<T>>;
+  compareAndSwap(value: T, expectedVersion: EntityVersion): ResearchResult<T>;
+}
+export type ArgumentClaimRepository = ArgumentNodeRepository<ArgumentClaim>;
+export type ArgumentEvidenceRepository = ArgumentNodeRepository<ArgumentEvidence>;
+export type MechanismLinkRepository = ArgumentNodeRepository<MechanismLink>;
+export type ArgumentDeltaRepository = ArgumentNodeRepository<ArgumentDelta>;
+export interface ClaimEvidenceLinkRepository {
+  create(value: ClaimEvidenceLink): ResearchResult<ClaimEvidenceLink>;
+  get(projectId: string, claimId: string, evidenceId: string): ResearchResult<ClaimEvidenceLink | undefined>;
+  listByProject(projectId: string, page: ResearchPageRequest): ResearchResult<ResearchPage<ClaimEvidenceLink>>;
+  compareAndSwap(value: ClaimEvidenceLink, expectedVersion: EntityVersion): ResearchResult<ClaimEvidenceLink>;
+}
+export interface MechanismEvidenceLinkRepository {
+  create(value: MechanismEvidenceLink): ResearchResult<MechanismEvidenceLink>;
+  get(projectId: string, mechanismLinkId: string, evidenceId: string): ResearchResult<MechanismEvidenceLink | undefined>;
+  listByProject(projectId: string, page: ResearchPageRequest): ResearchResult<ResearchPage<MechanismEvidenceLink>>;
+  compareAndSwap(value: MechanismEvidenceLink, expectedVersion: EntityVersion): ResearchResult<MechanismEvidenceLink>;
+}
+export interface ArgumentGraphRepositories {
+  readonly claims: ArgumentClaimRepository;
+  readonly argumentEvidence: ArgumentEvidenceRepository;
+  readonly mechanismLinks: MechanismLinkRepository;
+  readonly claimEvidenceLinks: ClaimEvidenceLinkRepository;
+  readonly mechanismEvidenceLinks: MechanismEvidenceLinkRepository;
+  readonly argumentDeltas: ArgumentDeltaRepository;
+}
+
+export interface ResearchRepositories extends ArgumentGraphRepositories {
   readonly projects: ResearchProjectRepository;
   readonly artifacts: ResearchArtifactRepository;
   readonly revisions: ArtifactRevisionRepository;

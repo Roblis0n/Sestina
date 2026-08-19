@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { join } from "node:path";
-import { MIGRATIONS, SCHEMA_VERSION, openDatabase, type StorageDatabase } from "../src/index.js";
+import { MIGRATIONS, openDatabase, readSchemaVersion, type StorageDatabase } from "../src/index.js";
 import { makeTempDir, removeTempDir } from "./helpers.js";
 
 describe("Migration 014 (review runs)", () => {
@@ -8,13 +8,13 @@ describe("Migration 014 (review runs)", () => {
   let db: StorageDatabase;
   beforeEach(async () => {
     dir = makeTempDir("sestina-review-014-");
-    db = await openDatabase({ path: join(dir, "sestina.db") });
+    db = await openDatabase({ path: join(dir, "sestina.db"), migrate: { migrations: MIGRATIONS.slice(0, 14) } });
   });
   afterEach(() => { db.close(); removeTempDir(dir); });
 
   it("advances only to the two RI-18 review tables", () => {
-    expect(SCHEMA_VERSION).toBe(14);
-    expect(MIGRATIONS.at(-1)?.name).toBe("014-review-runs");
+    expect(readSchemaVersion(db)).toBe(14);
+    expect(MIGRATIONS[13]?.name).toBe("014-review-runs");
     for (const table of ["review_runs", "review_findings"]) {
       const sql = db.get<{ sql: string }>("SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = ?", table)?.sql ?? "";
       expect(sql.trim().toUpperCase().endsWith("STRICT"), table).toBe(true);

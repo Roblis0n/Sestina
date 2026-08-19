@@ -256,6 +256,12 @@ export { parseMechanismLink } from "./argument/mechanism-link.js";
 export type { MechanismLink } from "./argument/mechanism-link.js";
 export { NON_DELTA_KINDS, SUBSTANTIVE_ARGUMENT_DELTA_KINDS, parseArgumentDelta, parseModelProposedArgumentDelta } from "./argument/argument-delta.js";
 export type { ArgumentDelta, ArgumentDeltaKind, ArgumentSpanReference, NonDeltaKind, SubstantiveArgumentDeltaKind } from "./argument/argument-delta.js";
+export { EVIDENCE_KINDS, EVIDENCE_STATES, INFERENCE_CAPACITIES, parseArgumentEvidence, parseEvidence } from "./argument/evidence.js";
+export type { ArgumentEvidence, Evidence, EvidenceKind, EvidenceState, InferenceCapacity } from "./argument/evidence.js";
+export { parseClaimEvidenceLink } from "./argument/claim-evidence-link.js";
+export type { ClaimEvidenceLink, ClaimEvidenceRole, EvidenceLinkStatus } from "./argument/claim-evidence-link.js";
+export { parseMechanismEvidenceLink } from "./argument/mechanism-evidence-link.js";
+export type { MechanismEvidenceLink } from "./argument/mechanism-evidence-link.js";
 
 export {
   RESEARCH_PAGE_LIMIT_MAX,
@@ -272,6 +278,14 @@ export type {
   ResearchIssueRepository,
   RevisionEpisodeRepository,
   ResearchSnapshotRepository,
+  ArgumentNodeRepository,
+  ArgumentClaimRepository,
+  ArgumentEvidenceRepository,
+  MechanismLinkRepository,
+  ArgumentDeltaRepository,
+  ClaimEvidenceLinkRepository,
+  MechanismEvidenceLinkRepository,
+  ArgumentGraphRepositories,
   ResearchRepositories,
   ResearchUnitOfWork,
 } from "./ports/repositories.js";
