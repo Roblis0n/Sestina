@@ -1,4 +1,3 @@
-import { compareFindingSeverity } from "@sestina/review";
 import { redactAbsolutePaths } from "../redaction/redact.js";
 import { normalizeReportInput, type ReviewReportInput } from "../report-input.js";
 
@@ -13,10 +12,13 @@ function bullets(values: readonly string[], empty: string): string[] {
   return values.length === 0 ? [`- ${empty}`] : values.map((value) => `- ${escapeMarkdown(value)}`);
 }
 
-export function renderReviewMarkdown(raw: ReviewReportInput): string {
-  const input = normalizeReportInput(raw); const findings = input.run.findings;
-  const foreground = findings.filter((finding) => finding.presentation === "foreground").sort(compareFindingSeverity);
-  const shown = foreground.slice(0, 3); const suppressed = findings.filter((finding) => finding.presentation === "suppressed");
+export interface ReviewMarkdownOptions { readonly allFindings?: boolean; }
+
+export function renderReviewMarkdown(raw: ReviewReportInput, options: ReviewMarkdownOptions = {}): string {
+  const input = normalizeReportInput(raw); const projection = input.findingProjection;
+  if (projection === undefined) throw new Error("Invalid review report");
+  const shown = options.allFindings === true ? projection.raw.map((item) => item.finding) : projection.foreground.map((item) => item.finding);
+  const totalForeground = projection.foreground.length + projection.omissions.mergedOutsideForeground;
   const uncertain = input.coverage.filter((item) => ["unproven", "stale", "disputed", "checker_failed"].includes(item.status));
   const checkerLines = [...new Set(input.run.context.checkerSet.map((checker) => `${checker.id}@${checker.version} (${checker.kind})`))].sort();
   const lines = [
@@ -35,18 +37,28 @@ export function renderReviewMarkdown(raw: ReviewReportInput): string {
     `- Checker health: ${input.outcome.checkerHealth.status}`,
     "",
     "## Foreground findings",
-    `- ${shown.length} of ${foreground.length} foreground findings shown. Deterministic placeholder ordering: severity, then Finding ID.`,
+    options.allFindings === true
+      ? `- All ${shown.length} raw findings shown; the authoritative foreground projection remains ${projection.foreground.length}.`
+      : `- ${shown.length} of ${totalForeground} merged foreground findings shown. Stable priority order; default intervention budget is three.`,
     ...shown.flatMap((finding) => [`- [${finding.severity}] ${escapeMarkdown(finding.rationale)} (${finding.id})`, `  - Recovery: ${escapeMarkdown(finding.minimumRecovery)}`]),
     "",
     "## Preserved content",
-    ...bullets(input.preservedContent, "No preserved-content statement was supplied"),
+    ...bullets(projection.preserved.items, projection.preserved.explanation),
     "",
     "## Minimum recovery path",
-    ...bullets(shown.map((finding) => finding.minimumRecovery), "No foreground recovery action"),
+    ...bullets(projection.metrics.returnToMainTaskActions, "No foreground recovery action"),
     "",
     "## Suppressed repeats",
-    `- ${suppressed.length} suppressed Finding(s) retained in the ReviewRun.`,
-    ...suppressed.map((finding) => `- ${finding.id}: ${escapeMarkdown(finding.rationale)}`),
+    `- ${projection.suppressed.length} suppressed Finding(s) retained in the ReviewRun and excluded from the intervention budget.`,
+    ...projection.suppressed.map((item) => `- ${item.findingId}: ${escapeMarkdown(item.finding.rationale)}`),
+    "",
+    "## Intervention metrics",
+    `- Raw findings: ${projection.metrics.rawFindingCount}`,
+    `- Merged findings: ${projection.metrics.mergedFindingCount}`,
+    `- Foreground findings: ${projection.metrics.foregroundFindingCount}`,
+    `- Suppressed findings: ${projection.metrics.suppressedFindingCount}`,
+    `- Return-to-main-task actions: ${projection.metrics.returnToMainTaskActions.length}`,
+    `- Unnecessary findings: ${projection.metrics.unnecessaryFindingCount}`,
     "",
     "## Unchecked or uncertain",
     ...bullets(uncertain.map((item) => `${item.obligationId}: ${item.status} — ${item.explanation}`), "No unproven, stale, disputed, or checker-failed obligation"),

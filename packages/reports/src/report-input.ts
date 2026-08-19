@@ -1,6 +1,8 @@
 import {
   COVERAGE_STATUSES,
   parseReviewRun,
+  projectFindings,
+  type FindingProjection,
   type ObligationCoverage,
   type ReviewObligation,
   type ReviewOutcome,
@@ -16,6 +18,7 @@ export interface ReviewReportInput {
   readonly coverage: readonly ObligationCoverage[];
   readonly preservedContent: readonly string[];
   readonly userActions: readonly string[];
+  readonly findingProjection?: FindingProjection;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -86,6 +89,7 @@ export function normalizeReportInput(input: unknown): ReviewReportInput {
   }
   const run = parseReviewRun(input.run);
   if (!run.ok) throw new Error("Invalid review report");
+  const findingProjection = projectFindings(run.value.findings, { preservedParts: input.preservedContent });
   return structuredClone({
     title: input.title.trim(),
     taskSummary: input.taskSummary.trim(),
@@ -95,5 +99,6 @@ export function normalizeReportInput(input: unknown): ReviewReportInput {
     coverage: input.coverage,
     preservedContent: input.preservedContent,
     userActions: input.userActions,
+    findingProjection,
   });
 }

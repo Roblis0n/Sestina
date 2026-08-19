@@ -1,4 +1,5 @@
 export { renderReviewMarkdown } from "./markdown/review-report.js";
+export type { ReviewMarkdownOptions } from "./markdown/review-report.js";
 export type { ReviewReportInput } from "./report-input.js";
 export { REVIEW_REPORT_SCHEMA_VERSION, parseReviewJson, renderReviewJson } from "./json/review-report.js";
 export type { ReviewJsonReport } from "./json/review-report.js";

@@ -11,7 +11,7 @@ export async function runReport(args: ParsedCliArguments, io: CliIo): Promise<Cl
   const local = opened.value;
   try {
     if ((format !== "markdown" && format !== "json") || args.positionals.length !== 3) return failure(io, json, EXIT_CODES.invalidInput, "invalid_input", "Use report markdown <run> or report json <run>.");
-    const report = local.core.renderReviewReportForRun(local.project.id, runId, format); if (!report.ok) return coreFailure(report, io, json);
+    const report = local.core.renderReviewReportForRun(local.project.id, runId, format, args.options["all-findings"] === true); if (!report.ok) return coreFailure(report, io, json);
     if (json) success(io, true, { command: `report ${format}`, reviewRunId: runId, format, report: report.value }, ""); else io.stdout(report.value.endsWith("\n") ? report.value : `${report.value}\n`);
     return EXIT_CODES.success;
   } finally { local.core.close(); }

@@ -59,6 +59,7 @@ import {
   parseProjectRelativePath,
   parseReviewContext,
   parseReviewRun,
+  projectFindings,
   runReview,
   ScopeChecker,
   diffMarkdownBlocks,
@@ -69,6 +70,7 @@ import {
   type ReviewOutcome,
   type ReviewRun,
   type ReviewRunRepository,
+  type FindingProjection,
 } from "@sestina/review";
 import {
   exportCapsule as exportReviewCapsule,
@@ -138,6 +140,7 @@ export interface DeterministicReviewResult {
   readonly obligations: readonly ReviewObligation[];
   readonly coverage: readonly ObligationCoverage[];
   readonly outcome: ReviewOutcome;
+  readonly findingProjection: FindingProjection;
 }
 
 export interface CoreDatabaseDiagnostics {
@@ -172,6 +175,7 @@ export interface CoreReviewSummary {
   readonly obligations: readonly ReviewObligation[];
   readonly coverage: readonly ObligationCoverage[];
   readonly outcome: ReviewOutcome;
+  readonly findingProjection: FindingProjection;
 }
 
 function now(clock: Clock): string | undefined {
@@ -602,7 +606,7 @@ export class SestinaCore {
       for (const issue of generatedIssues) { const storedIssue = fromDomain(this.#store.issues.create(issue)); if (!storedIssue.ok) return storedIssue; }
       const storedReviewed = fromDomain(this.#store.episodes.compareAndSwap(reviewed.value, episode.value.version)); if (!storedReviewed.ok) return storedReviewed;
       const storedRequired = fromDomain(this.#store.episodes.compareAndSwap(required.value, reviewed.value.version)); if (!storedRequired.ok) return storedRequired;
-      return coreOk(Object.freeze({ run: storedRun.value, episode: storedRequired.value, snapshot: storedSnapshot.value, ...products }));
+      return coreOk(Object.freeze({ run: storedRun.value, episode: storedRequired.value, snapshot: storedSnapshot.value, ...products, findingProjection: projectFindings(storedRun.value.findings) }));
     });
     return persisted;
   }
@@ -665,16 +669,17 @@ export class SestinaCore {
           "Semantic review status: semantic_pending. Fulfillment, evidence quality, target substitution, argument depth, and Argument Delta remain unproven.",
           ...(bundle.value.episode.status === "user_action_required" ? ["Accept, reject, or abandon this reviewed candidate explicitly."] : [`Episode disposition: ${bundle.value.episode.status}.`]),
         ],
+        findingProjection: projectFindings(bundle.value.run.findings),
       };
-      return coreOk(input.format === "markdown" ? renderReviewMarkdown(reportInput) : renderReviewJson(reportInput));
+      return coreOk(input.format === "markdown" ? renderReviewMarkdown(reportInput, { allFindings: input.allFindings }) : renderReviewJson(reportInput));
     } catch {
       return coreErr("review_blocked");
     }
   }
 
-  renderReviewReportForRun(projectId: string, reviewRunId: string, format: "markdown" | "json"): CoreResult<string> {
+  renderReviewReportForRun(projectId: string, reviewRunId: string, format: "markdown" | "json", allFindings = false): CoreResult<string> {
     const episode = this.findEpisodeByReviewRun(projectId, reviewRunId); if (!episode.ok) return episode;
-    return this.renderReviewReport({ projectId, episodeId: episode.value.id, format });
+    return this.renderReviewReport({ projectId, episodeId: episode.value.id, format, allFindings });
   }
 
   exportCapsule(input: ExportCapsuleCommand): CoreResult<{ readonly capsule: ReviewCapsule; readonly json: string }> {
@@ -706,6 +711,7 @@ export class SestinaCore {
       invalidationConditions: ["Brief, artifact revision, decision, issue, checker set, environment, or build binding changes."],
       buildFingerprint: bundle.value.run.context.buildFingerprint,
       checkerVersions: bundle.value.run.context.checkerSet,
+      findingProjection: projectFindings(bundle.value.run.findings),
     }, { includePermittedFullText: input.includePermittedFullText });
     return exported.ok ? coreOk(exported.value) : { ok: false, error: mapDomainError(exported.error) };
   }
@@ -817,7 +823,7 @@ export class SestinaCore {
   getReviewSummary(projectId: string, reviewRunId: string): CoreResult<CoreReviewSummary> {
     const episode = this.findEpisodeByReviewRun(projectId, reviewRunId); if (!episode.ok) return episode;
     const run = found(this.getReviewRun(projectId, reviewRunId)); if (!run.ok) return run;
-    return coreOk(Object.freeze({ run: run.value, episode: episode.value, ...reviewProducts(run.value, episode.value) }));
+    return coreOk(Object.freeze({ run: run.value, episode: episode.value, ...reviewProducts(run.value, episode.value), findingProjection: projectFindings(run.value.findings) }));
   }
 
   async diagnoseDatabase(input: { readonly backupDirectory: string; readonly dataRoot: string }): Promise<CoreResult<CoreDatabaseDiagnostics>> {

@@ -28,10 +28,10 @@ export const CLI_HELP = `Sestina local research revision workflow
   sestina episode start|submit|show
   sestina decision add|list|accept|reject|freeze|supersede
   sestina issue list|show|resolve|waive|dispute|reopen
-  sestina review run|show
+sestina review run|show [--all-findings]
   sestina episode accept|reject|waive
   sestina snapshot create|show|verify
-  sestina report markdown|json
+sestina report markdown|json [--all-findings]
   sestina capsule export|import-response
 
 Use --json for stable machine output. Authority-changing research actions require --yes.

@@ -7,6 +7,7 @@ import {
   deriveReviewOutcome,
   parseReviewContext,
   parseReviewRun,
+  projectFindings,
   type Finding,
   type ObligationCoverage,
   type ReviewContext,
@@ -68,14 +69,14 @@ function fixture(): { report: ReviewReportInput; run: ReviewRun; outcome: Review
 }
 
 describe("local Review reports", () => {
-  it("renders stable Markdown with only three foreground Findings and all nine sections", () => {
+  it("renders stable Markdown with only three foreground Findings and all ten sections", () => {
     const { report } = fixture(); const first = renderReviewMarkdown(report); const second = renderReviewMarkdown(report);
     expect(first).toBe(second);
-    expect(stableResearchHash(first)).toEqual({ ok: true, value: "64ceaadcf70d9c1c4f451b00e3a44cc8ae99c8561e60a74d6fd84518c6381b5e" });
-    for (const heading of ["Task and locked versions", "Honest overall state", "Foreground findings", "Preserved content", "Minimum recovery path", "Suppressed repeats", "Unchecked or uncertain", "User actions", "Provenance"]) expect(first).toContain(`## ${heading}`);
-    expect(first).toContain("3 of 4 foreground findings shown");
+    expect(stableResearchHash(first)).toEqual({ ok: true, value: "1339f9bea7611d5954579b22229094577ab275c2ce217604c1a6e6f248c6a121" });
+    for (const heading of ["Task and locked versions", "Honest overall state", "Foreground findings", "Preserved content", "Minimum recovery path", "Suppressed repeats", "Intervention metrics", "Unchecked or uncertain", "User actions", "Provenance"]) expect(first).toContain(`## ${heading}`);
+    expect(first).toContain("3 of 4 merged foreground findings shown");
     expect(first).not.toContain("Reason for minor");
-    expect(first).toContain("Deterministic placeholder ordering");
+    expect(first).toContain("Stable priority order");
   });
 
   it("escapes malicious Markdown, links, tables, fences, headings and front matter", () => {
@@ -92,7 +93,29 @@ describe("local Review reports", () => {
     expect(first).toBe(second);
     const parsed = parseReviewJson(first); expect(parsed).toMatchObject({ ok: true, value: { schemaVersion: "1.0.0" } });
     expect(parseReviewJson(first.replace('"1.0.0"', '"9.0.0"'))).toMatchObject({ ok: false, error: { code: "unsupported_report_version" } });
-    expect(first).toContain("checker_error"); expect(first).toContain("suppressed"); expect(first).toContain("checked_violated");
+    expect(first).toContain("checker_error"); expect(first).toContain("suppressed"); expect(first).toContain("checked_violated"); expect(first).toContain("findingProjection");
+  });
+
+  it("shows the full raw list only on request without changing the authoritative projection", () => {
+    const { report } = fixture(); const normal = renderReviewMarkdown(report); const all = renderReviewMarkdown(report, { allFindings: true });
+    expect(normal).not.toContain("Reason for minor");
+    expect(all).toContain("Reason for minor");
+    expect(all).toContain("All 6 raw findings shown; the authoritative foreground projection remains 3.");
+    const json = JSON.parse(renderReviewJson(report)) as { report: { findingProjection: { foreground: readonly unknown[] } } };
+    expect(json.report.findingProjection.foreground).toHaveLength(3);
+  });
+
+  it("keeps Markdown, JSON and Capsule on the same foreground and suppression projection", () => {
+    const { report, run } = fixture(); const projection = projectFindings(run.findings, { preservedParts: report.preservedContent });
+    const markdown = renderReviewMarkdown(report); const json = JSON.parse(renderReviewJson(report)) as { report: { findingProjection: typeof projection } };
+    const capsule = exportCapsule({ ...capsuleInput(), findingProjection: projection });
+    expect(capsule.ok).toBe(true); if (!capsule.ok) return;
+    const capsuleProjection = capsule.value.capsule.findings as { foreground: readonly { id: string }[]; suppressed: readonly { id: string }[] };
+    const foregroundIds = projection.foreground.map((item) => item.finding.id);
+    expect(json.report.findingProjection.foreground.map((item) => item.finding.id)).toEqual(foregroundIds);
+    expect(capsuleProjection.foreground.map((item) => item.id)).toEqual(foregroundIds);
+    expect(capsuleProjection.suppressed.map((item) => item.id)).toEqual(projection.suppressed.map((item) => item.findingId));
+    for (const id of foregroundIds) expect(markdown).toContain(id);
   });
 });
 
@@ -116,7 +139,7 @@ describe("portable Review Capsule", () => {
     expect(new TextEncoder().encode(first.value.json).byteLength).toBeLessThanOrEqual(4096);
     expect(first.value.json).not.toContain("PRIVATE BASELINE"); expect(first.value.json).not.toContain("PRIVATE CANDIDATE");
     expect(first.value.json).not.toContain("C:\\\\Users"); expect(first.value.capsule.hashMeaning).toBe("content_integrity_only_not_signature_or_proof");
-    expect(first.value.capsule.capsuleHash).toBe("629baa468d9cb7a1a831786089b0d91e7853e2cc79ca87837ee7097ee8cc5154");
+    expect(first.value.capsule.capsuleHash).toBe("fa7da7b2ad812aaad81a2e55580054a145d07b0f471ff8960a715c5c28c4d54c");
   });
 
   it("uses a public fixed overflow order and records every omission", () => {

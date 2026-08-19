@@ -73,9 +73,15 @@ describe("CLI local research integrity workflow", () => {
     expect(reviewed).toMatchObject({ code: 5, json: { command: "review run", reviewMode: "deterministic_only", semanticStatus: "semantic_pending", reviewReady: false } });
     expect(reviewed.json?.reviewRunId).toEqual(expect.stringMatching(/^rrun_/));
     expect(reviewed.json?.findings).toEqual(expect.arrayContaining([expect.objectContaining({ kind: "scope_violation", severity: "error" })]));
+    const reviewedProjection = reviewed.json?.findingProjection as { readonly metrics: { readonly foregroundFindingCount: unknown; readonly returnToMainTaskActions: unknown } };
+    expect(reviewed.json?.allFindings).toBe(false);
+    expect(typeof reviewedProjection.metrics.foregroundFindingCount).toBe("number");
+    expect(Array.isArray(reviewedProjection.metrics.returnToMainTaskActions)).toBe(true);
+    expect((reviewed.json?.findings as readonly unknown[]).length).toBeLessThanOrEqual(3);
     const runId = String(reviewed.json?.reviewRunId);
-    const shown = await command(sandbox, ["review", "show", runId, "--project", project, "--verbose"]);
-    expect(shown).toMatchObject({ code: 0, json: { reviewRunId: runId } });
+    const shown = await command(sandbox, ["review", "show", runId, "--project", project, "--all-findings", "--verbose"]);
+    expect(shown).toMatchObject({ code: 0, json: { reviewRunId: runId, allFindings: true, findingProjection: reviewed.json?.findingProjection } });
+    expect((shown.json?.findings as readonly unknown[]).length).toBe(shown.json?.findingCount);
     const reviewProvenance = shown.json?.provenance as { readonly inputHash: string };
     expect(reviewProvenance.inputHash).toMatch(/^[0-9a-f]{64}$/);
 
@@ -87,7 +93,7 @@ describe("CLI local research integrity workflow", () => {
     const repeatedEpisode = await command(sandbox, ["episode", "start", "--project", project, "--artifact", artifactId, "--baseline", baselineId]);
     const repeatedEpisodeId = String(repeatedEpisode.json?.episodeId);
     expect((await command(sandbox, ["episode", "submit", repeatedEpisodeId, "--project", project, "--revision", candidateId])).code).toBe(0);
-    const repeatedReview = await command(sandbox, ["review", "run", repeatedEpisodeId, "--project", project, "--deterministic", "--verbose"]);
+    const repeatedReview = await command(sandbox, ["review", "run", repeatedEpisodeId, "--project", project, "--deterministic", "--all-findings", "--verbose"]);
     expect(repeatedReview).toMatchObject({ code: 0, json: { reviewReady: false } });
     const repeatedFindings = repeatedReview.json?.findings as readonly { readonly presentation: string; readonly issueIds: readonly string[] }[];
     expect(repeatedFindings.some((finding) => finding.presentation === "suppressed" && finding.issueIds.includes(issueId))).toBe(true);
@@ -113,12 +119,17 @@ describe("CLI local research integrity workflow", () => {
 
     const markdown = await command(sandbox, ["report", "markdown", runId, "--project", project]);
     expect(markdown.json?.report).toContain("# Review of outside/claim\\.md");
+    const allMarkdown = await command(sandbox, ["report", "markdown", runId, "--project", project, "--all-findings"]);
+    expect(allMarkdown.json?.report).toContain("raw findings shown; the authoritative foreground projection remains");
     const reportJson = await command(sandbox, ["report", "json", runId, "--project", project]);
-    expect(JSON.parse(String(reportJson.json?.report))).toMatchObject({ schemaVersion: "1.0.0", report: { run: { id: runId } } });
+    const parsedReport = JSON.parse(String(reportJson.json?.report)) as { report: { run: { id: string }; findingProjection: { foreground: readonly { finding: { id: string } }[]; suppressed: readonly { findingId: string }[] } } };
+    expect(parsedReport).toMatchObject({ schemaVersion: "1.0.0", report: { run: { id: runId } } });
 
     const capsule = await command(sandbox, ["capsule", "export", episodeId, "--project", project]);
     expect(capsule).toMatchObject({ code: 0, json: { authority: "read_only_projection", canMutateAuthority: false } });
-    const capsuleValue = JSON.parse(String(capsule.json?.capsule)) as { readonly reviewInputHash: string; readonly snapshot: { readonly hash: string }; readonly brief: { readonly id: string }; readonly candidate: { readonly revisionId: string } };
+    const capsuleValue = JSON.parse(String(capsule.json?.capsule)) as { readonly reviewInputHash: string; readonly snapshot: { readonly hash: string }; readonly brief: { readonly id: string }; readonly candidate: { readonly revisionId: string }; readonly findings: { readonly foreground: readonly { readonly id: string }[]; readonly suppressed: readonly { readonly id: string }[] } };
+    expect(capsuleValue.findings.foreground.map((item) => item.id)).toEqual(parsedReport.report.findingProjection.foreground.map((item) => item.finding.id));
+    expect(capsuleValue.findings.suppressed.map((item) => item.id)).toEqual(parsedReport.report.findingProjection.suppressed.map((item) => item.findingId));
     const validResponsePath = join(project, "candidate-response.json");
     await writeFile(validResponsePath, JSON.stringify({ schemaVersion: "1.0.0", projectId, snapshotHash: capsuleValue.snapshot.hash, reviewInputHash: capsuleValue.reviewInputHash, briefVersionId: capsuleValue.brief.id, artifactRevisionId: capsuleValue.candidate.revisionId, response: { summary: "Proposal only", findings: ["A candidate observation"] } }), "utf8");
     expect((await command(sandbox, ["capsule", "import-response", "candidate-response.json", "--project", project]))).toMatchObject({ code: 0, json: { status: "candidate", authority: "model_proposed", canMutateAuthority: false } });

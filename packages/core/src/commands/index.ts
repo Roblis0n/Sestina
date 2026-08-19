@@ -46,7 +46,7 @@ export interface RunDeterministicReviewCommand { readonly projectId: string; rea
 export interface RecordUserDispositionCommand { readonly projectId: string; readonly episodeId: string; readonly disposition: "accepted" | "rejected" | "abandoned"; readonly reason: string; readonly actor: ResearchActor; }
 export interface ApplyEpisodeWaiverCommand { readonly projectId: string; readonly episodeId: string; readonly dimension: WaivableOutcomeDimension; readonly scope: DecisionScope; readonly reason: string; readonly invalidationCondition?: string; readonly actor: ResearchActor; }
 export interface CreateResearchSnapshotCommand { readonly projectId: string; readonly episodeId: string; readonly buildVersion: string; readonly limitations: readonly string[]; }
-export interface RenderReviewReportCommand { readonly projectId: string; readonly episodeId: string; readonly format: string; }
+export interface RenderReviewReportCommand { readonly projectId: string; readonly episodeId: string; readonly format: string; readonly allFindings?: boolean; }
 export interface ExportCapsuleCommand { readonly projectId: string; readonly episodeId: string; readonly includePermittedFullText?: boolean; }
 
 export type InitialBriefFields = ResearchBriefVersionFields;

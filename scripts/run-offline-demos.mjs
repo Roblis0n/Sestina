@@ -70,7 +70,7 @@ function initialize(name) {
 function startReview(state, allowedCodes) {
   const started = command(state.project, ["episode", "start", "--artifact", state.artifactId, "--baseline", state.baselineId]).json;
   command(state.project, ["episode", "submit", started.episodeId, "--revision", state.candidateId]);
-  const review = command(state.project, ["review", "run", started.episodeId, "--deterministic", "--verbose"], allowedCodes);
+  const review = command(state.project, ["review", "run", started.episodeId, "--deterministic", "--all-findings", "--verbose"], allowedCodes);
   return { episodeId: started.episodeId, reviewCode: review.code, review: review.json };
 }
 

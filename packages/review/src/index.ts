@@ -69,3 +69,11 @@ export { EVIDENCE_BOUNDARY_RUBRIC, evaluateEvidenceBoundary } from "./semantic/r
 export type { EvidenceBoundaryCode, EvidenceBoundaryFinding, EvidenceBoundaryInput } from "./semantic/rubrics/evidence-boundary.js";
 export { EvidenceFreshnessChecker, evaluateEvidenceFreshness } from "./checkers/evidence-freshness-checker.js";
 export type { CurrentEvidenceRevision, EvidenceFreshnessIssue } from "./checkers/evidence-freshness-checker.js";
+export { mergeFindings } from "./findings/merge-findings.js";
+export type { MergedFinding } from "./findings/merge-findings.js";
+export { compareMergedFindings, findingPriority, findingRootCauseKey, rankFindings } from "./findings/rank-findings.js";
+export type { FindingPriority } from "./findings/rank-findings.js";
+export { DEFAULT_FOREGROUND_FINDING_LIMIT, projectFindings, selectProjectedFindings } from "./findings/intervention-budget.js";
+export type { FindingProjection, FindingProjectionMetrics, FindingProjectionOptions, RawFindingProjection, SuppressedFindingProjection } from "./findings/intervention-budget.js";
+export { preservePositive } from "./findings/preserve-positive.js";
+export type { PreservedPositiveProjection } from "./findings/preserve-positive.js";
