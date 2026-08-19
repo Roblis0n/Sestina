@@ -98,6 +98,21 @@ describe("versioned Research Brief", () => {
     });
   });
 
+  it("allows an initial project-scoped brief before its first artifact is registered", () => {
+    const input = validInput();
+    const result = createResearchBrief({
+      ...input,
+      targetArtifacts: [],
+      allowedChanges: [{ target: { kind: "project_path", relativePath: "paper/manuscript.md" }, operations: ["add"] }],
+      expectedDeltas: [{
+        id: new SequenceIdFactory(9800).create("rbrf_"),
+        statement: "Create the first bounded manuscript artifact",
+        scope: { target: { kind: "project_path", relativePath: "paper/manuscript.md" }, operations: ["add"] },
+      }],
+    }, ports());
+    expect(result.ok).toBe(true);
+  });
+
   it("rejects overlapping allowed and forbidden operations on the same normalized scope", () => {
     const input = validInput();
     const conflict = input.allowedChanges[0];

@@ -1,0 +1,466 @@
+import {
+  activateRevisionEpisode,
+  addArtifactRevision,
+  createArtifactRevision,
+  createResearchArtifact,
+  createResearchBrief,
+  createResearchDecision,
+  createResearchIssue,
+  createResearchProject,
+  createResearchSnapshot as createFinalResearchSnapshot,
+  createReviewInputSnapshot,
+  createRevisionEpisode,
+  disposeRevisionEpisode,
+  getResearchBriefVersion,
+  parseResearchSource,
+  recordEpisodeReview,
+  requireEpisodeUserAction,
+  stableResearchHash,
+  submitEpisodeCandidate,
+  transitionResearchDecision,
+  type ArtifactRevision,
+  type Clock,
+  type EpisodeOutcome,
+  type IdFactory,
+  type ResearchActor,
+  type ResearchArtifact,
+  type ResearchBrief,
+  type ResearchBriefVersion,
+  type ResearchDecision,
+  type ResearchIssue,
+  type ResearchProject,
+  type ResearchSnapshot,
+  type ResearchSource,
+  type RevisionEpisode,
+} from "@sestina/research";
+import { createResearchStore, createSqliteReviewRunRepository, type ResearchStore } from "@sestina/research-store";
+import {
+  calculateReviewInputHash,
+  CheckerRegistry,
+  deriveCoverage,
+  deriveReviewObligations,
+  deriveReviewOutcome,
+  FreshnessChecker,
+  parseProjectRelativePath,
+  parseReviewContext,
+  runReview,
+  ScopeChecker,
+  type ObligationAssessment,
+  type ObligationCoverage,
+  type ReviewObligation,
+  type ReviewOutcome,
+  type ReviewRun,
+  type ReviewRunRepository,
+} from "@sestina/review";
+import { exportCapsule as exportReviewCapsule, renderReviewMarkdown, type ReviewCapsule } from "@sestina/reports";
+import { openDatabase, type StorageDatabase } from "@sestina/storage";
+import type {
+  ActivateBriefCommand,
+  CreateArtifactCommand,
+  CreateResearchSnapshotCommand,
+  CreateRevisionCommand,
+  ExportCapsuleCommand,
+  InitializeProjectCommand,
+  OpenIssueCommand,
+  RecordDecisionCommand,
+  RecordUserDispositionCommand,
+  RenderReviewReportCommand,
+  RunDeterministicReviewCommand,
+  StartRevisionEpisodeCommand,
+  SubmitCandidateRevisionCommand,
+} from "./commands/index.js";
+import { coreErr, coreOk, fromDomain, mapDomainError, type CoreResult } from "./errors.js";
+import { RandomIdFactory, SystemClock } from "./id-factory.js";
+import { CoreUnitOfWork } from "./unit-of-work.js";
+
+const PAGE = Object.freeze({ limit: 200 });
+const SYSTEM_ACTOR: ResearchActor = Object.freeze({ kind: "system", component: "sestina-core" });
+const CHECKERS = Object.freeze([
+  Object.freeze({ id: "freshness", version: "1.0.0", kind: "deterministic" as const }),
+  Object.freeze({ id: "scope", version: "1.0.0", kind: "deterministic" as const }),
+]);
+
+export interface OpenSestinaOptions {
+  readonly databasePath: string;
+  readonly readOnly?: boolean;
+  readonly clock?: Clock;
+  readonly idFactory?: IdFactory;
+}
+
+export interface DeterministicReviewResult {
+  readonly run: ReviewRun;
+  readonly episode: RevisionEpisode;
+  readonly snapshot: ResearchSnapshot;
+  readonly obligations: readonly ReviewObligation[];
+  readonly coverage: readonly ObligationCoverage[];
+  readonly outcome: ReviewOutcome;
+}
+
+function now(clock: Clock): string | undefined {
+  try {
+    const value = clock.now();
+    return value instanceof Date && Number.isFinite(value.getTime()) ? value.toISOString() : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function sourceFor(actor: ResearchActor, clock: Clock, userConfirmed = false): CoreResult<ResearchSource> {
+  const recordedAt = now(clock);
+  if (recordedAt === undefined) return coreErr("infrastructure_failure");
+  const authority = actor.kind === "user"
+    ? (userConfirmed ? "user_confirmed" : "user_recorded")
+    : actor.kind === "model"
+      ? "model_proposed"
+      : actor.kind === "system"
+        ? "system_derived"
+        : "imported_unconfirmed";
+  return fromDomain(parseResearchSource({ actor, authority, recordedAt }));
+}
+
+function requireUser(actor: ResearchActor): CoreResult<ResearchActor & { readonly kind: "user" }> {
+  return actor.kind === "user" ? coreOk(actor) : coreErr("user_confirmation_required");
+}
+
+function hash(value: unknown): CoreResult<string> {
+  return fromDomain(stableResearchHash(value));
+}
+
+function found<T>(result: CoreResult<T | undefined>): CoreResult<T> {
+  return result.ok ? (result.value === undefined ? coreErr("not_found") : coreOk(result.value)) : result;
+}
+
+function episodeOutcomeFromCoverage(coverage: readonly ObligationCoverage[]): EpisodeOutcome {
+  const scope = coverage.filter((item) => item.obligationId.startsWith("robl_")).some((item) => item.status === "checked_violated")
+    ? "violated"
+    : coverage.some((item) => item.status === "checked_satisfied")
+      ? "compliant"
+      : "unknown";
+  return Object.freeze({
+    fulfillment: "unknown",
+    evidence: "unproven",
+    scope,
+    decisionIntegrity: "unknown",
+    issueIntegrity: "unknown",
+    userDisposition: "pending",
+  });
+}
+
+function reviewProducts(run: ReviewRun, episode: RevisionEpisode): {
+  readonly obligations: readonly ReviewObligation[];
+  readonly coverage: readonly ObligationCoverage[];
+  readonly outcome: ReviewOutcome;
+} {
+  const obligations = deriveReviewObligations(run.context, []);
+  const scopeFindings = run.findings.filter((finding) => ["scope_violation", "scope_rule_conflict", "scope_unknown"].includes(finding.kind));
+  const scopeCheckerFailed = run.checkerErrors.some((item) => item.checker.id === "scope");
+  const assessments: ObligationAssessment[] = obligations
+    .filter((obligation) => obligation.dimension === "scope")
+    .map((obligation) => {
+      const violations = scopeFindings.filter((finding) => finding.kind !== "scope_unknown");
+      if (scopeCheckerFailed) return { obligationId: obligation.id, status: "checker_failed" as const, findingIds: scopeFindings.map((item) => item.id), explanation: "The deterministic scope checker failed." };
+      if (violations.length > 0) return { obligationId: obligation.id, status: "checked_violated" as const, findingIds: violations.map((item) => item.id), explanation: "Deterministic scope review found an out-of-scope change." };
+      if (scopeFindings.some((finding) => finding.kind === "scope_unknown")) return { obligationId: obligation.id, status: "unproven" as const, findingIds: scopeFindings.map((item) => item.id), explanation: "The changed scope could not be located safely." };
+      return { obligationId: obligation.id, status: "checked_satisfied" as const, findingIds: [], explanation: "Deterministic diff review found no scope violation." };
+    });
+  const coverage = deriveCoverage(obligations, assessments, run.findings);
+  const userDisposition = episode.status === "accepted" ? "accepted"
+    : episode.status === "rejected" ? "rejected"
+      : episode.outcome?.userDisposition === "waived" ? "waived"
+        : "pending";
+  const outcome = deriveReviewOutcome({
+    obligations,
+    coverage,
+    findings: run.findings,
+    expectedCheckerIds: run.context.checkerSet.map((item) => item.id),
+    completedCheckerIds: run.context.checkerSet.filter((item) => !run.checkerErrors.some((error) => error.checker.id === item.id)).map((item) => item.id),
+    failedCheckerIds: run.checkerErrors.map((item) => item.checker.id),
+    userDisposition,
+  });
+  return Object.freeze({ obligations, coverage, outcome });
+}
+
+export class SestinaCore {
+  readonly #database: StorageDatabase;
+  readonly #store: ResearchStore;
+  readonly #reviews: ReviewRunRepository;
+  readonly #clock: Clock;
+  readonly #idFactory: IdFactory;
+  readonly #unitOfWork: CoreUnitOfWork;
+
+  constructor(database: StorageDatabase, clock: Clock, idFactory: IdFactory) {
+    this.#database = database;
+    this.#store = createResearchStore(database);
+    this.#reviews = createSqliteReviewRunRepository(database);
+    this.#clock = clock;
+    this.#idFactory = idFactory;
+    this.#unitOfWork = new CoreUnitOfWork(database);
+  }
+
+  close(): void { this.#database.close(); }
+
+  initializeProject(input: InitializeProjectCommand): CoreResult<ResearchProject> {
+    const user = requireUser(input.actor); if (!user.ok) return user;
+    const source = sourceFor(user.value, this.#clock); if (!source.ok) return source;
+    const project = fromDomain(createResearchProject({ title: input.title, rootPath: input.rootPath ?? ".", source: source.value }, this.ports));
+    return project.ok ? fromDomain(this.#store.projects.create(project.value)) : project;
+  }
+
+  activateBrief(input: ActivateBriefCommand): CoreResult<ResearchBrief> {
+    const user = requireUser(input.actor); if (!user.ok) return user;
+    const project = found(this.getProject(input.projectId)); if (!project.ok) return project;
+    for (const artifactId of input.targetArtifacts) {
+      const artifact = found(fromDomain(this.#store.artifacts.getById(input.projectId, artifactId)));
+      if (!artifact.ok) return artifact;
+    }
+    const source = sourceFor(user.value, this.#clock, true); if (!source.ok) return source;
+    const fixedDecisions = input.fixedDecisions.map((item) => ({ ...item, id: item.id ?? this.#idFactory.create("rbrf_") }));
+    const expectedDeltas = input.expectedDeltas.map((item) => ({ ...item, id: item.id ?? this.#idFactory.create("rbrf_") }));
+    const evidenceBoundaries = input.evidenceBoundaries.map((item) => ({ ...item, id: item.id ?? this.#idFactory.create("rbrf_") }));
+    const brief = fromDomain(createResearchBrief({ ...input, projectId: input.projectId, fixedDecisions, expectedDeltas, evidenceBoundaries, source: source.value }, this.ports));
+    return brief.ok ? fromDomain(this.#store.briefs.create(brief.value)) : brief;
+  }
+
+  createArtifact(input: CreateArtifactCommand): CoreResult<ResearchArtifact> {
+    const project = found(this.getProject(input.projectId)); if (!project.ok) return project;
+    const path = parseProjectRelativePath(input.relativePath); if (!path.ok) return coreErr("invalid_input");
+    const source = sourceFor(input.actor, this.#clock); if (!source.ok) return source;
+    const artifact = fromDomain(createResearchArtifact({ projectId: input.projectId, kind: input.kind, title: path.value, source: source.value }, this.ports));
+    return artifact.ok ? fromDomain(this.#store.artifacts.create(artifact.value)) : artifact;
+  }
+
+  createRevision(input: CreateRevisionCommand): CoreResult<ArtifactRevision> {
+    const artifact = found(fromDomain(this.#store.artifacts.getById(input.projectId, input.artifactId))); if (!artifact.ok) return artifact;
+    const source = sourceFor(input.actor, this.#clock); if (!source.ok) return source;
+    const revision = fromDomain(createArtifactRevision({ projectId: input.projectId, artifactId: input.artifactId, ...(input.parentRevisionId ? { parentRevisionId: input.parentRevisionId } : {}), content: input.content, mediaType: input.mediaType, source: source.value }, this.ports));
+    if (!revision.ok) return revision;
+    const updated = fromDomain(addArtifactRevision(artifact.value, revision.value, artifact.value.version, { allowFork: input.allowFork }));
+    if (!updated.ok) return updated;
+    return this.#unitOfWork.commit(() => fromDomain(this.#store.revisions.append(revision.value)));
+  }
+
+  recordDecision(input: RecordDecisionCommand): CoreResult<ResearchDecision> {
+    const brief = this.findBriefVersion(input.projectId, input.effectiveBriefVersionId); if (!brief.ok) return brief;
+    const source = sourceFor(input.actor, this.#clock); if (!source.ok) return source;
+    const created = fromDomain(createResearchDecision({ projectId: input.projectId, statement: input.statement, scope: input.scope, rationale: input.rationale, effectiveBriefVersionId: input.effectiveBriefVersionId, reopenConditions: input.reopenConditions, source: source.value }, this.ports));
+    if (!created.ok) return created;
+    return this.#unitOfWork.commit(() => {
+      const persisted = fromDomain(this.#store.decisions.create(created.value)); if (!persisted.ok) return persisted;
+      if ((input.status ?? "proposed") === "proposed") return persisted;
+      const accepted = fromDomain(transitionResearchDecision(persisted.value, "accepted", input.actor, persisted.value.version, "User accepted decision", this.#clock));
+      if (!accepted.ok) return accepted;
+      const acceptedStored = fromDomain(this.#store.decisions.appendTransition(accepted.value, persisted.value.version)); if (!acceptedStored.ok) return acceptedStored;
+      if (input.status !== "frozen") return acceptedStored;
+      const frozen = fromDomain(transitionResearchDecision(acceptedStored.value, "frozen", input.actor, acceptedStored.value.version, "User froze decision", this.#clock));
+      return frozen.ok ? fromDomain(this.#store.decisions.appendTransition(frozen.value, acceptedStored.value.version)) : frozen;
+    });
+  }
+
+  openIssue(input: OpenIssueCommand): CoreResult<ResearchIssue> {
+    const revision = found(fromDomain(this.#store.revisions.getById(input.projectId, input.sourceArtifactId, input.sourceRevisionId))); if (!revision.ok) return revision;
+    if (revision.value.content.contentHash !== input.sourceRevisionContentHash) return coreErr("stale_state");
+    const source = sourceFor(input.actor, this.#clock); if (!source.ok) return source;
+    const issue = fromDomain(createResearchIssue({ ...input, source: source.value }, this.ports));
+    return issue.ok ? fromDomain(this.#store.issues.create(issue.value)) : issue;
+  }
+
+  startRevisionEpisode(input: StartRevisionEpisodeCommand): CoreResult<RevisionEpisode> {
+    const artifact = found(fromDomain(this.#store.artifacts.getById(input.projectId, input.artifactId))); if (!artifact.ok) return artifact;
+    const baseline = found(fromDomain(this.#store.revisions.getById(input.projectId, input.artifactId, input.baselineRevisionId))); if (!baseline.ok) return baseline;
+    const brief = this.findBriefVersion(input.projectId, input.briefVersionId); if (!brief.ok) return brief;
+    const decisions = fromDomain(this.#store.decisions.listByScope(input.projectId, undefined, PAGE)); if (!decisions.ok) return decisions;
+    const issues = fromDomain(this.#store.issues.listByStatus(input.projectId, undefined, PAGE)); if (!issues.ok) return issues;
+    if (decisions.value.nextCursor !== undefined || issues.value.nextCursor !== undefined) return coreErr("state_conflict");
+    const activeDecisions = decisions.value.items.filter((item): item is ResearchDecision & { readonly status: "accepted" | "frozen" } => item.status === "accepted" || item.status === "frozen");
+    const projectFingerprint = hash({ projectId: input.projectId, artifactId: input.artifactId, artifactVersion: artifact.value.version, briefVersionId: brief.value.version.id, decisions: activeDecisions.map((item) => [item.id, item.version, item.status]), issues: issues.value.items.map((item) => [item.id, item.version, item.status]) }); if (!projectFingerprint.ok) return projectFingerprint;
+    const repositoryFingerprint = hash({ baselineRevisionId: baseline.value.id, baselineContentHash: baseline.value.content.contentHash, activeRevisionId: artifact.value.activeRevisionId }); if (!repositoryFingerprint.ok) return repositoryFingerprint;
+    const source = sourceFor(input.actor, this.#clock); if (!source.ok) return source;
+    const created = fromDomain(createRevisionEpisode({
+      projectId: input.projectId,
+      artifactId: input.artifactId,
+      source: source.value,
+      lockedStart: {
+        briefVersionId: brief.value.version.id,
+        baselineRevisionId: baseline.value.id,
+        activeDecisions: activeDecisions.map((item) => ({ decisionId: item.id, status: item.status, version: item.version })),
+        relevantIssues: issues.value.items.map((item) => ({ issueId: item.id, status: item.status, version: item.version })),
+        evidenceBoundaryIds: brief.value.version.evidenceBoundaries.map((item) => item.id),
+        checkerVersion: CHECKERS.map((item) => `${item.id}@${item.version}`).join(","),
+        projectStateFingerprint: projectFingerprint.value,
+        repositoryStateFingerprint: repositoryFingerprint.value,
+      },
+    }, this.ports));
+    if (!created.ok) return created;
+    const activated = fromDomain(activateRevisionEpisode(created.value, SYSTEM_ACTOR, created.value.version, this.#clock)); if (!activated.ok) return activated;
+    return this.#unitOfWork.commit(() => {
+      const stored = fromDomain(this.#store.episodes.create(created.value)); if (!stored.ok) return stored;
+      return fromDomain(this.#store.episodes.compareAndSwap(activated.value, created.value.version));
+    });
+  }
+
+  submitCandidateRevision(input: SubmitCandidateRevisionCommand): CoreResult<RevisionEpisode> {
+    const episode = found(this.getEpisode(input.projectId, input.episodeId)); if (!episode.ok) return episode;
+    const candidate = found(fromDomain(this.#store.revisions.getById(input.projectId, episode.value.artifactId, input.candidateRevisionId))); if (!candidate.ok) return candidate;
+    const submitted = fromDomain(submitEpisodeCandidate(episode.value, candidate.value.id, input.actor, episode.value.version, this.#clock));
+    return submitted.ok ? fromDomain(this.#store.episodes.compareAndSwap(submitted.value, episode.value.version)) : submitted;
+  }
+
+  async runDeterministicReview(input: RunDeterministicReviewCommand): Promise<CoreResult<DeterministicReviewResult>> {
+    const episode = found(this.getEpisode(input.projectId, input.episodeId)); if (!episode.ok) return episode;
+    if (episode.value.status !== "candidate_submitted" || episode.value.candidateRevisionId === undefined) return coreErr("state_conflict");
+    const project = found(this.getProject(input.projectId)); if (!project.ok) return project;
+    const artifact = found(fromDomain(this.#store.artifacts.getById(input.projectId, episode.value.artifactId))); if (!artifact.ok) return artifact;
+    const baseline = found(fromDomain(this.#store.revisions.getById(input.projectId, episode.value.artifactId, episode.value.lockedStart.baselineRevisionId))); if (!baseline.ok) return baseline;
+    const candidate = found(fromDomain(this.#store.revisions.getById(input.projectId, episode.value.artifactId, episode.value.candidateRevisionId))); if (!candidate.ok) return candidate;
+    const brief = this.findBriefVersion(input.projectId, episode.value.lockedStart.briefVersionId); if (!brief.ok) return brief;
+    const defaultBuild = hash({ package: "@sestina/core", version: "0.1.0" }); if (!defaultBuild.ok) return defaultBuild;
+    const defaultEnvironment = hash({ runtime: "local", checkerSet: CHECKERS }); if (!defaultEnvironment.ok) return defaultEnvironment;
+    const buildFingerprint = input.buildFingerprint ?? defaultBuild.value;
+    const environmentFingerprint = input.environmentFingerprint ?? defaultEnvironment.value;
+    if (!/^[0-9a-f]{64}$/.test(buildFingerprint) || !/^[0-9a-f]{64}$/.test(environmentFingerprint)) return coreErr("invalid_input");
+    const snapshot = fromDomain(createReviewInputSnapshot(episode.value, { buildVersion: buildFingerprint, limitations: ["Review-input anchor only; content integrity does not prove research correctness."] }, this.ports)); if (!snapshot.ok) return snapshot;
+    const contextInput = {
+      project: { id: project.value.id, version: project.value.version },
+      episode: { id: episode.value.id, version: episode.value.version, artifactId: episode.value.artifactId, baselineRevisionId: baseline.value.id, candidateRevisionId: candidate.value.id },
+      baselineRevision: { id: baseline.value.id, artifactId: baseline.value.artifactId, projectId: baseline.value.projectId, ...(baseline.value.parentRevisionId ? { parentRevisionId: baseline.value.parentRevisionId } : {}), contentHash: baseline.value.content.contentHash },
+      candidateRevision: { id: candidate.value.id, artifactId: candidate.value.artifactId, projectId: candidate.value.projectId, ...(candidate.value.parentRevisionId ? { parentRevisionId: candidate.value.parentRevisionId } : {}), contentHash: candidate.value.content.contentHash },
+      briefVersion: { id: brief.value.version.id, versionNumber: brief.value.version.versionNumber },
+      activeDecisions: episode.value.lockedStart.activeDecisions.map((item) => ({ id: item.decisionId, version: item.version, status: item.status })),
+      relevantIssues: episode.value.lockedStart.relevantIssues.map((item) => ({ id: item.issueId, version: item.version, status: item.status })),
+      evidenceBoundaries: brief.value.version.evidenceBoundaries.filter((item) => episode.value.lockedStart.evidenceBoundaryIds.includes(item.id)).map((item) => ({ id: item.id, statement: item.statement })),
+      snapshot: { id: snapshot.value.id, projectId: snapshot.value.projectId, episodeId: snapshot.value.episodeId, hash: snapshot.value.hash },
+      checkerSet: CHECKERS,
+      environmentFingerprint,
+      buildFingerprint,
+    };
+    const context = parseReviewContext({ ...contextInput, inputHash: calculateReviewInputHash(contextInput) }); if (!context.ok) return { ok: false, error: mapDomainError(context.error) };
+    const freshness = new FreshnessChecker({ currentBriefVersionId: brief.value.version.id, artifactActiveRevisionId: artifact.value.activeRevisionId, boundReportInputHash: context.value.inputHash, availableCheckerVersions: CHECKERS, environmentFingerprint, buildFingerprint });
+    const scope = new ScopeChecker({
+      baselineDocuments: [{ artifactId: artifact.value.id, relativePath: artifact.value.title, markdown: baseline.value.inlineContent ?? "" }],
+      candidateDocuments: [{ artifactId: artifact.value.id, relativePath: artifact.value.title, markdown: candidate.value.inlineContent ?? "" }],
+      allowedChanges: brief.value.version.allowedChanges,
+      forbiddenChanges: brief.value.version.forbiddenChanges,
+    });
+    const run = await runReview(context.value, new CheckerRegistry([freshness, scope]), { ...this.ports, mode: "sequential" });
+    if (!run.ok) return { ok: false, error: mapDomainError(run.error) };
+    const products = reviewProducts(run.value, episode.value);
+    const reviewed = fromDomain(recordEpisodeReview(episode.value, run.value.id, run.value.findings.map((item) => item.id), SYSTEM_ACTOR, episode.value.version, this.#clock)); if (!reviewed.ok) return reviewed;
+    const required = fromDomain(requireEpisodeUserAction(reviewed.value, episodeOutcomeFromCoverage(products.coverage), SYSTEM_ACTOR, reviewed.value.version, this.#clock)); if (!required.ok) return required;
+    const persisted = this.#unitOfWork.commit(() => {
+      const storedSnapshot = fromDomain(this.#store.snapshots.create(snapshot.value)); if (!storedSnapshot.ok) return storedSnapshot;
+      const storedRun = this.#reviews.create(run.value); if (!storedRun.ok) return { ok: false, error: mapDomainError(storedRun.error) };
+      const storedReviewed = fromDomain(this.#store.episodes.compareAndSwap(reviewed.value, episode.value.version)); if (!storedReviewed.ok) return storedReviewed;
+      const storedRequired = fromDomain(this.#store.episodes.compareAndSwap(required.value, reviewed.value.version)); if (!storedRequired.ok) return storedRequired;
+      return coreOk(Object.freeze({ run: storedRun.value, episode: storedRequired.value, snapshot: storedSnapshot.value, ...products }));
+    });
+    return persisted;
+  }
+
+  recordUserDisposition(input: RecordUserDispositionCommand): CoreResult<RevisionEpisode> {
+    const user = requireUser(input.actor); if (!user.ok) return user;
+    const episode = found(this.getEpisode(input.projectId, input.episodeId)); if (!episode.ok) return episode;
+    const brief = this.findBriefVersion(input.projectId, episode.value.lockedStart.briefVersionId); if (!brief.ok) return brief;
+    const disposed = fromDomain(disposeRevisionEpisode(episode.value, input.disposition, user.value, episode.value.version, brief.value.version.id, input.reason, this.#clock));
+    return disposed.ok ? fromDomain(this.#store.episodes.compareAndSwap(disposed.value, episode.value.version)) : disposed;
+  }
+
+  createResearchSnapshot(input: CreateResearchSnapshotCommand): CoreResult<ResearchSnapshot> {
+    const episode = found(this.getEpisode(input.projectId, input.episodeId)); if (!episode.ok) return episode;
+    const snapshot = fromDomain(createFinalResearchSnapshot(episode.value, { buildVersion: input.buildVersion, limitations: input.limitations }, this.ports));
+    return snapshot.ok ? fromDomain(this.#store.snapshots.create(snapshot.value)) : snapshot;
+  }
+
+  renderReviewReport(input: RenderReviewReportCommand): CoreResult<string> {
+    if (input.format !== "markdown") return coreErr("unsupported_format");
+    const bundle = this.loadReviewBundle(input.projectId, input.episodeId); if (!bundle.ok) return bundle;
+    const products = reviewProducts(bundle.value.run, bundle.value.episode);
+    try {
+      return coreOk(renderReviewMarkdown({
+        title: `Review of ${bundle.value.artifact.title}`,
+        taskSummary: bundle.value.brief.version.currentTask,
+        run: bundle.value.run,
+        ...products,
+        preservedContent: [],
+        userActions: bundle.value.episode.status === "user_action_required" ? ["Accept, reject, or abandon this reviewed candidate explicitly."] : [`Episode disposition: ${bundle.value.episode.status}.`],
+      }));
+    } catch {
+      return coreErr("review_blocked");
+    }
+  }
+
+  exportCapsule(input: ExportCapsuleCommand): CoreResult<{ readonly capsule: ReviewCapsule; readonly json: string }> {
+    const bundle = this.loadReviewBundle(input.projectId, input.episodeId); if (!bundle.ok) return bundle;
+    const snapshot = found(this.getSnapshot(input.projectId, bundle.value.run.snapshotId)); if (!snapshot.ok) return snapshot;
+    const decisions: { id: string; statement: string; status: string }[] = [];
+    for (const locked of bundle.value.episode.lockedStart.activeDecisions) {
+      const decision = found(fromDomain(this.#store.decisions.getById(input.projectId, locked.decisionId))); if (!decision.ok) return decision;
+      decisions.push({ id: decision.value.id, statement: decision.value.statement, status: locked.status });
+    }
+    const issues: { id: string; summary: string; status: string }[] = [];
+    for (const locked of bundle.value.episode.lockedStart.relevantIssues) {
+      const issue = found(fromDomain(this.#store.issues.getById(input.projectId, locked.issueId))); if (!issue.ok) return issue;
+      issues.push({ id: issue.value.id, summary: issue.value.summary, status: locked.status });
+    }
+    const permission = input.includePermittedFullText === true ? "full_text" as const : "summary_only" as const;
+    const exported = exportReviewCapsule({
+      projectId: input.projectId,
+      brief: { id: bundle.value.brief.version.id, summary: bundle.value.brief.version.currentTask, expectedDeltas: bundle.value.brief.version.expectedDeltas.map((item) => item.statement) },
+      activeDecisions: decisions,
+      relevantIssues: issues,
+      baseline: { artifactId: bundle.value.artifact.id, revisionId: bundle.value.baseline.id, relativePath: bundle.value.artifact.title, summary: `${bundle.value.baseline.content.byteLength} bytes; sha256 ${bundle.value.baseline.content.contentHash}`, ...(permission === "full_text" ? { content: bundle.value.baseline.inlineContent } : {}), privacy: "private_a", contentPermission: permission },
+      candidate: { artifactId: bundle.value.artifact.id, revisionId: bundle.value.candidate.id, relativePath: bundle.value.artifact.title, summary: `${bundle.value.candidate.content.byteLength} bytes; sha256 ${bundle.value.candidate.content.contentHash}`, ...(permission === "full_text" ? { content: bundle.value.candidate.inlineContent } : {}), privacy: "private_a", contentPermission: permission },
+      evidenceBoundaries: bundle.value.brief.version.evidenceBoundaries.map((item) => item.statement),
+      expectedDeltas: bundle.value.brief.version.expectedDeltas.map((item) => item.statement),
+      snapshotId: snapshot.value.id,
+      snapshotHash: snapshot.value.hash,
+      reviewInputHash: bundle.value.run.inputHash,
+      invalidationConditions: ["Brief, artifact revision, decision, issue, checker set, environment, or build binding changes."],
+      buildFingerprint: bundle.value.run.context.buildFingerprint,
+      checkerVersions: bundle.value.run.context.checkerSet,
+    }, { includePermittedFullText: input.includePermittedFullText });
+    return exported.ok ? coreOk(exported.value) : { ok: false, error: mapDomainError(exported.error) };
+  }
+
+  getProject(projectId: string): CoreResult<ResearchProject | undefined> { return fromDomain(this.#store.projects.getById(projectId)); }
+  getEpisode(projectId: string, episodeId: string): CoreResult<RevisionEpisode | undefined> { return fromDomain(this.#store.episodes.getById(projectId, episodeId)); }
+  getReviewRun(projectId: string, reviewRunId: string): CoreResult<ReviewRun | undefined> {
+    const result = this.#reviews.getById(projectId, reviewRunId);
+    return result.ok ? coreOk(result.value) : { ok: false, error: mapDomainError(result.error) };
+  }
+  getSnapshot(projectId: string, snapshotId: string): CoreResult<ResearchSnapshot | undefined> { return fromDomain(this.#store.snapshots.getById(projectId, snapshotId)); }
+
+  private get ports(): { readonly clock: Clock; readonly idFactory: IdFactory } { return { clock: this.#clock, idFactory: this.#idFactory }; }
+
+  private findBriefVersion(projectId: string, versionId: string): CoreResult<{ readonly brief: ResearchBrief; readonly version: ResearchBriefVersion }> {
+    const page = fromDomain(this.#store.briefs.listByProject(projectId, PAGE)); if (!page.ok) return page;
+    if (page.value.nextCursor !== undefined) return coreErr("state_conflict");
+    for (const brief of page.value.items) {
+      const version = getResearchBriefVersion(brief, versionId);
+      if (version !== undefined) return coreOk(Object.freeze({ brief, version }));
+    }
+    return coreErr("not_found");
+  }
+
+  private loadReviewBundle(projectId: string, episodeId: string): CoreResult<{
+    readonly episode: RevisionEpisode; readonly run: ReviewRun; readonly artifact: ResearchArtifact; readonly brief: { readonly brief: ResearchBrief; readonly version: ResearchBriefVersion }; readonly baseline: ArtifactRevision; readonly candidate: ArtifactRevision;
+  }> {
+    const episode = found(this.getEpisode(projectId, episodeId)); if (!episode.ok) return episode;
+    const runId = episode.value.reviewRunIds.at(-1); if (runId === undefined || episode.value.candidateRevisionId === undefined) return coreErr("state_conflict");
+    const run = found(this.getReviewRun(projectId, runId)); if (!run.ok) return run;
+    const artifact = found(fromDomain(this.#store.artifacts.getById(projectId, episode.value.artifactId))); if (!artifact.ok) return artifact;
+    const brief = this.findBriefVersion(projectId, episode.value.lockedStart.briefVersionId); if (!brief.ok) return brief;
+    const baseline = found(fromDomain(this.#store.revisions.getById(projectId, episode.value.artifactId, episode.value.lockedStart.baselineRevisionId))); if (!baseline.ok) return baseline;
+    const candidate = found(fromDomain(this.#store.revisions.getById(projectId, episode.value.artifactId, episode.value.candidateRevisionId))); if (!candidate.ok) return candidate;
+    return coreOk(Object.freeze({ episode: episode.value, run: run.value, artifact: artifact.value, brief: brief.value, baseline: baseline.value, candidate: candidate.value }));
+  }
+}
+
+export async function openSestina(options: OpenSestinaOptions): Promise<CoreResult<SestinaCore>> {
+  if (typeof options.databasePath !== "string" || options.databasePath.trim().length === 0) return coreErr("invalid_input");
+  try {
+    const database = await openDatabase({ path: options.databasePath, readOnly: options.readOnly });
+    return coreOk(new SestinaCore(database, options.clock ?? new SystemClock(), options.idFactory ?? new RandomIdFactory()));
+  } catch (error) {
+    return { ok: false, error: mapDomainError(typeof error === "object" && error !== null ? error as { code?: unknown } : {}) };
+  }
+}

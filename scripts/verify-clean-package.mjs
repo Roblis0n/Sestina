@@ -58,6 +58,7 @@ const STRICT_PACKAGES = {
     "research-store",
     "review",
     "reports",
+    "storage",
     "config",
     "secrets",
     "schema",

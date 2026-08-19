@@ -20,7 +20,7 @@
  *                                          research-store or storage
  *   ARCH-R004 packages/reports           -> research, review, schema
  *   ARCH-R005 packages/core              -> research, research-store, review,
- *                                          reports, config, secrets, schema
+ *                                          reports, storage, config, secrets, schema
  *   ARCH-R006 apps/cli                   -> @sestina/core only
  *   ARCH-R007 integrations/mcp           -> @sestina/core only
  *   ARCH-R008 integrations/legacy-import -> read-only legacy boundary
@@ -72,8 +72,8 @@ const NEW_PACKAGE_RULES = {
   },
   "packages/core": {
     id: "ARCH-R005",
-    allow: ["research", "research-store", "review", "reports", "config", "secrets", "schema"],
-    fix: "core composes research-store, review, reports, config and secrets; anything else belongs behind a port",
+    allow: ["research", "research-store", "review", "reports", "storage", "config", "secrets", "schema"],
+    fix: "core composes research-store, review, reports, storage, config and secrets; anything else belongs behind a port",
   },
   "apps/cli": {
     id: "ARCH-R006",

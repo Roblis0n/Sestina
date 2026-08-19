@@ -99,7 +99,6 @@ function parseVersionFields(input: unknown): ResearchResult<ResearchBriefVersion
   if (!Array.isArray(input.targetArtifacts)) return err(researchError("invalid_research_brief"));
   const targetArtifacts: string[] = [];
   for (const item of input.targetArtifacts) { const id = parseResearchIdFor(item, "rart_"); if (!id.ok || targetArtifacts.includes(id.value.id)) return err(researchError("invalid_research_brief")); targetArtifacts.push(id.value.id); }
-  if (targetArtifacts.length === 0) return err(researchError("invalid_research_brief"));
   const fixedDecisions = parseArray(input.fixedDecisions, parseBriefConstraint); if (!fixedDecisions.ok) return fixedDecisions;
   const allowedChanges = parseArray(input.allowedChanges, parseScopeRule); if (!allowedChanges.ok) return allowedChanges;
   const forbiddenChanges = parseArray(input.forbiddenChanges, parseScopeRule); if (!forbiddenChanges.ok) return forbiddenChanges;

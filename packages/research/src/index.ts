@@ -243,6 +243,7 @@ export type {
 export { calculateResearchSnapshotHash } from "./snapshot/snapshot-hash.js";
 export {
   createResearchSnapshot,
+  createReviewInputSnapshot,
   parseResearchSnapshot,
   verifyResearchSnapshotHash,
   rebuildEpisodeFromSnapshot,

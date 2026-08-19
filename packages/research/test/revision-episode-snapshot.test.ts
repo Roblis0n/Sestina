@@ -5,6 +5,7 @@ import {
   activateRevisionEpisode,
   applyEpisodeWaiver,
   createResearchSnapshot,
+  createReviewInputSnapshot,
   createRevisionEpisode,
   disposeRevisionEpisode,
   parseRevisionEpisode,
@@ -188,6 +189,19 @@ describe("RevisionEpisode locked start and lifecycle", () => {
 });
 
 describe("ResearchSnapshot", () => {
+  it("creates an immutable review-input anchor before review without treating it as a final snapshot", () => {
+    const environment = env();
+    const created = createRevisionEpisode(episodeInput(), environment);
+    if (!created.ok) throw new Error(created.error.code);
+    const active = activateRevisionEpisode(created.value, SYSTEM_ACTOR, created.value.version, environment.clock);
+    if (!active.ok) throw new Error(active.error.code);
+    const submitted = submitEpisodeCandidate(active.value, environment.idFactory.create("rrev_"), MODEL_ACTOR, active.value.version, environment.clock);
+    if (!submitted.ok) throw new Error(submitted.error.code);
+    const snapshot = createReviewInputSnapshot(submitted.value, { buildVersion: "build-1", limitations: ["Review input only"] }, environment);
+    expect(snapshot.ok).toBe(true);
+    if (snapshot.ok) expect(snapshot.value.episode.status).toBe("candidate_submitted");
+  });
+
   it("serializes, verifies a canonical hash, and rebuilds a terminal episode", () => {
     const { episode, environment } = toUserActionRequired();
     const accepted = disposeRevisionEpisode(
