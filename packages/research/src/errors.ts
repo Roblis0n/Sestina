@@ -33,7 +33,13 @@ export type ResearchErrorCode =
   | "invalid_brief_change"
   | "brief_change_not_found"
   | "user_confirmation_required"
-  | "brief_change_already_decided";
+  | "brief_change_already_decided"
+  | "invalid_research_decision"
+  | "invalid_decision_scope"
+  | "invalid_decision_status"
+  | "invalid_decision_transition"
+  | "user_decision_required"
+  | "decision_supersede_required";
 
 export type ResearchErrorDetails = Readonly<
   Record<string, string | number | boolean>
@@ -81,4 +87,10 @@ const MESSAGES: Readonly<Record<ResearchErrorCode, string>> = {
   brief_change_not_found: "brief change proposal was not found",
   user_confirmation_required: "an explicit user confirmation is required",
   brief_change_already_decided: "brief change proposal is already decided",
+  invalid_research_decision: "research decision is missing or malformed",
+  invalid_decision_scope: "decision scope is missing or malformed",
+  invalid_decision_status: "decision status is unknown",
+  invalid_decision_transition: "decision status transition is not allowed",
+  user_decision_required: "an explicit user decision is required",
+  decision_supersede_required: "conflicting decisions require explicit supersede",
 };

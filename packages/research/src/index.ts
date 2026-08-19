@@ -139,6 +139,33 @@ export type {
   ResearchBrief,
 } from "./brief/research-brief.js";
 
+export { DECISION_STATUSES, parseDecisionStatus } from "./decision/decision-status.js";
+export type { DecisionStatus } from "./decision/decision-status.js";
+export {
+  parseDecisionScope,
+  decisionScopeMatches,
+  decisionScopePriority,
+} from "./decision/decision-scope.js";
+export type {
+  DecisionScope,
+  DecisionQueryContext,
+} from "./decision/decision-scope.js";
+export { parseDecisionTransition } from "./decision/decision-transition.js";
+export type { DecisionTransition } from "./decision/decision-transition.js";
+export {
+  createResearchDecision,
+  parseResearchDecision,
+  transitionResearchDecision,
+  supersedeResearchDecision,
+  getDecisionStateAt,
+  queryActiveResearchDecisions,
+} from "./decision/research-decision.js";
+export type {
+  ResearchDecisionInput,
+  ResearchDecision,
+  ActiveDecisionMatch,
+} from "./decision/research-decision.js";
+
 import type { ResearchIdPrefix } from "./identity/research-id.js";
 
 export interface IdFactory {
