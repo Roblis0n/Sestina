@@ -23,7 +23,17 @@ export type ResearchErrorCode =
   | "invalid_revision"
   | "invalid_revision_parent"
   | "revision_not_found"
-  | "artifact_tombstoned";
+  | "artifact_tombstoned"
+  | "invalid_research_brief"
+  | "invalid_research_stage"
+  | "invalid_scope_rule"
+  | "scope_rule_conflict"
+  | "invalid_expected_delta"
+  | "invalid_evidence_boundary"
+  | "invalid_brief_change"
+  | "brief_change_not_found"
+  | "user_confirmation_required"
+  | "brief_change_already_decided";
 
 export type ResearchErrorDetails = Readonly<
   Record<string, string | number | boolean>
@@ -61,4 +71,14 @@ const MESSAGES: Readonly<Record<ResearchErrorCode, string>> = {
   invalid_revision_parent: "artifact revision parent is invalid",
   revision_not_found: "artifact revision was not found",
   artifact_tombstoned: "research artifact is tombstoned",
+  invalid_research_brief: "research brief is missing or malformed",
+  invalid_research_stage: "research stage is unknown",
+  invalid_scope_rule: "scope rule is missing or malformed",
+  scope_rule_conflict: "allowed and forbidden scope rules conflict",
+  invalid_expected_delta: "expected delta is missing or malformed",
+  invalid_evidence_boundary: "evidence boundary is missing or malformed",
+  invalid_brief_change: "brief change proposal is missing or malformed",
+  brief_change_not_found: "brief change proposal was not found",
+  user_confirmation_required: "an explicit user confirmation is required",
+  brief_change_already_decided: "brief change proposal is already decided",
 };

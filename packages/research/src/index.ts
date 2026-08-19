@@ -96,6 +96,49 @@ export type {
   ArtifactTombstone,
 } from "./artifact/research-artifact.js";
 
+export { RESEARCH_STAGES, parseResearchStage } from "./brief/research-stage.js";
+export type { ResearchStage } from "./brief/research-stage.js";
+export {
+  parseScopeRule,
+  normalizedScopeTargetKey,
+  findScopeRuleConflict,
+} from "./brief/scope-rule.js";
+export type {
+  ScopeRule,
+  ScopeTarget,
+  ScopeOperation,
+} from "./brief/scope-rule.js";
+export { parseExpectedDelta } from "./brief/expected-delta.js";
+export type { ExpectedDelta } from "./brief/expected-delta.js";
+export { parseEvidenceBoundaryRule } from "./brief/evidence-boundary-rule.js";
+export type {
+  EvidenceBoundaryRule,
+  ForbiddenInferenceKind,
+} from "./brief/evidence-boundary-rule.js";
+export type {
+  BriefChangeStatus,
+  BriefChangeSet,
+  BriefChangeProposal,
+  CreateBriefChangeProposalInput,
+} from "./brief/brief-change.js";
+export {
+  createResearchBrief,
+  parseResearchBrief,
+  parseResearchBriefVersion,
+  createBriefChangeProposal,
+  confirmBriefChangeProposal,
+  getActiveResearchBriefVersion,
+  getResearchBriefVersion,
+  exportResearchBriefYaml,
+} from "./brief/research-brief.js";
+export type {
+  BriefConstraint,
+  ResearchBriefVersionFields,
+  ResearchBriefInput,
+  ResearchBriefVersion,
+  ResearchBrief,
+} from "./brief/research-brief.js";
+
 import type { ResearchIdPrefix } from "./identity/research-id.js";
 
 export interface IdFactory {
