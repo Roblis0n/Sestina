@@ -13,13 +13,18 @@ export interface ProjectFixture {
 
 const actor = Object.freeze({ kind: "user" as const, actorId: "ri37-fixture-user" });
 
-function initialBrief(currentTask: string) {
+function initialBrief(options: {
+  readonly currentTask: string;
+  readonly projectQuestion?: string;
+  readonly targetArtifacts?: readonly string[];
+  readonly explicitNonGoals?: readonly string[];
+}) {
   return {
     actor,
-    projectQuestion: "How can the current research task recover without replacing its goal?",
+    projectQuestion: options.projectQuestion ?? "How can the current research task recover without replacing its goal?",
     currentStage: "revision" as const,
-    currentTask,
-    targetArtifacts: [],
+    currentTask: options.currentTask,
+    targetArtifacts: options.targetArtifacts ?? [],
     fixedDecisions: [{
       statement: "Preserve the accepted research question.",
       scope: { target: { kind: "project_path" as const, relativePath: "manuscript.md" }, operations: ["rewrite" as const] },
@@ -41,13 +46,16 @@ function initialBrief(currentTask: string) {
       scope: { target: { kind: "project_path" as const, relativePath: "data/source.csv" }, operations: ["rewrite" as const] },
       forbiddenInferenceKinds: ["causal" as const],
     }],
-    explicitNonGoals: ["Do not replace the research question."],
+    explicitNonGoals: options.explicitNonGoals ?? ["Do not replace the research question."],
   };
 }
 
 export async function createProjectFixture(options: {
   readonly activeBrief?: boolean;
   readonly currentTask?: string;
+  readonly projectQuestion?: string;
+  readonly targetArtifacts?: readonly string[];
+  readonly explicitNonGoals?: readonly string[];
   readonly projectCount?: number;
 } = {}): Promise<ProjectFixture> {
   const root = await mkdtemp(join(tmpdir(), FIXTURE_PREFIX));
@@ -71,7 +79,12 @@ export async function createProjectFixture(options: {
     if (options.activeBrief !== false) {
       const brief = opened.value.activateBrief({
         projectId,
-        ...initialBrief(options.currentTask ?? "Add only the missing claim-evidence relation."),
+        ...initialBrief({
+          currentTask: options.currentTask ?? "Add only the missing claim-evidence relation.",
+          ...(options.projectQuestion === undefined ? {} : { projectQuestion: options.projectQuestion }),
+          ...(options.targetArtifacts === undefined ? {} : { targetArtifacts: options.targetArtifacts }),
+          ...(options.explicitNonGoals === undefined ? {} : { explicitNonGoals: options.explicitNonGoals }),
+        }),
       });
       if (!brief.ok) throw new Error(brief.error.code);
     }

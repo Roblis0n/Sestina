@@ -1,4 +1,4 @@
-import { serveStdio } from "@modelcontextprotocol/server/stdio";
+import { StdioServerTransport, serveStdio } from "@modelcontextprotocol/server/stdio";
 import { createIdempotentShutdown } from "./lifecycle.js";
 import {
   DEFAULT_OUTPUT_LIMIT_BYTES,
@@ -10,6 +10,10 @@ import {
   openProjectReader,
 } from "./project-reader.js";
 import { mcpErr, type SestinaMcpResult } from "./protocol-errors.js";
+import {
+  isInboundLimitError,
+  MAX_INBOUND_JSONRPC_MESSAGE_BYTES,
+} from "./security/output-limits.js";
 import { createSestinaMcpServer } from "./server.js";
 import { SERVER_VERSION } from "./tools/health.js";
 
@@ -83,18 +87,31 @@ if (!parsed.ok) {
     diagnostic({ event: "startup_failed", code: reader.error.code });
     process.exitCode = 66;
   } else {
-    const handle = serveStdio(
-      () => createSestinaMcpServer(reader.value, parsed.value),
-      {
-        onerror: () => {
-          diagnostic({ event: "transport_error", code: "malformed_or_invalid_jsonrpc" });
-        },
-      },
-    );
+    const transport = new StdioServerTransport(process.stdin, process.stdout, {
+      maxBufferSize: MAX_INBOUND_JSONRPC_MESSAGE_BYTES,
+    });
+    const transportLifecycle: { handle?: ReturnType<typeof serveStdio> } = {};
     const close = createIdempotentShutdown(
-      async () => { await handle.close(); },
+      async () => { await transportLifecycle.handle?.close(); },
       () => { reader.value.close(); },
       () => { process.stdin.pause(); },
+    );
+    transportLifecycle.handle = serveStdio(
+      () => createSestinaMcpServer(reader.value, parsed.value),
+      {
+        transport,
+        onerror: (error) => {
+          const inputTooLarge = isInboundLimitError(error);
+          diagnostic({
+            event: "transport_error",
+            code: inputTooLarge ? "input_too_large" : "malformed_or_invalid_jsonrpc",
+          });
+          if (inputTooLarge) {
+            process.exitCode = 65;
+            void close().finally(() => { process.stdin.destroy(); });
+          }
+        },
+      },
     );
     process.stdin.once("end", () => { void close(); });
     process.once("SIGINT", () => { void close(); });

@@ -128,11 +128,25 @@ describe.sequential("@sestina/mcp tool and resource contract", () => {
       capabilities: {
         tools: ["health", "get_research_context"],
         resources: [CURRENT_BRIEF_URI],
+        prompts: [],
+        resourceTemplates: [],
         write: false,
         network: false,
         daemon: false,
       },
-      limits: { outputLimitBytes: 32_768, queryTimeoutMs: 2_000 },
+      limits: {
+        inboundJsonRpcMessageBytes: 65_536,
+        researchTextBytes: 8_192,
+        researchCollectionItems: 128,
+        researchContext: {
+          configuredBytes: 32_768,
+          defaultBytes: 32_768,
+          minimumBytes: 1_024,
+          maximumBytes: 65_536,
+        },
+        mcpResultBytes: 262_144,
+        queryTimeout: { configuredMs: 2_000, minimumMs: 1, maximumMs: 10_000 },
+      },
     });
     expect(first.structuredContent).not.toHaveProperty("packaged");
     expect(JSON.stringify(first)).not.toContain(fixture.root);
@@ -232,6 +246,7 @@ describe.sequential("@sestina/mcp tool and resource contract", () => {
     const timeoutReader: ProjectReader = {
       health: () => ({ rootValidated: true, stateDatabaseInitialized: true, projectBinding: "single", readOnly: true }),
       readResearchContext: () => Promise.resolve(mcpErr("query_timeout")),
+      readSerializedResearchContext: () => Promise.resolve(mcpErr("query_timeout")),
       close: () => undefined,
     };
     const timed = await connectReader(timeoutReader, { outputLimitBytes: 32_768, queryTimeoutMs: 1 });

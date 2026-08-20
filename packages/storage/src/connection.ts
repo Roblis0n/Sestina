@@ -1,4 +1,5 @@
 import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { DatabaseSync, type StatementSync } from "node:sqlite";
 import { SestinaError, SestinaErrorCode } from "@sestina/schema";
 import { applySecurityPragmas, DEFAULT_BUSY_TIMEOUT_MS } from "./pragmas.js";
@@ -8,6 +9,11 @@ import { MigrationRunner, MIGRATIONS, type Migration } from "./migrator.js";
 export interface OpenDatabaseOptions {
   path: string;
   readOnly?: boolean;
+  /**
+   * Opens a read-only file as an immutable SQLite URI. This prevents SQLite
+   * from creating WAL/SHM sidecars and must never be used for writable opens.
+   */
+  immutable?: boolean;
   busyTimeoutMs?: number;
   /**
    * Defaults to true on writable opens. Pass false to skip migrations,
@@ -192,9 +198,23 @@ export class StorageDatabase {
  */
 export async function openDatabase(options: OpenDatabaseOptions): Promise<StorageDatabase> {
   const readOnly = options.readOnly ?? false;
+  const immutable = options.immutable ?? false;
+  if (immutable && !readOnly) {
+    throw new SestinaError(
+      SestinaErrorCode.validation_failed,
+      "Immutable database opens must be read-only",
+    );
+  }
   let raw: DatabaseSync;
   try {
-    raw = new DatabaseSync(options.path, { open: true, readOnly });
+    const sqlitePath = immutable
+      ? (() => {
+          const uri = pathToFileURL(options.path);
+          uri.searchParams.set("immutable", "1");
+          return uri;
+        })()
+      : options.path;
+    raw = new DatabaseSync(sqlitePath, { open: true, readOnly });
   } catch (err) {
     throw mapSqliteError(err, "Failed to open database");
   }

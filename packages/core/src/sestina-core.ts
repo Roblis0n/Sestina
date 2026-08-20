@@ -129,6 +129,7 @@ const CHECKERS = Object.freeze([
 export interface OpenSestinaOptions {
   readonly databasePath: string;
   readonly readOnly?: boolean;
+  readonly immutable?: boolean;
   readonly clock?: Clock;
   readonly idFactory?: IdFactory;
 }
@@ -905,8 +906,13 @@ export class SestinaCore {
 
 export async function openSestina(options: OpenSestinaOptions): Promise<CoreResult<SestinaCore>> {
   if (typeof options.databasePath !== "string" || options.databasePath.trim().length === 0) return coreErr("invalid_input");
+  if (options.immutable === true && options.readOnly !== true) return coreErr("invalid_input");
   try {
-    const database = await openDatabase({ path: options.databasePath, readOnly: options.readOnly });
+    const database = await openDatabase({
+      path: options.databasePath,
+      readOnly: options.readOnly,
+      immutable: options.immutable,
+    });
     return coreOk(new SestinaCore(database, options.clock ?? new SystemClock(), options.idFactory ?? new RandomIdFactory()));
   } catch (error) {
     return { ok: false, error: mapDomainError(typeof error === "object" && error !== null ? error : {}) };

@@ -6,7 +6,6 @@ export {
   MIN_OUTPUT_LIMIT_BYTES,
   MIN_QUERY_TIMEOUT_MS,
   openProjectReader,
-  projectResearchContext,
   runWithQueryDeadline,
 } from "./project-reader.js";
 export { createIdempotentShutdown } from "./lifecycle.js";
@@ -16,6 +15,37 @@ export type {
   ProjectReaderHealth,
   ResearchContextPayload,
 } from "./project-reader.js";
+export {
+  RESEARCH_CONTENT_BOUNDARY,
+  projectResearchContext,
+} from "./security/content-boundary.js";
+export {
+  CAPABILITY_POLICY,
+  CURRENT_BRIEF_RESOURCE_POLICY,
+  HEALTH_TOOL_POLICY,
+  READ_ONLY_TOOL_ANNOTATIONS,
+  RESEARCH_CONTEXT_TOOL_POLICY,
+  STRICT_EMPTY_INPUT_SCHEMA,
+} from "./security/capability-policy.js";
+export {
+  DEFAULT_RESEARCH_CONTEXT_BUDGET_BYTES,
+  MAX_INBOUND_JSONRPC_MESSAGE_BYTES,
+  MAX_MCP_RESULT_BYTES,
+  MAX_RESEARCH_COLLECTION_ITEMS,
+  MAX_RESEARCH_CONTEXT_BUDGET_BYTES,
+  MAX_RESEARCH_TEXT_BYTES,
+  MIN_RESEARCH_CONTEXT_BUDGET_BYTES,
+  serializeMcpResult,
+  serializeResearchContext,
+  utf8ByteLength,
+  validateResearchCollection,
+  validateResearchText,
+} from "./security/output-limits.js";
+export {
+  canonicalPathWithin,
+  resolveProjectStatePaths,
+  revalidateProjectStateDatabase,
+} from "./security/path-guard.js";
 export {
   mcpErr,
   mcpError,

@@ -63,4 +63,17 @@ describe("@sestina/mcp package and architecture boundary", () => {
       expect(source).not.toMatch(/Semantic Reviewer|Minimal Correction|Finding/u);
     }
   });
+
+  it("keeps production sources free of network listeners, direct SQL, and writable Core opens", async () => {
+    let combined = "";
+    for (const file of await sourceFiles(join(packageRoot, "src"))) {
+      const source = await readFile(file, "utf8");
+      combined += source;
+      expect(source).not.toMatch(/from\s+["']node:(?:net|http|https|http2|dgram)["']/u);
+      expect(source).not.toMatch(/\b(?:SELECT|INSERT\s+INTO|UPDATE|DELETE\s+FROM|PRAGMA)\b/iu);
+    }
+    expect(combined).toContain("readOnly: true");
+    expect(combined).not.toContain("readOnly: false");
+    expect(combined).not.toMatch(/registerPrompt|registerResourceTemplate/u);
+  });
 });

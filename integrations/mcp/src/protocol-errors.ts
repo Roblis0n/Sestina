@@ -31,7 +31,7 @@ const ERROR_MESSAGES: Readonly<Record<SestinaMcpErrorCode, string>> = Object.fre
   project_state_unavailable: "The read-only Sestina project state is unavailable.",
   project_binding_inconsistent: "The Sestina state database must contain exactly one Research Project.",
   no_active_brief: "No active Research Brief exists for the explicit project root.",
-  response_too_large: "The active Research Brief exceeds the configured response budget.",
+  response_too_large: "The read-only MCP response exceeds a configured security limit.",
   query_timeout: "The read-only project query timed out.",
   invalid_arguments: "The server arguments are invalid.",
 });
