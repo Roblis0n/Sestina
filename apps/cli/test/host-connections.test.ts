@@ -3,6 +3,7 @@ import { constants } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { openSestina } from "@sestina/core";
 import type { CliDependencies } from "../src/connections/connection-plan.js";
 import { runCli, type CliIo } from "../src/main.js";
 
@@ -34,6 +35,36 @@ async function runtimeFixture(parent: string, label = "runtime one"): Promise<Cl
   await writeFile(serverEntry, "export {};\n", "utf8");
   await writeFile(nodeExecutable, "node\n", "utf8");
   return () => Promise.resolve({ ok: true, value: { packageRoot, serverEntry, nodeExecutable } });
+}
+
+async function activateSyntheticBrief(project: string): Promise<{ readonly projectId: string; readonly briefId: string; readonly briefVersionId: string }> {
+  const opened = await openSestina({ databasePath: join(project, ".sestina", "state.sqlite") });
+  if (!opened.ok) throw new Error(opened.error.code);
+  try {
+    const projects = opened.value.listProjects();
+    if (!projects.ok || projects.value[0] === undefined) throw new Error("project required");
+    const projectId = projects.value[0].id;
+    const brief = opened.value.activateBrief({
+      projectId,
+      actor: { kind: "user", actorId: "ri40-host-test-user" },
+      projectQuestion: "How can a bounded synthetic claim preserve its evidence boundary?",
+      currentStage: "revision",
+      currentTask: "Add one bounded claim-evidence relation.",
+      targetArtifacts: [],
+      fixedDecisions: [{ statement: "Keep the observational design fixed.", scope: { target: { kind: "project_path", relativePath: "manuscript.md" }, operations: ["rewrite"] } }],
+      allowedChanges: [{ target: { kind: "project_path", relativePath: "manuscript.md" }, operations: ["rewrite"] }],
+      forbiddenChanges: [],
+      expectedDeltas: [{ statement: "Add one bounded claim-evidence relation.", scope: { target: { kind: "project_path", relativePath: "manuscript.md" }, operations: ["rewrite"] } }],
+      evidenceBoundaries: [{ statement: "Observational evidence does not establish causality.", scope: { target: { kind: "project_path", relativePath: "manuscript.md" }, operations: ["rewrite"] }, forbiddenInferenceKinds: ["causal"] }],
+      explicitNonGoals: ["Do not infer causality."],
+    });
+    if (!brief.ok) throw new Error(brief.error.code);
+    const state = opened.value.getBriefState(projectId);
+    if (!state.ok || state.value === undefined) throw new Error("brief required");
+    return { projectId, briefId: state.value.brief.id, briefVersionId: state.value.version.id };
+  } finally {
+    opened.value.close();
+  }
 }
 
 async function backupDirectories(root: string): Promise<readonly string[]> {
@@ -125,6 +156,60 @@ describe.sequential("project-scoped Codex connection workflow", () => {
       mcp: { status: "configured" },
       skill: { status: "configured" },
     });
+  });
+
+  it("keeps ordinary status local and requires explicit consent before verifying real Codex MCP events", async () => {
+    const sandbox = await mkdtemp(join(tmpdir(), "sestina-host-status-")); roots.push(sandbox);
+    const project = await initializeProject(sandbox);
+    const binding = await activateSyntheticBrief(project);
+    const runtimeLocator = await runtimeFixture(sandbox);
+    expect(await runCli(["connect", "--project", project, "--yes", "--json"], capture(sandbox).io, { runtimeLocator })).toBe(0);
+    let runs = 0;
+    const dependencies: CliDependencies = {
+      runtimeLocator,
+      codexExecutableLocator: () => Promise.resolve({ ok: true, value: "C:\\Codex\\codex.exe" }),
+      codexProcessRunner: async (request) => {
+        runs += 1;
+        const outputPath = request.args[request.args.indexOf("--output-last-message") + 1];
+        if (outputPath === undefined) throw new Error("output path required");
+        await writeFile(outputPath, JSON.stringify({ ...binding, authority: "host_observation", canMutateAuthority: false }), "utf8");
+        const event = (tool: string) => JSON.stringify({ type: "item.completed", item: { type: "mcp_tool_call", server: "sestina", tool, status: "completed", error: null } });
+        const stdout = `${event("health")}\n${event("get_research_context")}\n`;
+        return { kind: "completed", exitCode: 0, stdout, stdoutBytes: Buffer.byteLength(stdout), stderrBytes: 0, outputLimitExceeded: false };
+      },
+    };
+    const ordinary = capture(sandbox);
+    expect(await runCli(["connection-status", "--project", project, "--json"], ordinary.io, dependencies)).toBe(0);
+    expect(JSON.parse(ordinary.stdout.join(""))).toMatchObject({ state: "configured", hostVerification: "unverified" });
+    expect(runs).toBe(0);
+
+    const preview = capture(sandbox);
+    expect(await runCli(["connection-status", "--project", project, "--verify-host", "--json"], preview.io, dependencies)).toBe(7);
+    expect(JSON.parse(preview.stderr.join(""))).toMatchObject({
+      command: "connection-status",
+      host: "codex",
+      scope: "project",
+      error: { code: "user_confirmation_required" },
+    });
+    expect(preview.stderr.join("")).toContain("may send bounded research context");
+    expect(runs).toBe(0);
+
+    const verified = capture(sandbox);
+    expect(await runCli(["connection-status", "--project", project, "--verify-host", "--yes", "--json"], verified.io, dependencies)).toBe(0);
+    expect(JSON.parse(verified.stdout.join(""))).toMatchObject({
+      ok: true,
+      command: "connection-status",
+      state: "configured",
+      hostVerification: "verified",
+      verification: {
+        method: "codex_exec_jsonl",
+        observedTools: ["health", "get_research_context"],
+        authority: "host_observation",
+        canMutateAuthority: false,
+      },
+    });
+    expect(runs).toBe(1);
+    expect(verified.stdout.join("")).not.toContain(project);
   });
 
   it("preserves foreign config bytes, is mtime-idempotent, and backs up an owned runtime update", async () => {

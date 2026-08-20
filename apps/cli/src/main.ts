@@ -27,7 +27,7 @@ export const CLI_HELP = `Sestina local research revision workflow
   sestina init --project <dir> --title <title> --yes
   sestina doctor [--project <dir>]
   sestina connect [--project <dir>] [--host codex] [--yes] [--json]
-  sestina connection-status [--project <dir>] [--host codex] [--json]
+  sestina connection-status [--project <dir>] [--host codex] [--verify-host --yes] [--json]
   sestina disconnect [--project <dir>] [--host codex] [--yes] [--json]
   sestina brief show|edit|propose-change|accept-change
   sestina artifact add|list
@@ -72,8 +72,8 @@ export async function runCli(args: readonly string[], io: CliIo, dependencies: C
     return runConnect(options, io, dependencies);
   }
   if (command === "connection-status" && parsed.positionals.length === 1) {
-    if (!onlyOptions(parsed, new Set(["project", "host", "json"]))) return failure(io, json, EXIT_CODES.invalidInput, "invalid_input", "Command arguments are invalid.");
-    const options: ConnectionStatusOptions = { project: stringOption(parsed, "project"), host: stringOption(parsed, "host"), json };
+    if (!onlyOptions(parsed, new Set(["project", "host", "verify-host", "yes", "json"]))) return failure(io, json, EXIT_CODES.invalidInput, "invalid_input", "Command arguments are invalid.");
+    const options: ConnectionStatusOptions = { project: stringOption(parsed, "project"), host: stringOption(parsed, "host"), verifyHost: parsed.options["verify-host"] === true, yes: parsed.options.yes === true, json };
     return runConnectionStatus(options, io, dependencies);
   }
   if (command === "disconnect" && parsed.positionals.length === 1) {

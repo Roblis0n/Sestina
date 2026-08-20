@@ -1,4 +1,5 @@
-import { mkdtemp, mkdir } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -12,6 +13,7 @@ import {
   FIXTURE_PREFIX,
   readBriefRecordVersion,
   removeProjectFixture,
+  seedContinuityFixture,
   updateActiveBrief,
 } from "./fixture.js";
 
@@ -55,7 +57,7 @@ describe("@sestina/mcp project reader", () => {
     expect(context.ok).toBe(true);
     if (context.ok) {
       expect(context.value).toMatchObject({
-        schemaVersion: "1.0",
+        schemaVersion: "1.1",
         projectQuestion: "How can the current research task recover without replacing its goal?",
         currentTask: "Add only the missing claim-evidence relation.",
         fixedDecisions: [{ statement: "Preserve the accepted research question." }],
@@ -71,6 +73,59 @@ describe("@sestina/mcp project reader", () => {
     expect(after).toBe(before);
     opened.value.close();
     opened.value.close();
+  });
+
+  it("projects the current Episode, active decisions, and resolved issues across fresh read-only sessions", async () => {
+    const fixture = await createProjectFixture();
+    cleanup.push(fixture.root);
+    const continuity = await seedContinuityFixture(fixture);
+    const databaseBefore = createHash("sha256").update(await readFile(fixture.databasePath)).digest("hex");
+    const firstReader = await openProjectReader({ projectRoot: fixture.root, outputLimitBytes: 32_768, queryTimeoutMs: 2_000 });
+    expect(firstReader.ok).toBe(true);
+    if (!firstReader.ok) return;
+    const first = await firstReader.value.readResearchContext();
+    firstReader.value.close();
+    const secondReader = await openProjectReader({ projectRoot: fixture.root, outputLimitBytes: 32_768, queryTimeoutMs: 2_000 });
+    expect(secondReader.ok).toBe(true);
+    if (!secondReader.ok) return;
+    const second = await secondReader.value.readResearchContext();
+    secondReader.value.close();
+    expect(first).toEqual(second);
+    expect(second).toMatchObject({
+      ok: true,
+      value: {
+        schemaVersion: "1.1",
+        continuity: {
+          currentEpisode: {
+            id: continuity.episodeId,
+            status: "active",
+            artifactId: continuity.artifactId,
+            baselineRevisionId: continuity.baselineRevisionId,
+            candidateRevisionId: null,
+          },
+          activeDecisions: [{
+            id: continuity.decisionId,
+            status: "frozen",
+            statement: "Keep the observational evidence boundary fixed.",
+            reopenCondition: "New experimental evidence becomes available.",
+          }],
+          relevantIssues: [{
+            id: continuity.issueId,
+            status: "resolved",
+            summary: "A causal interpretation exceeds the evidence boundary.",
+            reopenCondition: null,
+            resolutionRecorded: true,
+          }],
+          omissions: { activeDecisions: 0, relevantIssues: 0 },
+        },
+      },
+    });
+    const serialized = JSON.stringify(second);
+    for (const forbidden of ["finding", "minimalCorrection", "provider", fixture.root, fixture.databasePath]) {
+      expect(serialized.toLowerCase()).not.toContain(forbidden.toLowerCase());
+    }
+    const databaseAfter = createHash("sha256").update(await readFile(fixture.databasePath)).digest("hex");
+    expect(databaseAfter).toBe(databaseBefore);
   });
 
   it("re-reads Core state on the same connection after a user creates a new active Brief version", async () => {

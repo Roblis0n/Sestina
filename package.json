@@ -14,6 +14,8 @@
     "test:ipc": "vitest run --project ipc",
     "test:desktop": "vitest run --project desktop",
     "test:e2e": "playwright test",
+    "test:e2e:ri40": "pnpm --filter @sestina/mcp build && vitest run --config tests/e2e/vitest.ri40.config.ts",
+    "test:e2e:codex": "pnpm --filter @sestina/mcp build && vitest run --config tests/e2e/vitest.codex.config.ts",
     "eval:locked": "node --experimental-strip-types researchbench/tools/run-evaluation.ts",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint . --max-warnings 0",
@@ -24,7 +26,7 @@
     "verify:authority": "node scripts/verify-authority.mjs",
     "verify:package": "node scripts/verify-clean-package.mjs",
     "demo:offline": "pnpm --filter @sestina/cli build && node scripts/run-offline-demos.mjs",
-    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm docs:check && pnpm repo:check && pnpm verify:architecture && pnpm verify:authority && pnpm verify:package && pnpm demo:offline"
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm test:e2e:ri40 && pnpm docs:check && pnpm repo:check && pnpm verify:architecture && pnpm verify:authority && pnpm verify:package && pnpm demo:offline"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

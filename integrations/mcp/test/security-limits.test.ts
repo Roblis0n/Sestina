@@ -85,7 +85,7 @@ describe.sequential("@sestina/mcp exact UTF-8 and result limits", () => {
             ),
           },
         };
-        expect(serializeResearchContext(synthetic, MAX_RESEARCH_CONTEXT_BUDGET_BYTES)).toMatchObject({
+        expect(serializeResearchContext({ projectId: totalOverflow.projectId, brief: synthetic, continuity: { currentEpisode: null, activeDecisions: [], relevantIssues: [] } }, MAX_RESEARCH_CONTEXT_BUDGET_BYTES)).toMatchObject({
           ok: false,
           error: { code: "response_too_large" },
         });
@@ -113,7 +113,7 @@ describe.sequential("@sestina/mcp exact UTF-8 and result limits", () => {
     const tool = await getResearchContext(reader);
     expect(tool).toMatchObject({ isError: true, structuredContent: { error: { code: "response_too_large" } } });
     expect(JSON.stringify(tool)).not.toContain("DO-NOT-LOG");
-    await expect(readCurrentBriefResource(reader, new URL("sestina://brief/current")))
+    await expect(readCurrentBriefResource(reader, new URL("sestina://research/current-brief")))
       .rejects.toThrow(/response_too_large/u);
   });
 
@@ -131,7 +131,7 @@ describe.sequential("@sestina/mcp exact UTF-8 and result limits", () => {
       await client.connect(clientTransport);
       const tool = await client.callTool({ name: "get_research_context", arguments: {} });
       expect(tool).toMatchObject({ isError: true, structuredContent: { error: { code: "response_too_large" } } });
-      await expect(client.readResource({ uri: "sestina://brief/current" })).rejects.toThrow(/response_too_large/u);
+      await expect(client.readResource({ uri: "sestina://research/current-brief" })).rejects.toThrow(/response_too_large/u);
     } finally {
       await client.close();
       await server.close();

@@ -1,0 +1,36 @@
+projectId: rprj_00000000000000000000000000
+projectQuestion: How can the observational claim remain bounded by the available evidence?
+currentStage: revision
+currentTask: Replace the causal sentence with one bounded association claim.
+targetArtifacts: []
+fixedDecisions:
+  - statement: Do not infer causality from the observational design.
+    scope:
+      target:
+        kind: project_path
+        relativePath: manuscript.md
+      operations: [rewrite]
+allowedChanges:
+  - target:
+      kind: project_path
+      relativePath: manuscript.md
+    operations: [rewrite]
+forbiddenChanges: []
+expectedDeltas:
+  - statement: Replace causation with association.
+    scope:
+      target:
+        kind: project_path
+        relativePath: manuscript.md
+      operations: [rewrite]
+evidenceBoundaries:
+  - statement: Observational evidence does not establish causality.
+    scope:
+      target:
+        kind: project_path
+        relativePath: manuscript.md
+      operations: [rewrite]
+    forbiddenInferenceKinds: [causal]
+explicitNonGoals:
+  - Collect new evidence.
+  - Change the research question.

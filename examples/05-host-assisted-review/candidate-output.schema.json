@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "candidateMarkdown",
+    "materialDelta",
+    "preservedDecisionIds",
+    "reopenResolvedIssue",
+    "authority",
+    "canMutateAuthority"
+  ],
+  "properties": {
+    "candidateMarkdown": { "type": "string", "minLength": 1, "maxLength": 8192 },
+    "materialDelta": { "type": "string", "minLength": 1, "maxLength": 2048 },
+    "preservedDecisionIds": {
+      "type": "array",
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^rdec_[0-9A-HJKMNP-TV-Z]{26}$" }
+    },
+    "reopenResolvedIssue": { "type": "boolean" },
+    "authority": { "const": "model_proposed" },
+    "canMutateAuthority": { "const": false }
+  }
+}

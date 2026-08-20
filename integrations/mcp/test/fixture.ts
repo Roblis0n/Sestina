@@ -11,6 +11,14 @@ export interface ProjectFixture {
   readonly projectId: string;
 }
 
+export interface ContinuityFixture {
+  readonly episodeId: string;
+  readonly artifactId: string;
+  readonly baselineRevisionId: string;
+  readonly decisionId: string;
+  readonly issueId: string;
+}
+
 const actor = Object.freeze({ kind: "user" as const, actorId: "ri37-fixture-user" });
 
 function initialBrief(options: {
@@ -135,6 +143,74 @@ export async function updateActiveBrief(fixture: ProjectFixture): Promise<void> 
       explicitNonGoals: ["Do not redesign the study."],
     });
     if (!changed.ok) throw new Error(changed.error.code);
+  } finally {
+    opened.value.close();
+  }
+}
+
+export async function seedContinuityFixture(fixture: ProjectFixture): Promise<ContinuityFixture> {
+  const opened = await openSestina({ databasePath: fixture.databasePath });
+  if (!opened.ok) throw new Error(opened.error.code);
+  try {
+    const brief = opened.value.getBriefState(fixture.projectId);
+    if (!brief.ok || brief.value === undefined) throw new Error("fixture_brief_missing");
+    const decision = opened.value.recordDecision({
+      projectId: fixture.projectId,
+      actor,
+      statement: "Keep the observational evidence boundary fixed.",
+      scope: { kind: "project" },
+      rationale: "The synthetic source does not identify causality.",
+      effectiveBriefVersionId: brief.value.version.id,
+      reopenConditions: ["New experimental evidence becomes available."],
+      status: "frozen",
+    });
+    if (!decision.ok) throw new Error(decision.error.code);
+    const artifact = opened.value.createArtifactWithInitialRevision({
+      projectId: fixture.projectId,
+      actor,
+      kind: "section",
+      relativePath: "manuscript.md",
+      content: "# Synthetic baseline\n\nAn observational association was recorded.\n",
+      mediaType: "text/markdown",
+    });
+    if (!artifact.ok) throw new Error(artifact.error.code);
+    const issue = opened.value.openIssue({
+      projectId: fixture.projectId,
+      actor,
+      kind: "evidence_boundary",
+      target: { kind: "artifact", artifactId: artifact.value.artifact.id },
+      violatedCriterion: "Do not infer causality from observational evidence.",
+      rationaleConcepts: ["observational evidence", "causal overreach"],
+      summary: "A causal interpretation exceeds the evidence boundary.",
+      sourceArtifactId: artifact.value.artifact.id,
+      sourceRevisionId: artifact.value.revision.id,
+      sourceRevisionContentHash: artifact.value.revision.content.contentHash,
+      lineageRootRevisionId: artifact.value.revision.id,
+    });
+    if (!issue.ok) throw new Error(issue.error.code);
+    const episode = opened.value.startRevisionEpisode({
+      projectId: fixture.projectId,
+      artifactId: artifact.value.artifact.id,
+      briefVersionId: brief.value.version.id,
+      baselineRevisionId: artifact.value.revision.id,
+      actor,
+    });
+    if (!episode.ok) throw new Error(episode.error.code);
+    const resolved = opened.value.resolveIssue({
+      projectId: fixture.projectId,
+      issueId: issue.value.id,
+      actor,
+      reason: "The synthetic text was corrected and the boundary recorded.",
+      resolutionEvidenceId: "synthetic-correction",
+    });
+    if (!resolved.ok) throw new Error(resolved.error.code);
+    return {
+      episodeId: episode.value.id,
+      artifactId: artifact.value.artifact.id,
+      baselineRevisionId: artifact.value.revision.id,
+      decisionId: decision.value.id,
+      issueId: resolved.value.id,
+    };
   } finally {
     opened.value.close();
   }

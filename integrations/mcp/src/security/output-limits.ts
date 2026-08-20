@@ -1,4 +1,3 @@
-import type { CoreBriefState } from "@sestina/core";
 import {
   mcpErr,
   mcpOk,
@@ -6,6 +5,7 @@ import {
 } from "../protocol-errors.js";
 import {
   projectResearchContext,
+  type ResearchContextSource,
   type ResearchContextPayload,
 } from "./content-boundary.js";
 
@@ -58,7 +58,7 @@ function validateStrings(values: readonly string[]): SestinaMcpResult<undefined>
   return mcpOk(undefined);
 }
 
-type ScopeRule = CoreBriefState["version"]["allowedChanges"][number];
+type ScopeRule = ResearchContextSource["brief"]["version"]["allowedChanges"][number];
 
 function validateScopeRule(rule: ScopeRule): SestinaMcpResult<undefined> {
   const operations = validateStrings(rule.operations);
@@ -71,7 +71,7 @@ function validateScopeRule(rule: ScopeRule): SestinaMcpResult<undefined> {
   }
 }
 
-function validateBriefSource(state: CoreBriefState): SestinaMcpResult<undefined> {
+function validateBriefSource(state: ResearchContextSource["brief"]): SestinaMcpResult<undefined> {
   const version = state.version;
   const scalarStrings = validateStrings([
     state.brief.id,
@@ -124,6 +124,38 @@ function validateBriefSource(state: CoreBriefState): SestinaMcpResult<undefined>
   return mcpOk(undefined);
 }
 
+function validateContinuityPayload(payload: ResearchContextPayload["continuity"]): SestinaMcpResult<undefined> {
+  if (payload.currentEpisode !== null) {
+    const episode = validateStrings([
+      payload.currentEpisode.id,
+      payload.currentEpisode.status,
+      payload.currentEpisode.artifactId,
+      payload.currentEpisode.baselineRevisionId,
+      ...(payload.currentEpisode.candidateRevisionId === null ? [] : [payload.currentEpisode.candidateRevisionId]),
+    ]);
+    if (!episode.ok) return episode;
+  }
+  for (const decision of payload.activeDecisions) {
+    const bounded = validateStrings([
+      decision.id,
+      decision.status,
+      decision.statement,
+      ...(decision.reopenCondition === null ? [] : [decision.reopenCondition]),
+    ]);
+    if (!bounded.ok) return bounded;
+  }
+  for (const issue of payload.relevantIssues) {
+    const bounded = validateStrings([
+      issue.id,
+      issue.status,
+      issue.summary,
+      ...(issue.reopenCondition === null ? [] : [issue.reopenCondition]),
+    ]);
+    if (!bounded.ok) return bounded;
+  }
+  return mcpOk(undefined);
+}
+
 function serializeJson(value: unknown): string | undefined {
   try {
     return JSON.stringify(value);
@@ -133,7 +165,7 @@ function serializeJson(value: unknown): string | undefined {
 }
 
 export function serializeResearchContext(
-  state: CoreBriefState,
+  source: ResearchContextSource,
   outputLimitBytes: number,
 ): SestinaMcpResult<SerializedResearchContext> {
   if (
@@ -141,9 +173,13 @@ export function serializeResearchContext(
     || outputLimitBytes < MIN_RESEARCH_CONTEXT_BUDGET_BYTES
     || outputLimitBytes > MAX_RESEARCH_CONTEXT_BUDGET_BYTES
   ) return mcpErr("response_too_large");
-  const boundedSource = validateBriefSource(state);
+  const projectId = validateResearchText(source.projectId);
+  if (!projectId.ok) return projectId;
+  const boundedSource = validateBriefSource(source.brief);
   if (!boundedSource.ok) return boundedSource;
-  const payload = projectResearchContext(state);
+  const payload = projectResearchContext(source, MAX_RESEARCH_COLLECTION_ITEMS);
+  const boundedContinuity = validateContinuityPayload(payload.continuity);
+  if (!boundedContinuity.ok) return boundedContinuity;
   const json = serializeJson(payload);
   if (json === undefined) return mcpErr("response_too_large");
   const bytes = utf8ByteLength(json);

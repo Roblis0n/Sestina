@@ -15,8 +15,9 @@ export const RESEARCH_CONTENT_BOUNDARY = Object.freeze({
 });
 
 export interface ResearchContextPayload {
-  readonly schemaVersion: "1.0";
+  readonly schemaVersion: "1.1";
   readonly contentBoundary: typeof RESEARCH_CONTENT_BOUNDARY;
+  readonly projectId: string;
   readonly briefId: string;
   readonly versionId: string;
   readonly version: number;
@@ -31,6 +32,43 @@ export interface ResearchContextPayload {
   readonly expectedDeltas: BriefVersion["expectedDeltas"];
   readonly evidenceBoundaries: BriefVersion["evidenceBoundaries"];
   readonly explicitNonGoals: readonly string[];
+  readonly continuity: ResearchContinuityPayload;
+}
+
+export interface ResearchContinuitySource {
+  readonly currentEpisode: {
+    readonly id: string;
+    readonly status: string;
+    readonly artifactId: string;
+    readonly baselineRevisionId: string;
+    readonly candidateRevisionId: string | null;
+  } | null;
+  readonly activeDecisions: readonly {
+    readonly id: string;
+    readonly status: "accepted" | "frozen";
+    readonly statement: string;
+    readonly reopenCondition: string | null;
+  }[];
+  readonly relevantIssues: readonly {
+    readonly id: string;
+    readonly status: string;
+    readonly summary: string;
+    readonly reopenCondition: string | null;
+    readonly resolutionRecorded: boolean;
+  }[];
+}
+
+export interface ResearchContextSource {
+  readonly projectId: string;
+  readonly brief: CoreBriefState;
+  readonly continuity: ResearchContinuitySource;
+}
+
+export interface ResearchContinuityPayload extends ResearchContinuitySource {
+  readonly omissions: {
+    readonly activeDecisions: number;
+    readonly relevantIssues: number;
+  };
 }
 
 function projectScopeTarget(target: ScopeTarget): ScopeTarget {
@@ -49,7 +87,8 @@ function projectScopeRule(rule: ScopeRule): ScopeRule {
   });
 }
 
-export function projectResearchContext(state: CoreBriefState): ResearchContextPayload {
+export function projectResearchContext(source: ResearchContextSource, maxItems: number): ResearchContextPayload {
+  const state = source.brief;
   const version = state.version;
   const fixedDecisions = version.fixedDecisions.map((item) => Object.freeze({
     id: item.id,
@@ -71,9 +110,22 @@ export function projectResearchContext(state: CoreBriefState): ResearchContextPa
       : { allowedSourceIds: Object.freeze([...item.allowedSourceIds]) }),
   }));
 
+  const activeDecisions = [...source.continuity.activeDecisions]
+    .sort((left, right) => left.id.localeCompare(right.id))
+    .slice(0, maxItems)
+    .map((item) => Object.freeze({ ...item }));
+  const relevantIssues = [...source.continuity.relevantIssues]
+    .sort((left, right) => left.id.localeCompare(right.id))
+    .slice(0, maxItems)
+    .map((item) => Object.freeze({ ...item }));
+  const currentEpisode = source.continuity.currentEpisode === null
+    ? null
+    : Object.freeze({ ...source.continuity.currentEpisode });
+
   return Object.freeze({
-    schemaVersion: "1.0" as const,
+    schemaVersion: "1.1" as const,
     contentBoundary: RESEARCH_CONTENT_BOUNDARY,
+    projectId: source.projectId,
     briefId: state.brief.id,
     versionId: version.id,
     version: version.versionNumber,
@@ -88,5 +140,14 @@ export function projectResearchContext(state: CoreBriefState): ResearchContextPa
     expectedDeltas: Object.freeze(expectedDeltas),
     evidenceBoundaries: Object.freeze(evidenceBoundaries),
     explicitNonGoals: Object.freeze([...version.explicitNonGoals]),
+    continuity: Object.freeze({
+      currentEpisode,
+      activeDecisions: Object.freeze(activeDecisions),
+      relevantIssues: Object.freeze(relevantIssues),
+      omissions: Object.freeze({
+        activeDecisions: Math.max(0, source.continuity.activeDecisions.length - activeDecisions.length),
+        relevantIssues: Math.max(0, source.continuity.relevantIssues.length - relevantIssues.length),
+      }),
+    }),
   });
 }

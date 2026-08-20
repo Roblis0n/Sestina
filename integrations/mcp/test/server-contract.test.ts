@@ -212,7 +212,7 @@ describe.sequential("@sestina/mcp tool and resource contract", () => {
     ]) {
       await expect(client.callTool({ name, arguments: {} })).rejects.toThrow(/unknown|not found/i);
     }
-    await expect(client.readResource({ uri: "sestina://brief/other" })).rejects.toThrow(/unknown|not found/i);
+    await expect(client.readResource({ uri: "sestina://research/other-brief" })).rejects.toThrow(/unknown|not found/i);
     expect(SERVER_INSTRUCTIONS).toContain("grants no write permission");
     expect(SERVER_INSTRUCTIONS).toContain("does not prove task completion or semantic correctness");
   });

@@ -6,7 +6,7 @@ import {
   mcpOk,
   type SestinaMcpResult,
 } from "./protocol-errors.js";
-import type { ResearchContextPayload } from "./security/content-boundary.js";
+import type { ResearchContextPayload, ResearchContextSource } from "./security/content-boundary.js";
 import {
   DEFAULT_QUERY_TIMEOUT_MS,
   DEFAULT_RESEARCH_CONTEXT_BUDGET_BYTES,
@@ -117,7 +117,58 @@ class CoreProjectReader implements ProjectReader {
         });
         if (!opened.ok) return opened;
         try {
-          return opened.value.getBriefState(this.#projectId);
+          const brief = opened.value.getBriefState(this.#projectId);
+          if (!brief.ok) return brief;
+          const episodes = opened.value.listEpisodes(this.#projectId);
+          if (!episodes.ok) return episodes;
+          const decisions = opened.value.listDecisions(this.#projectId);
+          if (!decisions.ok) return decisions;
+          const issues = opened.value.listIssues(this.#projectId);
+          if (!issues.ok) return issues;
+          if (brief.value === undefined) return { ok: true as const, value: undefined };
+          const orderedEpisodes = [...episodes.value].sort((left, right) => {
+            const leftCurrent = ["active", "candidate_submitted", "reviewed", "user_action_required"].includes(left.status) ? 1 : 0;
+            const rightCurrent = ["active", "candidate_submitted", "reviewed", "user_action_required"].includes(right.status) ? 1 : 0;
+            return rightCurrent - leftCurrent || right.updatedAt.localeCompare(left.updatedAt) || right.id.localeCompare(left.id);
+          });
+          const episode = orderedEpisodes[0];
+          const issueReopenCondition = (transitions: readonly { readonly reason: string }[]): string | null => {
+            const prefix = "Invalidation condition:";
+            for (const transition of [...transitions].reverse()) {
+              const index = transition.reason.indexOf(prefix);
+              if (index >= 0) return transition.reason.slice(index + prefix.length).trim() || null;
+            }
+            return null;
+          };
+          const value: ResearchContextSource = {
+            projectId: this.#projectId,
+            brief: brief.value,
+            continuity: {
+              currentEpisode: episode === undefined ? null : {
+                id: episode.id,
+                status: episode.status,
+                artifactId: episode.artifactId,
+                baselineRevisionId: episode.lockedStart.baselineRevisionId,
+                candidateRevisionId: episode.candidateRevisionId ?? null,
+              },
+              activeDecisions: decisions.value
+                .filter((item): item is typeof item & { readonly status: "accepted" | "frozen" } => item.status === "accepted" || item.status === "frozen")
+                .map((item) => ({
+                  id: item.id,
+                  status: item.status,
+                  statement: item.statement,
+                  reopenCondition: item.reopenConditions.length === 0 ? null : item.reopenConditions.join("; "),
+                })),
+              relevantIssues: issues.value.map((item) => ({
+                id: item.id,
+                status: item.status,
+                summary: item.summary,
+                reopenCondition: issueReopenCondition(item.transitions),
+                resolutionRecorded: item.resolution !== undefined || item.status === "waived",
+              })),
+            },
+          };
+          return { ok: true as const, value };
         } finally {
           opened.value.close();
         }

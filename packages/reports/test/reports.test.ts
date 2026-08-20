@@ -18,6 +18,7 @@ import {
 import {
   exportCapsule,
   importCapsuleResponse,
+  CAPSULE_RESPONSE_SCHEMA,
   parseReviewJson,
   redactAbsolutePaths,
   renderReviewJson,
@@ -129,6 +130,7 @@ function capsuleInput(): CapsuleExportInput {
     candidate: { artifactId, revisionId: candidateId, relativePath: "paper/manuscript.md", summary: "Candidate 摘要", content: "PRIVATE CANDIDATE", privacy: "private_b", contentPermission: "summary_only" },
     evidenceBoundaries: ["No causal inference"], expectedDeltas: ["Improve argument"], snapshotId, snapshotHash: ctx.snapshot.hash, reviewInputHash: ctx.inputHash,
     invalidationConditions: ["Brief or artifact changes"], buildFingerprint: ctx.buildFingerprint, checkerVersions: ctx.checkerSet,
+    stateBindingHash: "9".repeat(64),
   };
 }
 
@@ -139,7 +141,7 @@ describe("portable Review Capsule", () => {
     expect(new TextEncoder().encode(first.value.json).byteLength).toBeLessThanOrEqual(4096);
     expect(first.value.json).not.toContain("PRIVATE BASELINE"); expect(first.value.json).not.toContain("PRIVATE CANDIDATE");
     expect(first.value.json).not.toContain("C:\\\\Users"); expect(first.value.capsule.hashMeaning).toBe("content_integrity_only_not_signature_or_proof");
-    expect(first.value.capsule.capsuleHash).toBe("fa7da7b2ad812aaad81a2e55580054a145d07b0f471ff8960a715c5c28c4d54c");
+    expect(first.value.capsule.capsuleHash).toBe("1d7e69a8062ffa1485e078cc0a799a312ff52cff257ff5668672437b43ed1361");
   });
 
   it("uses a public fixed overflow order and records every omission", () => {
@@ -152,13 +154,13 @@ describe("portable Review Capsule", () => {
         ...input.relevantIssues,
         { id: new SequenceIdFactory(8950).create("riss_"), summary: "Secondary issue ".repeat(80), status: "open" },
       ],
-    }, { includePermittedFullText: true, maxBytes: 2_048, maxItemsPerSection: 1 });
+    }, { includePermittedFullText: true, maxBytes: 4_096, maxItemsPerSection: 1 });
     expect(exported.ok).toBe(true); if (!exported.ok) return;
-    expect(new TextEncoder().encode(exported.value.json).byteLength).toBeLessThanOrEqual(2_048);
+    expect(new TextEncoder().encode(exported.value.json).byteLength).toBeLessThanOrEqual(4_096);
     expect(exported.value.json).not.toContain("BASELINE SECRET");
     expect(exported.value.capsule).toMatchObject({
       baseline: { projection: "summary_only" }, candidate: { projection: "summary_only" },
-      omissions: { issues: 2, baselineContent: 1, candidateContent: 1 },
+      omissions: { issues: 1, baselineContent: 1, candidateContent: 1 },
       truncationPolicy: { withinSection: "ascending_id_or_text" },
     });
   });
@@ -172,12 +174,31 @@ describe("portable Review Capsule", () => {
 
   it("round-trips only a candidate response and rejects stale bindings", () => {
     const exported = exportCapsule(capsuleInput()); expect(exported.ok).toBe(true); if (!exported.ok) return;
-    const response = JSON.stringify({ schemaVersion: "1.0.0", projectId, snapshotHash: exported.value.capsule.snapshot.hash, reviewInputHash: exported.value.capsule.reviewInputHash, briefVersionId: briefId, artifactRevisionId: candidateId, response: { summary: "Model candidate C:\\Users\\a\\secret", findings: ["Potential issue"] } });
-    const expected = { projectId, snapshotHash: exported.value.capsule.snapshot.hash, reviewInputHash: exported.value.capsule.reviewInputHash, briefVersionId: briefId, artifactRevisionId: candidateId };
+    const response = JSON.stringify({ schemaVersion: "1.0.0", authority: "model_proposed_candidate_only", projectId, capsuleHash: exported.value.capsule.capsuleHash, snapshotHash: exported.value.capsule.snapshot.hash, reviewInputHash: exported.value.capsule.reviewInputHash, briefVersionId: briefId, artifactRevisionId: candidateId, response: { summary: "Model candidate C:\\Users\\a\\secret", findings: ["Potential issue"] } });
+    const expected = { projectId, capsuleHash: exported.value.capsule.capsuleHash, snapshotHash: exported.value.capsule.snapshot.hash, reviewInputHash: exported.value.capsule.reviewInputHash, briefVersionId: briefId, artifactRevisionId: candidateId };
     const imported = importCapsuleResponse(response, expected);
     expect(imported).toMatchObject({ ok: true, value: { status: "candidate", authority: "model_proposed", canMutateAuthority: false } });
     if (imported.ok) expect(JSON.stringify(imported.value)).not.toContain("C:\\\\Users");
     expect(importCapsuleResponse(response, { ...expected, snapshotHash: "0".repeat(64) })).toMatchObject({ ok: false, error: { code: "stale_capsule_response" } });
     expect(importCapsuleResponse(response, { ...expected, briefVersionId: new SequenceIdFactory(9000).create("rbrf_") })).toMatchObject({ ok: false, error: { code: "stale_capsule_response" } });
+  });
+
+  it("publishes one strict response schema and rejects privilege claims, extras, and oversized strings", () => {
+    const exported = exportCapsule(capsuleInput()); expect(exported.ok).toBe(true); if (!exported.ok) return;
+    expect(exported.value.capsule.responseSchema).toEqual(CAPSULE_RESPONSE_SCHEMA);
+    expect(CAPSULE_RESPONSE_SCHEMA).toMatchObject({
+      additionalProperties: false,
+      required: ["schemaVersion", "authority", "projectId", "capsuleHash", "snapshotHash", "reviewInputHash", "briefVersionId", "artifactRevisionId", "response"],
+      properties: { response: { additionalProperties: false } },
+    });
+    const expected = { projectId, capsuleHash: exported.value.capsule.capsuleHash, snapshotHash: exported.value.capsule.snapshot.hash, reviewInputHash: exported.value.capsule.reviewInputHash, briefVersionId: briefId, artifactRevisionId: candidateId };
+    const valid = { schemaVersion: "1.0.0", authority: "model_proposed_candidate_only", ...expected, response: { summary: "Candidate analysis", findings: ["Potential issue"] } };
+    expect(importCapsuleResponse(JSON.stringify({ ...valid, extra: true }), expected)).toMatchObject({ ok: false, error: { code: "invalid_capsule_response" } });
+    expect(importCapsuleResponse(JSON.stringify({ ...valid, response: { ...valid.response, accepted: true } }), expected)).toMatchObject({ ok: false, error: { code: "invalid_capsule_response" } });
+    for (const authority of ["user_confirmed", "accepted", "resolved", "waived"]) {
+      expect(importCapsuleResponse(JSON.stringify({ ...valid, authority }), expected)).toMatchObject({ ok: false, error: { code: "invalid_capsule_response" } });
+    }
+    expect(importCapsuleResponse(JSON.stringify({ ...valid, response: { summary: "x".repeat(2_049), findings: [] } }), expected)).toMatchObject({ ok: false, error: { code: "invalid_capsule_response" } });
+    expect(importCapsuleResponse(JSON.stringify({ ...valid, response: { summary: "Candidate analysis", findings: Array.from({ length: 101 }, () => "issue") } }), expected)).toMatchObject({ ok: false, error: { code: "invalid_capsule_response" } });
   });
 });

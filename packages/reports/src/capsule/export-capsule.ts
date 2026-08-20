@@ -3,6 +3,7 @@ import { parseProjectRelativePath, type CheckerIdentity, type FindingProjection 
 import { DEFAULT_CAPSULE_MAX_BYTES, DEFAULT_CAPSULE_MAX_ITEMS_PER_SECTION, DEFAULT_CAPSULE_TEXT_MAX_BYTES, truncateUtf8, utf8ByteLength } from "../limits.js";
 import { redactAbsolutePaths } from "../redaction/redact.js";
 import { reportErr, reportOk, type ReportResult } from "../result.js";
+import { CAPSULE_RESPONSE_SCHEMA } from "./response-schema.js";
 
 export interface CapsuleRevisionInput { readonly artifactId: string; readonly revisionId: string; readonly relativePath: string; readonly summary: string; readonly content?: string; readonly privacy: "public" | "private_a" | "private_b"; readonly contentPermission: "summary_only" | "full_text"; }
 export interface CapsuleExportInput {
@@ -13,6 +14,7 @@ export interface CapsuleExportInput {
   readonly evidenceBoundaries: readonly string[]; readonly expectedDeltas: readonly string[];
   readonly snapshotId: string; readonly snapshotHash: string; readonly reviewInputHash: string;
   readonly invalidationConditions: readonly string[]; readonly buildFingerprint: string; readonly checkerVersions: readonly CheckerIdentity[];
+  readonly stateBindingHash: string;
   readonly findingProjection?: FindingProjection;
 }
 export interface CapsuleExportOptions { readonly maxBytes?: number; readonly maxItemsPerSection?: number; readonly includePermittedFullText?: boolean; }
@@ -24,7 +26,7 @@ function serialize(value: unknown): string { const result = canonicalStringify(v
 
 export function exportCapsule(input: CapsuleExportInput, options: CapsuleExportOptions = {}): ReportResult<{ readonly capsule: ReviewCapsule; readonly json: string }> {
   const project = parseResearchIdFor(input.projectId, "rprj_"); const brief = parseResearchIdFor(input.brief.id, "rbrf_"); const snapshot = parseResearchIdFor(input.snapshotId, "rsnp_");
-  if (!project.ok || !brief.ok || !snapshot.ok || !validHash(input.snapshotHash) || !validHash(input.reviewInputHash) || !validHash(input.buildFingerprint)) return reportErr("invalid_capsule");
+  if (!project.ok || !brief.ok || !snapshot.ok || !validHash(input.snapshotHash) || !validHash(input.reviewInputHash) || !validHash(input.buildFingerprint) || !validHash(input.stateBindingHash)) return reportErr("invalid_capsule");
   const maxBytes = options.maxBytes ?? DEFAULT_CAPSULE_MAX_BYTES; const maxItems = options.maxItemsPerSection ?? DEFAULT_CAPSULE_MAX_ITEMS_PER_SECTION;
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 512 || !Number.isSafeInteger(maxItems) || maxItems < 0) return reportErr("invalid_capsule");
   let omittedDecisions = Math.max(0, input.activeDecisions.length - maxItems); let omittedIssues = Math.max(0, input.relevantIssues.length - maxItems);
@@ -64,8 +66,9 @@ export function exportCapsule(input: CapsuleExportInput, options: CapsuleExportO
     schemaVersion: "1.0.0" as const, projectId: project.value.id,
     brief: { id: brief.value.id, summary: safeText(input.brief.summary), expectedDeltas: briefDeltas },
     activeDecisions: decisions, relevantIssues: issues, baseline, candidate, evidenceBoundaries: boundaries, expectedDeltas: deltas,
-    responseSchema: { schemaVersion: "1.0.0", authority: "model_proposed_candidate_only", required: ["projectId", "snapshotHash", "reviewInputHash", "briefVersionId", "artifactRevisionId", "response"] },
+    responseSchema: CAPSULE_RESPONSE_SCHEMA,
     snapshot: { id: snapshot.value.id, hash: input.snapshotHash }, reviewInputHash: input.reviewInputHash,
+    stateBindingHash: input.stateBindingHash,
     invalidationConditions, buildFingerprint: input.buildFingerprint, checkerVersions,
     ...(input.findingProjection === undefined ? {} : { findings: {
       foreground: findingForeground,

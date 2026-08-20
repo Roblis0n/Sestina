@@ -8,6 +8,8 @@ export { exportCapsule } from "./capsule/export-capsule.js";
 export type { CapsuleExportInput, CapsuleExportOptions, CapsuleRevisionInput, ReviewCapsule } from "./capsule/export-capsule.js";
 export { importCapsuleResponse } from "./capsule/import-response.js";
 export type { CapsuleCandidateResponse, CapsuleResponseExpectation } from "./capsule/import-response.js";
+export { CAPSULE_RESPONSE_AUTHORITY, CAPSULE_RESPONSE_REQUIRED_KEYS, CAPSULE_RESPONSE_SCHEMA, CAPSULE_RESPONSE_SCHEMA_VERSION } from "./capsule/response-schema.js";
+export type { CapsuleResponseEnvelope } from "./capsule/response-schema.js";
 export { redactAbsolutePaths, redactAndLimit, redactUnknownStrings } from "./redaction/redact.js";
 export { DEFAULT_CAPSULE_MAX_BYTES, DEFAULT_CAPSULE_MAX_ITEMS_PER_SECTION, DEFAULT_CAPSULE_TEXT_MAX_BYTES, DEFAULT_RESPONSE_MAX_BYTES, truncateUtf8, utf8ByteLength } from "./limits.js";
 export type { Utf8Truncation } from "./limits.js";

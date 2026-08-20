@@ -55,7 +55,7 @@ describe.sequential("@sestina/mcp static read-only capability policy", () => {
   it("locks discovery to two tools, one resource, no prompts, and no templates", async () => {
     expect(CAPABILITY_POLICY).toMatchObject({
       tools: ["health", "get_research_context"],
-      resources: ["sestina://brief/current"],
+      resources: ["sestina://research/current-brief"],
       prompts: [],
       resourceTemplates: [],
       write: false,
@@ -114,7 +114,7 @@ describe.sequential("@sestina/mcp static read-only capability policy", () => {
     const results = await Promise.all(Array.from({ length: 32 }, async (_value, index) =>
       index % 2 === 0
         ? await client.callTool({ name: "get_research_context", arguments: {} })
-        : await client.readResource({ uri: "sestina://brief/current" })));
+        : await client.readResource({ uri: "sestina://research/current-brief" })));
     const projections = results.map((result) => {
       if ("structuredContent" in result) return result.structuredContent as { readonly briefId: string; readonly versionId: string; readonly version: number };
       const resource = result as Awaited<ReturnType<Client["readResource"]>>;

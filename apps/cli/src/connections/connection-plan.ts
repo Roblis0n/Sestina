@@ -1,4 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
+import { join } from "node:path";
+import { openSestina } from "@sestina/core";
 import type { CliIo } from "../output.js";
 import { renderManagedCodexConfig, removeManagedCodexConfig } from "./codex-config.js";
 import { codexSkillFiles, inspectCodexSkill } from "./codex-skill.js";
@@ -18,10 +20,18 @@ import {
   type CodexRuntimeLocator,
 } from "./runtime-locator.js";
 import { detectConnectionStatus, type ConnectionStatus } from "./status.js";
+import {
+  verifyCodexHost,
+  type CodexExecutableLocator,
+  type CodexProcessRunner,
+  type CodexVerificationResult,
+} from "./codex-host-verifier.js";
 
 export interface CliDependencies {
   readonly runtimeLocator?: CodexRuntimeLocator;
   readonly transactionHooks?: TransactionHooks;
+  readonly codexExecutableLocator?: CodexExecutableLocator;
+  readonly codexProcessRunner?: CodexProcessRunner;
 }
 
 export interface ConnectionPlanItem {
@@ -47,6 +57,12 @@ export type ConnectionOperationResult =
     };
   };
 
+type ConnectionOperationFailure = Extract<ConnectionOperationResult, { readonly ok: false }>;
+export type HostVerificationOperationResult =
+  | { readonly ok: true; readonly value: { readonly status: ConnectionStatus; readonly verification: Extract<CodexVerificationResult, { readonly ok: true }>["value"] } }
+  | ConnectionOperationFailure
+  | Extract<CodexVerificationResult, { readonly ok: false }>;
+
 export type ConnectionPreviewResult =
   | { readonly ok: true; readonly value: ConnectionOperationResult & { readonly ok: true } }
   | { readonly ok: false; readonly error: ConnectionOperationResult & { readonly ok: false } };
@@ -65,11 +81,11 @@ function operationPlan(actions: readonly ConnectionFileAction[]): readonly Conne
   return actions.map((action) => ({ action: action.action, path: action.relativePath }));
 }
 
-function pathError(code: "project_not_initialized" | "state_conflict" | "infrastructure_failure"): ConnectionOperationResult {
+function pathError(code: "project_not_initialized" | "state_conflict" | "infrastructure_failure"): ConnectionOperationFailure {
   return { ok: false, error: { code } };
 }
 
-async function resolvePaths(project: string | undefined, io: CliIo): Promise<ConnectionPaths | ConnectionOperationResult> {
+async function resolvePaths(project: string | undefined, io: CliIo): Promise<ConnectionPaths | ConnectionOperationFailure> {
   const resolved = await resolveConnectionPaths(project, io.cwd);
   return resolved.ok ? resolved.value : pathError(resolved.error.code);
 }
@@ -87,6 +103,41 @@ export async function getConnectionStatus(
   if ("ok" in paths) return paths;
   const status = await currentStatus(paths, dependencies);
   return { ok: true, value: { status, plan: [], idempotent: true, backupCreated: false } };
+}
+
+export async function verifyProjectHost(
+  project: string | undefined,
+  io: CliIo,
+  dependencies: CliDependencies = {},
+): Promise<HostVerificationOperationResult> {
+  const paths = await resolvePaths(project, io);
+  if ("ok" in paths) return paths;
+  const status = await currentStatus(paths, dependencies);
+  if (status.state !== "configured") return { ok: false, error: { code: "state_conflict" } };
+  const opened = await openSestina({ databasePath: join(paths.projectRoot, ".sestina", "state.sqlite"), readOnly: true, immutable: true });
+  if (!opened.ok) return { ok: false, error: { code: "infrastructure_failure" } };
+  try {
+    const projects = opened.value.listProjects();
+    if (!projects.ok || projects.value.length !== 1 || projects.value[0] === undefined) {
+      return { ok: false, error: { code: "state_conflict" } };
+    }
+    const projectState = projects.value[0];
+    const brief = opened.value.getBriefState(projectState.id);
+    if (!brief.ok || brief.value === undefined) return { ok: false, error: { code: "state_conflict" } };
+    const verification = await verifyCodexHost({
+      projectRoot: paths.projectRoot,
+      binding: {
+        projectId: projectState.id,
+        briefId: brief.value.brief.id,
+        briefVersionId: brief.value.version.id,
+      },
+      ...(dependencies.codexExecutableLocator === undefined ? {} : { executableLocator: dependencies.codexExecutableLocator }),
+      ...(dependencies.codexProcessRunner === undefined ? {} : { processRunner: dependencies.codexProcessRunner }),
+    });
+    return verification.ok ? { ok: true, value: { status, verification: verification.value } } : verification;
+  } finally {
+    opened.value.close();
+  }
 }
 
 export async function connectProject(

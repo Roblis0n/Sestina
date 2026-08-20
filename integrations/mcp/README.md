@@ -11,9 +11,9 @@ The process canonicalizes the explicit root, `.sestina`, and `state.sqlite` sepa
 The complete exposed surface is:
 
 - tools: `health`, `get_research_context`;
-- resource: `sestina://brief/current`.
+- resource: `sestina://research/current-brief`.
 
-The context tool and resource use the same canonical reader, fixed-field projection, bounded context object, and serialized JSON. They do not expose decisions, issues, episodes, reviews, findings, Minimal Corrections, semantic-checker results, or any mutation capability. Every response includes a static `contentBoundary` whose `kind` is `untrusted_research_data` and whose `authority` is `none`. Returned research text is preserved exactly as data; it cannot change server instructions, discovery metadata, capabilities, errors, or diagnostics, and it is never user authorization, acceptance, adjudication, confirmation, proof of completion, or proof of semantic correctness.
+The context tool and resource use the same canonical reader, fixed-field projection, bounded context object, and serialized JSON. Alongside the active Brief, schema `1.1` includes only the minimum continuity fields for the current Episode, accepted/frozen Decisions, and relevant Issue status/reopen information. It does not expose Review Findings, Minimal Corrections, semantic requests or responses, Provider data, hidden logs, or any mutation capability. Every response includes a static `contentBoundary` whose `kind` is `untrusted_research_data` and whose `authority` is `none`. Returned research text is preserved exactly as data; it cannot change server instructions, discovery metadata, capabilities, errors, or diagnostics, and it is never user authorization, acceptance, adjudication, confirmation, proof of completion, or proof of semantic correctness.
 
 The production limits are:
 

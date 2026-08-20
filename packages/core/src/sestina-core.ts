@@ -686,6 +686,37 @@ export class SestinaCore {
   exportCapsule(input: ExportCapsuleCommand): CoreResult<{ readonly capsule: ReviewCapsule; readonly json: string }> {
     const bundle = this.loadReviewBundle(input.projectId, input.episodeId); if (!bundle.ok) return bundle;
     const snapshot = found(this.getSnapshot(input.projectId, bundle.value.run.snapshotId)); if (!snapshot.ok) return snapshot;
+    const activeBrief = this.findActiveBrief(input.projectId); if (!activeBrief.ok) return activeBrief;
+    const currentDecisions = this.listDecisions(input.projectId); if (!currentDecisions.ok) return currentDecisions;
+    const currentIssues = this.listIssues(input.projectId); if (!currentIssues.ok) return currentIssues;
+    const currentEpisodes = this.listEpisodes(input.projectId); if (!currentEpisodes.ok) return currentEpisodes;
+    const stateBinding = hash({
+      projectId: input.projectId,
+      activeBrief: activeBrief.value === undefined ? null : { id: activeBrief.value.brief.id, entityVersion: activeBrief.value.brief.version, versionId: activeBrief.value.version.id },
+      artifact: { id: bundle.value.artifact.id, version: bundle.value.artifact.version, activeRevisionId: bundle.value.artifact.activeRevisionId ?? null },
+      review: {
+        episodeId: bundle.value.episode.id,
+        episodeVersion: bundle.value.episode.version,
+        episodeStatus: bundle.value.episode.status,
+        lockedBriefVersionId: bundle.value.episode.lockedStart.briefVersionId,
+        baselineRevisionId: bundle.value.baseline.id,
+        baselineContentHash: bundle.value.baseline.content.contentHash,
+        candidateRevisionId: bundle.value.candidate.id,
+        candidateContentHash: bundle.value.candidate.content.contentHash,
+        reviewRunId: bundle.value.run.id,
+        reviewRunVersion: bundle.value.run.version,
+        reviewInputHash: bundle.value.run.inputHash,
+        snapshotId: snapshot.value.id,
+        snapshotHash: snapshot.value.hash,
+      },
+      decisions: [...currentDecisions.value].sort((left, right) => left.id.localeCompare(right.id)).map((decision) => ({ id: decision.id, version: decision.version, status: decision.status })),
+      issues: [...currentIssues.value].sort((left, right) => left.id.localeCompare(right.id)).map((issue) => ({ id: issue.id, version: issue.version, status: issue.status })),
+      episodes: [...currentEpisodes.value].sort((left, right) => left.id.localeCompare(right.id)).map((episode) => ({ id: episode.id, version: episode.version, status: episode.status, baselineRevisionId: episode.lockedStart.baselineRevisionId, candidateRevisionId: episode.candidateRevisionId ?? null, reviewRunIds: episode.reviewRunIds })),
+      checkerSet: bundle.value.run.context.checkerSet,
+      environmentFingerprint: bundle.value.run.context.environmentFingerprint,
+      buildFingerprint: bundle.value.run.context.buildFingerprint,
+    });
+    if (!stateBinding.ok) return stateBinding;
     const decisions: { id: string; statement: string; status: string }[] = [];
     for (const locked of bundle.value.episode.lockedStart.activeDecisions) {
       const decision = found(fromDomain(this.#store.decisions.getById(input.projectId, locked.decisionId))); if (!decision.ok) return decision;
@@ -712,6 +743,7 @@ export class SestinaCore {
       invalidationConditions: ["Brief, artifact revision, decision, issue, checker set, environment, or build binding changes."],
       buildFingerprint: bundle.value.run.context.buildFingerprint,
       checkerVersions: bundle.value.run.context.checkerSet,
+      stateBindingHash: stateBinding.value,
       findingProjection: projectFindings(bundle.value.run.findings),
     }, { includePermittedFullText: input.includePermittedFullText });
     return exported.ok ? coreOk(exported.value) : { ok: false, error: mapDomainError(exported.error) };
@@ -727,11 +759,17 @@ export class SestinaCore {
       const runId = episode.reviewRunIds.at(-1); if (runId === undefined) continue;
       const run = found(this.getReviewRun(projectId, runId)); if (!run.ok) return run;
       if (run.value.inputHash !== raw.reviewInputHash || episode.candidateRevisionId === undefined) continue;
-      const snapshot = found(this.getSnapshot(projectId, run.value.snapshotId)); if (!snapshot.ok) return snapshot;
+      const summaryCapsule = this.exportCapsule({ projectId, episodeId: episode.id }); if (!summaryCapsule.ok) return summaryCapsule;
+      let expectedCapsule = summaryCapsule.value.capsule;
+      if (raw.capsuleHash !== expectedCapsule.capsuleHash) {
+        const fullCapsule = this.exportCapsule({ projectId, episodeId: episode.id, includePermittedFullText: true });
+        if (fullCapsule.ok && raw.capsuleHash === fullCapsule.value.capsule.capsuleHash) expectedCapsule = fullCapsule.value.capsule;
+      }
       const imported = importReviewCapsuleResponse(json, {
         projectId,
-        snapshotHash: snapshot.value.hash,
-        reviewInputHash: run.value.inputHash,
+        capsuleHash: expectedCapsule.capsuleHash,
+        snapshotHash: expectedCapsule.snapshot.hash,
+        reviewInputHash: expectedCapsule.reviewInputHash,
         briefVersionId: episode.lockedStart.briefVersionId,
         artifactRevisionId: episode.candidateRevisionId,
       });

@@ -90,6 +90,49 @@ describe("@sestina/core research lifecycle", () => {
     expect(report).toContain("Unchecked or uncertain");
     expect(capsule.capsule.hashMeaning).toBe("content_integrity_only_not_signature_or_proof");
 
+    const responseFor = (capsuleHash: string, snapshotHash: string, reviewInputHash: string) => JSON.stringify({
+      schemaVersion: "1.0.0",
+      authority: "model_proposed_candidate_only",
+      projectId: project.id,
+      capsuleHash,
+      snapshotHash,
+      reviewInputHash,
+      briefVersionId: brief.currentVersionId,
+      artifactRevisionId: candidate.id,
+      response: { summary: "Bounded model proposal", findings: ["Candidate observation"] },
+    });
+    const initialResponse = responseFor(capsule.capsule.capsuleHash, capsule.capsule.snapshot.hash, capsule.capsule.reviewInputHash);
+    expect(valueOf(core.importCapsuleResponse(project.id, initialResponse))).toMatchObject({ status: "candidate", authority: "model_proposed", canMutateAuthority: false });
+
+    const editedBrief = valueOf(core.editBrief({
+      projectId: project.id,
+      actor: USER,
+      expectedVersion: brief.version,
+      projectQuestion: "Does the revised claim stay within the observed evidence?",
+      currentStage: "revision",
+      currentTask: "Tighten the results claim and preserve the observational boundary",
+      targetArtifacts: [],
+      fixedDecisions: [],
+      allowedChanges: [{ target: { kind: "project_path", relativePath: "paper/manuscript.md" }, operations: ["add", "delete", "rewrite"] }],
+      forbiddenChanges: [],
+      expectedDeltas: [{ statement: "Qualify the results claim", scope: { target: { kind: "project_path", relativePath: "paper/manuscript.md" }, operations: ["rewrite"] } }],
+      evidenceBoundaries: [],
+      explicitNonGoals: ["Add new data"],
+    }));
+    expect(core.importCapsuleResponse(project.id, initialResponse)).toMatchObject({ ok: false, error: { code: "stale_state" } });
+
+    const afterBrief = valueOf(core.exportCapsule({ projectId: project.id, episodeId: accepted.id }));
+    const afterBriefResponse = responseFor(afterBrief.capsule.capsuleHash, afterBrief.capsule.snapshot.hash, afterBrief.capsule.reviewInputHash);
+    expect(valueOf(core.importCapsuleResponse(project.id, afterBriefResponse))).toMatchObject({ status: "candidate" });
+    valueOf(core.resolveIssue({ projectId: project.id, issueId: issue.id, actor: USER, reason: "The candidate removes the overclaim", resolutionEvidenceId: candidate.id }));
+    expect(core.importCapsuleResponse(project.id, afterBriefResponse)).toMatchObject({ ok: false, error: { code: "stale_state" } });
+
+    const afterIssue = valueOf(core.exportCapsule({ projectId: project.id, episodeId: accepted.id }));
+    const afterIssueResponse = responseFor(afterIssue.capsule.capsuleHash, afterIssue.capsule.snapshot.hash, afterIssue.capsule.reviewInputHash);
+    expect(valueOf(core.importCapsuleResponse(project.id, afterIssueResponse))).toMatchObject({ status: "candidate" });
+    valueOf(core.startRevisionEpisode({ projectId: project.id, artifactId: artifact.id, briefVersionId: editedBrief.version.id, baselineRevisionId: candidate.id, actor: USER }));
+    expect(core.importCapsuleResponse(project.id, afterIssueResponse)).toMatchObject({ ok: false, error: { code: "stale_state" } });
+
     core.close();
     const reopened = valueOf(await openSestina({ databasePath, readOnly: true }));
     cores.push(reopened);

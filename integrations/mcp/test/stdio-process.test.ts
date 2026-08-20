@@ -147,15 +147,15 @@ describe.sequential("@sestina/mcp real stdio process", () => {
         const health = await client.callTool({ name: "health", arguments: {} });
         const context = await client.callTool({ name: "get_research_context", arguments: {} });
         const initial = context.structuredContent as { readonly versionId: string };
-        const brief = await client.readResource({ uri: "sestina://brief/current" });
+        const brief = await client.readResource({ uri: "sestina://research/current-brief" });
         expect(tools.tools.map((tool) => tool.name)).toEqual(["health", "get_research_context"]);
-        expect(resources.resources.map((resource) => resource.uri)).toEqual(["sestina://brief/current"]);
+        expect(resources.resources.map((resource) => resource.uri)).toEqual(["sestina://research/current-brief"]);
         expect(health.structuredContent).toMatchObject({ ok: true, mode: "read_only" });
         expect(context.structuredContent).toMatchObject({ currentTask: "Add only the missing claim-evidence relation." });
         expect(brief.contents).toHaveLength(1);
         await updateActiveBrief(fixture);
         const refreshedTool = await client.callTool({ name: "get_research_context", arguments: {} });
-        const refreshedResource = await client.readResource({ uri: "sestina://brief/current" });
+        const refreshedResource = await client.readResource({ uri: "sestina://research/current-brief" });
         expect(refreshedTool.structuredContent).toMatchObject({ currentTask: "Add the newly bounded evidence comparison." });
         expect((refreshedTool.structuredContent as { readonly versionId: string }).versionId).not.toBe(initial.versionId);
         const refreshedText = refreshedResource.contents[0];
@@ -182,7 +182,7 @@ describe.sequential("@sestina/mcp real stdio process", () => {
         const tools = await client.listTools();
         const resources = await client.listResources();
         const context = await client.callTool({ name: "get_research_context", arguments: {} });
-        const resource = await client.readResource({ uri: "sestina://brief/current" });
+        const resource = await client.readResource({ uri: "sestina://research/current-brief" });
         expect(context.structuredContent).toMatchObject({ currentTask: attack });
         const resourceContent = resource.contents[0];
         expect(resourceContent !== undefined && "text" in resourceContent
@@ -415,7 +415,7 @@ describe.sequential("@sestina/mcp real stdio process", () => {
       try {
         const health = await client.callTool({ name: "health", arguments: {} });
         const context = await client.callTool({ name: "get_research_context", arguments: {} });
-        const resource = await client.readResource({ uri: "sestina://brief/current" });
+        const resource = await client.readResource({ uri: "sestina://research/current-brief" });
         expect(health.structuredContent).toMatchObject({ ok: true, server: { name: "sestina-mcp", version: "0.1.0" } });
         expect(context.structuredContent).toMatchObject({ currentTask: "Add only the missing claim-evidence relation." });
         expect(context.structuredContent).toMatchObject({
