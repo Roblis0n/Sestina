@@ -10,6 +10,7 @@ export default defineConfig({
             "packages/*/test/**/*.test.ts",
             "apps/*/test/**/*.test.ts",
             "integrations/*/test/**/*.test.ts",
+            "spikes/*/test/**/*.test.ts",
             "tests/repository/**/*.test.ts",
           ],
         },
