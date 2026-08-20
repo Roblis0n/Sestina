@@ -109,11 +109,14 @@ export async function verifyProjectHost(
   project: string | undefined,
   io: CliIo,
   dependencies: CliDependencies = {},
+  codexExecutable?: string,
 ): Promise<HostVerificationOperationResult> {
   const paths = await resolvePaths(project, io);
   if ("ok" in paths) return paths;
   const status = await currentStatus(paths, dependencies);
   if (status.state !== "configured") return { ok: false, error: { code: "state_conflict" } };
+  const runtime = await validateCodexRuntime(dependencies.runtimeLocator ?? defaultCodexRuntimeLocator);
+  if (!runtime.ok) return { ok: false, error: { code: "runtime_unavailable" } };
   const opened = await openSestina({ databasePath: join(paths.projectRoot, ".sestina", "state.sqlite"), readOnly: true, immutable: true });
   if (!opened.ok) return { ok: false, error: { code: "infrastructure_failure" } };
   try {
@@ -130,6 +133,12 @@ export async function verifyProjectHost(
         projectId: projectState.id,
         briefId: brief.value.brief.id,
         briefVersionId: brief.value.version.id,
+      },
+      ...(codexExecutable === undefined ? {} : { codexExecutable }),
+      mcpLaunch: {
+        command: runtime.value.nodeExecutable,
+        args: [runtime.value.serverEntry, "--project-root", paths.projectRoot],
+        cwd: paths.projectRoot,
       },
       ...(dependencies.codexExecutableLocator === undefined ? {} : { executableLocator: dependencies.codexExecutableLocator }),
       ...(dependencies.codexProcessRunner === undefined ? {} : { processRunner: dependencies.codexProcessRunner }),

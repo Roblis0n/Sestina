@@ -2,7 +2,7 @@ const BOOLEAN_OPTIONS = new Set(["yes", "json", "help", "deterministic", "verbos
 const VALUE_OPTIONS = new Set([
   "project", "title", "from", "file", "kind", "path", "artifact", "baseline", "revision", "expected-version",
   "statement", "rationale", "scope", "reason", "reopen-condition", "evidence-id", "invalidation", "dimension",
-  "build-version", "limitation", "host",
+  "build-version", "limitation", "host", "codex-executable",
 ]);
 
 export interface ParsedCliArguments {

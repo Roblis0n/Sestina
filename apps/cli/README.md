@@ -12,7 +12,7 @@ RI-39 adds one Tier A host workflow:
 
 ```text
 sestina connect [--project <dir>] [--host codex] [--yes] [--json]
-sestina connection-status [--project <dir>] [--host codex] [--verify-host] [--yes] [--json]
+sestina connection-status [--project <dir>] [--host codex] [--verify-host] [--codex-executable <absolute-path>] [--yes] [--json]
 sestina disconnect [--project <dir>] [--host codex] [--yes] [--json]
 ```
 
@@ -32,7 +32,16 @@ nothing and returns confirmation-required. With `--verify-host --yes`, the CLI
 uses a fresh read-only `codex exec --ephemeral` process and returns `verified`
 only after successful JSONL MCP events for both `health` and
 `get_research_context` plus an exact project/Brief binding. The invocation-only
-trust override is not written to user configuration.
+trust and MCP launch overrides are not written to user configuration.
+
+`--codex-executable` is accepted only together with `--verify-host --yes` and
+must be an absolute path. Native `codex` binaries are launched directly. An
+official npm `@openai/codex/bin/codex.js` launcher, or its adjacent `codex.cmd`
+shim, is resolved to the JavaScript launcher and run through the current Node
+executable without executing or parsing the shell shim. Other scripts, missing
+paths, directories, and relative paths fail closed. The real E2E selects this
+same production path through `SESTINA_CODEX_EXECUTABLE`; that variable is a test
+harness input, not a separate launch implementation.
 
 The managed TOML editor preserves every byte outside the Sestina marker block,
 including comments, formatting, and other MCP servers. Foreign ownership,

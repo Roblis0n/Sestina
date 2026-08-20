@@ -165,11 +165,21 @@ describe.sequential("project-scoped Codex connection workflow", () => {
     const runtimeLocator = await runtimeFixture(sandbox);
     expect(await runCli(["connect", "--project", project, "--yes", "--json"], capture(sandbox).io, { runtimeLocator })).toBe(0);
     let runs = 0;
+    const explicitCodex = join(sandbox, "official", "codex.exe");
+    let selectedExecutable: string | undefined;
     const dependencies: CliDependencies = {
       runtimeLocator,
-      codexExecutableLocator: () => Promise.resolve({ ok: true, value: "C:\\Codex\\codex.exe" }),
+      codexExecutableLocator: (value) => {
+        selectedExecutable = value;
+        return Promise.resolve({ ok: true, value: { executable: "C:\\Codex\\codex.exe", prefixArgs: [] } });
+      },
       codexProcessRunner: async (request) => {
         runs += 1;
+        expect(request.args).toEqual(expect.arrayContaining([
+          expect.stringMatching(/^mcp_servers\.sestina\.command=/u),
+          expect.stringMatching(/^mcp_servers\.sestina\.args=/u),
+          expect.stringMatching(/^mcp_servers\.sestina\.cwd=/u),
+        ]));
         const outputPath = request.args[request.args.indexOf("--output-last-message") + 1];
         if (outputPath === undefined) throw new Error("output path required");
         await writeFile(outputPath, JSON.stringify({ ...binding, authority: "host_observation", canMutateAuthority: false }), "utf8");
@@ -183,6 +193,17 @@ describe.sequential("project-scoped Codex connection workflow", () => {
     expect(JSON.parse(ordinary.stdout.join(""))).toMatchObject({ state: "configured", hostVerification: "unverified" });
     expect(runs).toBe(0);
 
+    for (const invalid of [
+      ["connection-status", "--project", project, "--codex-executable", explicitCodex, "--json"],
+      ["connection-status", "--project", project, "--verify-host", "--codex-executable", explicitCodex, "--json"],
+    ]) {
+      const rejected = capture(sandbox);
+      expect(await runCli(invalid, rejected.io, dependencies)).toBe(2);
+      expect(JSON.parse(rejected.stderr.join(""))).toMatchObject({ error: { code: "invalid_input" } });
+      expect(rejected.stderr.join("")).not.toContain(explicitCodex);
+      expect(runs).toBe(0);
+    }
+
     const preview = capture(sandbox);
     expect(await runCli(["connection-status", "--project", project, "--verify-host", "--json"], preview.io, dependencies)).toBe(7);
     expect(JSON.parse(preview.stderr.join(""))).toMatchObject({
@@ -195,7 +216,7 @@ describe.sequential("project-scoped Codex connection workflow", () => {
     expect(runs).toBe(0);
 
     const verified = capture(sandbox);
-    expect(await runCli(["connection-status", "--project", project, "--verify-host", "--yes", "--json"], verified.io, dependencies)).toBe(0);
+    expect(await runCli(["connection-status", "--project", project, "--verify-host", "--yes", "--codex-executable", explicitCodex, "--json"], verified.io, dependencies)).toBe(0);
     expect(JSON.parse(verified.stdout.join(""))).toMatchObject({
       ok: true,
       command: "connection-status",
@@ -209,7 +230,9 @@ describe.sequential("project-scoped Codex connection workflow", () => {
       },
     });
     expect(runs).toBe(1);
+    expect(selectedExecutable).toBe(explicitCodex);
     expect(verified.stdout.join("")).not.toContain(project);
+    expect(verified.stdout.join("")).not.toContain(explicitCodex);
   });
 
   it("preserves foreign config bytes, is mtime-idempotent, and backs up an owned runtime update", async () => {

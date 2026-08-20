@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  defaultCodexLaunchTargetLocator,
   parseCodexVerificationEvidence,
   verifyCodexHost,
   type CodexProcessRequest,
@@ -74,7 +75,12 @@ describe("Codex host verification evidence", () => {
     const verified = await verifyCodexHost({
       projectRoot,
       binding,
-      executableLocator: () => Promise.resolve({ ok: true, value: "C:\\Program Files\\Codex\\codex.exe" }),
+      mcpLaunch: {
+        command: "C:\\Runtime\\node.exe",
+        args: ["C:\\Runtime\\sestina-mcp.js", "--project-root", projectRoot],
+        cwd: projectRoot,
+      },
+      executableLocator: () => Promise.resolve({ ok: true, value: { executable: "C:\\Program Files\\Codex\\codex.exe", prefixArgs: ["fixed-launcher.js"] } }),
       processRunner: runner,
     });
     expect(verified).toMatchObject({ ok: true, value: { method: "codex_exec_jsonl", observedTools: ["health", "get_research_context"] } });
@@ -82,16 +88,74 @@ describe("Codex host verification evidence", () => {
     if (request === undefined) return;
     expect(request.shell).toBe(false);
     expect(request.cwd).toBe(projectRoot);
+    expect(request.args[0]).toBe("fixed-launcher.js");
     expect(request.args).toEqual(expect.arrayContaining([
       "exec", "--ephemeral", "--json", "--sandbox", "read-only", "--ignore-user-config", "--output-schema", "--output-last-message", "-c",
     ]));
     expect(request.args).not.toContain("danger-full-access");
     expect(request.args).not.toContain("--dangerously-bypass-approvals-and-sandbox");
     expect(request.args.some((item) => item.startsWith("projects.") && item.endsWith('.trust_level="trusted"'))).toBe(true);
+    expect(request.args).toEqual(expect.arrayContaining([
+      'mcp_servers.sestina.command="C:\\\\Runtime\\\\node.exe"',
+      `mcp_servers.sestina.args=["C:\\\\Runtime\\\\sestina-mcp.js","--project-root",${JSON.stringify(projectRoot)}]`,
+      `mcp_servers.sestina.cwd=${JSON.stringify(projectRoot)}`,
+      "mcp_servers.sestina.enabled=true",
+      'mcp_servers.sestina.enabled_tools=["health","get_research_context"]',
+    ]));
     expect(request.args.at(-1)).toContain("get_research_context");
     const schemaPath = request.args[request.args.indexOf("--output-schema") + 1];
     expect(schemaPath).toBeDefined();
     if (schemaPath !== undefined) await expect(readFile(schemaPath, "utf8")).rejects.toThrow();
+  });
+
+  it("prefers a canonical explicit native target and resolves an official npm cmd shim without executing the shim", async () => {
+    const sandbox = await mkdtemp(join(tmpdir(), "sestina-codex-target-"));
+    roots.push(sandbox);
+    const native = join(sandbox, "codex.exe");
+    await writeFile(native, "native\n", "utf8");
+    const nativeTarget = await defaultCodexLaunchTargetLocator(native);
+    expect(nativeTarget).toEqual({ ok: true, value: { executable: native, prefixArgs: [] } });
+
+    const shim = join(sandbox, "node_modules", ".bin", "codex.cmd");
+    const launcher = join(sandbox, "node_modules", "@openai", "codex", "bin", "codex.js");
+    await mkdir(join(sandbox, "node_modules", ".bin"), { recursive: true });
+    await mkdir(join(sandbox, "node_modules", "@openai", "codex", "bin"), { recursive: true });
+    await writeFile(shim, "untrusted shim bytes are never parsed\n", "utf8");
+    await writeFile(launcher, "export {};\n", "utf8");
+    const shimTarget = await defaultCodexLaunchTargetLocator(shim);
+    expect(shimTarget).toEqual({ ok: true, value: { executable: process.execPath, prefixArgs: [launcher] } });
+  });
+
+  it("rejects relative, missing, directory, and non-official JavaScript launch targets", async () => {
+    const sandbox = await mkdtemp(join(tmpdir(), "sestina-codex-target-invalid-"));
+    roots.push(sandbox);
+    const directory = join(sandbox, "codex.exe");
+    await mkdir(directory);
+    const arbitraryScript = join(sandbox, "launcher.js");
+    await writeFile(arbitraryScript, "export {};\n", "utf8");
+    for (const target of ["codex.exe", join(sandbox, "missing.exe"), directory, arbitraryScript]) {
+      await expect(defaultCodexLaunchTargetLocator(target)).resolves.toEqual({ ok: false, error: { code: "host_unavailable" } });
+    }
+  });
+
+  it("passes an explicit target to the shared locator and keeps PATH fallback when omitted", async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), "sestina-host-target-priority-"));
+    roots.push(projectRoot);
+    const explicit = join(projectRoot, "codex.exe");
+    const received: (string | undefined)[] = [];
+    const locator = (value?: string) => {
+      received.push(value);
+      return Promise.resolve({ ok: true as const, value: { executable: "resolved.exe", prefixArgs: [] } });
+    };
+    const runner: CodexProcessRunner = async (request) => {
+      const outputPath = request.args[request.args.indexOf("--output-last-message") + 1];
+      if (outputPath === undefined) throw new Error("output path required");
+      await writeFile(outputPath, JSON.stringify({ ...binding, authority: "host_observation", canMutateAuthority: false }), "utf8");
+      return { kind: "completed", exitCode: 0, stdout: `${completed("health")}\n${completed("get_research_context")}\n`, stdoutBytes: 400, stderrBytes: 0, outputLimitExceeded: false };
+    };
+    await verifyCodexHost({ projectRoot, binding, codexExecutable: explicit, executableLocator: locator, processRunner: runner });
+    await verifyCodexHost({ projectRoot, binding, executableLocator: locator, processRunner: runner });
+    expect(received).toEqual([explicit, undefined]);
   });
 
   it("maps unavailable, nonzero, timeout, and oversized processes to stable categories", async () => {
@@ -109,7 +173,7 @@ describe("Codex host verification evidence", () => {
       await expect(verifyCodexHost({
         projectRoot,
         binding,
-        executableLocator: () => Promise.resolve({ ok: true, value: "C:\\Codex\\codex.exe" }),
+        executableLocator: () => Promise.resolve({ ok: true, value: { executable: "C:\\Codex\\codex.exe", prefixArgs: [] } }),
         processRunner: () => Promise.resolve(result),
       })).resolves.toMatchObject({ ok: false, error: { code } });
     }

@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { mkdtemp, readFile, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { delimiter, isAbsolute, join } from "node:path";
+import { basename, delimiter, dirname, isAbsolute, join, normalize } from "node:path";
 
 export const CODEX_HOST_TIMEOUT_MS = 120_000;
 export const CODEX_HOST_STDOUT_MAX_BYTES = 1_048_576;
@@ -20,6 +20,7 @@ export interface CodexProcessRequest {
   readonly args: readonly string[];
   readonly cwd: string;
   readonly shell: false;
+  readonly stdin?: string;
   readonly timeoutMs: number;
   readonly stdoutMaxBytes: number;
   readonly stderrMaxBytes: number;
@@ -31,10 +32,22 @@ export type CodexProcessResult =
   | { readonly kind: "unavailable"; readonly exitCode: null; readonly stdout: ""; readonly stdoutBytes: 0; readonly stderrBytes: 0; readonly outputLimitExceeded: false };
 
 export type CodexProcessRunner = (request: CodexProcessRequest) => Promise<CodexProcessResult>;
-export type CodexExecutableLocator = () => Promise<
-  | { readonly ok: true; readonly value: string }
+export interface CodexLaunchTarget {
+  readonly executable: string;
+  readonly prefixArgs: readonly string[];
+}
+
+export interface CodexMcpLaunchConfig {
+  readonly command: string;
+  readonly args: readonly string[];
+  readonly cwd: string;
+}
+
+export type CodexLaunchTargetLocator = (explicitPath?: string) => Promise<
+  | { readonly ok: true; readonly value: CodexLaunchTarget }
   | { readonly ok: false; readonly error: { readonly code: "host_unavailable" } }
 >;
+export type CodexExecutableLocator = CodexLaunchTargetLocator;
 
 export type CodexVerificationErrorCode =
   | "host_unavailable"
@@ -114,7 +127,7 @@ export function parseCodexVerificationEvidence(
   };
 }
 
-async function canonicalExecutable(path: string): Promise<string | undefined> {
+async function canonicalFile(path: string): Promise<string | undefined> {
   if (!isAbsolute(path)) return undefined;
   try {
     const canonical = await realpath(path);
@@ -124,18 +137,61 @@ async function canonicalExecutable(path: string): Promise<string | undefined> {
   }
 }
 
-export const defaultCodexExecutableLocator: CodexExecutableLocator = async () => {
+function isOfficialNodeLauncher(path: string): boolean {
+  const segments = normalize(path).split(/[\\/]+/u).map((segment) => segment.toLowerCase());
+  return segments.slice(-4).join("/") === "@openai/codex/bin/codex.js";
+}
+
+async function nodeLaunchTarget(launcherPath: string): Promise<CodexLaunchTarget | undefined> {
+  const launcher = await canonicalFile(launcherPath);
+  if (launcher === undefined || !isOfficialNodeLauncher(launcher)) return undefined;
+  const node = await canonicalFile(process.execPath);
+  return node === undefined ? undefined : Object.freeze({ executable: node, prefixArgs: Object.freeze([launcher]) });
+}
+
+async function resolveExplicitLaunchTarget(path: string): Promise<CodexLaunchTarget | undefined> {
+  const canonical = await canonicalFile(path);
+  if (canonical === undefined) return undefined;
+  const name = basename(canonical).toLowerCase();
+  if (name === "codex.exe" || name === "codex") {
+    return Object.freeze({ executable: canonical, prefixArgs: Object.freeze([]) });
+  }
+  if (name === "codex.js") return await nodeLaunchTarget(canonical);
+  if (name !== "codex.cmd") return undefined;
+  const shimDirectory = dirname(canonical);
+  for (const candidate of [
+    join(shimDirectory, "..", "@openai", "codex", "bin", "codex.js"),
+    join(shimDirectory, "node_modules", "@openai", "codex", "bin", "codex.js"),
+  ]) {
+    const target = await nodeLaunchTarget(candidate);
+    if (target !== undefined) return target;
+  }
+  return undefined;
+}
+
+export const defaultCodexLaunchTargetLocator: CodexLaunchTargetLocator = async (explicitPath) => {
+  if (explicitPath !== undefined) {
+    const target = await resolveExplicitLaunchTarget(explicitPath);
+    return target === undefined
+      ? { ok: false, error: { code: "host_unavailable" } }
+      : { ok: true, value: target };
+  }
   const pathValue = process.env.PATH;
   if (pathValue === undefined) return { ok: false, error: { code: "host_unavailable" } };
-  const names = process.platform === "win32" ? ["codex.exe", "codex"] : ["codex"];
-  for (const directory of pathValue.split(delimiter).filter((value) => value.length > 0)) {
+  const names = process.platform === "win32" ? ["codex.cmd", "codex.exe", "codex"] : ["codex"];
+  const directories = pathValue.split(delimiter).filter((value) => value.length > 0).sort((left, right) => {
+    const restricted = (value: string) => normalize(value).toLowerCase().includes("\\windowsapps");
+    return Number(restricted(left)) - Number(restricted(right));
+  });
+  for (const directory of directories) {
     for (const name of names) {
-      const executable = await canonicalExecutable(join(directory, name));
-      if (executable !== undefined) return { ok: true, value: executable };
+      const target = await resolveExplicitLaunchTarget(join(directory, name));
+      if (target !== undefined) return { ok: true, value: target };
     }
   }
   return { ok: false, error: { code: "host_unavailable" } };
 };
+export const defaultCodexExecutableLocator = defaultCodexLaunchTargetLocator;
 
 export const defaultCodexProcessRunner: CodexProcessRunner = async (request) => await new Promise((resolve) => {
   let stdout = Buffer.alloc(0);
@@ -148,7 +204,7 @@ export const defaultCodexProcessRunner: CodexProcessRunner = async (request) => 
     cwd: request.cwd,
     shell: false,
     windowsHide: true,
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: [request.stdin === undefined ? "ignore" : "pipe", "pipe", "pipe"],
   });
   const finish = (result: CodexProcessResult) => {
     if (settled) return;
@@ -160,12 +216,12 @@ export const defaultCodexProcessRunner: CodexProcessRunner = async (request) => 
     timedOut = true;
     child.kill();
   }, request.timeoutMs);
-  child.stdout.on("data", (chunk: Buffer) => {
+  child.stdout?.on("data", (chunk: Buffer) => {
     stdoutBytes += chunk.byteLength;
     if (stdoutBytes <= request.stdoutMaxBytes) stdout = Buffer.concat([stdout, chunk]);
     else { outputLimitExceeded = true; child.kill(); }
   });
-  child.stderr.on("data", (chunk: Buffer) => {
+  child.stderr?.on("data", (chunk: Buffer) => {
     stderrBytes += chunk.byteLength;
     if (stderrBytes > request.stderrMaxBytes) { outputLimitExceeded = true; child.kill(); }
   });
@@ -175,6 +231,7 @@ export const defaultCodexProcessRunner: CodexProcessRunner = async (request) => 
       ? { kind: "timeout", exitCode: null, stdout: stdout.toString("utf8"), stdoutBytes, stderrBytes, outputLimitExceeded }
       : { kind: "completed", exitCode, stdout: stdout.toString("utf8"), stdoutBytes, stderrBytes, outputLimitExceeded });
   });
+  if (request.stdin !== undefined) child.stdin?.end(request.stdin);
 });
 
 function outputSchema(binding: CodexContextBinding): Readonly<Record<string, unknown>> {
@@ -196,6 +253,21 @@ function trustOverride(projectRoot: string): string {
   return `projects.${JSON.stringify(projectRoot)}.trust_level="trusted"`;
 }
 
+export function codexMcpConfigArgs(config: CodexMcpLaunchConfig): readonly string[] {
+  const values = [
+    `mcp_servers.sestina.command=${JSON.stringify(config.command)}`,
+    `mcp_servers.sestina.args=[${config.args.map((value) => JSON.stringify(value)).join(",")}]`,
+    `mcp_servers.sestina.cwd=${JSON.stringify(config.cwd)}`,
+    "mcp_servers.sestina.enabled=true",
+    "mcp_servers.sestina.required=false",
+    'mcp_servers.sestina.enabled_tools=["health","get_research_context"]',
+    'mcp_servers.sestina.default_tools_approval_mode="writes"',
+    "mcp_servers.sestina.startup_timeout_sec=10",
+    "mcp_servers.sestina.tool_timeout_sec=5",
+  ];
+  return Object.freeze(values.flatMap((value) => ["-c", value]));
+}
+
 const VERIFICATION_PROMPT = [
   "Use the project Skill $sestina-research-integrity for this host verification.",
   "Call the sestina MCP tools health and get_research_context exactly once each.",
@@ -207,17 +279,19 @@ const VERIFICATION_PROMPT = [
 export async function verifyCodexHost(options: {
   readonly projectRoot: string;
   readonly binding: CodexContextBinding;
+  readonly codexExecutable?: string;
+  readonly mcpLaunch?: CodexMcpLaunchConfig;
   readonly executableLocator?: CodexExecutableLocator;
   readonly processRunner?: CodexProcessRunner;
 }): Promise<CodexVerificationResult> {
-  const located = await (options.executableLocator ?? defaultCodexExecutableLocator)();
+  const located = await (options.executableLocator ?? defaultCodexLaunchTargetLocator)(options.codexExecutable);
   if (!located.ok) return located;
   const temporaryRoot = await mkdtemp(join(tmpdir(), "sestina-codex-host-"));
   const schemaPath = join(temporaryRoot, "verification.schema.json");
   const outputPath = join(temporaryRoot, "verification.output.json");
   try {
     await writeFile(schemaPath, `${JSON.stringify(outputSchema(options.binding))}\n`, { encoding: "utf8", flush: true });
-    const args = [
+    const codexArgs = [
       "exec",
       "--ephemeral",
       "--json",
@@ -232,11 +306,12 @@ export async function verifyCodexHost(options: {
       options.projectRoot,
       "-c",
       trustOverride(options.projectRoot),
+      ...(options.mcpLaunch === undefined ? [] : codexMcpConfigArgs(options.mcpLaunch)),
       VERIFICATION_PROMPT,
     ];
     const processResult = await (options.processRunner ?? defaultCodexProcessRunner)({
-      executable: located.value,
-      args,
+      executable: located.value.executable,
+      args: [...located.value.prefixArgs, ...codexArgs],
       cwd: options.projectRoot,
       shell: false,
       timeoutMs: CODEX_HOST_TIMEOUT_MS,

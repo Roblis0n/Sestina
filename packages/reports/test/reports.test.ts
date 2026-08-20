@@ -141,7 +141,7 @@ describe("portable Review Capsule", () => {
     expect(new TextEncoder().encode(first.value.json).byteLength).toBeLessThanOrEqual(4096);
     expect(first.value.json).not.toContain("PRIVATE BASELINE"); expect(first.value.json).not.toContain("PRIVATE CANDIDATE");
     expect(first.value.json).not.toContain("C:\\\\Users"); expect(first.value.capsule.hashMeaning).toBe("content_integrity_only_not_signature_or_proof");
-    expect(first.value.capsule.capsuleHash).toBe("1d7e69a8062ffa1485e078cc0a799a312ff52cff257ff5668672437b43ed1361");
+    expect(first.value.capsule.capsuleHash).toBe("76fa79043577eb70ebed89f5351addf57af197d969988a712a400243d594a70b");
   });
 
   it("uses a public fixed overflow order and records every omission", () => {

@@ -32,8 +32,8 @@ export const CAPSULE_RESPONSE_SCHEMA = Object.freeze({
   additionalProperties: false,
   required: CAPSULE_RESPONSE_REQUIRED_KEYS,
   properties: {
-    schemaVersion: { const: CAPSULE_RESPONSE_SCHEMA_VERSION },
-    authority: { const: CAPSULE_RESPONSE_AUTHORITY },
+    schemaVersion: { type: "string", const: CAPSULE_RESPONSE_SCHEMA_VERSION },
+    authority: { type: "string", const: CAPSULE_RESPONSE_AUTHORITY },
     projectId: { type: "string", pattern: RESEARCH_ID_PATTERNS.projectId },
     capsuleHash: { type: "string", pattern: HASH_PATTERN },
     snapshotHash: { type: "string", pattern: HASH_PATTERN },

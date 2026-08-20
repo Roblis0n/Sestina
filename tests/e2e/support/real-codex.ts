@@ -1,4 +1,3 @@
-import { spawn } from "node:child_process";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -8,8 +7,11 @@ import {
   CODEX_HOST_STDERR_MAX_BYTES,
   CODEX_HOST_STDOUT_MAX_BYTES,
   CODEX_HOST_TIMEOUT_MS,
-  defaultCodexExecutableLocator,
+  codexMcpConfigArgs,
+  defaultCodexLaunchTargetLocator,
+  defaultCodexProcessRunner,
 } from "../../../apps/cli/src/connections/codex-host-verifier.js";
+import { defaultCodexRuntimeLocator, validateCodexRuntime } from "../../../apps/cli/src/connections/runtime-locator.js";
 
 export interface RealCodexSessionResult {
   readonly events: readonly Readonly<Record<string, unknown>>[];
@@ -44,14 +46,16 @@ export async function runRealCodexSession(options: {
   readonly trustProject?: boolean;
 }): Promise<RealCodexSessionResult> {
   if ((options.prompt === undefined) === (options.stdinContext === undefined)) throw new Error("codex_session_requires_exactly_one_input");
-  const located = await defaultCodexExecutableLocator();
+  const located = await defaultCodexLaunchTargetLocator(process.env.SESTINA_CODEX_EXECUTABLE);
   if (!located.ok) throw new Error("host_unavailable");
+  const runtime = options.trustProject === false ? undefined : await validateCodexRuntime(defaultCodexRuntimeLocator);
+  if (runtime !== undefined && !runtime.ok) throw new Error("runtime_unavailable");
   const temporaryRoot = await mkdtemp(join(tmpdir(), "sestina-real-codex-"));
   const schemaPath = join(temporaryRoot, "output.schema.json");
   const outputPath = join(temporaryRoot, "output.json");
   try {
     await writeFile(schemaPath, `${JSON.stringify(options.schema)}\n`, { encoding: "utf8", flush: true });
-    const args = [
+    const codexArgs = [
       "exec",
       "--ephemeral",
       "--json",
@@ -65,40 +69,28 @@ export async function runRealCodexSession(options: {
       "-C",
       options.cwd,
       ...(options.trustProject === false ? [] : ["-c", trustOverride(options.cwd)]),
+      ...(runtime === undefined ? [] : codexMcpConfigArgs({
+        command: runtime.value.nodeExecutable,
+        args: [runtime.value.serverEntry, "--project-root", options.cwd],
+        cwd: options.cwd,
+      })),
       ...(options.prompt === undefined ? [] : [options.prompt]),
     ];
-    const completed = await new Promise<{ readonly exitCode: number | null; readonly stdout: Buffer; readonly stdoutBytes: number; readonly stderrBytes: number; readonly timedOut: boolean; readonly overflow: boolean }>((resolve) => {
-      const child = spawn(located.value, args, { cwd: options.cwd, shell: false, windowsHide: true, stdio: ["pipe", "pipe", "pipe"] });
-      let stdout = Buffer.alloc(0);
-      let stdoutBytes = 0;
-      let stderrBytes = 0;
-      let overflow = false;
-      let timedOut = false;
-      let settled = false;
-      const finish = (exitCode: number | null) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        resolve({ exitCode, stdout, stdoutBytes, stderrBytes, timedOut, overflow });
-      };
-      const timer = setTimeout(() => { timedOut = true; child.kill(); }, CODEX_HOST_TIMEOUT_MS);
-      child.stdout.on("data", (chunk: Buffer) => {
-        stdoutBytes += chunk.byteLength;
-        if (stdoutBytes <= CODEX_HOST_STDOUT_MAX_BYTES) stdout = Buffer.concat([stdout, chunk]);
-        else { overflow = true; child.kill(); }
-      });
-      child.stderr.on("data", (chunk: Buffer) => {
-        stderrBytes += chunk.byteLength;
-        if (stderrBytes > CODEX_HOST_STDERR_MAX_BYTES) { overflow = true; child.kill(); }
-      });
-      child.on("error", () => { finish(null); });
-      child.on("close", finish);
-      child.stdin.end(options.stdinContext ?? "");
+    const completed = await defaultCodexProcessRunner({
+      executable: located.value.executable,
+      args: [...located.value.prefixArgs, ...codexArgs],
+      cwd: options.cwd,
+      shell: false,
+      ...(options.stdinContext === undefined ? {} : { stdin: options.stdinContext }),
+      timeoutMs: CODEX_HOST_TIMEOUT_MS,
+      stdoutMaxBytes: CODEX_HOST_STDOUT_MAX_BYTES,
+      stderrMaxBytes: CODEX_HOST_STDERR_MAX_BYTES,
     });
-    if (completed.timedOut) throw new Error("host_timeout");
-    if (completed.overflow) throw new Error("host_protocol_mismatch");
-    if (completed.exitCode !== 0) throw new Error(completed.exitCode === null ? "host_unavailable" : "host_process_failed");
-    const lines = completed.stdout.toString("utf8").split(/\r?\n/u).filter((line) => line.length > 0);
+    if (completed.kind === "timeout") throw new Error("host_timeout");
+    if (completed.kind === "unavailable") throw new Error("host_unavailable");
+    if (completed.outputLimitExceeded) throw new Error("host_protocol_mismatch");
+    if (completed.exitCode !== 0) throw new Error("host_process_failed");
+    const lines = completed.stdout.split(/\r?\n/u).filter((line) => line.length > 0);
     if (lines.length > CODEX_HOST_JSONL_MAX_LINES) throw new Error("host_protocol_mismatch");
     const events: Readonly<Record<string, unknown>>[] = [];
     for (const line of lines) {

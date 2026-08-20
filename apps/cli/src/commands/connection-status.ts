@@ -8,6 +8,7 @@ export interface ConnectionStatusOptions {
   readonly host?: string;
   readonly verifyHost: boolean;
   readonly yes: boolean;
+  readonly codexExecutable?: string;
   readonly json: boolean;
 }
 
@@ -72,6 +73,9 @@ export async function runConnectionStatus(
   if ((options.host ?? "codex") !== "codex") {
     return failure(io, options.json, EXIT_CODES.unsupportedFormat, "unsupported_format", "Only the project-scoped Codex host is supported.");
   }
+  if (options.codexExecutable !== undefined && (!options.verifyHost || !options.yes)) {
+    return failure(io, options.json, EXIT_CODES.invalidInput, "invalid_input", "--codex-executable requires --verify-host --yes.");
+  }
   if (options.verifyHost) {
     const staticResult = await getConnectionStatus(options.project, io, dependencies);
     if (!staticResult.ok) return statusFailure(staticResult, io, options.json);
@@ -79,7 +83,7 @@ export async function runConnectionStatus(
       return failure(io, options.json, EXIT_CODES.stateConflict, "state_conflict", "Static Codex configuration must be configured before host verification.");
     }
     if (!options.yes) return confirmationRequired(io, options.json);
-    const verified = await verifyProjectHost(options.project, io, dependencies);
+    const verified = await verifyProjectHost(options.project, io, dependencies, options.codexExecutable);
     if (!verified.ok) {
       if (isConnectionFailureCode(verified.error.code)) {
         const code = verified.error.code;

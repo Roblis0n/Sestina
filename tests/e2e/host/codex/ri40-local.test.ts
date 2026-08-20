@@ -55,7 +55,7 @@ describe.sequential("RI-40 deterministic one-host workflow", () => {
     };
     const verified = await runJsonCli(temporaryRoot, ["connection-status", "--project", fixture.projectRoot, "--host", "codex", "--verify-host", "--yes"], {
       runtimeLocator,
-      codexExecutableLocator: () => Promise.resolve({ ok: true, value: process.execPath }),
+      codexExecutableLocator: () => Promise.resolve({ ok: true, value: { executable: process.execPath, prefixArgs: [] } }),
       codexProcessRunner: processRunner,
     });
     expect(hostRuns).toBe(1);

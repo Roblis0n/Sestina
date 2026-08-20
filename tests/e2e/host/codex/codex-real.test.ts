@@ -33,8 +33,15 @@ describe.sequential("RI-40 real Codex Tier A and no-MCP Capsule workflow", () =>
     const fixture = await initializeRi40Workflow(temporaryRoot);
     expect((await runJsonCli(temporaryRoot, ["connect", "--project", fixture.projectRoot, "--host", "codex", "--yes"])).code).toBe(0);
 
-    const verified = await runJsonCli(temporaryRoot, ["connection-status", "--project", fixture.projectRoot, "--host", "codex", "--verify-host", "--yes"]);
-    expect(verified).toMatchObject({
+    const selectedCodex = process.env.SESTINA_CODEX_EXECUTABLE;
+    if (selectedCodex === undefined) throw new Error("SESTINA_CODEX_EXECUTABLE is required for the real Codex E2E");
+    const verified = await runJsonCli(temporaryRoot, ["connection-status", "--project", fixture.projectRoot, "--host", "codex", "--verify-host", "--yes", "--codex-executable", selectedCodex]);
+    const verificationDiagnostic = JSON.stringify({
+      code: verified.code,
+      errorCode: (verified.json?.error as { readonly code?: unknown } | undefined)?.code,
+      diagnostics: verified.json?.diagnostics,
+    });
+    expect(verified, verificationDiagnostic).toMatchObject({
       code: 0,
       json: {
         state: "configured",
@@ -50,10 +57,10 @@ describe.sequential("RI-40 real Codex Tier A and no-MCP Capsule workflow", () =>
       properties: {
         candidateMarkdown: { type: "string", minLength: 1, maxLength: 8_192 },
         materialDelta: { type: "string", minLength: 1, maxLength: 2_048 },
-        preservedDecisionIds: { type: "array", minItems: 1, maxItems: 16, uniqueItems: true, items: { type: "string" } },
-        reopenResolvedIssue: { const: false },
-        authority: { const: "model_proposed" },
-        canMutateAuthority: { const: false },
+        preservedDecisionIds: { type: "array", minItems: 1, maxItems: 16, items: { type: "string" } },
+        reopenResolvedIssue: { type: "boolean", const: false },
+        authority: { type: "string", const: "model_proposed" },
+        canMutateAuthority: { type: "boolean", const: false },
       },
     } as const;
     const firstSession = await runRealCodexSession({
@@ -101,15 +108,15 @@ describe.sequential("RI-40 real Codex Tier A and no-MCP Capsule workflow", () =>
       additionalProperties: false,
       required: ["projectId", "briefId", "episodeId", "issueId", "issueStatus", "treatAsOpenAudit", "reopenResolvedIssue", "authority", "canMutateAuthority"],
       properties: {
-        projectId: { const: fixture.projectId },
-        briefId: { const: fixture.briefId },
-        episodeId: { const: episodeId },
-        issueId: { const: issueId },
-        issueStatus: { const: "resolved" },
-        treatAsOpenAudit: { const: false },
-        reopenResolvedIssue: { const: false },
-        authority: { const: "host_observation" },
-        canMutateAuthority: { const: false },
+        projectId: { type: "string", const: fixture.projectId },
+        briefId: { type: "string", const: fixture.briefId },
+        episodeId: { type: "string", const: episodeId },
+        issueId: { type: "string", const: issueId },
+        issueStatus: { type: "string", const: "resolved" },
+        treatAsOpenAudit: { type: "boolean", const: false },
+        reopenResolvedIssue: { type: "boolean", const: false },
+        authority: { type: "string", const: "host_observation" },
+        canMutateAuthority: { type: "boolean", const: false },
       },
     } as const;
     const secondSession = await runRealCodexSession({
@@ -153,14 +160,14 @@ describe.sequential("RI-40 real Codex Tier A and no-MCP Capsule workflow", () =>
       required: ["schemaVersion", "authority", "projectId", "capsuleHash", "snapshotHash", "reviewInputHash", "briefVersionId", "artifactRevisionId", "response"],
       properties: {
         ...capsule.responseSchema.properties,
-        schemaVersion: { const: "1.0.0" },
-        authority: { const: "model_proposed_candidate_only" },
-        projectId: { const: capsule.projectId },
-        capsuleHash: { const: capsule.capsuleHash },
-        snapshotHash: { const: capsule.snapshot.hash },
-        reviewInputHash: { const: capsule.reviewInputHash },
-        briefVersionId: { const: capsule.brief.id },
-        artifactRevisionId: { const: capsule.candidate.revisionId },
+        schemaVersion: { type: "string", const: "1.0.0" },
+        authority: { type: "string", const: "model_proposed_candidate_only" },
+        projectId: { type: "string", const: capsule.projectId },
+        capsuleHash: { type: "string", const: capsule.capsuleHash },
+        snapshotHash: { type: "string", const: capsule.snapshot.hash },
+        reviewInputHash: { type: "string", const: capsule.reviewInputHash },
+        briefVersionId: { type: "string", const: capsule.brief.id },
+        artifactRevisionId: { type: "string", const: capsule.candidate.revisionId },
       },
     } as const;
     const capsuleSession = await runRealCodexSession({
