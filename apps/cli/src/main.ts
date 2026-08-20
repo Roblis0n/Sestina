@@ -1,10 +1,13 @@
 #!/usr/bin/env node
 import { pathToFileURL } from "node:url";
-import { parseCliArguments, stringOption } from "./arguments.js";
+import { parseCliArguments, stringOption, type ParsedCliArguments } from "./arguments.js";
 import { runArtifact } from "./commands/artifact.js";
 import { runBrief } from "./commands/brief.js";
 import { runCapsule } from "./commands/capsule.js";
+import { runConnect, type ConnectOptions } from "./commands/connect.js";
+import { runConnectionStatus, type ConnectionStatusOptions } from "./commands/connection-status.js";
 import { runDecision } from "./commands/decision.js";
+import { runDisconnect, type DisconnectOptions } from "./commands/disconnect.js";
 import { runDoctor, type DoctorOptions } from "./commands/doctor.js";
 import { runEpisode } from "./commands/episode.js";
 import { runIssue } from "./commands/issue.js";
@@ -15,6 +18,7 @@ import { runReport } from "./commands/report.js";
 import { runSnapshot } from "./commands/snapshot.js";
 import { EXIT_CODES, type CliExitCode } from "./exit-codes.js";
 import { failure, type CliIo } from "./output.js";
+import type { CliDependencies } from "./connections/connection-plan.js";
 
 export type { CliIo } from "./output.js";
 
@@ -22,6 +26,9 @@ export const CLI_HELP = `Sestina local research revision workflow
 
   sestina init --project <dir> --title <title> --yes
   sestina doctor [--project <dir>]
+  sestina connect [--project <dir>] [--host codex] [--yes] [--json]
+  sestina connection-status [--project <dir>] [--host codex] [--json]
+  sestina disconnect [--project <dir>] [--host codex] [--yes] [--json]
   sestina brief show|edit|propose-change|accept-change
   sestina artifact add|list
   sestina revision add|diff
@@ -37,7 +44,11 @@ sestina report markdown|json [--all-findings]
 Use --json for stable machine output. Authority-changing research actions require --yes.
 `;
 
-export async function runCli(args: readonly string[], io: CliIo): Promise<CliExitCode> {
+function onlyOptions(parsed: ParsedCliArguments, allowed: ReadonlySet<string>): boolean {
+  return Object.keys(parsed.options).every((name) => allowed.has(name));
+}
+
+export async function runCli(args: readonly string[], io: CliIo, dependencies: CliDependencies = {}): Promise<CliExitCode> {
   const parsed = parseCliArguments(args);
   const json = parsed.options.json === true;
   if (!parsed.valid) return failure(io, json, EXIT_CODES.invalidInput, "invalid_input", "Command arguments are invalid.");
@@ -53,7 +64,22 @@ export async function runCli(args: readonly string[], io: CliIo): Promise<CliExi
   if (command === "doctor" && parsed.positionals.length === 1) {
     if (parsed.options.title !== undefined || parsed.options.yes !== undefined) return failure(io, json, EXIT_CODES.invalidInput, "invalid_input", "Command arguments are invalid.");
     const options: DoctorOptions = { project: stringOption(parsed, "project"), json };
-    return runDoctor(options, io);
+    return runDoctor(options, io, dependencies);
+  }
+  if (command === "connect" && parsed.positionals.length === 1) {
+    if (!onlyOptions(parsed, new Set(["project", "host", "yes", "json"]))) return failure(io, json, EXIT_CODES.invalidInput, "invalid_input", "Command arguments are invalid.");
+    const options: ConnectOptions = { project: stringOption(parsed, "project"), host: stringOption(parsed, "host"), yes: parsed.options.yes === true, json };
+    return runConnect(options, io, dependencies);
+  }
+  if (command === "connection-status" && parsed.positionals.length === 1) {
+    if (!onlyOptions(parsed, new Set(["project", "host", "json"]))) return failure(io, json, EXIT_CODES.invalidInput, "invalid_input", "Command arguments are invalid.");
+    const options: ConnectionStatusOptions = { project: stringOption(parsed, "project"), host: stringOption(parsed, "host"), json };
+    return runConnectionStatus(options, io, dependencies);
+  }
+  if (command === "disconnect" && parsed.positionals.length === 1) {
+    if (!onlyOptions(parsed, new Set(["project", "host", "yes", "json"]))) return failure(io, json, EXIT_CODES.invalidInput, "invalid_input", "Command arguments are invalid.");
+    const options: DisconnectOptions = { project: stringOption(parsed, "project"), host: stringOption(parsed, "host"), yes: parsed.options.yes === true, json };
+    return runDisconnect(options, io, dependencies);
   }
   if (command === "brief") return runBrief(parsed, io);
   if (command === "artifact") return runArtifact(parsed, io);

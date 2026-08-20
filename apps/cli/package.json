@@ -18,7 +18,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@sestina/core": "workspace:*"
+    "@sestina/core": "workspace:*",
+    "@sestina/mcp": "workspace:*",
+    "@sestina/skills": "workspace:*",
+    "smol-toml": "1.8.0"
   },
   "devDependencies": {
     "esbuild": "0.28.2",

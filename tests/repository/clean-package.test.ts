@@ -121,6 +121,26 @@ describe("verify-clean-package positive fixtures", () => {
     });
     expect(r.exitCode).toBe(0);
   });
+
+  it("P4. RI-39 CLI and Skill package dependency boundaries pass strict mode", () => {
+    const r = runCleanPackage("pos-ri39", (root) => {
+      writeStrictPackage(root, "apps/cli", {
+        ...VALID_STRICT_MANIFEST,
+        name: "@sestina/cli",
+        dependencies: {
+          "@sestina/core": "workspace:*",
+          "@sestina/mcp": "workspace:*",
+          "@sestina/skills": "workspace:*",
+        },
+      });
+      writeStrictPackage(root, "integrations/skills", {
+        ...VALID_STRICT_MANIFEST,
+        name: "@sestina/skills",
+        dependencies: {},
+      });
+    });
+    expect(r.exitCode).toBe(0);
+  });
 });
 
 // ═══════════════════════════════════════════════════════════════════════════

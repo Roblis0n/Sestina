@@ -1,0 +1,11 @@
+interface:
+  display_name: "Sestina Research Integrity"
+  short_description: "Keep research revisions aligned with the active Brief"
+  default_prompt: "Use $sestina-research-integrity to revise this research work within the current Sestina Research Brief."
+dependencies:
+  tools:
+    - type: "mcp"
+      value: "sestina"
+      description: "Read-only access to the current Sestina Research Brief."
+policy:
+  allow_implicit_invocation: true

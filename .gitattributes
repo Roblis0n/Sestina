@@ -5,3 +5,8 @@ docs/pivot-inputs/2026-08-18/current/*.md whitespace=-trailing-space
 docs/pivot-inputs/2026-08-18/retained/*.md whitespace=-trailing-space
 docs/pivot-inputs/2026-08-18/deferred/*.md whitespace=-trailing-space
 docs/pivot-inputs/2026-08-18/frozen/* whitespace=-trailing-space
+
+# Canonical Skill inputs and generated host artifacts must remain byte-stable.
+integrations/skills/canonical/*.md text eol=lf
+integrations/skills/hosts/** text eol=lf
+integrations/skills/src/generated/*.ts text eol=lf

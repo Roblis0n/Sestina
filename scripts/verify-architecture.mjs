@@ -21,12 +21,13 @@
  *   ARCH-R004 packages/reports           -> research, review, schema
  *   ARCH-R005 packages/core              -> research, research-store, review,
  *                                          reports, storage, config, secrets, schema
- *   ARCH-R006 apps/cli                   -> @sestina/core only
+ *   ARCH-R006 apps/cli                   -> core, mcp, skills
  *   ARCH-R007 integrations/mcp           -> @sestina/core only
  *   ARCH-R008 integrations/legacy-import -> read-only legacy boundary
  *                                          (legacy packages + mapping targets)
  *   ARCH-R009 new product packages must never import @sestina/events,
  *             @sestina/projects, @sestina/contracts, @sestina/evidence
+ *   ARCH-R010 integrations/skills        -> no @sestina/* dependencies
  */
 
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
@@ -77,13 +78,18 @@ const NEW_PACKAGE_RULES = {
   },
   "apps/cli": {
     id: "ARCH-R006",
-    allow: ["core"],
-    fix: "apps/cli must call business capabilities through @sestina/core only; do not import storage, research-store or legacy packages directly",
+    allow: ["core", "mcp", "skills"],
+    fix: "apps/cli may compose core plus the public MCP package locator and generated Skill artifacts; do not import storage, research-store, legacy packages, or package internals",
   },
   "integrations/mcp": {
     id: "ARCH-R007",
     allow: ["core"],
     fix: "integrations/mcp must reach business capabilities through @sestina/core only and must never import storage internals",
+  },
+  "integrations/skills": {
+    id: "ARCH-R010",
+    allow: [],
+    fix: "integrations/skills is a deterministic generation/host-adapter package and must not depend on Sestina business or runtime packages",
   },
   "integrations/legacy-import": {
     id: "ARCH-R008",

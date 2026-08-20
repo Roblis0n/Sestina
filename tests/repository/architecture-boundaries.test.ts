@@ -12,11 +12,12 @@
  *   ARCH-R004 reports           -> research, review, schema
  *   ARCH-R005 core              -> research, research-store, review, reports,
  *                                  config, secrets, schema
- *   ARCH-R006 apps/cli          -> only @sestina/core
+ *   ARCH-R006 apps/cli          -> @sestina/core, @sestina/mcp, @sestina/skills
  *   ARCH-R007 integrations/mcp  -> only @sestina/core
  *   ARCH-R008 integrations/legacy-import -> read-only legacy boundary
  *   ARCH-R009 no new product package may import @sestina/events,
  *             @sestina/projects, @sestina/contracts, @sestina/evidence
+ *   ARCH-R010 integrations/skills -> no @sestina/* dependencies
  */
 import { describe, it, expect } from "vitest";
 import { mkdirSync, writeFileSync, rmSync, mkdtempSync } from "node:fs";
@@ -135,13 +136,18 @@ describe("verify-architecture positive fixtures", () => {
     expect(r.exitCode).toBe(0);
   });
 
-  it("P5. apps/cli -> core is allowed", () => {
+  it("P5. apps/cli -> core/mcp/skills are allowed", () => {
     const r = runArchitecture("pos-cli-core", (root) => {
       writeModule(
         root,
         "apps/cli",
         "src/main.ts",
-        'import { core } from "@sestina/core";\nexport const cli = core;\n',
+        [
+          'import { core } from "@sestina/core";',
+          'import { openProjectReader } from "@sestina/mcp";',
+          'import { CODEX_RESEARCH_INTEGRITY_SKILL } from "@sestina/skills";',
+          'export const cli = [core, openProjectReader, CODEX_RESEARCH_INTEGRITY_SKILL];',
+        ].join("\n"),
       );
     });
     expect(r.exitCode).toBe(0);
@@ -197,6 +203,18 @@ describe("verify-architecture positive fixtures", () => {
         "packages/evidence",
         "src/index.ts",
         'import { S } from "@sestina/schema";\nexport const T = S;\n',
+      );
+    });
+    expect(r.exitCode).toBe(0);
+  });
+
+  it("P10. integrations/skills may use third-party generation utilities", () => {
+    const r = runArchitecture("pos-skills-third-party", (root) => {
+      writeModule(
+        root,
+        "integrations/skills",
+        "src/index.ts",
+        'import { parse } from "yaml";\nexport const skill = parse("name: test");\n',
       );
     });
     expect(r.exitCode).toBe(0);
@@ -373,5 +391,18 @@ describe("verify-architecture negative fixtures", () => {
     });
     expect(r.exitCode).toBe(1);
     expect(r.stderr).toContain("[ARCH-R008]");
+  });
+
+  it("N13. integrations/skills -> core is rejected as ARCH-R010", () => {
+    const r = runArchitecture("neg-skills-core", (root) => {
+      writeModule(
+        root,
+        "integrations/skills",
+        "src/index.ts",
+        'import { core } from "@sestina/core";\nexport const skill = core;\n',
+      );
+    });
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toContain("[ARCH-R010]");
   });
 });

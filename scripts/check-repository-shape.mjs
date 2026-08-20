@@ -285,6 +285,10 @@ process.stderr.write(
 const allPkgs = collectAllPackageDirs();
 const pkgMap = buildPackageMap(allPkgs);
 
+const CROSS_CATEGORY_IMPORT_ALLOWLIST = new Map([
+  ["@sestina/cli", new Set(["@sestina/mcp", "@sestina/skills"])],
+]);
+
 function checkCategoryCrossImports(catDir, catLabel, otherNames) {
   const dirs = dirsUnder(catDir);
   for (const d of dirs) {
@@ -293,7 +297,7 @@ function checkCategoryCrossImports(catDir, catLabel, otherNames) {
     for (const f of walkFiles(pkgDir)) {
       if (!/\.(ts|tsx|js|jsx|mjs|cjs|mts|cts)$/.test(f)) continue;
       for (const imp of extractImports(f)) {
-        if (otherNames.has(imp) && imp !== ownName) {
+        if (otherNames.has(imp) && imp !== ownName && !CROSS_CATEGORY_IMPORT_ALLOWLIST.get(ownName)?.has(imp)) {
           err(
             `${f} imports "${imp}" — cross-import between ${catLabel} packages is forbidden`,
           );

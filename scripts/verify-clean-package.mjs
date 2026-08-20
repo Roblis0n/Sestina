@@ -63,8 +63,9 @@ const STRICT_PACKAGES = {
     "secrets",
     "schema",
   ],
-  "apps/cli": ["core"],
+  "apps/cli": ["core", "mcp", "skills"],
   "integrations/mcp": ["core"],
+  "integrations/skills": [],
   "integrations/legacy-import": [
     "schema",
     "storage",

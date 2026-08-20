@@ -5,6 +5,10 @@ import { openSestina, type CoreErrorCode } from "@sestina/core";
 import { EXIT_CODES, exitCodeForCoreError, type CliExitCode } from "../exit-codes.js";
 import { failure, success, type CliIo } from "../output.js";
 import { findProjectRoot } from "../project-root.js";
+import type { CliDependencies } from "../connections/connection-plan.js";
+import { resolveConnectionPaths } from "../connections/path-safety.js";
+import { defaultCodexRuntimeLocator } from "../connections/runtime-locator.js";
+import { detectConnectionStatus } from "../connections/status.js";
 
 export interface DoctorOptions { readonly project?: string; readonly json: boolean; }
 
@@ -17,7 +21,7 @@ function coreFailure(io: CliIo, json: boolean, code: CoreErrorCode): CliExitCode
   return failure(io, json, exit, code, exit === EXIT_CODES.projectNotInitialized ? "The project is not initialized." : "Local diagnostics could not complete.");
 }
 
-export async function runDoctor(options: DoctorOptions, io: CliIo): Promise<CliExitCode> {
+export async function runDoctor(options: DoctorOptions, io: CliIo, dependencies: CliDependencies = {}): Promise<CliExitCode> {
   const root = options.project === undefined ? await findProjectRoot(io.cwd) : resolve(io.cwd, options.project);
   if (root === undefined) return failure(io, options.json, EXIT_CODES.projectNotInitialized, "project_not_initialized", "The project is not initialized.");
   const stateDirectory = join(root, ".sestina");
@@ -49,6 +53,19 @@ export async function runDoctor(options: DoctorOptions, io: CliIo): Promise<CliE
       : briefText.replaceAll("\r\n", "\n").trim() === projection.value.yaml.replaceAll("\r\n", "\n").trim()
         ? "in_sync" as const
         : "drift" as const;
+    const connectionPaths = await resolveConnectionPaths(root, io.cwd);
+    const connection = connectionPaths.ok
+      ? (await detectConnectionStatus(connectionPaths.value, dependencies.runtimeLocator ?? defaultCodexRuntimeLocator)).status
+      : {
+          host: "codex" as const,
+          scope: "project" as const,
+          state: "conflict" as const,
+          mcp: { status: "conflict" as const },
+          skill: { status: "conflict" as const },
+          runtime: { status: "unavailable" as const },
+          activation: { projectTrustRequired: true as const, restartRequired: false },
+          hostVerification: "unverified" as const,
+        };
     const value = {
       command: "doctor",
       version: { cli: "0.1.0", runtime: diagnostics.value.schema.runtimeVersion, node: process.versions.node },
@@ -59,13 +76,15 @@ export async function runDoctor(options: DoctorOptions, io: CliIo): Promise<CliE
       schema: diagnostics.value.schema,
       brief: { status: briefStatus },
       backup: diagnostics.value.backup,
-      mcp: { status: "not_configured" },
-      skill: { status: "not_configured" },
+      connection: { state: connection.state, hostVerification: connection.hostVerification },
+      mcp: connection.mcp,
+      skill: connection.skill,
+      runtime: connection.runtime,
     };
     if (briefStatus === "drift" || diagnostics.value.schema.status !== "current") {
       return failure(io, options.json, EXIT_CODES.stateConflict, "stale_state", "Local state differs from its authoritative projection.");
     }
-    success(io, options.json, value, "Sestina doctor: local project state is healthy; MCP and Skill are not configured.");
+    success(io, options.json, value, `Sestina doctor: local project state is healthy; Codex configuration is ${connection.state}; host verification is unverified.`);
     return EXIT_CODES.success;
   } catch {
     return failure(io, options.json, EXIT_CODES.infrastructureFailure, "infrastructure_failure", "Local diagnostics could not complete.");
