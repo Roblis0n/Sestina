@@ -4,6 +4,7 @@ export type ReviewErrorCode =
   | "invalid_checker"
   | "duplicate_checker"
   | "invalid_finding"
+  | "invalid_minimal_correction"
   | "invalid_review_run"
   | "review_version_conflict"
   | "review_not_found"
@@ -20,6 +21,7 @@ const MESSAGES: Readonly<Record<ReviewErrorCode, string>> = {
   invalid_checker: "checker result is invalid",
   duplicate_checker: "duplicate checker ID/version",
   invalid_finding: "review finding is invalid",
+  invalid_minimal_correction: "minimal correction is invalid",
   invalid_review_run: "review run is invalid",
   review_version_conflict: "review run version conflict",
   review_not_found: "review run was not found in the requested project",

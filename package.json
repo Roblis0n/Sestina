@@ -14,7 +14,7 @@
     "test:ipc": "vitest run --project ipc",
     "test:desktop": "vitest run --project desktop",
     "test:e2e": "playwright test",
-    "eval:locked": "pnpm --filter @sestina/eval eval:locked",
+    "eval:locked": "node --experimental-strip-types researchbench/tools/run-evaluation.ts",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint . --max-warnings 0",
     "docs:check": "node scripts/check-doc-links.mjs",

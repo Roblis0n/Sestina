@@ -77,3 +77,18 @@ export { DEFAULT_FOREGROUND_FINDING_LIMIT, projectFindings, selectProjectedFindi
 export type { FindingProjection, FindingProjectionMetrics, FindingProjectionOptions, RawFindingProjection, SuppressedFindingProjection } from "./findings/intervention-budget.js";
 export { preservePositive } from "./findings/preserve-positive.js";
 export type { PreservedPositiveProjection } from "./findings/preserve-positive.js";
+export {
+  MAX_MINIMAL_CORRECTIONS,
+  MINIMAL_CORRECTION_SCHEMA_VERSION,
+  parseMinimalCorrectionProjection,
+} from "./correction/correction-shape.js";
+export type {
+  MinimalCorrection,
+  MinimalCorrectionContext,
+  MinimalCorrectionProjection,
+  MinimalCorrectionSources,
+  MinimalCorrectionUnavailableReason,
+  PreservedCorrectionPart,
+  SuggestionOwnership,
+} from "./correction/correction-shape.js";
+export { buildMinimalCorrections } from "./correction/minimal-correction.js";
