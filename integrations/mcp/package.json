@@ -1,0 +1,38 @@
+{
+  "name": "@sestina/mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Bounded read-only local stdio MCP access to the active Sestina Research Brief",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "bin": {
+    "sestina-mcp": "./dist/main.js"
+  },
+  "files": [
+    "dist/",
+    "src/",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc --noEmit && node build.mjs",
+    "test": "vitest run --root ../.. --project unit integrations/mcp/test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.0.0",
+    "@modelcontextprotocol/server": "2.0.0",
+    "@sestina/core": "workspace:*",
+    "esbuild": "0.28.2",
+    "typescript": "^5.8.0",
+    "vitest": "^3.0.0",
+    "zod": "4.2.0"
+  }
+}
