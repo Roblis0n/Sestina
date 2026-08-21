@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { access, cp, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { constants } from "node:fs";
 import { delimiter, dirname, join, relative, resolve } from "node:path";
 import { tmpdir } from "node:os";
@@ -181,7 +181,8 @@ try {
   await exerciseWorkflow(quickstart, "work/baseline.md", "work/candidate.md", "work", "Verify one genuine argumentative addition from the sanitized release quickstart.", false, "quickstart_workflow");
   const connected = cliJson(["connect", "--project", emptyProject, "--host", "codex", "--yes"], { label: "connect" }); invariant(connected.state === "configured", "connect_failed");
   const statusResult = cliJson(["connection-status", "--project", emptyProject, "--host", "codex"], { label: "connection_status" }); invariant(statusResult.state === "configured" && statusResult.runtime?.status === "available", "connection_status_failed");
-  const codexConfig = await readFile(join(emptyProject, ".codex", "config.toml"), "utf8"); invariant(codexConfig.includes(packageRoot.replaceAll("\\", "\\\\")) || codexConfig.includes(installedMcp.replaceAll("\\", "\\\\")), "connection_not_bound_to_installed_package");
+  const canonicalInstalledMcp = await realpath(installedMcp);
+  const codexConfig = await readFile(join(emptyProject, ".codex", "config.toml"), "utf8"); invariant(codexConfig.includes(canonicalInstalledMcp.replaceAll("\\", "\\\\")), "connection_not_bound_to_installed_package");
   await verifyMcp(emptyProject, task);
   cliJson(["disconnect", "--project", emptyProject, "--host", "codex", "--yes"], { label: "disconnect" });
   cliJson(["connect", "--project", emptyProject, "--host", "codex", "--yes"], { label: "reconnect" });
