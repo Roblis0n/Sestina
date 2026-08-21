@@ -117,6 +117,7 @@ const WALK_SKIP = new Set([
   "build",
   "coverage",
   ".turbo",
+  ".pnpm-store",
   ".git",
   ".release-ri42-staging",
   "OpenMythos-main (1)",
