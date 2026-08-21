@@ -3,7 +3,10 @@ import * as coreApi from "../src/index.js";
 
 describe("@sestina/core public boundary", () => {
   it("exports the application entry without storage or repository internals", () => {
-    expect(Object.keys(coreApi).sort()).toEqual(["SestinaCore", "coreErr", "coreOk", "openSestina"]);
+    expect(Object.keys(coreApi).sort()).toEqual([
+      "SestinaCore", "coreErr", "coreOk", "createProjectStateBackup", "getPrivacyManifest",
+      "inspectProjectRecovery", "openSestina", "previewProjectStateRestore", "restoreProjectState",
+    ].sort());
     expect(coreApi).not.toHaveProperty("openDatabase");
     expect(coreApi).not.toHaveProperty("createResearchStore");
     expect(coreApi).not.toHaveProperty("withTransaction");

@@ -7,11 +7,13 @@ import { runCapsule } from "./commands/capsule.js";
 import { runConnect, type ConnectOptions } from "./commands/connect.js";
 import { runConnectionStatus, type ConnectionStatusOptions } from "./commands/connection-status.js";
 import { runDecision } from "./commands/decision.js";
+import { runData } from "./commands/data.js";
 import { runDisconnect, type DisconnectOptions } from "./commands/disconnect.js";
 import { runDoctor, type DoctorOptions } from "./commands/doctor.js";
 import { runEpisode } from "./commands/episode.js";
 import { runIssue } from "./commands/issue.js";
 import { runInit, type InitOptions } from "./commands/init.js";
+import { runPrivacy } from "./commands/privacy.js";
 import { runRevision } from "./commands/revision.js";
 import { runReviewCommand } from "./commands/review.js";
 import { runReport } from "./commands/report.js";
@@ -29,6 +31,9 @@ export const CLI_HELP = `Sestina local research revision workflow
   sestina connect [--project <dir>] [--host codex] [--yes] [--json]
   sestina connection-status [--project <dir>] [--host codex] [--verify-host --yes [--codex-executable <absolute-path>]] [--json]
   sestina disconnect [--project <dir>] [--host codex] [--yes] [--json]
+  sestina privacy show [--project <dir>] [--json]
+  sestina data status|backup [--project <dir>] [--json]
+  sestina data restore <backup-id> [--project <dir>] [--yes] [--json]
   sestina brief show|edit|propose-change|accept-change
   sestina artifact add|list
   sestina revision add|diff
@@ -81,6 +86,8 @@ export async function runCli(args: readonly string[], io: CliIo, dependencies: C
     const options: DisconnectOptions = { project: stringOption(parsed, "project"), host: stringOption(parsed, "host"), yes: parsed.options.yes === true, json };
     return runDisconnect(options, io, dependencies);
   }
+  if (command === "privacy") return runPrivacy(parsed, io);
+  if (command === "data") return runData(parsed, io);
   if (command === "brief") return runBrief(parsed, io);
   if (command === "artifact") return runArtifact(parsed, io);
   if (command === "revision") return runRevision(parsed, io);

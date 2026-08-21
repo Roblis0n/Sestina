@@ -1,4 +1,5 @@
 import { EXIT_CODES, type CliExitCode } from "../exit-codes.js";
+import { getPrivacyManifest } from "@sestina/core";
 import { getConnectionStatus, verifyProjectHost, type CliDependencies, type ConnectionOperationResult } from "../connections/connection-plan.js";
 import type { CodexVerificationErrorCode } from "../connections/codex-host-verifier.js";
 import { failure, success, type CliIo } from "../output.js";
@@ -23,7 +24,9 @@ function isConnectionFailureCode(value: string): value is Extract<ConnectionOper
 }
 
 function confirmationRequired(io: CliIo, json: boolean): CliExitCode {
-  const message = "Host verification starts one Codex model call and may send bounded research context to the Codex model provider. Pass --yes to continue.";
+  const flow = getPrivacyManifest().dataFlows.codexHost;
+  const disclosure = `may send ${flow.fields.join(", ")} to the ${flow.recipient.replaceAll("_", " ")}`;
+  const message = `Host verification starts one Codex model call and ${disclosure}. Pass --yes to continue.`;
   if (json) {
     io.stderr(`${JSON.stringify({
       ok: false,
@@ -31,7 +34,7 @@ function confirmationRequired(io: CliIo, json: boolean): CliExitCode {
       host: "codex",
       scope: "project",
       hostVerification: "unverified",
-      disclosure: "may send bounded research context to the Codex model provider",
+      disclosure,
       error: { code: "user_confirmation_required", message },
       exitCode: EXIT_CODES.userConfirmationRequired,
     })}\n`);

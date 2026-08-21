@@ -81,11 +81,26 @@ function finish(state, reviewed, disposition) {
   const jsonText = command(state.project, ["report", "json", reviewed.review.reviewRunId]).json.report;
   const jsonReport = JSON.parse(jsonText);
   const capsule = command(state.project, ["capsule", "export", reviewed.episodeId]).json;
+  const capsuleValue = JSON.parse(capsule.capsule);
+  const responsePath = join(state.project, "offline-capsule-response.json");
+  writeFileSync(responsePath, JSON.stringify({
+    schemaVersion: "1.0.0",
+    authority: "model_proposed_candidate_only",
+    projectId: capsuleValue.projectId,
+    capsuleHash: capsuleValue.capsuleHash,
+    snapshotHash: capsuleValue.snapshot.hash,
+    reviewInputHash: capsuleValue.reviewInputHash,
+    briefVersionId: capsuleValue.brief.id,
+    artifactRevisionId: capsuleValue.candidate.revisionId,
+    response: { summary: "Synthetic offline candidate response", findings: [] },
+  }), "utf8");
+  const imported = command(state.project, ["capsule", "import-response", "offline-capsule-response.json"]).json;
   writeFileSync(join(state.project, "actual-report.md"), markdown, "utf8");
   writeFileSync(join(state.project, "actual-report.json"), `${jsonText}\n`, "utf8");
   writeFileSync(join(state.project, "actual-capsule.json"), `${capsule.capsule}\n`, "utf8");
   invariant(snapshot.hashMeaning === "content_integrity_only", "Snapshot overstated its hash meaning");
   invariant(capsule.canMutateAuthority === false, "Capsule projection gained mutation authority");
+  invariant(imported.status === "candidate" && imported.canMutateAuthority === false, "Capsule response gained mutation authority");
   invariant(markdown.includes("semantic_pending") || markdown.includes("semantic\\_pending"), "Markdown report omitted semantic_pending");
   invariant(jsonReport.report.userActions.some((item) => item.includes("semantic_pending")), "JSON report omitted semantic_pending");
   return { markdown, jsonReport };

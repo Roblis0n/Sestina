@@ -26,6 +26,8 @@
  *   PKG-R008 workspace dependencies stay inside the architecture allowlist
  *   PKG-R009 no deep @sestina/* subpath imports bypassing public exports
  *   PKG-R010 no personal absolute paths inside package sources
+ *   PKG-R011 no uninstall lifecycle scripts that could delete project data
+ *   PKG-R012 no automatic telemetry, crash-upload, or session-replay SDK dependency
  */
 
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
@@ -81,8 +83,9 @@ const STRICT_PACKAGES = {
 };
 
 const FORBIDDEN_ASSET_RE =
-  /\.(db|sqlite|sqlite3|log|key|pem|bak|backup|wal)(-[a-z0-9]+)*$/i;
-const PERSONAL_PATH_RE = /[A-Za-z]:\\Users\\/i;
+  /\.(db|sqlite|sqlite3|log|key|pem|p12|pfx|bak|backup|wal|shm)(-[a-z0-9]+)*$/i;
+const FORBIDDEN_RUNTIME_PATH_RE = /(^|\/)(?:\.sestina|backups?|provider[-_]responses?|\.frozen-local|frozen[-_]private(?:[-_]evals?)?)(?:\/|$)|(^|\/)research-brief\.ya?ml$/i;
+const PERSONAL_PATH_RE = /[A-Za-z]:\\Users\\|\/(?:Users|home)\/[^/]+\//i;
 const SOURCE_EXTENSIONS = new Set([
   ".ts",
   ".tsx",
@@ -95,7 +98,8 @@ const SOURCE_EXTENSIONS = new Set([
   ".json",
   ".md",
 ]);
-const SKIP_DIRS = new Set(["node_modules", "dist", ".git"]);
+const SKIP_DIRS = new Set(["node_modules", ".git"]);
+const FORBIDDEN_UPLOAD_DEPENDENCY_RE = /^(?:@sentry\/|@bugsnag\/|bugsnag|posthog|mixpanel|amplitude|newrelic|@datadog\/|@segment\/|fullstory|logrocket)/i;
 
 // ── Helpers ──
 let errors = 0;
@@ -158,6 +162,39 @@ function extractSpecifiers(source) {
     }
   }
   return [...specs];
+}
+
+function collectPackageManifests(directory, acc = []) {
+  let entries;
+  try { entries = readdirSync(directory); } catch { return acc; }
+  for (const entry of entries) {
+    if (SKIP_DIRS.has(entry)) continue;
+    const path = join(directory, entry);
+    let st; try { st = statSync(path); } catch { continue; }
+    if (st.isDirectory()) collectPackageManifests(path, acc);
+    else if (entry === "package.json") acc.push(path);
+  }
+  return acc;
+}
+
+const workspaceManifestPaths = [join(ROOT, "package.json")];
+for (const directory of ["packages", "apps", "integrations", "spikes"]) {
+  collectPackageManifests(join(ROOT, directory), workspaceManifestPaths);
+}
+for (const manifestPath of workspaceManifestPaths) {
+  if (!existsSync(manifestPath)) continue;
+  let manifest;
+  try { manifest = JSON.parse(readFileSync(manifestPath, "utf8")); } catch { continue; }
+  const rel = relative(ROOT, manifestPath).split(sep).join("/");
+  const scripts = manifest.scripts ?? {};
+  for (const lifecycle of ["preuninstall", "uninstall", "postuninstall"]) {
+    if (typeof scripts[lifecycle] === "string") err(`[PKG-R011] ${rel}: ${lifecycle} lifecycle scripts are forbidden; uninstall must never delete project state or backups`);
+  }
+  for (const field of ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"]) {
+    for (const [name, version] of Object.entries(manifest[field] ?? {})) {
+      if (FORBIDDEN_UPLOAD_DEPENDENCY_RE.test(name)) err(`[PKG-R012] ${rel}: ${field} declares '${name}@${version}'; automatic telemetry, crash upload, and session replay SDKs are forbidden`);
+    }
+  }
 }
 
 // ── Strict checks ──
@@ -254,7 +291,8 @@ for (const [pkgDir, allow] of Object.entries(STRICT_PACKAGES)) {
   for (const file of files) {
     const rel = relative(ROOT, file).split(sep).join("/");
     // PKG-R007: forbidden asset files anywhere in the package.
-    if (FORBIDDEN_ASSET_RE.test(rel.slice(pkgDir.length + 1))) {
+    const packageRelative = rel.slice(pkgDir.length + 1);
+    if (FORBIDDEN_ASSET_RE.test(packageRelative) || FORBIDDEN_RUNTIME_PATH_RE.test(packageRelative)) {
       err(
         `[PKG-R007] ${rel}: forbidden package asset (database/WAL/log/key/backup); runtime artifacts must never live inside a package`,
       );
@@ -278,7 +316,8 @@ for (const [pkgDir, allow] of Object.entries(STRICT_PACKAGES)) {
       }
     }
     // PKG-R010: personal absolute paths in sources.
-    if (PERSONAL_PATH_RE.test(source)) {
+    const isTestFixture = /\/(?:test|tests)\//i.test(`/${packageRelative}`);
+    if (!isTestFixture && PERSONAL_PATH_RE.test(source)) {
       err(
         `[PKG-R010] ${rel}: contains a personal absolute path (user directory); package sources must stay machine-independent`,
       );

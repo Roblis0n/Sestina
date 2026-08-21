@@ -17,6 +17,8 @@
  *   PKG-R008 workspace dependencies must stay inside the architecture allowlist
  *   PKG-R009 no deep @sestina/* subpath imports bypassing public exports
  *   PKG-R010 no personal absolute paths inside package sources
+ *   PKG-R011 no uninstall lifecycle scripts that could delete project data
+ *   PKG-R012 no automatic telemetry, crash-upload, or session-replay SDK dependency
  */
 import { describe, it, expect } from "vitest";
 import { mkdirSync, writeFileSync, rmSync, mkdtempSync } from "node:fs";
@@ -314,5 +316,59 @@ describe("verify-clean-package negative fixtures", () => {
     });
     expect(r.exitCode).toBe(1);
     expect(r.stderr).toContain("[PKG-R003]");
+  });
+
+  it("N12. SHM, complete backup directories, real Briefs, provider responses, and frozen private evals fail as PKG-R007", () => {
+    for (const [name, relativePath] of [
+      ["shm", "state.sqlite-shm"],
+      ["backup-dir", "backups/manual/manifest.json"],
+      ["brief", "research-brief.yaml"],
+      ["provider", "provider-responses/raw.json"],
+      ["frozen", ".frozen-local/private-eval.json"],
+    ] as const) {
+      const r = runCleanPackage(`neg-runtime-${name}`, (root) => {
+        writeStrictPackage(root, "packages/research", VALID_STRICT_MANIFEST);
+        const target = join(root, "packages/research", relativePath);
+        mkdirSync(resolve(target, ".."), { recursive: true });
+        writeFileSync(target, "private runtime material");
+      });
+      expect(r.exitCode, `${name}: ${r.stderr}`).toBe(1);
+      expect(r.stderr).toContain("[PKG-R007]");
+    }
+  });
+
+  it("N13. uninstall lifecycle scripts fail as PKG-R011", () => {
+    for (const lifecycle of ["preuninstall", "uninstall", "postuninstall"] as const) {
+      const r = runCleanPackage(`neg-${lifecycle}`, (root) => {
+        writeStrictPackage(root, "packages/research", {
+          ...VALID_STRICT_MANIFEST,
+          scripts: { ...VALID_STRICT_MANIFEST.scripts, [lifecycle]: "node delete-user-data.js" },
+        });
+      });
+      expect(r.exitCode).toBe(1);
+      expect(r.stderr).toContain("[PKG-R011]");
+    }
+  });
+
+  it("N14. POSIX personal home paths fail as PKG-R010", () => {
+    const r = runCleanPackage("neg-posix-personal", (root) => {
+      writeStrictPackage(root, "packages/research", VALID_STRICT_MANIFEST, 'export const p = "/Users/researcher/private.txt";\n');
+    });
+    expect(r.exitCode).toBe(1);
+    expect(r.stderr).toContain("[PKG-R010]");
+  });
+
+  it("N15. crash upload and automatic telemetry SDKs fail as PKG-R012", () => {
+    for (const dependency of ["@sentry/node", "@bugsnag/js", "posthog-node", "mixpanel"] as const) {
+      const r = runCleanPackage(`neg-upload-sdk-${dependency.replace(/\W/g, "-")}`, (root) => {
+        writeStrictPackage(root, "packages/core", {
+          ...VALID_STRICT_MANIFEST,
+          name: "@sestina/core",
+          dependencies: { "@sestina/storage": "workspace:*", [dependency]: "1.0.0" },
+        });
+      });
+      expect(r.exitCode).toBe(1);
+      expect(r.stderr).toContain("[PKG-R012]");
+    }
   });
 });
