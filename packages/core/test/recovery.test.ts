@@ -91,10 +91,18 @@ describe("RI-41 complete local recovery bundles", () => {
   it("creates and revalidates a complete bundle when managed backup paths exceed 260 characters", async () => {
     const source = await fixture();
     const opened = cores.pop(); opened?.close();
-    const longRoot = join(source.root, "long research directory segment".repeat(2), "第二层 with spaces", "another deliberately long project directory segment", "final long segment");
+    const managedBackupTail = [
+      ".sestina", "backups", "manual", "bkp_00000000T000000000Z_000000000000", "state.sqlite",
+    ];
+    let longRoot = join(source.root, "第二层 with spaces");
+    let segment = 0;
+    while (join(longRoot, ...managedBackupTail).length <= 280) {
+      longRoot = join(longRoot, `long-project-segment-${String(segment).padStart(2, "0")}`);
+      segment += 1;
+    }
     await mkdir(longRoot, { recursive: true });
     await rename(join(source.root, ".sestina"), join(longRoot, ".sestina"));
-    expect(join(longRoot, ".sestina", "backups", "manual", "bkp_00000000T000000000Z_000000000000", "state.sqlite").length).toBeGreaterThan(260);
+    expect(join(longRoot, ...managedBackupTail).length).toBeGreaterThan(260);
     const created = valueOf(await createProjectStateBackup({ projectRoot: longRoot }));
     const status = valueOf(await inspectProjectRecovery({ projectRoot: longRoot }));
     expect(status).toMatchObject({ currentState: "healthy", restoreAvailable: true });

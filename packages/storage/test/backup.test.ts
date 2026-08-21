@@ -49,10 +49,16 @@ describe("backupDatabase (docs/17 §10)", () => {
   });
 
   it("backs up successfully when the destination exceeds the legacy Windows path limit", async () => {
-    const longRoot = join(dir, "long research directory segment".repeat(3), "第二层 with spaces", "another deliberately long directory segment");
+    const backupName = "sestina-v15-backup-0000000000000-000000000000.sqlite";
+    let longRoot = join(dir, "第二层 with spaces");
+    let segment = 0;
+    while (join(longRoot, "backups", "temporary bundle staging directory", backupName).length <= 280) {
+      longRoot = join(longRoot, `long-backup-segment-${String(segment).padStart(2, "0")}`);
+      segment += 1;
+    }
     const backupDir = join(longRoot, "backups", "temporary bundle staging directory");
     mkdirSync(backupDir, { recursive: true });
-    expect(join(backupDir, "sestina-v15-backup-0000000000000-000000000000.sqlite").length).toBeGreaterThan(260);
+    expect(join(backupDir, backupName).length).toBeGreaterThan(260);
     const result = await backupDatabase(db, { backupDirectory: backupDir, dataRoot: dir });
     expect(existsSync(result.path)).toBe(true);
     expect(checkDatabaseIntegrity(result.path).ok).toBe(true);
