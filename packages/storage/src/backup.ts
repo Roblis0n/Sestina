@@ -1,7 +1,9 @@
 import { backup as sqliteBackup } from "node:sqlite";
 import {
   createReadStream,
+  copyFileSync,
   mkdirSync,
+  mkdtempSync,
   existsSync,
   readdirSync,
   statSync,
@@ -11,6 +13,7 @@ import {
   realpathSync,
 } from "node:fs";
 import { createHash, randomBytes } from "node:crypto";
+import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep, isAbsolute } from "node:path";
 import { SestinaError, SestinaErrorCode } from "@sestina/schema";
 import type { StorageDatabase } from "./connection.js";
@@ -65,7 +68,25 @@ export async function backupDatabase(
   const suffix = randomBytes(6).toString("hex");
   const path = join(options.backupDirectory, `sestina-v${version}-backup-${Date.now()}-${suffix}.sqlite`);
 
-  await sqliteBackup(db.raw, path);
+  // SQLite's Windows VFS can still reject destinations beyond the legacy
+  // path limit even though Node's filesystem APIs support them. Materialize
+  // the native backup at a short, private temporary path, then copy it to the
+  // already validated project destination. Always remove the temporary DB.
+  const sqliteStage = mkdtempSync(join(tmpdir(), "sestina-sqlite-backup-"));
+  const sqliteStagePath = join(sqliteStage, "backup.sqlite");
+  try {
+    await sqliteBackup(db.raw, sqliteStagePath);
+    const stagedIntegrity = checkDatabaseIntegrity(sqliteStagePath);
+    if (!stagedIntegrity.ok) {
+      throw new SestinaError(
+        SestinaErrorCode.database_corrupt,
+        "Backup verification failed",
+      );
+    }
+    copyFileSync(sqliteStagePath, path);
+  } finally {
+    rmSync(sqliteStage, { recursive: true, force: true });
+  }
 
   let hash: string;
   try {
@@ -75,16 +96,6 @@ export async function backupDatabase(
     throw mapFsError(err, "Failed to hash the backup file");
   }
   writeFileSync(`${path}.sha256`, `${hash}\n`, "utf8");
-
-  const integrity = checkDatabaseIntegrity(path);
-  if (!integrity.ok) {
-    rmSync(path, { force: true });
-    rmSync(`${path}.sha256`, { force: true });
-    throw new SestinaError(
-      SestinaErrorCode.database_corrupt,
-      "Backup verification failed",
-    );
-  }
 
   return { path, hash, version, sizeBytes: statSync(path).size };
 }

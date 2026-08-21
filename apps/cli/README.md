@@ -6,6 +6,22 @@ every business operation. Ordinary commands remain local and offline. Only the
 explicit `connection-status --verify-host --yes` path starts a bounded Codex
 model call.
 
+## Private-preview installation
+
+Install the supplied npm-compatible tarball with Node.js 24. The package is not
+published to the public npm registry.
+
+```sh
+npm install --global ./sestina-cli-0.1.0.tgz --ignore-scripts --offline
+sestina --version --json
+```
+
+The installed package is self-contained, including the production read-only MCP
+server. It has no install lifecycle script, telemetry, background service,
+network upload, crash upload, or update check. Uninstalling `@sestina/cli`
+preserves all project data. See the release bundle's Windows, macOS, or Linux
+guide for the complete fresh-install workflow.
+
 ## Project-scoped Codex connection
 
 RI-39 adds one Tier A host workflow:
@@ -67,6 +83,5 @@ output. Any action that changes user authority requires `--yes`; imported
 Capsule responses remain `model_proposed` candidates and cannot mutate
 authoritative research state.
 
-See [`docs/getting-started/codex.md`](../../docs/getting-started/codex.md) and
-[`docs/getting-started/CAPSULE-WORKFLOW.md`](../../docs/getting-started/CAPSULE-WORKFLOW.md)
-for end-to-end commands and failure semantics.
+The private-preview release bundle includes platform installation guides and a
+sanitized end-to-end quickstart project.

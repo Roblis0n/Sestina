@@ -5,7 +5,7 @@ describe("@sestina/core public boundary", () => {
   it("exports the application entry without storage or repository internals", () => {
     expect(Object.keys(coreApi).sort()).toEqual([
       "SestinaCore", "coreErr", "coreOk", "createProjectStateBackup", "getPrivacyManifest",
-      "inspectProjectRecovery", "openSestina", "previewProjectStateRestore", "restoreProjectState",
+      "getReleaseIdentity", "inspectProjectRecovery", "openSestina", "previewProjectStateRestore", "RELEASE_IDENTITY", "restoreProjectState",
     ].sort());
     expect(coreApi).not.toHaveProperty("openDatabase");
     expect(coreApi).not.toHaveProperty("createResearchStore");

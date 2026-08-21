@@ -118,6 +118,7 @@ const WALK_SKIP = new Set([
   "coverage",
   ".turbo",
   ".git",
+  ".release-ri42-staging",
   "OpenMythos-main (1)",
 ]);
 
@@ -598,6 +599,9 @@ let nulErrors = 0;
 // Git classifies a file as binary when a NUL appears within the first 8000
 // bytes; scan that window only, mirroring git's own heuristic.
 for (const fileRel of walkFiles(".")) {
+  // Root release artifacts are generated, ignored binaries. Check 10 still
+  // walks release manifests explicitly so template variables cannot escape.
+  if (fileRel.startsWith("./release/")) continue;
   const ext = fileRel.split(".").pop()?.toLowerCase();
   if (BINARY_EXTENSIONS.has(ext)) continue;
   let buf;

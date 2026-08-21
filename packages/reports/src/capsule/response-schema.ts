@@ -1,7 +1,8 @@
 import { parseResearchIdFor } from "@sestina/research";
+import { SESTINA_RELEASE_CONTRACT } from "@sestina/schema";
 import { DEFAULT_CAPSULE_MAX_ITEMS_PER_SECTION, DEFAULT_CAPSULE_TEXT_MAX_BYTES, DEFAULT_RESPONSE_MAX_BYTES, utf8ByteLength } from "../limits.js";
 
-export const CAPSULE_RESPONSE_SCHEMA_VERSION = "1.0.0" as const;
+export const CAPSULE_RESPONSE_SCHEMA_VERSION = SESTINA_RELEASE_CONTRACT.capsuleResponseSchemaVersion;
 export const CAPSULE_RESPONSE_AUTHORITY = "model_proposed_candidate_only" as const;
 
 const HASH_PATTERN = "^[0-9a-f]{64}$";

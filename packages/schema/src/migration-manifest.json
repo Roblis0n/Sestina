@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "1.0.0",
+  "migrations": [
+    { "version": 1, "name": "001-initial" },
+    { "version": 2, "name": "002-fts" },
+    { "version": 3, "name": "003-maintenance-fencing" },
+    { "version": 4, "name": "004-activity-stream" },
+    { "version": 5, "name": "005-leases-and-sequence" },
+    { "version": 6, "name": "006-retention-snapshot" },
+    { "version": 7, "name": "007-keyset-indexes" },
+    { "version": 8, "name": "008-notification-project" },
+    { "version": 9, "name": "009-project-scope" },
+    { "version": 10, "name": "010-lookup-indexes" },
+    { "version": 11, "name": "011-correction-indexes" },
+    { "version": 12, "name": "012-evidence-ledger" },
+    { "version": 13, "name": "013-research-core" },
+    { "version": 14, "name": "014-review-runs" },
+    { "version": 15, "name": "015-argument-graph" }
+  ]
+}

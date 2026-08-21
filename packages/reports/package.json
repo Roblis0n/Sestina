@@ -16,7 +16,8 @@
   },
   "dependencies": {
     "@sestina/research": "workspace:*",
-    "@sestina/review": "workspace:*"
+    "@sestina/review": "workspace:*",
+    "@sestina/schema": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.8.0",

@@ -4,6 +4,8 @@ export { coreErr, coreOk } from "./errors.js";
 export type { CoreError, CoreErrorCode, CoreResult } from "./errors.js";
 export { getPrivacyManifest } from "./privacy.js";
 export type { PrivacyDataFlow, PrivacyManifest } from "./privacy.js";
+export { getReleaseIdentity, RELEASE_IDENTITY } from "./release-identity.js";
+export type { ReleaseIdentity } from "@sestina/schema";
 export { createProjectStateBackup, inspectProjectRecovery, previewProjectStateRestore, restoreProjectState } from "./recovery.js";
 export type {
   PreviewProjectStateRestoreOptions, ProjectRecoveryOptions, ProjectRecoveryStatus, ProjectStateBackupResult,

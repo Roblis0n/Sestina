@@ -1,7 +1,7 @@
 import { access, readFile, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import { join, resolve } from "node:path";
-import { openSestina, type CoreErrorCode } from "@sestina/core";
+import { getReleaseIdentity, openSestina, type CoreErrorCode } from "@sestina/core";
 import { EXIT_CODES, exitCodeForCoreError, type CliExitCode } from "../exit-codes.js";
 import { failure, success, type CliIo } from "../output.js";
 import { findProjectRoot } from "../project-root.js";
@@ -66,9 +66,22 @@ export async function runDoctor(options: DoctorOptions, io: CliIo, dependencies:
           activation: { projectTrustRequired: true as const, restartRequired: false },
           hostVerification: "unverified" as const,
         };
+    const release = getReleaseIdentity();
     const value = {
       command: "doctor",
-      version: { cli: "0.1.0", runtime: diagnostics.value.schema.runtimeVersion, node: process.versions.node },
+      version: {
+        cli: release.version,
+        runtime: diagnostics.value.schema.runtimeVersion,
+        node: process.versions.node,
+        nodeRange: release.nodeRange,
+        releaseBuildId: release.releaseBuildId,
+        databaseSchemaVersion: release.databaseSchemaVersion,
+        migrationCount: release.migrationCount,
+        reportSchemaVersion: release.reportSchemaVersion,
+        capsuleResponseSchemaVersion: release.capsuleResponseSchemaVersion,
+        mcpServerVersion: release.mcpServerVersion,
+        mcpResearchContextSchemaVersion: release.mcpResearchContextSchemaVersion,
+      },
       platform: { os: process.platform, architecture: process.arch },
       projectRoot: ".",
       paths: { project: "read_write", state: "read_write" },

@@ -1,8 +1,9 @@
-import type { CoreBriefState } from "@sestina/core";
+import { getReleaseIdentity, type CoreBriefState } from "@sestina/core";
 
 type BriefVersion = CoreBriefState["version"];
 type ScopeRule = BriefVersion["allowedChanges"][number];
 type ScopeTarget = ScopeRule["target"];
+export const MCP_RESEARCH_CONTEXT_SCHEMA_VERSION = getReleaseIdentity().mcpResearchContextSchemaVersion;
 
 export const RESEARCH_CONTENT_BOUNDARY = Object.freeze({
   kind: "untrusted_research_data" as const,
@@ -15,7 +16,7 @@ export const RESEARCH_CONTENT_BOUNDARY = Object.freeze({
 });
 
 export interface ResearchContextPayload {
-  readonly schemaVersion: "1.1";
+  readonly schemaVersion: typeof MCP_RESEARCH_CONTEXT_SCHEMA_VERSION;
   readonly contentBoundary: typeof RESEARCH_CONTENT_BOUNDARY;
   readonly projectId: string;
   readonly briefId: string;
@@ -123,7 +124,7 @@ export function projectResearchContext(source: ResearchContextSource, maxItems: 
     : Object.freeze({ ...source.continuity.currentEpisode });
 
   return Object.freeze({
-    schemaVersion: "1.1" as const,
+    schemaVersion: MCP_RESEARCH_CONTEXT_SCHEMA_VERSION,
     contentBoundary: RESEARCH_CONTENT_BOUNDARY,
     projectId: source.projectId,
     briefId: state.brief.id,

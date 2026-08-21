@@ -19,6 +19,7 @@
     "@sestina/research": "workspace:*",
     "@sestina/research-store": "workspace:*",
     "@sestina/review": "workspace:*",
+    "@sestina/schema": "workspace:*",
     "@sestina/storage": "workspace:*"
   },
   "devDependencies": {

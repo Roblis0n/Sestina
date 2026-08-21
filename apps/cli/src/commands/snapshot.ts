@@ -1,4 +1,4 @@
-import type { CoreResult } from "@sestina/core";
+import { getReleaseIdentity, type CoreResult } from "@sestina/core";
 import { stringOption, type ParsedCliArguments } from "../arguments.js";
 import { EXIT_CODES, type CliExitCode } from "../exit-codes.js";
 import { commandExitCode, openLocalProject } from "../local-project.js";
@@ -15,7 +15,7 @@ export async function runSnapshot(args: ParsedCliArguments, io: CliIo): Promise<
   const local = opened.value;
   try {
     if (subcommand === "create" && args.positionals.length === 3) {
-      const buildVersion = stringOption(args, "build-version") ?? "sestina-cli-0.1.0";
+      const buildVersion = stringOption(args, "build-version") ?? getReleaseIdentity().releaseBuildId;
       const limitations = [stringOption(args, "limitation") ?? "Deterministic integrity checks and a content hash do not prove research correctness."];
       const created = local.core.createResearchSnapshot({ projectId: local.project.id, episodeId: id, buildVersion, limitations }); if (!created.ok) return coreFailure(created, io, json);
       success(io, json, { command: "snapshot create", ...view(created.value), immutable: true, provesResearchCorrectness: false }, `Created immutable Snapshot ${created.value.id}; its hash proves content integrity only.`); return EXIT_CODES.success;

@@ -1,4 +1,4 @@
-const BOOLEAN_OPTIONS = new Set(["yes", "json", "help", "deterministic", "verbose", "include-full-text", "all-findings", "verify-host"]);
+const BOOLEAN_OPTIONS = new Set(["yes", "json", "help", "version", "deterministic", "verbose", "include-full-text", "all-findings", "verify-host"]);
 const VALUE_OPTIONS = new Set([
   "project", "title", "from", "file", "kind", "path", "artifact", "baseline", "revision", "expected-version",
   "statement", "rationale", "scope", "reason", "reopen-condition", "evidence-id", "invalidation", "dimension",

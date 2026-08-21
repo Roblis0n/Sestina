@@ -1,8 +1,9 @@
 import { canonicalStringify } from "@sestina/research";
+import { SESTINA_RELEASE_CONTRACT } from "@sestina/schema";
 import { normalizeReportInput, type ReviewReportInput } from "../report-input.js";
 import { reportErr, reportOk, type ReportResult } from "../result.js";
 
-export const REVIEW_REPORT_SCHEMA_VERSION = "1.0.0";
+export const REVIEW_REPORT_SCHEMA_VERSION = SESTINA_RELEASE_CONTRACT.reportSchemaVersion;
 export interface ReviewJsonReport { readonly schemaVersion: typeof REVIEW_REPORT_SCHEMA_VERSION; readonly report: ReviewReportInput; }
 
 export function renderReviewJson(raw: ReviewReportInput): string {

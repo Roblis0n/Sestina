@@ -27,11 +27,11 @@ async function initializeProject(parent: string, name = "研究 project 😀"): 
 }
 
 async function runtimeFixture(parent: string, label = "runtime one"): Promise<CliDependencies["runtimeLocator"]> {
-  const packageRoot = join(parent, label, "@sestina", "mcp");
-  const serverEntry = join(packageRoot, "dist", "main.js");
+  const packageRoot = join(parent, label, "@sestina", "cli");
+  const serverEntry = join(packageRoot, "dist", "mcp", "main.js");
   const nodeExecutable = join(parent, label, "Node 24 中文.exe");
-  await mkdir(join(packageRoot, "dist"), { recursive: true });
-  await writeFile(join(packageRoot, "package.json"), "{}\n", "utf8");
+  await mkdir(join(packageRoot, "dist", "mcp"), { recursive: true });
+  await writeFile(join(packageRoot, "package.json"), `${JSON.stringify({ name: "@sestina/cli", version: "0.1.0" })}\n`, "utf8");
   await writeFile(serverEntry, "export {};\n", "utf8");
   await writeFile(nodeExecutable, "node\n", "utf8");
   return () => Promise.resolve({ ok: true, value: { packageRoot, serverEntry, nodeExecutable } });

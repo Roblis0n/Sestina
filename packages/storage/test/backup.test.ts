@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { join } from "node:path";
-import { existsSync, readFileSync, readdirSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync, rmSync } from "node:fs";
 import {
   openDatabase,
   backupDatabase,
@@ -46,6 +46,16 @@ describe("backupDatabase (docs/17 §10)", () => {
 
     const integrity = checkDatabaseIntegrity(result.path);
     expect(integrity.ok).toBe(true);
+  });
+
+  it("backs up successfully when the destination exceeds the legacy Windows path limit", async () => {
+    const longRoot = join(dir, "long research directory segment".repeat(3), "第二层 with spaces", "another deliberately long directory segment");
+    const backupDir = join(longRoot, "backups", "temporary bundle staging directory");
+    mkdirSync(backupDir, { recursive: true });
+    expect(join(backupDir, "sestina-v15-backup-0000000000000-000000000000.sqlite").length).toBeGreaterThan(260);
+    const result = await backupDatabase(db, { backupDirectory: backupDir, dataRoot: dir });
+    expect(existsSync(result.path)).toBe(true);
+    expect(checkDatabaseIntegrity(result.path).ok).toBe(true);
   });
 
   it("rejects a backup directory outside the data root", async () => {

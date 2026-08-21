@@ -1,14 +1,14 @@
-import { SestinaError, SestinaErrorCode, isSestinaError } from "@sestina/schema";
+import { SESTINA_RELEASE_CONTRACT, SestinaError, SestinaErrorCode, isSestinaError } from "@sestina/schema";
 import type { StorageDatabase } from "./connection.js";
 import { withTransaction } from "./transaction.js";
 import { MaintenanceGuard } from "./maintenance-domain.js";
 import { backupDatabase, pruneOldBackups, type BackupResult } from "./backup.js";
-import { MIGRATIONS, SCHEMA_VERSION } from "./migrations/manifest.js";
+import { MIGRATIONS, MIGRATION_MANIFEST_VERSION, SCHEMA_VERSION } from "./migrations/manifest.js";
 
-export { MIGRATIONS, SCHEMA_VERSION };
+export { MIGRATIONS, MIGRATION_MANIFEST_VERSION, SCHEMA_VERSION };
 
 // ── Runtime identity recorded in the migration journal (docs/17 §10) ──
-export const RUNTIME_VERSION = "0.1.0";
+export const RUNTIME_VERSION = SESTINA_RELEASE_CONTRACT.runtimeVersion;
 
 export interface Migration {
   version: number;

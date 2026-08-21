@@ -28,7 +28,7 @@ secrets/
 *.p12
 
 # Generated release artifacts
-release/
+/release/
 artifacts/acceptance/*/
 *.zip
 *.tar.gz

@@ -1,3 +1,4 @@
+import { getReleaseIdentity } from "@sestina/core";
 import type { ProjectReader } from "../project-reader.js";
 import { CAPABILITY_POLICY } from "../security/capability-policy.js";
 import {
@@ -13,7 +14,7 @@ import {
 } from "../security/output-limits.js";
 
 export const SERVER_NAME = "sestina-mcp";
-export const SERVER_VERSION = "0.1.0";
+export const SERVER_VERSION = getReleaseIdentity().mcpServerVersion;
 export const MCP_SDK_PACKAGE = "@modelcontextprotocol/server";
 export const MCP_SDK_VERSION = "2.0.0";
 export const MCP_PROTOCOL_REVISION = "2026-07-28";

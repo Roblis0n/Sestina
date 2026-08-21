@@ -26,6 +26,9 @@
     "verify:architecture": "node scripts/verify-architecture.mjs",
     "verify:authority": "node scripts/verify-authority.mjs",
     "verify:package": "node scripts/verify-clean-package.mjs",
+    "release:build": "node scripts/build-release.mjs",
+    "release:verify": "node scripts/verify-release-artifact.mjs",
+    "release:fresh-install": "node scripts/run-fresh-install.mjs",
     "demo:offline": "pnpm --filter @sestina/cli build && node scripts/run-offline-demos.mjs",
     "verify:no-network": "node scripts/verify-no-network.mjs",
     "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm verify:no-network && pnpm test:e2e:ri40 && pnpm test:e2e:ri41 && pnpm docs:check && pnpm repo:check && pnpm verify:architecture && pnpm verify:authority && pnpm verify:package && pnpm demo:offline"
@@ -34,6 +37,7 @@
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.62.1",
     "@types/node": "^24.0.0",
+    "esbuild": "0.28.2",
     "eslint": "^9.0.0",
     "prettier": "^3.0.0",
     "typescript": "^5.8.0",

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { pathToFileURL } from "node:url";
+import { getReleaseIdentity } from "@sestina/core";
 import { parseCliArguments, stringOption, type ParsedCliArguments } from "./arguments.js";
 import { runArtifact } from "./commands/artifact.js";
 import { runBrief } from "./commands/brief.js";
@@ -19,7 +20,7 @@ import { runReviewCommand } from "./commands/review.js";
 import { runReport } from "./commands/report.js";
 import { runSnapshot } from "./commands/snapshot.js";
 import { EXIT_CODES, type CliExitCode } from "./exit-codes.js";
-import { failure, type CliIo } from "./output.js";
+import { failure, success, type CliIo } from "./output.js";
 import type { CliDependencies } from "./connections/connection-plan.js";
 
 export type { CliIo } from "./output.js";
@@ -58,6 +59,12 @@ export async function runCli(args: readonly string[], io: CliIo, dependencies: C
   const json = parsed.options.json === true;
   if (!parsed.valid) return failure(io, json, EXIT_CODES.invalidInput, "invalid_input", "Command arguments are invalid.");
   const command = parsed.positionals[0];
+  if (parsed.options.version === true) {
+    if (parsed.positionals.length !== 0 || !onlyOptions(parsed, new Set(["version", "json"]))) return failure(io, json, EXIT_CODES.invalidInput, "invalid_input", "Version arguments are invalid.");
+    const identity = getReleaseIdentity();
+    success(io, json, { command: "version", ...identity }, `${identity.package} ${identity.version} (${identity.releaseBuildId})`);
+    return EXIT_CODES.success;
+  }
   if (parsed.options.help === true || command === "help") {
     io.stdout(CLI_HELP);
     return EXIT_CODES.success;
@@ -102,12 +109,13 @@ export async function runCli(args: readonly string[], io: CliIo, dependencies: C
 }
 
 const isEntry = process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
-if (isEntry) {
+export async function runProcessCli(args: readonly string[] = process.argv.slice(2)): Promise<CliExitCode> {
   const io: CliIo = {
     cwd: process.cwd(),
     isTTY: process.stdin.isTTY,
     stdout: (value) => process.stdout.write(value),
     stderr: (value) => process.stderr.write(value),
   };
-  process.exitCode = await runCli(process.argv.slice(2), io);
+  return runCli(args, io);
 }
+if (isEntry) process.exitCode = await runProcessCli();

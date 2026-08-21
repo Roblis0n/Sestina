@@ -1,6 +1,6 @@
-import { stat, realpath } from "node:fs/promises";
-import { createRequire } from "node:module";
-import { dirname, isAbsolute, join, relative, sep } from "node:path";
+import { readFile, stat, realpath } from "node:fs/promises";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 
 export interface CodexRuntimeLocation {
   readonly packageRoot: string;
@@ -29,21 +29,35 @@ async function canonicalFile(path: string): Promise<string | undefined> {
   }
 }
 
-export const defaultCodexRuntimeLocator: CodexRuntimeLocator = async () => {
+async function validCliManifest(path: string): Promise<boolean> {
+  try {
+    const value = JSON.parse(await readFile(path, "utf8")) as Record<string, unknown>;
+    return value.name === "@sestina/cli" && typeof value.version === "string";
+  } catch {
+    return false;
+  }
+}
+
+export async function locateCodexRuntimeFromCliModule(moduleUrl: string, nodePath: string): Promise<CodexRuntimeLocationResult> {
   try {
     if (process.versions.node.split(".")[0] !== "24") return { ok: false, error: { code: "runtime_unavailable" } };
-    const require = createRequire(import.meta.url);
-    const packageJson = require.resolve("@sestina/mcp/package.json");
-    const packageRoot = await realpath(dirname(packageJson));
-    const serverEntry = await canonicalFile(join(packageRoot, "dist", "main.js"));
-    const nodeExecutable = await canonicalFile(process.execPath);
-    if (serverEntry === undefined || nodeExecutable === undefined || !within(packageRoot, serverEntry)) {
+    const modulePath = fileURLToPath(moduleUrl);
+    const packageRoot = await realpath(resolve(dirname(modulePath), ".."));
+    const packageJson = await canonicalFile(join(packageRoot, "package.json"));
+    const serverEntry = await canonicalFile(join(packageRoot, "dist", "mcp", "main.js"));
+    const nodeExecutable = await canonicalFile(nodePath);
+    if (packageJson === undefined || serverEntry === undefined || nodeExecutable === undefined
+      || !within(packageRoot, packageJson) || !within(packageRoot, serverEntry) || !(await validCliManifest(packageJson))) {
       return { ok: false, error: { code: "runtime_unavailable" } };
     }
     return { ok: true, value: { packageRoot, serverEntry, nodeExecutable } };
   } catch {
     return { ok: false, error: { code: "runtime_unavailable" } };
   }
+}
+
+export const defaultCodexRuntimeLocator: CodexRuntimeLocator = () => {
+  return locateCodexRuntimeFromCliModule(import.meta.url, process.execPath);
 };
 
 export async function validateCodexRuntime(locator: CodexRuntimeLocator): Promise<CodexRuntimeLocationResult> {
@@ -57,7 +71,7 @@ export async function validateCodexRuntime(locator: CodexRuntimeLocator): Promis
     return { ok: false, error: { code: "runtime_unavailable" } };
   }
   try {
-    if (!(await stat(packageRoot)).isDirectory() || !within(packageRoot, packageJson) || !within(packageRoot, serverEntry)) {
+    if (!(await stat(packageRoot)).isDirectory() || !within(packageRoot, packageJson) || !within(packageRoot, serverEntry) || !(await validCliManifest(packageJson))) {
       return { ok: false, error: { code: "runtime_unavailable" } };
     }
   } catch {

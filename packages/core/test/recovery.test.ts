@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { lstat, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, readdir, rename, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -86,6 +86,19 @@ describe("RI-41 complete local recovery bundles", () => {
       "activeBriefId", "activeBriefVersionId", "backupId", "bindingHash", "brief", "createdAt", "database", "databaseSchemaVersion", "kind", "projectId", "runtimeVersion", "schemaVersion",
     ].sort());
     expect(manifest).toMatchObject({ schemaVersion: "1.0.0", backupId: result.backupId, kind: "manual", projectId: source.projectId, activeBriefId: source.briefId, activeBriefVersionId: source.briefVersionId });
+  });
+
+  it("creates and revalidates a complete bundle when managed backup paths exceed 260 characters", async () => {
+    const source = await fixture();
+    const opened = cores.pop(); opened?.close();
+    const longRoot = join(source.root, "long research directory segment".repeat(2), "第二层 with spaces", "another deliberately long project directory segment", "final long segment");
+    await mkdir(longRoot, { recursive: true });
+    await rename(join(source.root, ".sestina"), join(longRoot, ".sestina"));
+    expect(join(longRoot, ".sestina", "backups", "manual", "bkp_00000000T000000000Z_000000000000", "state.sqlite").length).toBeGreaterThan(260);
+    const created = valueOf(await createProjectStateBackup({ projectRoot: longRoot }));
+    const status = valueOf(await inspectProjectRecovery({ projectRoot: longRoot }));
+    expect(status).toMatchObject({ currentState: "healthy", restoreAvailable: true });
+    expect(status.backups).toEqual(expect.arrayContaining([expect.objectContaining({ backupId: created.backupId, valid: true })]));
   });
 
   it("includes committed WAL state and reports only verified managed backups", async () => {

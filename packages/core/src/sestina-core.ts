@@ -115,6 +115,7 @@ import type {
   DisputeIssueCommand,
   WaiveIssueCommand,
 } from "./commands/index.js";
+import { RELEASE_IDENTITY } from "./release-identity.js";
 import { coreErr, coreOk, fromDomain, mapDomainError, type CoreResult } from "./errors.js";
 import { RandomIdFactory, SystemClock } from "./id-factory.js";
 import { CoreUnitOfWork } from "./unit-of-work.js";
@@ -545,9 +546,8 @@ export class SestinaCore {
     const baseline = found(fromDomain(this.#store.revisions.getById(input.projectId, episode.value.artifactId, episode.value.lockedStart.baselineRevisionId))); if (!baseline.ok) return baseline;
     const candidate = found(fromDomain(this.#store.revisions.getById(input.projectId, episode.value.artifactId, episode.value.candidateRevisionId))); if (!candidate.ok) return candidate;
     const brief = this.findBriefVersion(input.projectId, episode.value.lockedStart.briefVersionId); if (!brief.ok) return brief;
-    const defaultBuild = hash({ package: "@sestina/core", version: "0.1.0" }); if (!defaultBuild.ok) return defaultBuild;
     const defaultEnvironment = hash({ runtime: "local", checkerSet: CHECKERS }); if (!defaultEnvironment.ok) return defaultEnvironment;
-    const buildFingerprint = input.buildFingerprint ?? defaultBuild.value;
+    const buildFingerprint = input.buildFingerprint ?? RELEASE_IDENTITY.releaseBuildId;
     const environmentFingerprint = input.environmentFingerprint ?? defaultEnvironment.value;
     if (!/^[0-9a-f]{64}$/.test(buildFingerprint) || !/^[0-9a-f]{64}$/.test(environmentFingerprint)) return coreErr("invalid_input");
     const snapshot = fromDomain(createReviewInputSnapshot(episode.value, { buildVersion: buildFingerprint, limitations: ["Review-input anchor only; content integrity does not prove research correctness."] }, this.ports)); if (!snapshot.ok) return snapshot;

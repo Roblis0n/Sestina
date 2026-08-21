@@ -272,21 +272,26 @@ async function assertManagedDirectory(manualRoot: string, backupId: string): Pro
 }
 
 async function validateDatabaseBriefBinding(databasePath: string, briefText: string, manifest: BundleManifest): Promise<void> {
-  const database = await openDatabase({ path: databasePath, readOnly: true, immutable: true }).catch(() => fail("state_conflict"));
+  const validationRoot = await mkdtemp(join(tmpdir(), "sestina-bundle-validation-"));
+  const validationDatabase = join(validationRoot, DATABASE_FILE);
   try {
-    const integrityRows = database.raw.prepare("PRAGMA integrity_check").all() as Record<string, unknown>[];
-    if (integrityRows.length === 0 || !integrityRows.every((row) => Object.values(row).every((value) => value === "ok"))) fail("state_conflict");
-    if (readSchemaVersion(database) !== manifest.databaseSchemaVersion) fail("state_conflict");
-  } finally { database.close(); }
-  const opened = await openSestina({ databasePath, readOnly: true, immutable: true });
-  if (!opened.ok) fail("state_conflict");
-  try {
-    const projects = opened.value.listProjects();
-    if (!projects.ok || projects.value.length !== 1 || projects.value[0]?.id !== manifest.projectId) fail("state_conflict");
-    const projection = opened.value.getActiveBriefProjection(manifest.projectId);
-    if (!projection.ok || projection.value === undefined) fail("state_conflict");
-    if (projection.value.briefId !== manifest.activeBriefId || projection.value.versionId !== manifest.activeBriefVersionId || projection.value.yaml !== briefText) fail("state_conflict");
-  } finally { opened.value.close(); }
+    await copyFile(databasePath, validationDatabase);
+    const database = await openDatabase({ path: validationDatabase, readOnly: true, immutable: true }).catch(() => fail("state_conflict"));
+    try {
+      const integrityRows = database.raw.prepare("PRAGMA integrity_check").all() as Record<string, unknown>[];
+      if (integrityRows.length === 0 || !integrityRows.every((row) => Object.values(row).every((value) => value === "ok"))) fail("state_conflict");
+      if (readSchemaVersion(database) !== manifest.databaseSchemaVersion) fail("state_conflict");
+    } finally { database.close(); }
+    const opened = await openSestina({ databasePath: validationDatabase, readOnly: true, immutable: true });
+    if (!opened.ok) fail("state_conflict");
+    try {
+      const projects = opened.value.listProjects();
+      if (!projects.ok || projects.value.length !== 1 || projects.value[0]?.id !== manifest.projectId) fail("state_conflict");
+      const projection = opened.value.getActiveBriefProjection(manifest.projectId);
+      if (!projection.ok || projection.value === undefined) fail("state_conflict");
+      if (projection.value.briefId !== manifest.activeBriefId || projection.value.versionId !== manifest.activeBriefVersionId || projection.value.yaml !== briefText) fail("state_conflict");
+    } finally { opened.value.close(); }
+  } finally { await rm(validationRoot, { recursive: true, force: true }); }
 }
 
 async function validateBundle(paths: ProjectPaths, backupId: string): Promise<ValidBundle> {
@@ -340,8 +345,11 @@ async function buildBundle(paths: ProjectPaths, kind: "manual" | "pre_restore", 
     await writeFile(join(temporaryDirectory, DATABASE_HASH_FILE), `${backup.hash}\n`, { encoding: "utf8", flag: "wx" });
     await writeFile(join(temporaryDirectory, BRIEF_HASH_FILE), `${briefDigest}\n`, { encoding: "utf8", flag: "wx" });
 
-    const opened = await openSestina({ databasePath, readOnly: true, immutable: true });
-    if (!opened.ok) fail("state_conflict");
+    const bindingRoot = await mkdtemp(join(tmpdir(), "sestina-backup-binding-"));
+    const bindingDatabase = join(bindingRoot, DATABASE_FILE);
+    await copyFile(databasePath, bindingDatabase);
+    const opened = await openSestina({ databasePath: bindingDatabase, readOnly: true, immutable: true });
+    if (!opened.ok) { await rm(bindingRoot, { recursive: true, force: true }); fail("state_conflict"); }
     let projectId: string; let activeBriefId: string; let activeBriefVersionId: string;
     try {
       const projects = opened.value.listProjects();
@@ -350,7 +358,7 @@ async function buildBundle(paths: ProjectPaths, kind: "manual" | "pre_restore", 
       const projection = opened.value.getActiveBriefProjection(projectId);
       if (!projection.ok || projection.value?.yaml !== briefBuffer.toString("utf8")) fail("state_conflict");
       activeBriefId = projection.value.briefId; activeBriefVersionId = projection.value.versionId;
-    } finally { opened.value.close(); }
+    } finally { opened.value.close(); await rm(bindingRoot, { recursive: true, force: true }); }
     const manifestBase = {
       schemaVersion: MANIFEST_SCHEMA_VERSION, backupId, kind, createdAt: new Date().toISOString(), runtimeVersion: RUNTIME_VERSION,
       databaseSchemaVersion: backup.version, projectId, activeBriefId, activeBriefVersionId,

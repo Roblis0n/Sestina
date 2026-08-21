@@ -33,6 +33,7 @@ export {
 export {
   MigrationRunner,
   MIGRATIONS,
+  MIGRATION_MANIFEST_VERSION,
   SCHEMA_VERSION,
   RUNTIME_VERSION,
   type Migration,

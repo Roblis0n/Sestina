@@ -24,6 +24,7 @@ export * from "./observability.js";
 export * from "./providers.js";
 export * from "./config.js";
 export * from "./collaboration.js";
+export * from "./release-contract.mjs";
 
 // IPC
 export * from "./ipc.js";
