@@ -9,6 +9,8 @@ coverage/
 *.tsbuildinfo
 
 # Local runtime data
+/pilot-private/
+/pilot-dist/
 *.db
 *.db-wal
 *.db-shm

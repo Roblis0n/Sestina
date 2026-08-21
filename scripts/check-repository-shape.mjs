@@ -21,8 +21,10 @@
  *   9. Renderer must not depend on core/storage/secrets/providers
  *  10. No unexpanded variables in release/artifacts/packaging manifests
  *  11. No NUL bytes in text-like tracked files (git would classify them binary)
+ *  12. Pilot private/build roots are ignored and contain no tracked files
  */
 
+import { spawnSync } from "node:child_process";
 import { readFileSync, readdirSync, statSync, existsSync } from "node:fs";
 import { resolve, relative, dirname, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -120,6 +122,8 @@ const WALK_SKIP = new Set([
   ".pnpm-store",
   ".git",
   ".release-ri42-staging",
+  "pilot-dist",
+  "pilot-private",
   "OpenMythos-main (1)",
 ]);
 
@@ -622,6 +626,36 @@ for (const fileRel of walkFiles(".")) {
 
 if (nulErrors === 0) {
   ok("No NUL bytes in text-like files");
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Check 12 — Pilot private/build roots stay outside version control
+// ═══════════════════════════════════════════════════════════════════════════
+process.stderr.write(
+  "\n=== Check 12: Pilot private/build roots are untracked ===\n",
+);
+if (!existsSync(resolve(ROOT, ".git"))) {
+  ok("Pilot tracked-root check skipped for non-Git fixture root");
+} else {
+  const gitignore = readFileSync(resolve(ROOT, ".gitignore"), "utf8")
+    .split(/\r?\n/u)
+    .map((line) => line.trim());
+  for (const pattern of ["/pilot-private/", "/pilot-dist/"]) {
+    if (gitignore.includes(pattern)) ok(`.gitignore contains ${pattern}`);
+    else err(`.gitignore must contain ${pattern}`);
+  }
+  const trackedPilotRoots = spawnSync(
+    "git",
+    ["-C", ROOT, "ls-files", "--", "pilot-private", "pilot-dist"],
+    { encoding: "utf8", windowsHide: true },
+  );
+  if (trackedPilotRoots.status !== 0) {
+    err("Unable to verify tracked Pilot private/build roots");
+  } else if (trackedPilotRoots.stdout.trim().length > 0) {
+    err("pilot-private/ or pilot-dist/ contains tracked files");
+  } else {
+    ok("pilot-private/ and pilot-dist/ contain no tracked files");
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

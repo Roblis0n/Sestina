@@ -55,6 +55,7 @@ const STRICT_PACKAGES = {
   "packages/research-store": ["research", "review", "schema", "storage"],
   "packages/review": ["research", "schema"],
   "packages/reports": ["research", "review", "schema"],
+  "packages/pilot": [],
   "packages/core": [
     "research",
     "research-store",

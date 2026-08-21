@@ -25,8 +25,8 @@ describe.sequential("RI-40 deterministic one-host workflow", () => {
     roots.push(temporaryRoot);
     const fixture = await initializeRi40Workflow(temporaryRoot);
     const runtime = {
-      packageRoot: join(repositoryRoot, "integrations", "mcp"),
-      serverEntry: join(repositoryRoot, "integrations", "mcp", "dist", "main.js"),
+      packageRoot: join(repositoryRoot, "apps", "cli"),
+      serverEntry: join(repositoryRoot, "apps", "cli", "dist", "mcp", "main.js"),
       nodeExecutable: process.execPath,
     };
     const runtimeLocator: NonNullable<CliDependencies["runtimeLocator"]> = () => Promise.resolve({ ok: true, value: runtime });

@@ -19,6 +19,7 @@
  *   ARCH-R003 packages/review            -> research, schema; never
  *                                          research-store or storage
  *   ARCH-R004 packages/reports           -> research, review, schema
+ *   ARCH-R011 packages/pilot             -> no @sestina/* dependencies
  *   ARCH-R005 packages/core              -> research, research-store, review,
  *                                          reports, storage, config, secrets, schema
  *   ARCH-R006 apps/cli                   -> core, mcp, skills
@@ -85,6 +86,11 @@ const NEW_PACKAGE_RULES = {
     id: "ARCH-R007",
     allow: ["core"],
     fix: "integrations/mcp must reach business capabilities through @sestina/core only and must never import storage internals",
+  },
+  "packages/pilot": {
+    id: "ARCH-R011",
+    allow: [],
+    fix: "pilot is an isolated RI-43 local recorder and must not depend on Sestina product runtime or domain packages",
   },
   "integrations/skills": {
     id: "ARCH-R010",

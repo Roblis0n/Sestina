@@ -10,9 +10,11 @@ import dns from "node:dns";
 
 const marker = process.env.SESTINA_NO_NETWORK_GUARD_MARKER;
 if (marker) appendFileSync(marker, `${process.pid}\n`, { encoding: "utf8", flag: "a" });
+const attemptMarker = process.env.SESTINA_NO_NETWORK_ATTEMPT_MARKER;
 
 function blocked(surface) {
   return function sestinaNetworkDenied() {
+    if (attemptMarker) appendFileSync(attemptMarker, `${process.pid}:${surface}\n`, { encoding: "utf8", flag: "a" });
     const error = new Error(`SESTINA_NETWORK_BLOCKED:${surface}`);
     error.code = "SESTINA_NETWORK_BLOCKED";
     throw error;

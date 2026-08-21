@@ -1,0 +1,117 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sestina.local/schemas/shareable-pilot-export-1.0.0.json",
+  "title": "ShareablePilotExport",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "participantCode",
+    "sessionId",
+    "evidenceId",
+    "sessionOrdinal",
+    "participantRole",
+    "hostEntry",
+    "materialType",
+    "sessionDate",
+    "totalDurationMinutes",
+    "setup",
+    "episode",
+    "exitResult",
+    "exitPoint",
+    "repeatCorrectionImpact",
+    "findingAssessment",
+    "maintenanceBurden",
+    "secondUseObserved",
+    "preferredEntry",
+    "uiNeed",
+    "syntheticCaseDiscussion",
+    "wouldUseAgain",
+    "failureObserved",
+    "negativeFeedbackObserved",
+    "consentVersion",
+    "protocolVersion",
+    "pilotKitVersion",
+    "releaseVersion",
+    "releaseBuildId",
+    "contentHash"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "participantCode": { "type": "string", "pattern": "^(?=[A-Z0-9_-]*[A-Z])[A-Z0-9][A-Z0-9_-]{2,31}$" },
+    "sessionId": { "type": "string", "pattern": "^ps_[a-f0-9]{32}$" },
+    "evidenceId": { "type": "string", "pattern": "^pe_[a-f0-9]{24}$" },
+    "sessionOrdinal": { "enum": [1, 2] },
+    "participantRole": { "enum": ["external_researcher", "project_owner", "internal_test"] },
+    "hostEntry": { "enum": ["cli", "mcp", "capsule", "multiple"] },
+    "materialType": { "enum": ["paper", "chapter", "research_plan", "report", "other"] },
+    "sessionDate": { "type": "string", "format": "date" },
+    "totalDurationMinutes": { "type": "integer", "minimum": 0, "maximum": 1440 },
+    "setup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome", "durationMinutes"],
+      "properties": {
+        "outcome": { "enum": ["success", "failure", "not_observed"] },
+        "durationMinutes": { "type": ["integer", "null"], "minimum": 0, "maximum": 240 }
+      }
+    },
+    "episode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome", "durationMinutes"],
+      "properties": {
+        "outcome": { "enum": ["completed", "not_completed", "not_observed"] },
+        "durationMinutes": { "type": ["integer", "null"], "minimum": 0, "maximum": 480 }
+      }
+    },
+    "exitResult": { "enum": ["completed", "exited", "abandoned"] },
+    "exitPoint": {
+      "enum": [
+        "installation",
+        "initialization",
+        "connection",
+        "brief",
+        "episode",
+        "review",
+        "second_task",
+        "other",
+        null
+      ]
+    },
+    "repeatCorrectionImpact": { "enum": ["reduced", "unchanged", "increased", "uncertain"] },
+    "findingAssessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["necessary", "unnecessary", "uncertain"],
+      "properties": {
+        "necessary": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "unnecessary": { "type": "integer", "minimum": 0, "maximum": 1000 },
+        "uncertain": { "type": "integer", "minimum": 0, "maximum": 1000 }
+      }
+    },
+    "maintenanceBurden": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["brief", "decision", "issue"],
+      "properties": {
+        "brief": { "type": "integer", "minimum": 1, "maximum": 5 },
+        "decision": { "type": "integer", "minimum": 1, "maximum": 5 },
+        "issue": { "type": "integer", "minimum": 1, "maximum": 5 }
+      }
+    },
+    "secondUseObserved": { "type": "boolean" },
+    "preferredEntry": { "enum": ["cli", "mcp", "capsule", "multiple", "none"] },
+    "uiNeed": { "enum": ["yes", "no", "uncertain"] },
+    "syntheticCaseDiscussion": { "enum": ["yes", "no", "undecided"] },
+    "wouldUseAgain": { "enum": ["yes", "no", "uncertain"] },
+    "failureObserved": { "type": "boolean" },
+    "negativeFeedbackObserved": { "type": "boolean" },
+    "consentVersion": { "const": "2026-08-21" },
+    "protocolVersion": { "const": "2026-08-21" },
+    "pilotKitVersion": { "const": "1.0.0" },
+    "releaseVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$" },
+    "releaseBuildId": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "contentHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  }
+}
