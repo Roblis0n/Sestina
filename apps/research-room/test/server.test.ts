@@ -4,6 +4,7 @@ import { request as rawRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createResearchRoomServer, type DirectoryPicker, type RunningResearchRoomServer } from "../src/server.js";
+import type { AppLanguage, LanguagePreferenceStore } from "../src/language-preferences.js";
 import {
   openSestina,
   type AnalyzedResearchRoomReview,
@@ -48,6 +49,16 @@ class Ri48FixtureProvider implements ResearchRoomProvider {
       minimalCorrection: "Keep the observational wording and add the interval.",
       unproven: ["No external participant or real second use is proven."],
     });
+  }
+}
+
+class MemoryLanguagePreferenceStore implements LanguagePreferenceStore {
+  writes = 0;
+  constructor(public language: AppLanguage | undefined, private readonly failWrites = false) {}
+  readLanguage(): Promise<AppLanguage | undefined> { return Promise.resolve(this.language); }
+  writeLanguage(language: AppLanguage): Promise<void> {
+    if (this.failWrites) return Promise.reject(new Error("private path must not escape"));
+    this.writes += 1; this.language = language; return Promise.resolve();
   }
 }
 
@@ -101,8 +112,8 @@ afterEach(async () => { while (running.length) await running.pop()?.close(); whi
 type ApiEnvelope<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: { readonly code: string; readonly message?: string } };
 function apiValue<T>(body: ApiEnvelope<T>): T { if (!body.ok) throw new Error(body.error.code); return body.value; }
 
-async function start(provider?: Ri48FixtureProvider, directoryPicker?: DirectoryPicker) {
-  const value = await createResearchRoomServer({ ...(provider ? { provider } : {}), ...(directoryPicker ? { directoryPicker } : {}) }).start(); running.push(value); return value;
+async function start(provider?: Ri48FixtureProvider, directoryPicker?: DirectoryPicker, languagePreferenceStore: LanguagePreferenceStore = new MemoryLanguagePreferenceStore("zh-CN")) {
+  const value = await createResearchRoomServer({ ...(provider ? { provider } : {}), ...(directoryPicker ? { directoryPicker } : {}), languagePreferenceStore }).start(); running.push(value); return value;
 }
 async function status(origin: string) { const response = await fetch(`${origin}/api/status`); return (await response.json() as { value: { sessionToken: string } }).value; }
 async function request<T>(origin: string, token: string, path: string, body: unknown) {
@@ -111,6 +122,40 @@ async function request<T>(origin: string, token: string, path: string, body: unk
 }
 
 describe("RI-48 loopback Research Room", () => {
+  it("requires an explicit first-run language, persists only zh-CN or en, and restores it after server restart", async () => {
+    const preferences = new MemoryLanguagePreferenceStore(undefined);
+    const server = await start(undefined, undefined, preferences); const session = await status(server.origin);
+    const initialStatus = await (await fetch(`${server.origin}/api/status`)).json();
+    expect(initialStatus).toMatchObject({ ok: true, value: { languagePreference: null } });
+
+    const blocked = await request<unknown>(server.origin, session.sessionToken, "/api/project/open", { projectPath: "C:\\not-opened" });
+    expect(blocked.response.status).toBe(409);
+    expect(blocked.body).toMatchObject({ ok: false, error: { code: "language_preference_required" } });
+    const unauthorized = await fetch(`${server.origin}/api/preferences/language`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ language: "en" }) });
+    expect(unauthorized.status).toBe(403);
+    const invalid = await request<unknown>(server.origin, session.sessionToken, "/api/preferences/language", { language: "fr" });
+    expect(invalid.response.status).toBe(400);
+    expect(preferences.writes).toBe(0);
+
+    const selected = await request<{ readonly language: AppLanguage }>(server.origin, session.sessionToken, "/api/preferences/language", { language: "en" });
+    expect(apiValue(selected.body)).toEqual({ language: "en" });
+    expect(preferences).toMatchObject({ language: "en", writes: 1 });
+    await server.close(); running.pop();
+
+    const restarted = await start(undefined, undefined, preferences);
+    expect(await (await fetch(`${restarted.origin}/api/status`)).json()).toMatchObject({ ok: true, value: { languagePreference: "en" } });
+  });
+
+  it("keeps first-run visible and returns a path-free stable error when language persistence fails", async () => {
+    const preferences = new MemoryLanguagePreferenceStore(undefined, true);
+    const server = await start(undefined, undefined, preferences); const session = await status(server.origin);
+    const failed = await request<unknown>(server.origin, session.sessionToken, "/api/preferences/language", { language: "zh-CN" });
+    expect(failed.response.status).toBe(503);
+    expect(failed.body).toMatchObject({ ok: false, error: { code: "language_preference_write_failed" } });
+    expect(JSON.stringify(failed.body)).not.toContain("private path");
+    expect(await (await fetch(`${server.origin}/api/status`)).json()).toMatchObject({ ok: true, value: { languagePreference: null } });
+  });
+
   it("refuses a non-loopback bind and rejects non-loopback Host headers", async () => {
     expect(() => createResearchRoomServer({ host: "0.0.0.0" })).toThrow(/127\.0\.0\.1/u);
     const server = await start();

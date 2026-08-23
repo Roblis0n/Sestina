@@ -70,7 +70,7 @@ const GUIDANCE_FILES = [
     required: [
       "accepted_current_guide",
       "RI-43 为 `pilot_kit_ready_external_validation_deferred_by_user`",
-      "RI-48 双模式项目入口与 UI 修正已完成并验证",
+      "RI-48 首次语言与电脑端体验修正已完成并验证",
       "Market Gate 0",
     ],
   },
@@ -148,15 +148,15 @@ const MARKER_CONTRACT = {
   },
   "sestina-next-code-goal": {
     exact: "await_new_task_start_record_after_RI48",
-    why: "RI-48 is complete and no later product task is authorized without a new start record",
+    why: "RI-48 is complete and no later task is authorized without a new start record",
   },
   "sestina-next-execution-goal": {
     exact: "do_not_start_RI49_without_new_gate",
-    why: "RI-49 remains not started and requires a new gate",
+    why: "RI-49 remains not started and must pass a new gate",
   },
   "sestina-next-code-sequence": {
     exact: "none_active_RI49_not_started",
-    why: "there is no active product task after the completed RI-48 correction",
+    why: "there is no active code sequence after the verified RI-48 correction",
   },
   "sestina-ri44-to-ri47-status": {
     exact: "superseded_unstarted",
@@ -164,7 +164,7 @@ const MARKER_CONTRACT = {
   },
   "sestina-ri48-status": {
     exact: "completed_and_verified_implementation_only",
-    why: "the RI-48 vertical slice and entry correction are complete at implementation evidence level only",
+    why: "the first-run language and desktop experience correction is complete with implementation evidence only",
   },
   "sestina-market-gate-0": {
     exact: "deferred_by_user_nonblocking",

@@ -9,6 +9,7 @@ import {
   type SestinaCore,
 } from "@sestina/core";
 import { RESEARCH_ROOM_CSS, RESEARCH_ROOM_HTML, RESEARCH_ROOM_JS } from "./ui.js";
+import { isAppLanguage, type LanguagePreferenceStore } from "./language-preferences.js";
 
 const LOOPBACK = "127.0.0.1";
 const BODY_LIMIT = 65_536;
@@ -21,6 +22,7 @@ export interface ResearchRoomServerOptions {
   readonly provider?: ResearchRoomProvider;
   readonly providerTimeoutMs?: number;
   readonly directoryPicker?: DirectoryPicker;
+  readonly languagePreferenceStore?: LanguagePreferenceStore;
 }
 
 export interface DirectoryPicker {
@@ -129,7 +131,12 @@ export class ResearchRoomHttpApplication {
   #opened: OpenedProject | undefined;
   #pickerAbort: AbortController | undefined;
 
-  constructor(private readonly provider?: ResearchRoomProvider, private readonly providerTimeoutMs = 15_000, private readonly directoryPicker?: DirectoryPicker) {}
+  constructor(
+    private readonly provider?: ResearchRoomProvider,
+    private readonly providerTimeoutMs = 15_000,
+    private readonly directoryPicker?: DirectoryPicker,
+    private readonly languagePreferenceStore?: LanguagePreferenceStore,
+  ) {}
 
   close(): void { this.#pickerAbort?.abort(); this.#pickerAbort = undefined; this.#opened?.core.close(); this.#opened = undefined; }
 
@@ -140,6 +147,26 @@ export class ResearchRoomHttpApplication {
 
   private authorize(request: IncomingMessage): void {
     if (request.headers["x-sestina-session"] !== this.sessionToken) throw new HttpProblem(403, "explicit_action_required", "This action requires the active local session.");
+  }
+
+  private async readLanguagePreference(): Promise<"zh-CN" | "en" | undefined> {
+    if (this.languagePreferenceStore === undefined) return undefined;
+    try { return await this.languagePreferenceStore.readLanguage(); }
+    catch { throw new HttpProblem(503, "language_preference_unavailable", "The local language preference is unavailable."); }
+  }
+
+  private async requireLanguagePreference(): Promise<"zh-CN" | "en"> {
+    const language = await this.readLanguagePreference();
+    if (language === undefined) throw new HttpProblem(409, "language_preference_required", "Choose Chinese or English before continuing.");
+    return language;
+  }
+
+  private async setLanguagePreference(input: unknown): Promise<{ readonly language: "zh-CN" | "en" }> {
+    if (this.languagePreferenceStore === undefined) throw new HttpProblem(503, "language_preference_unavailable", "The local language preference is unavailable.");
+    if (!isRecord(input) || Object.keys(input).length !== 1 || !isAppLanguage(input.language)) throw new HttpProblem(400, "invalid_language", "Choose either zh-CN or en.");
+    try { await this.languagePreferenceStore.writeLanguage(input.language); }
+    catch { throw new HttpProblem(503, "language_preference_write_failed", "The language choice could not be saved locally."); }
+    return { language: input.language };
   }
 
   private async initializeProject(root: string, title: string): Promise<OpenedProject> {
@@ -256,9 +283,11 @@ export class ResearchRoomHttpApplication {
       if (request.method === "GET" && url.pathname === "/") { asset(response, "text/html; charset=utf-8", RESEARCH_ROOM_HTML); return; }
       if (request.method === "GET" && url.pathname === "/app.css") { asset(response, "text/css; charset=utf-8", RESEARCH_ROOM_CSS); return; }
       if (request.method === "GET" && url.pathname === "/app.js") { asset(response, "text/javascript; charset=utf-8", RESEARCH_ROOM_JS); return; }
-      if (request.method === "GET" && url.pathname === "/api/status") { json(response, 200, { ok: true, value: { localOnly: true, telemetry: false, projectOpen: this.#opened !== undefined, directoryPickerAvailable: this.directoryPicker !== undefined, sessionToken: this.sessionToken } }); return; }
+      if (request.method === "GET" && url.pathname === "/api/status") { const languagePreference = await this.readLanguagePreference(); json(response, 200, { ok: true, value: { localOnly: true, telemetry: false, projectOpen: this.#opened !== undefined, directoryPickerAvailable: this.directoryPicker !== undefined, languagePreference: languagePreference ?? null, sessionToken: this.sessionToken } }); return; }
 
       if (request.method === "POST") this.authorize(request);
+      if (request.method === "POST" && url.pathname === "/api/preferences/language") { json(response, 200, { ok: true, value: await this.setLanguagePreference(await readBody(request)) }); return; }
+      await this.requireLanguagePreference();
       if (request.method === "POST" && url.pathname === "/api/project/select-directory") { json(response, 200, { ok: true, value: await this.selectDirectory() }); return; }
       if (request.method === "POST" && url.pathname === "/api/project/open") { json(response, 200, { ok: true, value: await this.openProject(await readBody(request)) }); return; }
       if (request.method === "POST" && url.pathname === "/api/project/brief") { json(response, 200, { ok: true, value: await this.activateInitialBrief(await readBody(request)) }); return; }
@@ -306,7 +335,7 @@ export function createResearchRoomServer(options: ResearchRoomServerOptions = {}
   if (host !== LOOPBACK) throw new Error("Research Room must bind to 127.0.0.1.");
   const port = options.port ?? 0;
   if (!Number.isSafeInteger(port) || port < 0 || port > 65_535) throw new Error("Invalid Research Room port.");
-  const application = new ResearchRoomHttpApplication(options.provider, options.providerTimeoutMs, options.directoryPicker);
+  const application = new ResearchRoomHttpApplication(options.provider, options.providerTimeoutMs, options.directoryPicker, options.languagePreferenceStore);
   const server = createServer((request, response) => { void application.handle(request, response); });
   server.on("clientError", (_error, socket) => { socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n"); });
   return {

@@ -18,7 +18,7 @@ try {
   if (!existsSync(marker) || readFileSync(marker, "utf8").trim().length === 0) throw new Error("network guard was not active");
   if (existsSync(attempts) && readFileSync(attempts, "utf8").trim().length > 0) throw new Error("default Research Room attempted outbound network access");
   const value = JSON.parse(result.stdout.trim());
-  if (value.researchRoomOfflineVerified !== true || value.browserInitializationVerified !== true || value.nativePickerFlowVerified !== true || value.initialBriefActivationVerified !== true || value.loopbackPolicy !== true || value.providerConfigured !== false || value.networkAttempts !== 0 || value.backgroundArtifacts !== 0) throw new Error("offline result contract drifted");
+  if (value.researchRoomOfflineVerified !== true || value.languagePreferenceVerified !== true || value.browserInitializationVerified !== true || value.nativePickerFlowVerified !== true || value.initialBriefActivationVerified !== true || value.loopbackPolicy !== true || value.providerConfigured !== false || value.networkAttempts !== 0 || value.backgroundArtifacts !== 0) throw new Error("offline result contract drifted");
   process.stdout.write(`${JSON.stringify(value)}\n`);
 } catch (error) {
   process.stderr.write(`Research Room no-network verification failed: ${error instanceof Error ? error.message : "unknown error"}\n`);

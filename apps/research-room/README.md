@@ -1,11 +1,18 @@
 # Sestina Research Room
 
-The RI-48 Research Room is a loopback-only local web application. On Windows,
-its primary project action opens the operating system's folder picker; a manual
-absolute-path mode remains available as a fallback. It opens only the directory
-the owner explicitly selects. When that directory has no `.sestina`, the same
-open-or-initialize action creates the local project and asks the owner for the
-initial research question and current task on the next screen.
+The RI-48 Research Room is a loopback-only local web application. On first run,
+it requires an explicit `中文` or `English` interface-language choice before a
+project can be opened. The choice is stored as a strict App-level preference in
+`%LOCALAPPDATA%\Sestina\preferences.json` on Windows and is restored across
+browser, service, and project changes. It can be changed explicitly from the
+top-right control. It is not stored in project state, a receipt, Provider
+Context, browser storage, or Git, and it never changes user research text.
+
+On Windows, the primary project action opens the operating system's folder
+picker; a manual absolute-path mode remains available as a fallback. It opens
+only the directory the owner explicitly selects. When that directory has no
+`.sestina`, the same open-or-initialize action creates the local project and asks
+the owner for the initial research question and current task on the next screen.
 It then shows the exact Context Manifest before any Provider call and requires a
 separate explicit owner action before a disposition can change research state.
 
@@ -25,3 +32,9 @@ the selected directory are not imported or modified. A foreign or partial
 The selected path stays inside the local server process and is never returned by
 the folder-picker API. Cancelling the system dialog performs no write. On hosts
 where the native picker is unavailable, the UI exposes manual mode immediately.
+
+The shipped UI is a desktop research workstation with bilingual entry, Brief,
+Room, feedback, and recovery copy. Short transitions communicate view entry,
+busy work, stage progression, findings, and receipts. When Windows or the
+browser requests reduced motion, nonessential animation is disabled and the
+entire workflow remains operable.

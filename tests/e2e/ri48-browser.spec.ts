@@ -4,10 +4,17 @@ import { join } from "node:path";
 import { resolve } from "node:path";
 import { test, expect, type Page } from "@playwright/test";
 import { createResearchRoomServer, type RunningResearchRoomServer } from "../../apps/research-room/src/server.js";
+import type { AppLanguage, LanguagePreferenceStore } from "../../apps/research-room/src/language-preferences.js";
 import { createRi48Project, Ri48FixtureProvider } from "../helpers/ri48-project.js";
 
 type Scenario = "reasonable-increment" | "target-substitution" | "repeated-audit";
 interface ScenarioFixture { readonly suggestion: string; readonly evidenceClass: "synthetic_fixture" | "synthetic_adversarial_fixture"; readonly expected: { readonly findingKind: string } }
+
+class MemoryLanguagePreferenceStore implements LanguagePreferenceStore {
+  constructor(public language: AppLanguage | undefined) {}
+  readLanguage(): Promise<AppLanguage | undefined> { return Promise.resolve(this.language); }
+  writeLanguage(language: AppLanguage): Promise<void> { this.language = language; return Promise.resolve(); }
+}
 
 const servers: RunningResearchRoomServer[] = [];
 const cleanups: (() => Promise<void>)[] = [];
@@ -19,7 +26,7 @@ async function scenario(name: Scenario): Promise<ScenarioFixture> {
 
 async function openRoom(page: Page, provider: Ri48FixtureProvider) {
   const fixture = await createRi48Project(); cleanups.push(() => fixture.cleanup());
-  const server = await createResearchRoomServer({ provider, directoryPicker: { pick: () => Promise.resolve(fixture.root) } }).start(); servers.push(server);
+  const server = await createResearchRoomServer({ provider, directoryPicker: { pick: () => Promise.resolve(fixture.root) }, languagePreferenceStore: new MemoryLanguagePreferenceStore("zh-CN") }).start(); servers.push(server);
   await page.goto(server.origin);
   await expect(page.getByRole("status")).toContainText("本地服务已就绪");
   await page.getByRole("button", { name: "选择文件夹并打开" }).click();
@@ -41,15 +48,69 @@ async function prepareAndAnalyze(page: Page, fixture: ScenarioFixture, provider:
 }
 
 test.describe("RI-48 real browser vertical slice", () => {
+  test("first run: explicit English choice is remembered across a new server and can be explicitly changed", async ({ page }) => {
+    const preferences = new MemoryLanguagePreferenceStore(undefined);
+    const first = await createResearchRoomServer({ languagePreferenceStore: preferences }).start(); servers.push(first);
+    await page.goto(first.origin);
+
+    await expect(page.getByRole("heading", { name: "选择界面语言 / Choose your language" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "打开研究项目" })).toBeHidden();
+    await page.getByRole("button", { name: "English", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Open a research project" })).toBeVisible();
+    await expect(page.getByRole("status")).toContainText("Local service is ready");
+
+    await first.close(); servers.pop();
+    const restarted = await createResearchRoomServer({ languagePreferenceStore: preferences }).start(); servers.push(restarted);
+    await page.goto(restarted.origin);
+    await expect(page.getByRole("heading", { name: "Open a research project" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "选择界面语言 / Choose your language" })).toBeHidden();
+    await page.getByRole("button", { name: "中文", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "打开研究项目" })).toBeVisible();
+
+    await restarted.close(); servers.pop();
+    const changed = await createResearchRoomServer({ languagePreferenceStore: preferences }).start(); servers.push(changed);
+    await page.goto(changed.origin);
+    await expect(page.getByRole("heading", { name: "打开研究项目" })).toBeVisible();
+  });
+
+  test("English mode: project initialization, Brief activation, and Room entry stay consistently English", async ({ page }) => {
+    const root = await mkdtemp(join(tmpdir(), "sestina-ri48-browser-english-"));
+    cleanups.push(() => rm(root, { recursive: true, force: true }));
+    const server = await createResearchRoomServer({ directoryPicker: { pick: () => Promise.resolve(root) }, languagePreferenceStore: new MemoryLanguagePreferenceStore("en") }).start(); servers.push(server);
+    await page.goto(server.origin);
+
+    await page.getByRole("button", { name: "Select a folder and open" }).click();
+    await expect(page.getByRole("heading", { name: "Set the research working line" })).toBeVisible();
+    await expect(page.getByRole("status")).toContainText("Local initialization is complete");
+    await page.getByLabel("Research question", { exact: true }).fill("How should a persistent language preference remain separate from research authority?");
+    await page.getByLabel("Current smallest research task").fill("Verify the complete English first-run path.");
+    await page.getByRole("button", { name: "Activate Brief and enter Research Room" }).click();
+    await expect(page.getByRole("heading", { name: "Current research state" })).toBeVisible();
+    await expect(page.getByText("How should a persistent language preference remain separate from research authority?", { exact: true })).toBeVisible();
+    await expect(page.getByText("Choose text file", { exact: true })).toBeVisible();
+    await expect(page.getByText("No file selected", { exact: true })).toBeVisible();
+  });
+
+  test("reduced motion: the desktop workflow remains operable without nonessential transitions", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    const server = await createResearchRoomServer({ directoryPicker: { pick: () => Promise.resolve(undefined) }, languagePreferenceStore: new MemoryLanguagePreferenceStore("zh-CN") }).start(); servers.push(server);
+    await page.goto(server.origin);
+    await expect(page.getByRole("heading", { name: "打开研究项目" })).toBeVisible();
+    await expect(page.locator("#project-launch")).toHaveCSS("animation-name", "none");
+    await page.getByText("手动输入绝对路径", { exact: true }).click();
+    await expect(page.getByLabel("项目绝对路径")).toBeVisible();
+  });
+
   test("primary mode: the system folder picker opens a plain directory without exposing a path field", async ({ page }) => {
     const root = await mkdtemp(join(tmpdir(), "sestina-ri48-browser-first-use-"));
     cleanups.push(() => rm(root, { recursive: true, force: true }));
     const canary = join(root, "existing-research-canary.txt");
     await writeFile(canary, "must remain unchanged\n", "utf8");
-    const server = await createResearchRoomServer({ directoryPicker: { pick: () => Promise.resolve(root) } }).start(); servers.push(server);
+    const server = await createResearchRoomServer({ directoryPicker: { pick: () => Promise.resolve(root) }, languagePreferenceStore: new MemoryLanguagePreferenceStore("zh-CN") }).start(); servers.push(server);
     await page.goto(server.origin);
 
-    await expect(page.getByRole("heading", { name: "从一个研究项目开始" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "打开研究项目" })).toBeVisible();
+    await expect(page.locator("#project-launch")).toHaveCSS("animation-name", "view-in");
     await expect(page.getByText("仅在本机", { exact: true })).toBeVisible();
     await expect(page.getByText("不扫描目录", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "选择文件夹并打开" }).click();
@@ -67,7 +128,7 @@ test.describe("RI-48 real browser vertical slice", () => {
   test("fallback mode: manual absolute-path entry remains available", async ({ page }) => {
     const root = await mkdtemp(join(tmpdir(), "sestina-ri48-browser-manual-mode-"));
     cleanups.push(() => rm(root, { recursive: true, force: true }));
-    const server = await createResearchRoomServer({ directoryPicker: { pick: () => Promise.resolve(undefined) } }).start(); servers.push(server);
+    const server = await createResearchRoomServer({ directoryPicker: { pick: () => Promise.resolve(undefined) }, languagePreferenceStore: new MemoryLanguagePreferenceStore("zh-CN") }).start(); servers.push(server);
     await page.goto(server.origin);
 
     await page.getByText("手动输入绝对路径", { exact: true }).click();
