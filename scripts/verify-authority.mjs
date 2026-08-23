@@ -4,8 +4,9 @@
  * verify-authority.mjs
  *
  * Guards the ACTIVE authority regions of the repository entry documents so
- * stale product direction (old Task 11, RI-00 stop line, Desktop-first,
- * generic Agent OS) cannot re-enter the entry points as current guidance.
+ * stale product direction (old Task 11, RI-00 stop line, generic Agent OS,
+ * CLI/MCP-first, or premature RI-48 activation) cannot re-enter the entry
+ * points as current guidance.
  *
  * Only the region between SESTINA_ACTIVE_AUTHORITY_START and
  * SESTINA_ACTIVE_AUTHORITY_END is scanned; everything after
@@ -21,7 +22,8 @@
  *   AUTH-R003 sestina-current-task agrees across entries and with the
  *             WORK-BOARD yaml current_task field
  *   AUTH-R004 no stale-authority phrasing inside active regions
- *   AUTH-R005 exact product invariant present in every active region
+ *   AUTH-R005 exact accepted product definition present in every active region
+ *   AUTH-R006 current guidance chain exists and carries its defining contracts
  */
 
 import { readFileSync, existsSync } from "node:fs";
@@ -51,8 +53,44 @@ const ENTRY_FILES = [
 
 const ACTIVE_START = "<!-- SESTINA_ACTIVE_AUTHORITY_START -->";
 const ACTIVE_END = "<!-- SESTINA_ACTIVE_AUTHORITY_END -->";
-const PRODUCT_INVARIANT =
-  "Sestina 是一个本地科研过程调试器。它让 AI 始终围绕当前研究问题工作，记住已经作出的研究决定，识别目标替换、重复审计、论证跳跃和伪深度，并要求每一轮修改说明真正增加了什么。";
+const PRODUCT_DEFINITION =
+  "Sestina 最终应当是一个本地交互式科研 App。其内部本体是 Research Deliberation Kernel，主要交互面是 Research Room；MCP、Skill、Hooks、CLI 只是外部宿主接入、自动化和恢复接口。Sestina 作为本地科研过程调试器，让 AI 始终围绕当前研究问题工作，记住已经作出的研究决定，识别目标替换、重复审计、论证跳跃和伪深度，并要求每一轮修改说明真正增加了什么。";
+
+const GUIDANCE_FILES = [
+  {
+    path: "docs/product/CURRENT-PRODUCT-DEFINITION.md",
+    required: [
+      "accepted_current_authority",
+      PRODUCT_DEFINITION,
+      "用户是唯一研究权威",
+    ],
+  },
+  {
+    path: "docs/execution/CURRENT-PLAN.md",
+    required: [
+      "accepted_current_guide",
+      "RI-43 为 `pilot_kit_ready_waiting_external_participants`",
+      "RI-48 是门禁后的首个计划产品任务，当前为 `planned_not_active`",
+      "Market Gate 0",
+    ],
+  },
+  {
+    path: "docs/execution/CURRENT-PLAN-USAGE.md",
+    required: [
+      "required_operating_guide",
+      "只有相邻一层能够授权下一层",
+      "TASK-START-GATE.md",
+    ],
+  },
+  {
+    path: "docs/execution/TASK-START-GATE.md",
+    required: [
+      "required_before_every_task",
+      "Gate A：方向成立",
+      "final: ready_to_start | do_not_start",
+    ],
+  },
+];
 
 // ── Marker contract ──
 // Each active region must carry every marker exactly once. Value checks:
@@ -65,12 +103,40 @@ const MARKER_CONTRACT = {
     why: "the sole canonical development repository is fixed by standing user decision",
   },
   "sestina-direction": {
-    exact: "local-research-process-debugger",
-    why: "Sestina is a local research process debugger",
+    exact: "local-interactive-research-app",
+    why: "Sestina's accepted final product form is a local interactive research App",
   },
   "sestina-product-invariant": {
-    exact: "local-research-process-debugger",
-    why: "the product invariant must identify the local research process debugger",
+    exact: "local-interactive-research-app",
+    why: "the product invariant must identify the local interactive research App",
+  },
+  "sestina-product-kernel": {
+    exact: "research-deliberation-kernel",
+    why: "the Research Deliberation Kernel is the product body",
+  },
+  "sestina-primary-interface": {
+    exact: "research-room",
+    why: "the Research Room is the primary interaction surface",
+  },
+  "sestina-external-interface-role": {
+    exact: "host-access-automation-recovery",
+    why: "MCP, Skill, Hooks, and CLI are subordinate access, automation, and recovery interfaces",
+  },
+  "sestina-current-guide": {
+    exact: "docs/execution/CURRENT-PLAN.md",
+    why: "every entry must point to the accepted current guide",
+  },
+  "sestina-plan-usage-guide": {
+    exact: "docs/execution/CURRENT-PLAN-USAGE.md",
+    why: "every entry must point to the current plan usage guide",
+  },
+  "sestina-task-start-gate": {
+    exact: "docs/execution/TASK-START-GATE.md",
+    why: "every entry must require the current task-start gate",
+  },
+  "sestina-guide-status": {
+    exact: "accepted_current",
+    why: "the new guidance chain was explicitly accepted by the user",
   },
   "sestina-prework-direction-gate": {
     exact: "required",
@@ -79,6 +145,30 @@ const MARKER_CONTRACT = {
   "sestina-current-task": {
     pattern: /^RI-\d+$/,
     why: "the current task id must be a well-formed RI-XX id consistent across entries",
+  },
+  "sestina-next-code-goal": {
+    exact: "blocked_until_RI-43_evidence_and_Market_Gate_0",
+    why: "new product code must remain blocked while RI-43 and Market Gate 0 evidence are absent",
+  },
+  "sestina-next-execution-goal": {
+    exact: "run 5-10 real external researcher sessions and observe second-task reuse",
+    why: "the immediate action is real RI-43 evidence collection",
+  },
+  "sestina-next-code-sequence": {
+    exact: "RI-48_planned_not_active",
+    why: "RI-48 is the planned next product task but is not active",
+  },
+  "sestina-ri44-to-ri47-status": {
+    exact: "superseded_unstarted",
+    why: "old RI-44 through RI-47 were superseded without being implemented",
+  },
+  "sestina-ri48-status": {
+    exact: "planned_not_active",
+    why: "RI-48 must not be activated before its evidence gates",
+  },
+  "sestina-market-gate-0": {
+    exact: "not_started",
+    why: "Market Gate 0 has not yet produced real evidence",
   },
   "sestina-ri00": {
     exact: "accepted_for_continuation",
@@ -115,6 +205,14 @@ const BANNED_ACTIVE_PHRASES = [
   { re: /当前唯一任务仍是\s*RI-00/, label: "naming RI-00 as the current unique task" },
   { re: /继续旧\s*Tasks/i, label: "resuming old Tasks 11-32" },
   { re: /Desktop\s*是首版控制面/, label: "Desktop as the first-version control plane" },
+  {
+    re: /Sestina\s*是一个本地科研过程调试器。/,
+    label: "the former debugger-only product definition",
+  },
+  {
+    re: /(MCP|CLI|Skill|Hooks)[^\n]{0,40}(产品本体|主要交互面)/i,
+    label: "a subordinate interface presented as the product body or primary surface",
+  },
   {
     re: /通用\s*Agent\s*OS[^\n]{0,40}产品本体/,
     label: "generic Agent OS as the product body",
@@ -209,11 +307,11 @@ for (const entry of ENTRY_FILES) {
     }
   }
 
-  // AUTH-R005: the user's product definition is immutable and active.
-  const invariantOccurrences = region.split(PRODUCT_INVARIANT).length - 1;
-  if (invariantOccurrences !== 1) {
+  // AUTH-R005: the user's accepted product definition is immutable and active.
+  const definitionOccurrences = region.split(PRODUCT_DEFINITION).length - 1;
+  if (definitionOccurrences !== 1) {
     err(
-      `[AUTH-R005] ${entry}: active region must contain the exact product invariant once; found ${invariantOccurrences}`,
+      `[AUTH-R005] ${entry}: active region must contain the exact accepted product definition once; found ${definitionOccurrences}`,
     );
   }
   ok(`${entry}: active authority region checked`);
@@ -252,6 +350,26 @@ if (tasks.length > 0) {
   }
 } else if (errors === 0) {
   err("[AUTH-R003] no entry carries a valid sestina-current-task marker");
+}
+
+// AUTH-R006: the stable current guidance chain must exist and retain its
+// defining contracts. Entry markers alone are not enough if a target file was
+// deleted, renamed, or silently rewritten into a different product direction.
+for (const guidance of GUIDANCE_FILES) {
+  const abs = resolve(ROOT, guidance.path);
+  if (!existsSync(abs)) {
+    err(`[AUTH-R006] ${guidance.path}: required current guidance file is missing`);
+    continue;
+  }
+  const text = readFileSync(abs, "utf8");
+  for (const required of guidance.required) {
+    if (!text.includes(required)) {
+      err(
+        `[AUTH-R006] ${guidance.path}: required guidance contract is missing: '${required}'`,
+      );
+    }
+  }
+  ok(`${guidance.path}: current guidance contract checked`);
 }
 
 if (errors > 0) {
