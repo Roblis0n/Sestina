@@ -19,6 +19,7 @@ import type { MechanismLink } from "../argument/mechanism-link.js";
 import type { ClaimEvidenceLink } from "../argument/claim-evidence-link.js";
 import type { MechanismEvidenceLink } from "../argument/mechanism-evidence-link.js";
 import type { ArgumentDelta } from "../argument/argument-delta.js";
+import type { ResearchRoomReceipt } from "../room/research-room.js";
 
 export const RESEARCH_PAGE_LIMIT_MAX = 200;
 
@@ -135,6 +136,13 @@ export interface ArgumentGraphRepositories {
   readonly argumentDeltas: ArgumentDeltaRepository;
 }
 
+export interface ResearchRoomReceiptRepository {
+  create(value: ResearchRoomReceipt): ResearchResult<ResearchRoomReceipt>;
+  getById(projectId: string, receiptId: string): ResearchResult<ResearchRoomReceipt | undefined>;
+  listByProject(projectId: string, page: ResearchPageRequest): ResearchResult<ResearchPage<ResearchRoomReceipt>>;
+  compareAndSwap(value: ResearchRoomReceipt, expectedVersion: EntityVersion): ResearchResult<ResearchRoomReceipt>;
+}
+
 export interface ResearchRepositories extends ArgumentGraphRepositories {
   readonly projects: ResearchProjectRepository;
   readonly artifacts: ResearchArtifactRepository;
@@ -144,6 +152,7 @@ export interface ResearchRepositories extends ArgumentGraphRepositories {
   readonly issues: ResearchIssueRepository;
   readonly episodes: RevisionEpisodeRepository;
   readonly snapshots: ResearchSnapshotRepository;
+  readonly roomReceipts: ResearchRoomReceiptRepository;
 }
 
 export interface ResearchUnitOfWork {

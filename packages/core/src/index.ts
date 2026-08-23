@@ -1,5 +1,16 @@
 export { openSestina, SestinaCore } from "./sestina-core.js";
 export type { CoreBriefMutation, CoreBriefState, CoreDatabaseDiagnostics, CoreReviewSummary, DeterministicReviewResult, EpisodeIntegritySummary, OpenSestinaOptions } from "./sestina-core.js";
+export type {
+  AnalyzedResearchRoomReview,
+  CommitResearchRoomDispositionInput,
+  PrepareResearchRoomReviewInput,
+  PreparedResearchRoomReview,
+  ResearchRoomProvider,
+  ResearchRoomProviderInput,
+  ResearchRoomState,
+  RollbackResearchRoomReceiptInput,
+} from "./research-room.js";
+export type { ResearchRoomAnalysisPayload, ResearchRoomContextManifest, ResearchRoomReceipt, ResearchRoomStateBinding } from "@sestina/research";
 export { coreErr, coreOk } from "./errors.js";
 export type { CoreError, CoreErrorCode, CoreResult } from "./errors.js";
 export { getPrivacyManifest } from "./privacy.js";

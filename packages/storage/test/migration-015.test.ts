@@ -8,9 +8,10 @@ describe("migration 015 Argument Graph", () => {
   beforeEach(() => { dir = makeTempDir(); path = join(dir, "sestina.db"); });
   afterEach(() => { db?.close(); removeTempDir(dir); });
 
-  it("advances a fresh database to schema 15 with only the six current graph tables", async () => {
-    db = await openDatabase({ path });
-    expect(SCHEMA_VERSION).toBe(15);
+  it("advances a fresh database through schema 15 with only the six graph tables", async () => {
+    db = await openDatabase({ path, migrate: { migrations: MIGRATIONS.slice(0, 15) } });
+    expect(MIGRATIONS[14]?.version).toBe(15);
+    expect(SCHEMA_VERSION).toBeGreaterThanOrEqual(15);
     const tables = new Set(db.all<{ name: string }>("SELECT name FROM sqlite_schema WHERE type='table'").map((row) => row.name));
     for (const name of ["argument_claims", "argument_evidence", "argument_mechanism_links", "argument_claim_evidence_links", "argument_mechanism_evidence_links", "argument_deltas"]) expect(tables.has(name)).toBe(true);
   });

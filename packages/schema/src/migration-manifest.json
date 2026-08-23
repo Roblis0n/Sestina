@@ -15,6 +15,7 @@
     { "version": 12, "name": "012-evidence-ledger" },
     { "version": 13, "name": "013-research-core" },
     { "version": 14, "name": "014-review-runs" },
-    { "version": 15, "name": "015-argument-graph" }
+    { "version": 15, "name": "015-argument-graph" },
+    { "version": 16, "name": "016-research-room" }
   ]
 }

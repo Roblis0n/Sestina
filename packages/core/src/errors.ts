@@ -46,7 +46,7 @@ export function mapDomainError(error: { readonly code?: unknown }): CoreError {
   if (["version_conflict", "review_version_conflict", "stale_episode_brief", "review_input_hash_mismatch", "snapshot_hash_mismatch"].includes(code)) return coreError("stale_state");
   if (code === "stale_capsule_response") return coreError("stale_state");
   if (["user_confirmation_required", "user_decision_required", "user_issue_action_required", "user_episode_action_required"].includes(code)) return coreError("user_confirmation_required");
-  if (["invalid_decision_transition", "invalid_issue_transition", "invalid_episode_transition", "episode_lock_mismatch", "artifact_tombstoned", "scope_rule_conflict"].includes(code)) return coreError("state_conflict");
+  if (["invalid_decision_transition", "invalid_issue_transition", "invalid_episode_transition", "invalid_research_room_transition", "episode_lock_mismatch", "artifact_tombstoned", "scope_rule_conflict"].includes(code)) return coreError("state_conflict");
   if (["research_storage_unavailable", "research_storage_readonly", "review_storage_unavailable", "database_readonly", "database_corrupt", "storage_busy"].includes(code)) return coreError("infrastructure_failure");
   if (code.startsWith("invalid_") || code === "unsafe_relative_path" || code === "unsupported_capsule_response_version") return coreError("invalid_input");
   return coreError("infrastructure_failure");

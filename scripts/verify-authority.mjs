@@ -70,7 +70,7 @@ const GUIDANCE_FILES = [
     required: [
       "accepted_current_guide",
       "RI-43 为 `pilot_kit_ready_external_validation_deferred_by_user`",
-      "RI-48 是唯一当前产品任务，状态为 `active`",
+      "RI-48 已完成决定驱动的 Local Research Room 垂直切片，状态为 `completed_and_verified_implementation_only`",
       "Market Gate 0",
     ],
   },
@@ -147,24 +147,24 @@ const MARKER_CONTRACT = {
     why: "the current task id must be a well-formed RI-XX id consistent across entries",
   },
   "sestina-next-code-goal": {
-    exact: "implement_RI-48_decision_driven_local_research_room",
-    why: "the current code goal is the explicitly authorized RI-48 Research Room vertical slice",
+    exact: "await_new_task_start_record_after_RI48",
+    why: "no later product task is authorized without a new task-start record",
   },
   "sestina-next-execution-goal": {
-    exact: "build_and_verify_RI-48_with_owner_and_synthetic_scenarios",
-    why: "the immediate action is RI-48 implementation with evidence-classified development scenarios",
+    exact: "do_not_start_RI49_without_new_gate",
+    why: "RI-49 remains unstarted until a new direction and task-start gate pass",
   },
   "sestina-next-code-sequence": {
-    exact: "RI-48_active",
-    why: "RI-48 is the unique active product task",
+    exact: "none_active_RI49_not_started",
+    why: "RI-48 is complete and no later product task is active",
   },
   "sestina-ri44-to-ri47-status": {
     exact: "superseded_unstarted",
     why: "old RI-44 through RI-47 were superseded without being implemented",
   },
   "sestina-ri48-status": {
-    exact: "active",
-    why: "the user explicitly authorized development before later external feedback",
+    exact: "completed_and_verified_implementation_only",
+    why: "RI-48 implementation is verified without claiming external-user evidence",
   },
   "sestina-market-gate-0": {
     exact: "deferred_by_user_nonblocking",

@@ -12,6 +12,7 @@ import {
   parseResearchIssue,
   parseResearchPageRequest,
   parseResearchProject,
+  parseResearchRoomReceipt,
   parseResearchSnapshot,
   parseRevisionEpisode,
   researchError,
@@ -26,6 +27,7 @@ import {
   type ResearchPage,
   type ResearchPageRequest,
   type ResearchProject,
+  type ResearchRoomReceipt,
   type ResearchRepositories,
   type ResearchResult,
   type ResearchSnapshot,
@@ -952,5 +954,65 @@ export function createResearchRepositories(db: StorageDatabase): ResearchReposit
     },
   };
 
-  return Object.freeze({ projects, artifacts, revisions, briefs, decisions, issues, episodes, snapshots, ...createArgumentGraphRepositories(db) });
+  const roomReceipts: ResearchRepositories["roomReceipts"] = {
+    create(value) {
+      return writeResult(db, () => {
+        const parsed = parseResearchRoomReceipt(value); if (!parsed.ok) return parsed;
+        const project = requireProject(db, parsed.value.projectId); if (!project.ok) return project;
+        if (db.get("SELECT receipt_id FROM research_room_receipts WHERE receipt_id = ? OR (project_id = ? AND review_id = ?)", parsed.value.id, parsed.value.projectId, parsed.value.reviewId)) return { ok: false, error: researchError("version_conflict") };
+        if (parsed.value.sourceEpisodeId !== undefined && db.get("SELECT episode_id FROM revision_episodes WHERE project_id = ? AND episode_id = ?", parsed.value.projectId, parsed.value.sourceEpisodeId) === undefined) return notFound();
+        const data = encodeDomainJson(parsed.value, parseResearchRoomReceipt); if (!data.ok) return data;
+        db.run(
+          `INSERT INTO research_room_receipts
+             (receipt_id, project_id, review_id, source_episode_id, status, disposition, provider_status,
+              evidence_class, counts_as_external_evidence, version, receipt_hash, created_at, updated_at, data)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)`,
+          parsed.value.id, parsed.value.projectId, parsed.value.reviewId, parsed.value.sourceEpisodeId ?? null,
+          parsed.value.status, parsed.value.disposition.kind, parsed.value.providerStatus, parsed.value.evidenceClass,
+          parsed.value.version, parsed.value.receiptHash, parsed.value.createdAt, parsed.value.updatedAt, data.value,
+        );
+        return parsed;
+      });
+    },
+    getById(projectId, receiptId) {
+      return readResult<ResearchRoomReceipt | undefined>(() => {
+        const project = validId(projectId, "rprj_"); const id = validId(receiptId, "rrcp_"); if (!project.ok || !id.ok) return { ok: false, error: researchError("invalid_research_room_receipt") };
+        const row = db.get<{ data: string }>("SELECT data FROM research_room_receipts WHERE project_id = ? AND receipt_id = ?", project.value, id.value);
+        return row === undefined ? { ok: true, value: undefined } : decodeDomainJson(row.data, parseResearchRoomReceipt);
+      });
+    },
+    listByProject(projectId, page) {
+      return readResult(() => pageRows(db, {
+        table: "research_room_receipts", idColumn: "receipt_id", idPrefix: "rrcp_",
+        projectId, where: "project_id = ?", params: [projectId], page, parser: parseResearchRoomReceipt,
+      }));
+    },
+    compareAndSwap(value, expectedVersion) {
+      return writeResult(db, () => {
+        const next = parseResearchRoomReceipt(value); const expected = parseEntityVersion(expectedVersion); if (!next.ok || !expected.ok) return { ok: false, error: researchError("invalid_research_room_receipt") };
+        const row = db.get<{ data: string }>("SELECT data FROM research_room_receipts WHERE project_id = ? AND receipt_id = ? AND version = ?", next.value.projectId, next.value.id, expected.value);
+        if (row === undefined) return { ok: false, error: researchError("version_conflict") };
+        const current = decodeDomainJson(row.data, parseResearchRoomReceipt); if (!current.ok) return current;
+        const versions = requireExpectedNext(current.value.version, expected.value, next.value.version); if (!versions.ok) return versions;
+        const immutable = (receipt: ResearchRoomReceipt) => {
+          const fields: Record<string, unknown> = { ...receipt };
+          for (const key of ["status", "rollback", "version", "updatedAt", "receiptHash"]) Reflect.deleteProperty(fields, key);
+          return fields;
+        };
+        const immutableCurrent = immutable(current.value);
+        const immutableNext = immutable(next.value);
+        if (current.value.status !== "committed" || next.value.status !== "rolled_back" || !current.value.rollback.available || next.value.rollback.available || !sameValue(immutableCurrent, immutableNext)) return { ok: false, error: researchError("version_conflict") };
+        const data = encodeDomainJson(next.value, parseResearchRoomReceipt); if (!data.ok) return data;
+        const update = db.run(
+          `UPDATE research_room_receipts SET status = ?, version = ?, receipt_hash = ?, updated_at = ?, data = ?
+           WHERE project_id = ? AND receipt_id = ? AND version = ?`,
+          next.value.status, next.value.version, next.value.receiptHash, next.value.updatedAt, data.value,
+          next.value.projectId, next.value.id, expected.value,
+        );
+        return Number(update.changes) === 1 ? next : { ok: false, error: researchError("version_conflict") };
+      });
+    },
+  };
+
+  return Object.freeze({ projects, artifacts, revisions, briefs, decisions, issues, episodes, snapshots, roomReceipts, ...createArgumentGraphRepositories(db) });
 }

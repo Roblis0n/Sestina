@@ -250,6 +250,30 @@ export {
 } from "./snapshot/research-snapshot.js";
 export type { ResearchSnapshot } from "./snapshot/research-snapshot.js";
 
+export {
+  RESEARCH_ROOM_DISPOSITIONS,
+  RESEARCH_ROOM_EVIDENCE_CLASSES,
+  createResearchRoomReceipt,
+  parseResearchRoomAnalysisPayload,
+  parseResearchRoomContextManifest,
+  parseResearchRoomEvidenceClass,
+  parseResearchRoomReceipt,
+  parseResearchRoomStateBinding,
+  rollBackResearchRoomReceipt,
+} from "./room/research-room.js";
+export type {
+  ResearchRoomAnalysisPayload,
+  ResearchRoomContextManifest,
+  ResearchRoomDeltaKind,
+  ResearchRoomDispositionKind,
+  ResearchRoomEvidenceClass,
+  ResearchRoomFinding,
+  ResearchRoomFindingKind,
+  ResearchRoomProviderStatus,
+  ResearchRoomReceipt,
+  ResearchRoomStateBinding,
+} from "./room/research-room.js";
+
 export { CLAIM_KINDS, parseArgumentClaim, parseClaim } from "./argument/claim.js";
 export type { ArgumentClaim, Claim, ClaimKind } from "./argument/claim.js";
 export { parseMechanismLink } from "./argument/mechanism-link.js";
@@ -286,6 +310,7 @@ export type {
   ClaimEvidenceLinkRepository,
   MechanismEvidenceLinkRepository,
   ArgumentGraphRepositories,
+  ResearchRoomReceiptRepository,
   ResearchRepositories,
   ResearchUnitOfWork,
 } from "./ports/repositories.js";

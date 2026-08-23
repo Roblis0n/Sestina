@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "1.0.0",
+  "scenarioId": "ri48-repeated-audit",
+  "evidenceClass": "synthetic_adversarial_fixture",
+  "countsAsExternalEvidence": false,
+  "researchBrief": {
+    "projectQuestion": "Which mechanisms are supported by a synthetic interview corpus?",
+    "currentStage": "revision",
+    "currentTask": "Add one traceable mechanism relation.",
+    "fixedDecision": "Do not reopen the already resolved terminology audit.",
+    "openIssue": "The mechanism still lacks a negative case."
+  },
+  "suggestion": "Deepen the epistemic architecture through a paradigmatic ontology audit and comprehensively problematize every term again.",
+  "expected": {
+    "findingKind": "repeated_audit",
+    "argumentDeltaKind": "no_substantive_delta",
+    "genuineAddition": "No traceable mechanism relation is added.",
+    "alternativeExplanation": "Abstract vocabulary is substituting for the requested mechanism evidence.",
+    "unproven": "Any claimed theoretical advance is unproven.",
+    "authorityBehavior": "model_cannot_reopen_resolved_work_or_accept_itself"
+  }
+}

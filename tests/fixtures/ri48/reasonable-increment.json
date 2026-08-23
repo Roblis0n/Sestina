@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "1.0.0",
+  "scenarioId": "ri48-reasonable-increment",
+  "evidenceClass": "synthetic_fixture",
+  "countsAsExternalEvidence": false,
+  "researchBrief": {
+    "projectQuestion": "How does a bounded reminder affect completion of a synthetic weekly research log?",
+    "currentStage": "analysis",
+    "currentTask": "Interpret the synthetic association without claiming causality.",
+    "fixedDecision": "The synthetic observational comparison cannot establish a causal effect.",
+    "openIssue": "The estimate still needs an uncertainty interval."
+  },
+  "suggestion": "Report the observed association with a confidence interval and state that the non-randomized design leaves selection as an alternative explanation.",
+  "expected": {
+    "findingKind": "reasonable_increment",
+    "argumentDeltaKind": "boundary_condition",
+    "genuineAddition": "Adds an uncertainty interval and an explicit design limitation.",
+    "alternativeExplanation": "Selection into reminder use may explain the association.",
+    "unproven": "A causal effect remains unproven.",
+    "authorityBehavior": "user_confirmation_required_before_commit"
+  }
+}

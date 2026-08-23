@@ -52,7 +52,7 @@ const GUIDANCE_FIXTURES: Record<string, string> = {
   "docs/execution/CURRENT-PLAN.md": [
     "accepted_current_guide",
     "RI-43 为 `pilot_kit_ready_external_validation_deferred_by_user`",
-    "RI-48 是唯一当前产品任务，状态为 `active`",
+    "RI-48 已完成决定驱动的 Local Research Room 垂直切片，状态为 `completed_and_verified_implementation_only`",
     "Market Gate 0",
   ].join("\n"),
   "docs/execution/CURRENT-PLAN-USAGE.md": [
@@ -83,11 +83,11 @@ function activeBlock(currentTask: string): string {
     "<!-- sestina-guide-status: accepted_current -->",
     "<!-- sestina-prework-direction-gate: required -->",
     `<!-- sestina-current-task: ${currentTask} -->`,
-    "<!-- sestina-next-code-goal: implement_RI-48_decision_driven_local_research_room -->",
-    "<!-- sestina-next-execution-goal: build_and_verify_RI-48_with_owner_and_synthetic_scenarios -->",
-    "<!-- sestina-next-code-sequence: RI-48_active -->",
+    "<!-- sestina-next-code-goal: await_new_task_start_record_after_RI48 -->",
+    "<!-- sestina-next-execution-goal: do_not_start_RI49_without_new_gate -->",
+    "<!-- sestina-next-code-sequence: none_active_RI49_not_started -->",
     "<!-- sestina-ri44-to-ri47-status: superseded_unstarted -->",
-    "<!-- sestina-ri48-status: active -->",
+    "<!-- sestina-ri48-status: completed_and_verified_implementation_only -->",
     "<!-- sestina-market-gate-0: deferred_by_user_nonblocking -->",
     "<!-- sestina-ri00: accepted_for_continuation -->",
     "<!-- sestina-ri01: deferred_by_current_user_for_direct_development -->",
@@ -350,7 +350,7 @@ describe("verify-authority negative fixtures", () => {
         root,
         "docs/execution/CURRENT-PLAN.md",
         GUIDANCE_FIXTURES["docs/execution/CURRENT-PLAN.md"].replace(
-          "RI-48 是唯一当前产品任务，状态为 `active`",
+          "RI-48 已完成决定驱动的 Local Research Room 垂直切片，状态为 `completed_and_verified_implementation_only`",
           "RI-48 is blocked",
         ),
       );
@@ -377,11 +377,11 @@ describe("verify-authority negative fixtures", () => {
     expect(r.stderr).toContain("[AUTH-R004]");
   });
 
-  it("N15. reverting RI-48 to planned-not-active in entry markers fails as AUTH-R002", () => {
+  it("N15. reverting completed RI-48 to planned-not-active in entry markers fails as AUTH-R002", () => {
     const r = runAuthority("neg-ri48-planned-not-active", (root) => {
       writeValidEntries(root, {
         "handoff.md": activeBlock("RI-03").replace(
-          "sestina-ri48-status: active",
+          "sestina-ri48-status: completed_and_verified_implementation_only",
           "sestina-ri48-status: planned_not_active",
         ),
       });

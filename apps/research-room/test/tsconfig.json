@@ -1,0 +1,8 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["vitest/globals"]
+  },
+  "include": ["./**/*.ts", "../src/**/*.ts", "../../../tests/helpers/ri48-project.ts"]
+}

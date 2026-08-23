@@ -1,0 +1,35 @@
+{
+  "name": "@sestina/research-room",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Loopback-only local Research Room for Sestina",
+  "license": "UNLICENSED",
+  "type": "module",
+  "bin": {
+    "sestina-research-room": "./dist/main.js"
+  },
+  "main": "./dist/server.js",
+  "exports": {
+    ".": "./dist/server.js",
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "files": [
+    "dist/",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc --noEmit && node ../../scripts/build-research-room.mjs",
+    "test": "vitest run --root ../.. --project unit apps/research-room/test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@sestina/core": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.0",
+    "vitest": "^3.0.0"
+  }
+}

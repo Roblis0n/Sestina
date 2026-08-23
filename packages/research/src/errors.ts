@@ -64,7 +64,10 @@ export type ResearchErrorCode =
   | "invalid_mechanism_link"
   | "invalid_argument_delta"
   | "invalid_argument_evidence"
-  | "invalid_evidence_link";
+  | "invalid_evidence_link"
+  | "invalid_research_room_review"
+  | "invalid_research_room_receipt"
+  | "invalid_research_room_transition";
 
 export type ResearchErrorDetails = Readonly<
   Record<string, string | number | boolean>
@@ -143,4 +146,7 @@ const MESSAGES: Readonly<Record<ResearchErrorCode, string>> = {
   invalid_argument_delta: "argument delta is missing or malformed",
   invalid_argument_evidence: "argument evidence is missing or malformed",
   invalid_evidence_link: "claim or mechanism evidence link is missing or malformed",
+  invalid_research_room_review: "research room review is missing or malformed",
+  invalid_research_room_receipt: "research room receipt is missing or malformed",
+  invalid_research_room_transition: "research room state transition is not allowed",
 };

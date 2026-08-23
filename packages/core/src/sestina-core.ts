@@ -119,6 +119,17 @@ import { RELEASE_IDENTITY } from "./release-identity.js";
 import { coreErr, coreOk, fromDomain, mapDomainError, type CoreResult } from "./errors.js";
 import { RandomIdFactory, SystemClock } from "./id-factory.js";
 import { CoreUnitOfWork } from "./unit-of-work.js";
+import {
+  ResearchRoomService,
+  type AnalyzedResearchRoomReview,
+  type CommitResearchRoomDispositionInput,
+  type PrepareResearchRoomReviewInput,
+  type PreparedResearchRoomReview,
+  type ResearchRoomProvider,
+  type ResearchRoomState,
+  type RollbackResearchRoomReceiptInput,
+} from "./research-room.js";
+import type { ResearchRoomReceipt } from "@sestina/research";
 
 const PAGE = Object.freeze({ limit: 200 });
 const SYSTEM_ACTOR: ResearchActor = Object.freeze({ kind: "system", component: "sestina-core" });
@@ -133,6 +144,8 @@ export interface OpenSestinaOptions {
   readonly immutable?: boolean;
   readonly clock?: Clock;
   readonly idFactory?: IdFactory;
+  readonly researchRoomProvider?: ResearchRoomProvider;
+  readonly researchRoomProviderTimeoutMs?: number;
 }
 
 export interface DeterministicReviewResult {
@@ -280,14 +293,16 @@ export class SestinaCore {
   readonly #clock: Clock;
   readonly #idFactory: IdFactory;
   readonly #unitOfWork: CoreUnitOfWork;
+  readonly #researchRoom: ResearchRoomService;
 
-  constructor(database: StorageDatabase, clock: Clock, idFactory: IdFactory) {
+  constructor(database: StorageDatabase, clock: Clock, idFactory: IdFactory, researchRoomProvider?: ResearchRoomProvider, researchRoomProviderTimeoutMs = 15_000) {
     this.#database = database;
     this.#store = createResearchStore(database);
     this.#reviews = createSqliteReviewRunRepository(database);
     this.#clock = clock;
     this.#idFactory = idFactory;
     this.#unitOfWork = new CoreUnitOfWork(database);
+    this.#researchRoom = new ResearchRoomService(this.#store, clock, idFactory, researchRoomProvider, researchRoomProviderTimeoutMs);
   }
 
   close(): void { this.#database.close(); }
@@ -890,6 +905,13 @@ export class SestinaCore {
   }
   getSnapshot(projectId: string, snapshotId: string): CoreResult<ResearchSnapshot | undefined> { return fromDomain(this.#store.snapshots.getById(projectId, snapshotId)); }
 
+  getResearchRoomState(projectId: string): CoreResult<ResearchRoomState> { return this.#researchRoom.getState(projectId); }
+  prepareResearchRoomReview(input: PrepareResearchRoomReviewInput): CoreResult<PreparedResearchRoomReview> { return this.#researchRoom.prepare(input); }
+  analyzeResearchRoomSuggestion(input: { readonly reviewId: string; readonly confirmationNonce: string; readonly manifestHash: string }): Promise<CoreResult<AnalyzedResearchRoomReview>> { return this.#researchRoom.analyze(input); }
+  commitResearchRoomDisposition(input: CommitResearchRoomDispositionInput): CoreResult<ResearchRoomReceipt> { return this.#researchRoom.commit(input); }
+  listResearchRoomReceipts(projectId: string): CoreResult<readonly ResearchRoomReceipt[]> { return this.#researchRoom.listReceipts(projectId); }
+  rollbackResearchRoomReceipt(input: RollbackResearchRoomReceiptInput): CoreResult<ResearchRoomReceipt> { return this.#researchRoom.rollback(input); }
+
   private get ports(): { readonly clock: Clock; readonly idFactory: IdFactory } { return { clock: this.#clock, idFactory: this.#idFactory }; }
 
   private findBriefVersion(projectId: string, versionId: string): CoreResult<{ readonly brief: ResearchBrief; readonly version: ResearchBriefVersion }> {
@@ -945,13 +967,14 @@ export class SestinaCore {
 export async function openSestina(options: OpenSestinaOptions): Promise<CoreResult<SestinaCore>> {
   if (typeof options.databasePath !== "string" || options.databasePath.trim().length === 0) return coreErr("invalid_input");
   if (options.immutable === true && options.readOnly !== true) return coreErr("invalid_input");
+  if (options.researchRoomProviderTimeoutMs !== undefined && (!Number.isSafeInteger(options.researchRoomProviderTimeoutMs) || options.researchRoomProviderTimeoutMs < 10 || options.researchRoomProviderTimeoutMs > 120_000)) return coreErr("invalid_input");
   try {
     const database = await openDatabase({
       path: options.databasePath,
       readOnly: options.readOnly,
       immutable: options.immutable,
     });
-    return coreOk(new SestinaCore(database, options.clock ?? new SystemClock(), options.idFactory ?? new RandomIdFactory()));
+    return coreOk(new SestinaCore(database, options.clock ?? new SystemClock(), options.idFactory ?? new RandomIdFactory(), options.researchRoomProvider, options.researchRoomProviderTimeoutMs));
   } catch (error) {
     return { ok: false, error: mapDomainError(typeof error === "object" && error !== null ? error : {}) };
   }

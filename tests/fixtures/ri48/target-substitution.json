@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "1.0.0",
+  "scenarioId": "ri48-target-substitution",
+  "evidenceClass": "synthetic_adversarial_fixture",
+  "countsAsExternalEvidence": false,
+  "researchBrief": {
+    "projectQuestion": "How do first-year students describe a synthetic campus navigation tool?",
+    "currentStage": "revision",
+    "currentTask": "Clarify the bounded qualitative finding.",
+    "fixedDecision": "Keep the study focused on first-year student descriptions, not institutional performance.",
+    "openIssue": "One negative case needs to remain visible."
+  },
+  "suggestion": "Reframe the paper as an evaluation of university operational efficiency and conclude that the tool improves institution-wide performance.",
+  "expected": {
+    "findingKind": "target_substitution",
+    "argumentDeltaKind": "research_object_transformation",
+    "genuineAddition": "No admissible addition to the locked research object.",
+    "alternativeExplanation": "The suggestion answers a different institutional-efficiency question.",
+    "unproven": "Institution-wide performance improvement is unproven.",
+    "authorityBehavior": "formal_redirect_requires_explicit_user_confirmation"
+  }
+}

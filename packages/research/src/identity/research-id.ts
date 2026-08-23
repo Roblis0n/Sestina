@@ -21,7 +21,9 @@ export type ResearchIdPrefix =
   | "rdlt_"
   | "rrun_"
   | "rfnd_"
-  | "rsnp_";
+  | "rsnp_"
+  | "rrvw_"
+  | "rrcp_";
 
 export const RESEARCH_ID_PREFIXES: readonly ResearchIdPrefix[] = [
   "rprj_",
@@ -38,6 +40,8 @@ export const RESEARCH_ID_PREFIXES: readonly ResearchIdPrefix[] = [
   "rrun_",
   "rfnd_",
   "rsnp_",
+  "rrvw_",
+  "rrcp_",
 ];
 
 const PREFIX_SET: ReadonlySet<string> = new Set(RESEARCH_ID_PREFIXES);

@@ -73,7 +73,7 @@ describe("Migration 013 (research core persistence)", () => {
     );
     v12.close();
 
-    const upgraded = await openDatabase({ path: legacyPath });
+    const upgraded = await openDatabase({ path: legacyPath, migrate: { migrations: MIGRATIONS.slice(0, 13) } });
     try {
       expect(upgraded.get("SELECT project_id FROM projects WHERE project_id = 'legacy-project'"))
         .toBeTruthy();

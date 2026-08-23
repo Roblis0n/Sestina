@@ -23,6 +23,7 @@
  *   ARCH-R005 packages/core              -> research, research-store, review,
  *                                          reports, storage, config, secrets, schema
  *   ARCH-R006 apps/cli                   -> core, mcp, skills
+ *   ARCH-R012 apps/research-room         -> core only
  *   ARCH-R007 integrations/mcp           -> @sestina/core only
  *   ARCH-R008 integrations/legacy-import -> read-only legacy boundary
  *                                          (legacy packages + mapping targets)
@@ -86,6 +87,11 @@ const NEW_PACKAGE_RULES = {
     id: "ARCH-R007",
     allow: ["core"],
     fix: "integrations/mcp must reach business capabilities through @sestina/core only and must never import storage internals",
+  },
+  "apps/research-room": {
+    id: "ARCH-R012",
+    allow: ["core"],
+    fix: "apps/research-room is a loopback presentation adapter and may reach business capabilities only through @sestina/core",
   },
   "packages/pilot": {
     id: "ARCH-R011",
