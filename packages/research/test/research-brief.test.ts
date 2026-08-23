@@ -113,6 +113,21 @@ describe("versioned Research Brief", () => {
     expect(result.ok).toBe(true);
   });
 
+  it("allows a root-scoped expected delta for browser-created projects with no artifact yet", () => {
+    const input = validInput();
+    const result = createResearchBrief({
+      ...input,
+      targetArtifacts: [],
+      allowedChanges: [],
+      expectedDeltas: [{
+        id: new SequenceIdFactory(9900).create("rbrf_"),
+        statement: "Define the first evidence-bounded research step",
+        scope: { target: { kind: "project_path", relativePath: "." }, operations: ["add"] },
+      }],
+    }, ports());
+    expect(result.ok).toBe(true);
+  });
+
   it("rejects overlapping allowed and forbidden operations on the same normalized scope", () => {
     const input = validInput();
     const conflict = input.allowedChanges[0];

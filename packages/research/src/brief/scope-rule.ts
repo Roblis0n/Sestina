@@ -40,7 +40,7 @@ export function parseScopeRule(input: unknown): ResearchResult<ScopeRule> {
   const raw = input.target;
   let target: ScopeTarget;
   if (raw.kind === "project_path") {
-    const path = parseSafeRelativePath(raw.relativePath);
+    const path = parseSafeRelativePath(raw.relativePath, { allowRoot: true });
     if (!path.ok) return path;
     target = { kind: "project_path", relativePath: path.value };
   } else {

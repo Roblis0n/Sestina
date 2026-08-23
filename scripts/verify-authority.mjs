@@ -70,7 +70,7 @@ const GUIDANCE_FILES = [
     required: [
       "accepted_current_guide",
       "RI-43 为 `pilot_kit_ready_external_validation_deferred_by_user`",
-      "RI-48 已完成决定驱动的 Local Research Room 垂直切片，状态为 `completed_and_verified_implementation_only`",
+      "RI-48 浏览器自动初始化首次使用闭环已完成并验证",
       "Market Gate 0",
     ],
   },
@@ -148,15 +148,15 @@ const MARKER_CONTRACT = {
   },
   "sestina-next-code-goal": {
     exact: "await_new_task_start_record_after_RI48",
-    why: "no later product task is authorized without a new task-start record",
+    why: "RI-48 is complete and no later product task inherits implementation authority",
   },
   "sestina-next-execution-goal": {
     exact: "do_not_start_RI49_without_new_gate",
-    why: "RI-49 remains unstarted until a new direction and task-start gate pass",
+    why: "RI-49 remains unstarted until a new task gate passes",
   },
   "sestina-next-code-sequence": {
     exact: "none_active_RI49_not_started",
-    why: "RI-48 is complete and no later product task is active",
+    why: "no product code sequence is active after the verified RI-48 correction",
   },
   "sestina-ri44-to-ri47-status": {
     exact: "superseded_unstarted",
@@ -164,7 +164,7 @@ const MARKER_CONTRACT = {
   },
   "sestina-ri48-status": {
     exact: "completed_and_verified_implementation_only",
-    why: "RI-48 implementation is verified without claiming external-user evidence",
+    why: "RI-48 including browser first-use initialization passed implementation and host verification without claiming external evidence",
   },
   "sestina-market-gate-0": {
     exact: "deferred_by_user_nonblocking",

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { request as rawRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -129,6 +129,68 @@ describe("RI-48 loopback Research Room", () => {
     const opened = await request<{ readonly project: { readonly id: string }; readonly localOnly: boolean; readonly pathPersisted: boolean; readonly directoryScanPerformed: boolean }>(server.origin, session.sessionToken, "/api/project/open", { projectPath: fixture.root });
     expect(opened.body).toMatchObject({ ok: true, value: { project: { id: fixture.projectId }, localOnly: true, pathPersisted: false, directoryScanPerformed: false } });
     expect(JSON.stringify(opened.body)).not.toContain(fixture.root);
+  });
+
+  it("initializes an explicitly selected plain directory and activates its first Brief entirely through the browser API", async () => {
+    const root = await mkdtemp(join(tmpdir(), "sestina-ri48-browser-init-"));
+    cleanups.push(() => rm(root, { recursive: true, force: true }));
+    const canaryPath = join(root, "existing-research-canary.txt");
+    await writeFile(canaryPath, "existing research bytes must survive\n", "utf8");
+    const server = await start(); const session = await status(server.origin);
+
+    const unconfirmed = await request<unknown>(server.origin, session.sessionToken, "/api/project/open", { projectPath: root });
+    expect(unconfirmed.response.status).toBe(409);
+    expect(unconfirmed.body).toMatchObject({ ok: false, error: { code: "initialization_confirmation_required" } });
+    expect(await readdir(root)).toEqual(["existing-research-canary.txt"]);
+
+    const opened = await request<{
+      readonly project: { readonly id: string; readonly title: string };
+      readonly initialized: boolean;
+      readonly setupRequired: boolean;
+      readonly directoryScanPerformed: boolean;
+      readonly pathPersisted: boolean;
+    }>(server.origin, session.sessionToken, "/api/project/open", { projectPath: root, initializeIfNeeded: true });
+    const openedValue = apiValue(opened.body);
+    expect(openedValue).toMatchObject({ initialized: true, setupRequired: true, directoryScanPerformed: false, pathPersisted: false });
+    expect(JSON.stringify(opened.body)).not.toContain(root);
+    expect((await readdir(join(root, ".sestina"))).sort()).toEqual(expect.arrayContaining(["gitignore-suggestion.txt", "research-brief.yaml", "state.sqlite"]));
+    expect(await readFile(canaryPath, "utf8")).toBe("existing research bytes must survive\n");
+
+    const beforeSetup = await fetch(`${server.origin}/api/state`);
+    expect(beforeSetup.status).toBe(409);
+    expect(await beforeSetup.json()).toMatchObject({ ok: false, error: { code: "brief_setup_required" } });
+
+    const invalidBrief = await request<unknown>(server.origin, session.sessionToken, "/api/project/brief", { projectQuestion: "", currentTask: "" });
+    expect(invalidBrief.response.status).toBe(400);
+    expect(invalidBrief.body).toMatchObject({ ok: false, error: { code: "invalid_input" } });
+
+    const activated = await request<ResearchRoomState>(server.origin, session.sessionToken, "/api/project/brief", {
+      projectQuestion: "How should this explicitly selected local project be studied?",
+      currentTask: "Define the first evidence-bounded research step.",
+    });
+    expect(apiValue(activated.body)).toMatchObject({
+      project: { id: openedValue.project.id },
+      brief: {
+        projectQuestion: "How should this explicitly selected local project be studied?",
+        currentTask: "Define the first evidence-bounded research step.",
+      },
+    });
+    expect(await readFile(canaryPath, "utf8")).toBe("existing research bytes must survive\n");
+    expect(await readFile(join(root, ".sestina", "research-brief.yaml"), "utf8")).toContain("How should this explicitly selected local project be studied?");
+  });
+
+  it("preserves a foreign or partial .sestina directory instead of overwriting it", async () => {
+    const root = await mkdtemp(join(tmpdir(), "sestina-ri48-foreign-state-"));
+    cleanups.push(() => rm(root, { recursive: true, force: true }));
+    const stateDir = join(root, ".sestina"); await mkdir(stateDir);
+    const sentinel = join(stateDir, "foreign.txt"); await writeFile(sentinel, "foreign bytes\n", "utf8");
+    const server = await start(); const session = await status(server.origin);
+
+    const opened = await request<unknown>(server.origin, session.sessionToken, "/api/project/open", { projectPath: root, initializeIfNeeded: true });
+    expect(opened.response.status).toBe(409);
+    expect(opened.body).toMatchObject({ ok: false, error: { code: "state_conflict" } });
+    expect(await readdir(stateDir)).toEqual(["foreign.txt"]);
+    expect(await readFile(sentinel, "utf8")).toBe("foreign bytes\n");
   });
 
   it("shows the exact unsent Manifest before invoking the Provider, then commits only on a separate owner action", async () => {

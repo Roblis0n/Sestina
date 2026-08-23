@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { realpath, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { lstat, mkdir, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { basename, join } from "node:path";
 import {
   openSestina,
   type CoreResult,
@@ -33,6 +33,7 @@ interface OpenedProject {
   readonly root: string;
   readonly project: { readonly id: string; readonly title: string };
   readonly core: SestinaCore;
+  readonly createdBySession: boolean;
 }
 
 class HttpProblem extends Error {
@@ -63,7 +64,37 @@ function hostAllowed(raw: string | undefined): boolean {
   const host = raw.toLowerCase().split(":")[0];
   return host === "127.0.0.1" || host === "localhost";
 }
-async function isFile(path: string): Promise<boolean> { try { return (await stat(path)).isFile(); } catch { return false; } }
+type EntryKind = "missing" | "file" | "directory" | "other";
+async function entryKind(path: string): Promise<EntryKind> {
+  try {
+    const value = await lstat(path);
+    if (value.isSymbolicLink()) return "other";
+    if (value.isFile()) return "file";
+    if (value.isDirectory()) return "directory";
+    return "other";
+  } catch (error) {
+    return isRecord(error) && error.code === "ENOENT" ? "missing" : "other";
+  }
+}
+function renderDraft(projectId: string, title: string): string {
+  return [
+    "schemaVersion: 1",
+    "status: draft",
+    `projectId: ${projectId}`,
+    `title: ${JSON.stringify(title)}`,
+    "projectQuestion: \"\"",
+    "currentStage: question_formulation",
+    "currentTask: \"\"",
+    "targetArtifacts: []",
+    "fixedDecisions: []",
+    "allowedChanges: []",
+    "forbiddenChanges: []",
+    "expectedDeltas: []",
+    "evidenceBoundaries: []",
+    "explicitNonGoals: []",
+    "",
+  ].join("\n");
+}
 async function readBody(request: IncomingMessage): Promise<unknown> {
   let bytes = 0; const chunks: Uint8Array[] = [];
   for await (const raw of request) {
@@ -96,21 +127,96 @@ export class ResearchRoomHttpApplication {
     if (request.headers["x-sestina-session"] !== this.sessionToken) throw new HttpProblem(403, "explicit_action_required", "This action requires the active local session.");
   }
 
+  private async initializeProject(root: string, title: string): Promise<OpenedProject> {
+    const stateDirectory = join(root, ".sestina");
+    const databasePath = join(stateDirectory, "state.sqlite");
+    let core: SestinaCore | undefined;
+    let createdStateDirectory = false;
+    try {
+      await mkdir(stateDirectory);
+      createdStateDirectory = true;
+      core = resultValue(await openSestina({ databasePath, ...(this.provider ? { researchRoomProvider: this.provider } : {}), researchRoomProviderTimeoutMs: this.providerTimeoutMs }));
+      const project = resultValue(core.initializeProject({ title, rootPath: ".", actor: USER }));
+      await writeFile(join(stateDirectory, "research-brief.yaml"), renderDraft(project.id, title), { encoding: "utf8", flag: "wx" });
+      await writeFile(join(stateDirectory, "gitignore-suggestion.txt"), ".sestina/\n", { encoding: "utf8", flag: "wx" });
+      return { root, project: { id: project.id, title: project.title }, core, createdBySession: true };
+    } catch (error) {
+      core?.close();
+      if (createdStateDirectory) await rm(stateDirectory, { recursive: true, force: true }).catch(() => undefined);
+      throw error;
+    }
+  }
+
   private async openProject(input: unknown): Promise<unknown> {
-    if (!isRecord(input)) throw new HttpProblem(400, "invalid_input", "Choose an initialized Sestina project directory.");
+    if (!isRecord(input)) throw new HttpProblem(400, "invalid_input", "Choose a local project directory.");
     const projectPath = text(input.projectPath, 16_384);
-    if (projectPath === undefined) throw new HttpProblem(400, "invalid_input", "Choose an initialized Sestina project directory.");
+    if (projectPath === undefined) throw new HttpProblem(400, "invalid_input", "Choose a local project directory.");
     let root: string;
     try { root = await realpath(projectPath); } catch { throw new HttpProblem(404, "project_not_found", "The selected directory is unavailable."); }
-    const databasePath = join(root, ".sestina", "state.sqlite");
-    const briefPath = join(root, ".sestina", "research-brief.yaml");
-    if (!(await isFile(databasePath)) || !(await isFile(briefPath))) throw new HttpProblem(409, "project_not_initialized", "The selected directory is not an initialized Sestina project.");
-    const opened = resultValue(await openSestina({ databasePath, ...(this.provider ? { researchRoomProvider: this.provider } : {}), researchRoomProviderTimeoutMs: this.providerTimeoutMs }));
-    const projects = resultValue(opened.listProjects());
-    if (projects.length !== 1 || projects[0] === undefined) { opened.close(); throw new HttpProblem(409, "state_conflict", "The selected project binding is inconsistent."); }
+    if (await entryKind(root) !== "directory") throw new HttpProblem(400, "invalid_input", "Choose a local project directory.");
+    const stateDirectory = join(root, ".sestina");
+    const databasePath = join(stateDirectory, "state.sqlite");
+    const briefPath = join(stateDirectory, "research-brief.yaml");
+    const [stateKind, databaseKind, briefKind] = await Promise.all([entryKind(stateDirectory), entryKind(databasePath), entryKind(briefPath)]);
+    let next: OpenedProject;
+    let initialized = false;
+    if (stateKind === "directory" && databaseKind === "file" && briefKind === "file") {
+      const core = resultValue(await openSestina({ databasePath, ...(this.provider ? { researchRoomProvider: this.provider } : {}), researchRoomProviderTimeoutMs: this.providerTimeoutMs }));
+      const projects = resultValue(core.listProjects());
+      if (projects.length !== 1 || projects[0] === undefined) { core.close(); throw new HttpProblem(409, "state_conflict", "The selected project binding is inconsistent."); }
+      next = { root, project: { id: projects[0].id, title: projects[0].title }, core, createdBySession: false };
+    } else if (stateKind === "missing" && databaseKind === "missing" && briefKind === "missing") {
+      if (input.initializeIfNeeded !== true) throw new HttpProblem(409, "initialization_confirmation_required", "Opening this directory can create a local .sestina project after explicit confirmation.");
+      const title = text(input.projectTitle, 512) ?? basename(root);
+      next = await this.initializeProject(root, title);
+      initialized = true;
+    } else {
+      throw new HttpProblem(409, "state_conflict", "A foreign or partial .sestina directory was preserved.");
+    }
+    const brief = resultValue(next.core.getBriefState(next.project.id));
     this.#opened?.core.close();
-    this.#opened = { root, project: { id: projects[0].id, title: projects[0].title }, core: opened };
-    return { project: this.#opened.project, localOnly: true, pathPersisted: false, directoryScanPerformed: false };
+    this.#opened = next;
+    return { project: next.project, initialized, setupRequired: brief === undefined, localOnly: true, pathPersisted: false, directoryScanPerformed: false };
+  }
+
+  private async activateInitialBrief(input: unknown): Promise<unknown> {
+    if (!isRecord(input)) throw new HttpProblem(400, "invalid_input", "Enter the initial research question and current task.");
+    const projectQuestion = text(input.projectQuestion, 4_096);
+    const currentTask = text(input.currentTask, 4_096);
+    if (projectQuestion === undefined || currentTask === undefined) throw new HttpProblem(400, "invalid_input", "Enter the initial research question and current task.");
+    const opened = this.requireOpened();
+    const existing = resultValue(opened.core.getBriefState(opened.project.id));
+    if (existing !== undefined) throw new HttpProblem(409, "state_conflict", "The initial Research Brief is already active.");
+    const brief = resultValue(opened.core.activateBrief({
+      projectId: opened.project.id,
+      actor: USER,
+      projectQuestion,
+      currentStage: "question_formulation",
+      currentTask,
+      targetArtifacts: [],
+      fixedDecisions: [],
+      allowedChanges: [],
+      forbiddenChanges: [],
+      expectedDeltas: [{ statement: currentTask, scope: { target: { kind: "project_path", relativePath: "." }, operations: ["add"] } }],
+      evidenceBoundaries: [],
+      explicitNonGoals: [],
+    }));
+    const projection = resultValue(opened.core.getBriefState(opened.project.id));
+    if (projection?.brief.id !== brief.id) throw new HttpProblem(500, "infrastructure_failure", "The initial Research Brief projection is unavailable.");
+    const target = join(opened.root, ".sestina", "research-brief.yaml");
+    const staged = join(opened.root, ".sestina", `research-brief.${randomBytes(8).toString("hex")}.tmp`);
+    try {
+      await writeFile(staged, projection.yaml, { encoding: "utf8", flag: "wx" });
+      await rename(staged, target);
+    } catch (error) {
+      await rm(staged, { force: true }).catch(() => undefined);
+      if (opened.createdBySession) {
+        opened.core.close(); this.#opened = undefined;
+        await rm(join(opened.root, ".sestina"), { recursive: true, force: true }).catch(() => undefined);
+      }
+      throw error;
+    }
+    return resultValue(opened.core.getResearchRoomState(opened.project.id));
   }
 
   async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
@@ -124,8 +230,12 @@ export class ResearchRoomHttpApplication {
 
       if (request.method === "POST") this.authorize(request);
       if (request.method === "POST" && url.pathname === "/api/project/open") { json(response, 200, { ok: true, value: await this.openProject(await readBody(request)) }); return; }
+      if (request.method === "POST" && url.pathname === "/api/project/brief") { json(response, 200, { ok: true, value: await this.activateInitialBrief(await readBody(request)) }); return; }
       const opened = this.requireOpened();
-      if (request.method === "GET" && url.pathname === "/api/state") { json(response, 200, { ok: true, value: resultValue(opened.core.getResearchRoomState(opened.project.id)) }); return; }
+      if (request.method === "GET" && url.pathname === "/api/state") {
+        if (resultValue(opened.core.getBriefState(opened.project.id)) === undefined) throw new HttpProblem(409, "brief_setup_required", "Complete the initial Research Brief in this browser.");
+        json(response, 200, { ok: true, value: resultValue(opened.core.getResearchRoomState(opened.project.id)) }); return;
+      }
       if (request.method === "POST" && url.pathname === "/api/reviews/prepare") {
         const body = await readBody(request); if (!isRecord(body)) throw new HttpProblem(400, "invalid_input", "The review request is invalid.");
         json(response, 200, { ok: true, value: resultValue(opened.core.prepareResearchRoomReview({ projectId: opened.project.id, suggestion: body.suggestion as string, evidenceClass: body.evidenceClass as never, countsAsExternalEvidence: false })) }); return;

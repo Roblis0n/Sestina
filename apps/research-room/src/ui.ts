@@ -18,6 +18,7 @@ main { padding: 1rem clamp(1rem, 4vw, 3.2rem) 3rem; max-width: 1500px; margin: a
 .notice { border-left: 4px solid #d49b35; padding: .7rem 1rem; margin: 0 0 1rem; background: #fffaf0; }
 .project-open { display: grid; grid-template-columns: minmax(16rem, 1fr) auto; gap: .75rem; align-items: end; margin-bottom: 1rem; }
 .project-open label { margin-top: 0; }
+.setup { max-width: 760px; margin: 0 auto 1rem; }
 .grid { display: grid; grid-template-columns: minmax(18rem, 1fr) minmax(19rem, 1fr) minmax(18rem, 1fr); gap: 1rem; align-items: start; }
 .card { border: 1px solid #d7d2c5; border-radius: 12px; padding: 1rem; background: #fff; box-shadow: 0 2px 10px rgb(23 33 43 / 5%); }
 .card h2, .card h3 { margin-top: 0; font-family: Georgia, serif; }
@@ -50,12 +51,23 @@ export const RESEARCH_ROOM_HTML = String.raw`<!doctype html>
 <body>
   <header><h1>Sestina Research Room</h1><p>围绕当前研究问题工作，而不是从空白聊天开始</p></header>
   <main>
-    <p class="notice">默认仅在本机运行。打开项目、把 Context 发送给已配置 Provider、提交处置、下载凭证和回滚都需要你的显式动作。</p>
+    <p class="notice">默认仅在本机运行。点击“打开或初始化项目”后，如果所选目录还不是 Sestina 项目，会只在该目录创建本地 <code>.sestina</code>；不会扫描目录内容，也不会联网。Context 外发、提交处置、下载凭证和回滚仍需要你的显式动作。</p>
     <form id="project-form" class="project-open">
       <div><label for="project-path">项目目录</label><input id="project-path" name="projectPath" required autocomplete="off" placeholder="D:\\path\\to\\project"></div>
-      <button type="submit">打开所选项目</button>
+      <button type="submit">打开或初始化项目</button>
     </form>
     <div id="live" role="status" aria-live="polite"></div>
+    <section id="project-setup" class="card setup" hidden>
+      <h2>完成初始 Research Brief</h2>
+      <p class="muted">本地项目已经建立。研究问题和当前任务必须由你填写；Sestina 不会根据目录内容或模型输出替你编造。</p>
+      <form id="brief-form">
+        <label for="initial-question">研究问题</label>
+        <textarea id="initial-question" required maxlength="4096" placeholder="你当前真正要回答的研究问题"></textarea>
+        <label for="initial-task">当前研究任务</label>
+        <textarea id="initial-task" required maxlength="4096" placeholder="接下来需要完成的最小研究工作"></textarea>
+        <button type="submit">激活并进入 Research Room</button>
+      </form>
+    </section>
     <section id="room" class="grid" hidden>
       <article class="card">
         <h2>当前研究状态</h2>
@@ -149,8 +161,27 @@ async function rollbackReceipt(receipt) {
   try { await api("/api/receipts/" + encodeURIComponent(receipt.id) + "/rollback", { method: "POST", mutation: true, body: { expectedVersion: receipt.version, reason } }); await refresh(); live("已回滚，并保留可审计凭证。"); } catch (error) { live(error.message, true); }
 }
 $("project-form").addEventListener("submit", async (event) => {
-  event.preventDefault(); live("正在打开所选项目……");
-  try { const opened = await api("/api/project/open", { method: "POST", mutation: true, body: { projectPath: $("project-path").value } }); projectId = opened.project.id; await refresh(); live("项目已在本机打开。路径不会写入凭证或日志。"); } catch (error) { live(error.message, true); }
+  event.preventDefault(); live("正在打开或初始化所选项目……");
+  try {
+    const opened = await api("/api/project/open", { method: "POST", mutation: true, body: { projectPath: $("project-path").value, initializeIfNeeded: true } });
+    projectId = opened.project.id;
+    $("room").hidden = true;
+    $("project-setup").hidden = !opened.setupRequired;
+    if (opened.setupRequired) {
+      live(opened.initialized ? "已在所选目录创建本地 Sestina 项目。请在本页填写初始 Research Brief。" : "项目已打开，但初始 Research Brief 尚未完成。请在本页填写。");
+    } else {
+      await refresh(); live("项目已在本机打开。路径不会写入凭证或日志。");
+    }
+  } catch (error) { live(error.message, true); }
+});
+$("brief-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    const state = await api("/api/project/brief", { method: "POST", mutation: true, body: { projectQuestion: $("initial-question").value, currentTask: $("initial-task").value } });
+    $("project-setup").hidden = true;
+    showState(state);
+    live("初始 Research Brief 已由你激活；现在可以在 Research Room 中继续工作。");
+  } catch (error) { live(error.message, true); }
 });
 $("suggestion-file").addEventListener("change", async () => { const file = $("suggestion-file").files[0]; if (!file) return; if (file.size > 16384) return live("文件超过 16 KiB 限制。", true); $("suggestion").value = await file.text(); live("只读取了你选中的一个文件。"); });
 $("prepare-form").addEventListener("submit", async (event) => {

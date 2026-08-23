@@ -52,7 +52,7 @@ const GUIDANCE_FIXTURES: Record<string, string> = {
   "docs/execution/CURRENT-PLAN.md": [
     "accepted_current_guide",
     "RI-43 为 `pilot_kit_ready_external_validation_deferred_by_user`",
-    "RI-48 已完成决定驱动的 Local Research Room 垂直切片，状态为 `completed_and_verified_implementation_only`",
+    "RI-48 浏览器自动初始化首次使用闭环已完成并验证",
     "Market Gate 0",
   ].join("\n"),
   "docs/execution/CURRENT-PLAN-USAGE.md": [
@@ -350,7 +350,7 @@ describe("verify-authority negative fixtures", () => {
         root,
         "docs/execution/CURRENT-PLAN.md",
         GUIDANCE_FIXTURES["docs/execution/CURRENT-PLAN.md"].replace(
-          "RI-48 已完成决定驱动的 Local Research Room 垂直切片，状态为 `completed_and_verified_implementation_only`",
+          "RI-48 浏览器自动初始化首次使用闭环已完成并验证",
           "RI-48 is blocked",
         ),
       );
