@@ -1,4 +1,5 @@
 import { createResearchRoomServer } from "./server.js";
+import { createNativeDirectoryPicker } from "./directory-picker.js";
 
 function requestedPort(argv: readonly string[]): number {
   const index = argv.indexOf("--port");
@@ -9,7 +10,8 @@ function requestedPort(argv: readonly string[]): number {
 }
 
 try {
-  const instance = createResearchRoomServer({ host: "127.0.0.1", port: requestedPort(process.argv.slice(2)) });
+  const directoryPicker = createNativeDirectoryPicker();
+  const instance = createResearchRoomServer({ host: "127.0.0.1", port: requestedPort(process.argv.slice(2)), ...(directoryPicker ? { directoryPicker } : {}) });
   const running = await instance.start();
   process.stdout.write(`Sestina Research Room: ${running.origin}\n`);
   let stopping = false;

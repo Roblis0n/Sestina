@@ -23,18 +23,19 @@ try {
   let rejectedNonLoopback = false;
   try { createResearchRoomServer({ host: "0.0.0.0" }); } catch { rejectedNonLoopback = true; }
   if (!rejectedNonLoopback) throw new Error("non-loopback bind policy drifted");
-  const localApplication = createResearchRoomServer();
+  const localApplication = createResearchRoomServer({ directoryPicker: { pick: () => Promise.resolve(root) } });
   const canary = join(root, "existing-research-canary.txt");
   await writeFile(canary, "unchanged\n", "utf8");
-  const opened = await request(localApplication.application, localApplication.application.sessionToken, "/api/project/open", { projectPath: root, initializeIfNeeded: true });
+  const opened = await request(localApplication.application, localApplication.application.sessionToken, "/api/project/select-directory", {});
   if (opened.status !== 200 || opened.body?.value?.initialized !== true || opened.body?.value?.setupRequired !== true) throw new Error("offline browser initialization failed");
+  if (opened.body?.value?.selected !== true || JSON.stringify(opened.body).includes(root)) throw new Error("native picker privacy contract drifted");
   const activated = await request(localApplication.application, localApplication.application.sessionToken, "/api/project/brief", { projectQuestion: "Can local first use remain offline?", currentTask: "Verify browser initialization without outbound traffic." });
   if (activated.status !== 200 || activated.body?.value?.brief?.projectQuestion !== "Can local first use remain offline?") throw new Error("offline initial Brief activation failed");
   if (await readFile(canary, "utf8") !== "unchanged\n") throw new Error("existing project file changed");
   localApplication.application.close();
   const background = (await files(root)).filter((path) => /(?:telemetry|crash|upload|retry)[-_]?(?:queue|report)?|\.(?:log|dmp|crash)$/iu.test(path));
   if (background.length !== 0) throw new Error("background artifact created");
-  process.stdout.write(`${JSON.stringify({ researchRoomOfflineVerified: true, browserInitializationVerified: true, initialBriefActivationVerified: true, providerConfigured: false, networkAttempts: 0, loopbackPolicy: true, backgroundArtifacts: 0 })}\n`);
+  process.stdout.write(`${JSON.stringify({ researchRoomOfflineVerified: true, browserInitializationVerified: true, nativePickerFlowVerified: true, initialBriefActivationVerified: true, providerConfigured: false, networkAttempts: 0, loopbackPolicy: true, backgroundArtifacts: 0 })}\n`);
 } finally {
   await rm(root, { recursive: true, force: true });
 }

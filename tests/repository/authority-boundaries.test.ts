@@ -52,7 +52,7 @@ const GUIDANCE_FIXTURES: Record<string, string> = {
   "docs/execution/CURRENT-PLAN.md": [
     "accepted_current_guide",
     "RI-43 为 `pilot_kit_ready_external_validation_deferred_by_user`",
-    "RI-48 浏览器自动初始化首次使用闭环已完成并验证",
+    "RI-48 双模式项目入口与 UI 修正已完成并验证",
     "Market Gate 0",
   ].join("\n"),
   "docs/execution/CURRENT-PLAN-USAGE.md": [
@@ -350,7 +350,7 @@ describe("verify-authority negative fixtures", () => {
         root,
         "docs/execution/CURRENT-PLAN.md",
         GUIDANCE_FIXTURES["docs/execution/CURRENT-PLAN.md"].replace(
-          "RI-48 浏览器自动初始化首次使用闭环已完成并验证",
+          "RI-48 双模式项目入口与 UI 修正已完成并验证",
           "RI-48 is blocked",
         ),
       );
@@ -377,7 +377,7 @@ describe("verify-authority negative fixtures", () => {
     expect(r.stderr).toContain("[AUTH-R004]");
   });
 
-  it("N15. reverting completed RI-48 to planned-not-active in entry markers fails as AUTH-R002", () => {
+  it("N15. reverting active RI-48 entry correction to planned-not-active in entry markers fails as AUTH-R002", () => {
     const r = runAuthority("neg-ri48-planned-not-active", (root) => {
       writeValidEntries(root, {
         "handoff.md": activeBlock("RI-03").replace(

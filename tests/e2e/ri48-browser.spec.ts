@@ -19,11 +19,10 @@ async function scenario(name: Scenario): Promise<ScenarioFixture> {
 
 async function openRoom(page: Page, provider: Ri48FixtureProvider) {
   const fixture = await createRi48Project(); cleanups.push(() => fixture.cleanup());
-  const server = await createResearchRoomServer({ provider }).start(); servers.push(server);
+  const server = await createResearchRoomServer({ provider, directoryPicker: { pick: () => Promise.resolve(fixture.root) } }).start(); servers.push(server);
   await page.goto(server.origin);
   await expect(page.getByRole("status")).toContainText("本地服务已就绪");
-  await page.getByLabel("项目目录").fill(fixture.root);
-  await page.getByRole("button", { name: "打开或初始化项目" }).click();
+  await page.getByRole("button", { name: "选择文件夹并打开" }).click();
   await expect(page.getByRole("heading", { name: "当前研究状态" })).toBeVisible();
   await expect(page.getByText("How should a synthetic observational association be reported?", { exact: true })).toBeVisible();
   return fixture;
@@ -42,25 +41,39 @@ async function prepareAndAnalyze(page: Page, fixture: ScenarioFixture, provider:
 }
 
 test.describe("RI-48 real browser vertical slice", () => {
-  test("first use: selecting a plain directory initializes it and activates the initial Brief without CLI", async ({ page }) => {
+  test("primary mode: the system folder picker opens a plain directory without exposing a path field", async ({ page }) => {
     const root = await mkdtemp(join(tmpdir(), "sestina-ri48-browser-first-use-"));
     cleanups.push(() => rm(root, { recursive: true, force: true }));
     const canary = join(root, "existing-research-canary.txt");
     await writeFile(canary, "must remain unchanged\n", "utf8");
-    const server = await createResearchRoomServer().start(); servers.push(server);
+    const server = await createResearchRoomServer({ directoryPicker: { pick: () => Promise.resolve(root) } }).start(); servers.push(server);
     await page.goto(server.origin);
 
-    await page.getByLabel("项目目录").fill(root);
-    await page.getByRole("button", { name: "打开或初始化项目" }).click();
-    await expect(page.getByRole("heading", { name: "完成初始 Research Brief" })).toBeVisible();
-    await expect(page.getByRole("status")).toContainText("已在所选目录创建本地 Sestina 项目");
+    await expect(page.getByRole("heading", { name: "从一个研究项目开始" })).toBeVisible();
+    await expect(page.getByText("仅在本机", { exact: true })).toBeVisible();
+    await expect(page.getByText("不扫描目录", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "选择文件夹并打开" }).click();
+    await expect(page.getByRole("heading", { name: "建立这项研究的工作主线" })).toBeVisible();
+    await expect(page.getByRole("status")).toContainText("已在所选文件夹完成本地初始化");
     await page.getByLabel("研究问题", { exact: true }).fill("How should first-use browser initialization preserve research authority?");
-    await page.getByLabel("当前研究任务").fill("Verify the browser-owned initialization boundary.");
-    await page.getByRole("button", { name: "激活并进入 Research Room" }).click();
+    await page.getByLabel("当前最小研究任务").fill("Verify the browser-owned initialization boundary.");
+    await page.getByRole("button", { name: "激活 Brief 并进入 Research Room" }).click();
 
     await expect(page.getByRole("heading", { name: "当前研究状态" })).toBeVisible();
     await expect(page.getByText("How should first-use browser initialization preserve research authority?", { exact: true })).toBeVisible();
     expect(await readFile(canary, "utf8")).toBe("must remain unchanged\n");
+  });
+
+  test("fallback mode: manual absolute-path entry remains available", async ({ page }) => {
+    const root = await mkdtemp(join(tmpdir(), "sestina-ri48-browser-manual-mode-"));
+    cleanups.push(() => rm(root, { recursive: true, force: true }));
+    const server = await createResearchRoomServer({ directoryPicker: { pick: () => Promise.resolve(undefined) } }).start(); servers.push(server);
+    await page.goto(server.origin);
+
+    await page.getByText("手动输入绝对路径", { exact: true }).click();
+    await page.getByLabel("项目绝对路径").fill(root);
+    await page.getByRole("button", { name: "按此路径打开或初始化" }).click();
+    await expect(page.getByRole("heading", { name: "建立这项研究的工作主线" })).toBeVisible();
   });
 
   test("reasonable increment: Manifest first, owner accepts, complete receipt persists", async ({ page }) => {

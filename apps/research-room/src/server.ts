@@ -20,6 +20,11 @@ export interface ResearchRoomServerOptions {
   readonly port?: number;
   readonly provider?: ResearchRoomProvider;
   readonly providerTimeoutMs?: number;
+  readonly directoryPicker?: DirectoryPicker;
+}
+
+export interface DirectoryPicker {
+  pick(signal: AbortSignal): Promise<string | undefined>;
 }
 
 export interface RunningResearchRoomServer {
@@ -34,6 +39,15 @@ interface OpenedProject {
   readonly project: { readonly id: string; readonly title: string };
   readonly core: SestinaCore;
   readonly createdBySession: boolean;
+}
+
+interface ProjectOpenResult {
+  readonly project: { readonly id: string; readonly title: string };
+  readonly initialized: boolean;
+  readonly setupRequired: boolean;
+  readonly localOnly: true;
+  readonly pathPersisted: false;
+  readonly directoryScanPerformed: false;
 }
 
 class HttpProblem extends Error {
@@ -113,10 +127,11 @@ function publicError(error: unknown): { readonly status: number; readonly body: 
 export class ResearchRoomHttpApplication {
   readonly sessionToken = randomBytes(32).toString("hex");
   #opened: OpenedProject | undefined;
+  #pickerAbort: AbortController | undefined;
 
-  constructor(private readonly provider?: ResearchRoomProvider, private readonly providerTimeoutMs = 15_000) {}
+  constructor(private readonly provider?: ResearchRoomProvider, private readonly providerTimeoutMs = 15_000, private readonly directoryPicker?: DirectoryPicker) {}
 
-  close(): void { this.#opened?.core.close(); this.#opened = undefined; }
+  close(): void { this.#pickerAbort?.abort(); this.#pickerAbort = undefined; this.#opened?.core.close(); this.#opened = undefined; }
 
   private requireOpened(): OpenedProject {
     if (this.#opened === undefined) throw new HttpProblem(409, "project_not_open", "Open an initialized Sestina project first.");
@@ -147,7 +162,7 @@ export class ResearchRoomHttpApplication {
     }
   }
 
-  private async openProject(input: unknown): Promise<unknown> {
+  private async openProject(input: unknown): Promise<ProjectOpenResult> {
     if (!isRecord(input)) throw new HttpProblem(400, "invalid_input", "Choose a local project directory.");
     const projectPath = text(input.projectPath, 16_384);
     if (projectPath === undefined) throw new HttpProblem(400, "invalid_input", "Choose a local project directory.");
@@ -177,6 +192,21 @@ export class ResearchRoomHttpApplication {
     this.#opened?.core.close();
     this.#opened = next;
     return { project: next.project, initialized, setupRequired: brief === undefined, localOnly: true, pathPersisted: false, directoryScanPerformed: false };
+  }
+
+  private async selectDirectory(): Promise<{ readonly selected: false } | ({ readonly selected: true } & ProjectOpenResult)> {
+    if (this.directoryPicker === undefined) throw new HttpProblem(501, "directory_picker_unavailable", "The system folder picker is unavailable. Use manual path entry instead.");
+    if (this.#pickerAbort !== undefined) throw new HttpProblem(409, "directory_picker_busy", "A system folder picker is already open.");
+    const controller = new AbortController(); this.#pickerAbort = controller;
+    try {
+      let selected: string | undefined;
+      try { selected = await this.directoryPicker.pick(controller.signal); }
+      catch { throw new HttpProblem(502, "directory_picker_failed", "The system folder picker could not be opened. Use manual path entry instead."); }
+      if (selected === undefined) return { selected: false };
+      return { selected: true, ...await this.openProject({ projectPath: selected, initializeIfNeeded: true }) };
+    } finally {
+      if (this.#pickerAbort === controller) this.#pickerAbort = undefined;
+    }
   }
 
   private async activateInitialBrief(input: unknown): Promise<unknown> {
@@ -226,9 +256,10 @@ export class ResearchRoomHttpApplication {
       if (request.method === "GET" && url.pathname === "/") { asset(response, "text/html; charset=utf-8", RESEARCH_ROOM_HTML); return; }
       if (request.method === "GET" && url.pathname === "/app.css") { asset(response, "text/css; charset=utf-8", RESEARCH_ROOM_CSS); return; }
       if (request.method === "GET" && url.pathname === "/app.js") { asset(response, "text/javascript; charset=utf-8", RESEARCH_ROOM_JS); return; }
-      if (request.method === "GET" && url.pathname === "/api/status") { json(response, 200, { ok: true, value: { localOnly: true, telemetry: false, projectOpen: this.#opened !== undefined, sessionToken: this.sessionToken } }); return; }
+      if (request.method === "GET" && url.pathname === "/api/status") { json(response, 200, { ok: true, value: { localOnly: true, telemetry: false, projectOpen: this.#opened !== undefined, directoryPickerAvailable: this.directoryPicker !== undefined, sessionToken: this.sessionToken } }); return; }
 
       if (request.method === "POST") this.authorize(request);
+      if (request.method === "POST" && url.pathname === "/api/project/select-directory") { json(response, 200, { ok: true, value: await this.selectDirectory() }); return; }
       if (request.method === "POST" && url.pathname === "/api/project/open") { json(response, 200, { ok: true, value: await this.openProject(await readBody(request)) }); return; }
       if (request.method === "POST" && url.pathname === "/api/project/brief") { json(response, 200, { ok: true, value: await this.activateInitialBrief(await readBody(request)) }); return; }
       const opened = this.requireOpened();
@@ -275,7 +306,7 @@ export function createResearchRoomServer(options: ResearchRoomServerOptions = {}
   if (host !== LOOPBACK) throw new Error("Research Room must bind to 127.0.0.1.");
   const port = options.port ?? 0;
   if (!Number.isSafeInteger(port) || port < 0 || port > 65_535) throw new Error("Invalid Research Room port.");
-  const application = new ResearchRoomHttpApplication(options.provider, options.providerTimeoutMs);
+  const application = new ResearchRoomHttpApplication(options.provider, options.providerTimeoutMs, options.directoryPicker);
   const server = createServer((request, response) => { void application.handle(request, response); });
   server.on("clientError", (_error, socket) => { socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n"); });
   return {

@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promis
 import { request as rawRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createResearchRoomServer, type RunningResearchRoomServer } from "../src/server.js";
+import { createResearchRoomServer, type DirectoryPicker, type RunningResearchRoomServer } from "../src/server.js";
 import {
   openSestina,
   type AnalyzedResearchRoomReview,
@@ -101,8 +101,8 @@ afterEach(async () => { while (running.length) await running.pop()?.close(); whi
 type ApiEnvelope<T> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: { readonly code: string; readonly message?: string } };
 function apiValue<T>(body: ApiEnvelope<T>): T { if (!body.ok) throw new Error(body.error.code); return body.value; }
 
-async function start(provider?: Ri48FixtureProvider) {
-  const value = await createResearchRoomServer({ ...(provider ? { provider } : {}) }).start(); running.push(value); return value;
+async function start(provider?: Ri48FixtureProvider, directoryPicker?: DirectoryPicker) {
+  const value = await createResearchRoomServer({ ...(provider ? { provider } : {}), ...(directoryPicker ? { directoryPicker } : {}) }).start(); running.push(value); return value;
 }
 async function status(origin: string) { const response = await fetch(`${origin}/api/status`); return (await response.json() as { value: { sessionToken: string } }).value; }
 async function request<T>(origin: string, token: string, path: string, body: unknown) {
@@ -177,6 +177,70 @@ describe("RI-48 loopback Research Room", () => {
     });
     expect(await readFile(canaryPath, "utf8")).toBe("existing research bytes must survive\n");
     expect(await readFile(join(root, ".sestina", "research-brief.yaml"), "utf8")).toContain("How should this explicitly selected local project be studied?");
+  });
+
+  it("uses an injected native directory picker as the primary mode without returning the selected path", async () => {
+    const root = await mkdtemp(join(tmpdir(), "sestina-ri48-native-picker-"));
+    cleanups.push(() => rm(root, { recursive: true, force: true }));
+    const canary = join(root, "existing-research-canary.txt");
+    await writeFile(canary, "unchanged by native selection\n", "utf8");
+    let calls = 0;
+    const directoryPicker: DirectoryPicker = { pick: () => { calls += 1; return Promise.resolve(root); } };
+    const server = await start(undefined, directoryPicker); const session = await status(server.origin);
+
+    const denied = await fetch(`${server.origin}/api/project/select-directory`, { method: "POST" });
+    expect(denied.status).toBe(403);
+    const selected = await request<{
+      readonly selected: boolean;
+      readonly initialized: boolean;
+      readonly setupRequired: boolean;
+      readonly directoryScanPerformed: boolean;
+      readonly pathPersisted: boolean;
+    }>(server.origin, session.sessionToken, "/api/project/select-directory", {});
+
+    expect(calls).toBe(1);
+    expect(apiValue(selected.body)).toMatchObject({ selected: true, initialized: true, setupRequired: true, directoryScanPerformed: false, pathPersisted: false });
+    expect(JSON.stringify(selected.body)).not.toContain(root);
+    expect(await readFile(canary, "utf8")).toBe("unchanged by native selection\n");
+  });
+
+  it("treats native picker cancellation as a zero-write outcome and reports picker availability", async () => {
+    const root = await mkdtemp(join(tmpdir(), "sestina-ri48-picker-cancel-"));
+    cleanups.push(() => rm(root, { recursive: true, force: true }));
+    const server = await start(undefined, { pick: () => Promise.resolve(undefined) }); const session = await status(server.origin);
+
+    const statusResponse = await fetch(`${server.origin}/api/status`);
+    expect(await statusResponse.json()).toMatchObject({ ok: true, value: { directoryPickerAvailable: true } });
+    const cancelled = await request<{ readonly selected: boolean }>(server.origin, session.sessionToken, "/api/project/select-directory", {});
+    expect(apiValue(cancelled.body)).toEqual({ selected: false });
+    expect(await readdir(root)).toEqual([]);
+  });
+
+  it("allows only one native picker at a time and leaves the first request cancellable", async () => {
+    let pickerStarted!: () => void;
+    let resolvePicker!: (value: undefined) => void;
+    const started = new Promise<void>((resolve) => { pickerStarted = resolve; });
+    const selected = new Promise<undefined>((resolve) => { resolvePicker = resolve; });
+    const server = await start(undefined, { pick: () => { pickerStarted(); return selected; } });
+    const session = await status(server.origin);
+
+    const first = request<{ readonly selected: boolean }>(server.origin, session.sessionToken, "/api/project/select-directory", {});
+    await started;
+    const overlapping = await request<unknown>(server.origin, session.sessionToken, "/api/project/select-directory", {});
+    expect(overlapping.response.status).toBe(409);
+    expect(overlapping.body).toMatchObject({ ok: false, error: { code: "directory_picker_busy" } });
+
+    resolvePicker(undefined);
+    expect(apiValue((await first).body)).toEqual({ selected: false });
+  });
+
+  it("keeps manual mode available when no native directory picker is configured", async () => {
+    const server = await start(); const session = await status(server.origin);
+    const statusResponse = await fetch(`${server.origin}/api/status`);
+    expect(await statusResponse.json()).toMatchObject({ ok: true, value: { directoryPickerAvailable: false } });
+    const unavailable = await request<unknown>(server.origin, session.sessionToken, "/api/project/select-directory", {});
+    expect(unavailable.response.status).toBe(501);
+    expect(unavailable.body).toMatchObject({ ok: false, error: { code: "directory_picker_unavailable" } });
   });
 
   it("preserves a foreign or partial .sestina directory instead of overwriting it", async () => {
