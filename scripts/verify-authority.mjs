@@ -5,7 +5,7 @@
  *
  * Guards the ACTIVE authority regions of the repository entry documents so
  * stale product direction (old Task 11, RI-00 stop line, generic Agent OS,
- * CLI/MCP-first, or premature RI-48 activation) cannot re-enter the entry
+ * CLI/MCP-first, or the superseded RI-43-before-RI-48 gate) cannot re-enter the entry
  * points as current guidance.
  *
  * Only the region between SESTINA_ACTIVE_AUTHORITY_START and
@@ -69,8 +69,8 @@ const GUIDANCE_FILES = [
     path: "docs/execution/CURRENT-PLAN.md",
     required: [
       "accepted_current_guide",
-      "RI-43 为 `pilot_kit_ready_waiting_external_participants`",
-      "RI-48 是门禁后的首个计划产品任务，当前为 `planned_not_active`",
+      "RI-43 为 `pilot_kit_ready_external_validation_deferred_by_user`",
+      "RI-48 是唯一当前产品任务，状态为 `active`",
       "Market Gate 0",
     ],
   },
@@ -147,28 +147,28 @@ const MARKER_CONTRACT = {
     why: "the current task id must be a well-formed RI-XX id consistent across entries",
   },
   "sestina-next-code-goal": {
-    exact: "blocked_until_RI-43_evidence_and_Market_Gate_0",
-    why: "new product code must remain blocked while RI-43 and Market Gate 0 evidence are absent",
+    exact: "implement_RI-48_decision_driven_local_research_room",
+    why: "the current code goal is the explicitly authorized RI-48 Research Room vertical slice",
   },
   "sestina-next-execution-goal": {
-    exact: "run 5-10 real external researcher sessions and observe second-task reuse",
-    why: "the immediate action is real RI-43 evidence collection",
+    exact: "build_and_verify_RI-48_with_owner_and_synthetic_scenarios",
+    why: "the immediate action is RI-48 implementation with evidence-classified development scenarios",
   },
   "sestina-next-code-sequence": {
-    exact: "RI-48_planned_not_active",
-    why: "RI-48 is the planned next product task but is not active",
+    exact: "RI-48_active",
+    why: "RI-48 is the unique active product task",
   },
   "sestina-ri44-to-ri47-status": {
     exact: "superseded_unstarted",
     why: "old RI-44 through RI-47 were superseded without being implemented",
   },
   "sestina-ri48-status": {
-    exact: "planned_not_active",
-    why: "RI-48 must not be activated before its evidence gates",
+    exact: "active",
+    why: "the user explicitly authorized development before later external feedback",
   },
   "sestina-market-gate-0": {
-    exact: "not_started",
-    why: "Market Gate 0 has not yet produced real evidence",
+    exact: "deferred_by_user_nonblocking",
+    why: "Market Gate 0 remains unrun but no longer blocks the explicitly authorized RI-48 implementation",
   },
   "sestina-ri00": {
     exact: "accepted_for_continuation",

@@ -51,8 +51,8 @@ const GUIDANCE_FIXTURES: Record<string, string> = {
   ].join("\n"),
   "docs/execution/CURRENT-PLAN.md": [
     "accepted_current_guide",
-    "RI-43 为 `pilot_kit_ready_waiting_external_participants`",
-    "RI-48 是门禁后的首个计划产品任务，当前为 `planned_not_active`",
+    "RI-43 为 `pilot_kit_ready_external_validation_deferred_by_user`",
+    "RI-48 是唯一当前产品任务，状态为 `active`",
     "Market Gate 0",
   ].join("\n"),
   "docs/execution/CURRENT-PLAN-USAGE.md": [
@@ -83,12 +83,12 @@ function activeBlock(currentTask: string): string {
     "<!-- sestina-guide-status: accepted_current -->",
     "<!-- sestina-prework-direction-gate: required -->",
     `<!-- sestina-current-task: ${currentTask} -->`,
-    "<!-- sestina-next-code-goal: blocked_until_RI-43_evidence_and_Market_Gate_0 -->",
-    "<!-- sestina-next-execution-goal: run 5-10 real external researcher sessions and observe second-task reuse -->",
-    "<!-- sestina-next-code-sequence: RI-48_planned_not_active -->",
+    "<!-- sestina-next-code-goal: implement_RI-48_decision_driven_local_research_room -->",
+    "<!-- sestina-next-execution-goal: build_and_verify_RI-48_with_owner_and_synthetic_scenarios -->",
+    "<!-- sestina-next-code-sequence: RI-48_active -->",
     "<!-- sestina-ri44-to-ri47-status: superseded_unstarted -->",
-    "<!-- sestina-ri48-status: planned_not_active -->",
-    "<!-- sestina-market-gate-0: not_started -->",
+    "<!-- sestina-ri48-status: active -->",
+    "<!-- sestina-market-gate-0: deferred_by_user_nonblocking -->",
     "<!-- sestina-ri00: accepted_for_continuation -->",
     "<!-- sestina-ri01: deferred_by_current_user_for_direct_development -->",
     "<!-- sestina-ri02: deferred_by_current_user_for_direct_development -->",
@@ -343,15 +343,15 @@ describe("verify-authority negative fixtures", () => {
     expect(r.stderr).toContain("docs/execution/CURRENT-PLAN.md");
   });
 
-  it("N13. current guide losing the RI-48 evidence boundary fails as AUTH-R006", () => {
-    const r = runAuthority("neg-guide-loses-ri48-boundary", (root) => {
+  it("N13. current guide losing the develop-first evidence boundary fails as AUTH-R006", () => {
+    const r = runAuthority("neg-guide-loses-develop-first-boundary", (root) => {
       writeValidEntries(root);
       writeEntry(
         root,
         "docs/execution/CURRENT-PLAN.md",
         GUIDANCE_FIXTURES["docs/execution/CURRENT-PLAN.md"].replace(
-          "RI-48 是门禁后的首个计划产品任务，当前为 `planned_not_active`",
-          "RI-48 is active",
+          "RI-48 是唯一当前产品任务，状态为 `active`",
+          "RI-48 is blocked",
         ),
       );
     });
@@ -377,12 +377,12 @@ describe("verify-authority negative fixtures", () => {
     expect(r.stderr).toContain("[AUTH-R004]");
   });
 
-  it("N15. activating RI-48 in entry markers fails as AUTH-R002", () => {
-    const r = runAuthority("neg-ri48-active", (root) => {
+  it("N15. reverting RI-48 to planned-not-active in entry markers fails as AUTH-R002", () => {
+    const r = runAuthority("neg-ri48-planned-not-active", (root) => {
       writeValidEntries(root, {
         "handoff.md": activeBlock("RI-03").replace(
-          "sestina-ri48-status: planned_not_active",
           "sestina-ri48-status: active",
+          "sestina-ri48-status: planned_not_active",
         ),
       });
     });
