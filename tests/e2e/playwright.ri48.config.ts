@@ -15,7 +15,7 @@ export default defineConfig({
   use: {
     headless: true,
     locale: "zh-CN",
-    viewport: { width: 1440, height: 1000 },
+    viewport: { width: 1440, height: 900 },
     trace: "retain-on-failure",
     launchOptions: existsSync(edge) ? { executablePath: edge } : undefined,
   },

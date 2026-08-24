@@ -5,6 +5,7 @@ export type CoreErrorCode =
   | "state_conflict"
   | "user_confirmation_required"
   | "review_blocked"
+  | "operation_cancelled"
   | "infrastructure_failure"
   | "unsupported_format";
 
@@ -24,6 +25,7 @@ const MESSAGES: Readonly<Record<CoreErrorCode, string>> = {
   state_conflict: "The requested lifecycle transition is not allowed.",
   user_confirmation_required: "An explicit user action is required.",
   review_blocked: "The review could not establish a usable result.",
+  operation_cancelled: "The operation was cancelled before a usable result was created.",
   infrastructure_failure: "The local research state is unavailable.",
   unsupported_format: "The requested output format is not supported.",
 };

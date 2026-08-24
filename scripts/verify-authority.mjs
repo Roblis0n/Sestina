@@ -70,7 +70,9 @@ const GUIDANCE_FILES = [
     required: [
       "accepted_current_guide",
       "RI-43 为 `pilot_kit_ready_external_validation_deferred_by_user`",
-      "RI-48 首次语言与电脑端体验基线已完成并验证",
+      "UI-01 Production App Shell",
+      "completed_and_verified",
+      "当前没有活动编码任务",
       "completed_and_verified_implementation_real_provider_evidence_blocked",
       "Market Gate 0",
     ],
@@ -89,6 +91,26 @@ const GUIDANCE_FILES = [
       "required_before_every_task",
       "Gate A：方向成立",
       "final: ready_to_start | do_not_start",
+    ],
+  },
+  {
+    path: "docs/execution/UI-01-PRODUCTION-APP-SHELL-TASK-START-RECORD.md",
+    required: [
+      "task: UI-01",
+      "status: ready_to_start",
+      "final: ready_to_start",
+      "ri49_status: not_started",
+      "blocked_missing_user_config",
+    ],
+  },
+  {
+    path: "docs/execution/UI-01-PRODUCTION-APP-SHELL-TASK-RESULT.md",
+    required: [
+      "task: UI-01",
+      "status: completed_and_verified",
+      "pnpm_verify: passed",
+      "ri49_status: not_started",
+      "blocked_missing_user_config",
     ],
   },
 ];
@@ -144,20 +166,24 @@ const MARKER_CONTRACT = {
     why: "every task must pass the product-direction gate before work begins",
   },
   "sestina-current-task": {
-    pattern: /^RI-\d+$/,
-    why: "the current task id must be a well-formed RI-XX id consistent across entries",
+    pattern: /^(?:RI|UI)-\d+$/,
+    why: "the current task id must be well formed and consistent across entries",
+  },
+  "sestina-current-status": {
+    exact: "completed_and_verified",
+    why: "UI-01 is the most recently completed task and the full production migration is verified",
   },
   "sestina-next-code-goal": {
     exact: "none_active_RI49_not_started",
-    why: "the RI-48 implementation slice is complete and RI-49 has not started",
+    why: "no next code task is authorized and RI-49 remains not started",
   },
   "sestina-next-execution-goal": {
-    exact: "await_explicit_user_provider_config_for_real_provider_evidence",
-    why: "real Provider evidence requires an explicit user configuration",
+    exact: "await_explicit_user_authorization",
+    why: "the next execution must await explicit user authority and a new task-start record",
   },
   "sestina-next-code-sequence": {
     exact: "none_active_RI49_not_started",
-    why: "no coding slice is active and RI-49 remains not started",
+    why: "UI-01 is complete, no code sequence is active, and RI-49 remains not started",
   },
   "sestina-ri44-to-ri47-status": {
     exact: "superseded_unstarted",
@@ -322,6 +348,11 @@ for (const entry of ENTRY_FILES) {
 const tasks = [...currentTasks.entries()];
 if (tasks.length > 0) {
   const first = tasks[0][1];
+  if (first !== "UI-01") {
+    err(
+      `[AUTH-R003] ${tasks[0][0]}: current task is '${first}' but the latest governed task is 'UI-01'`,
+    );
+  }
   for (const [entry, task] of tasks) {
     if (task !== first) {
       err(

@@ -9,6 +9,7 @@ export const EXIT_CODES = Object.freeze({
   infrastructureFailure: 6,
   userConfirmationRequired: 7,
   unsupportedFormat: 8,
+  operationCancelled: 9,
 } as const);
 
 export type CliExitCode = typeof EXIT_CODES[keyof typeof EXIT_CODES];
@@ -23,5 +24,6 @@ export function exitCodeForCoreError(code: CoreErrorCode): CliExitCode {
     case "infrastructure_failure": return EXIT_CODES.infrastructureFailure;
     case "user_confirmation_required": return EXIT_CODES.userConfirmationRequired;
     case "unsupported_format": return EXIT_CODES.unsupportedFormat;
+    case "operation_cancelled": return EXIT_CODES.operationCancelled;
   }
 }

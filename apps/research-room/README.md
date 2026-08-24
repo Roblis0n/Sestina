@@ -10,11 +10,12 @@ Context, browser storage, or Git, and it never changes user research text.
 
 On Windows, the primary project action opens the operating system's folder
 picker; a manual absolute-path mode remains available as a fallback. It opens
-only the directory the owner explicitly selects. When that directory has no
-`.sestina`, the same open-or-initialize action creates the local project and asks
-the owner for the initial research question and current task on the next screen.
-It then shows the exact Context Manifest before any Provider call and requires a
-separate explicit owner action before a disposition can change research state.
+only the directory the owner explicitly selects. An existing Sestina project
+opens immediately. A plain directory first produces a path-free initialization
+preview and a one-use confirmation nonce; only the separate **Initialize this
+folder** action creates `.sestina`. The owner then supplies the initial research
+question and current task. No first-render, picker-preview, or cancelled action
+writes to the selected directory.
 
 The top-right Provider settings dialog supports exactly one
 `openai_compatible` family. Enter a Base URL, model, and API key for external
@@ -35,7 +36,23 @@ the model, derives Findings, ArgumentDelta, unknowns, and reasonable-increment
 status; only the owner can commit one of the five dispositions. Cancelling,
 timeouts, invalid output, changed configuration, or no configuration fail
 closed to the local ledger without partial semantic findings or authority
-writes.
+writes. Cancellation remains a true server-side operation after a request has
+started: the Kernel validates the bound operation nonce and Manifest hash,
+aborts the Provider signal, and refuses to persist an analyzed entry.
+
+## Production client architecture
+
+The only shipped page is the React / TypeScript / Vite client under `client/`.
+It uses a single typed API facade in `client/src/api/client.ts`; runtime decoders
+reject malformed HTTP envelopes and payloads before components can consume
+them. Screens and product components never derive assessments, Findings,
+ArgumentDelta, authority, or receipts. Those remain Kernel results.
+
+The production build emits fingerprinted JavaScript and CSS. The loopback
+server serves those files without a Vite development server, applies a
+same-origin CSP and security headers, returns a diagnosable JSON 404 for missing
+assets, and supports extensionless SPA refreshes. No CDN, remote font, telemetry,
+or client-side project-path history is used.
 
 From the repository root:
 
@@ -51,14 +68,21 @@ telemetry, or write an export without an explicit user action. Existing files in
 the selected directory are not imported or modified. A foreign or partial
 `.sestina` directory is preserved and rejected instead of being overwritten.
 The selected path stays inside the local server process and is never returned by
-the folder-picker API. Cancelling the system dialog performs no write. On hosts
-where the native picker is unavailable, the UI exposes manual mode immediately.
+the folder-picker API. The preview response contains only whether the folder is
+an existing project or can be initialized, plus the one-use nonce required for
+initialization. Cancelling the system dialog or declining initialization
+performs no write. On hosts where the native picker is unavailable, the UI
+exposes manual mode immediately.
 
-The shipped UI is a desktop research workstation with bilingual entry, Brief,
-Room, feedback, and recovery copy. Short transitions communicate view entry,
-busy work, stage progression, findings, and receipts. When Windows or the
-browser requests reduced motion, nonessential animation is disabled and the
-entire workflow remains operable.
+The shipped UI is a desktop `Thread + Inspector` research workstation with a
+Start Center, project/Review Room navigation, a central review workflow, a
+conditional Context Inspector, receipts, rollback, runtime status, and
+bilingual recovery copy. Appearance preferences are a strict versioned
+allowlist in browser storage: follow system, light, dark, or high contrast;
+reduced motion and reduced transparency are independent. High contrast forces
+opaque black/white surfaces. The 1280px layout collapses project navigation and
+presents the Inspector as a focus-trapped sheet; Escape closes it and focus is
+restored. The same core workflow remains usable by keyboard and at 200% text.
 
 The development-only Semantic Judge benchmark and its reproducible
 export/run/import/evaluate workflow are documented at

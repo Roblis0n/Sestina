@@ -1,12 +1,17 @@
 #!/usr/bin/env node
 import { build } from "esbuild";
-import { mkdir } from "node:fs/promises";
+import { mkdir, rm } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
+const appRequire = createRequire(resolve(root, "apps/research-room/package.json"));
+const { build: buildClient } = await import(pathToFileURL(appRequire.resolve("vite")).href);
 const outdir = resolve(root, "apps/research-room/dist");
+await rm(outdir, { recursive: true, force: true });
 await mkdir(outdir, { recursive: true });
+await buildClient({ configFile: resolve(root, "apps/research-room/vite.config.ts") });
 await build({
   entryPoints: {
     main: resolve(root, "apps/research-room/src/main.ts"),

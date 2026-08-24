@@ -1,14 +1,14 @@
 import { randomBytes } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { lstat, mkdir, realpath, rename, rm, writeFile } from "node:fs/promises";
-import { basename, join } from "node:path";
+import { lstat, mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { basename, extname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   openSestina,
   type CoreResult,
   type ResearchRoomProvider,
   type SestinaCore,
 } from "@sestina/core";
-import { RESEARCH_ROOM_CSS, RESEARCH_ROOM_HTML, RESEARCH_ROOM_JS } from "./ui.js";
 import { isAppLanguage, type LanguagePreferenceStore } from "./language-preferences.js";
 import { createOpenAICompatibleProvider } from "./openai-compatible-provider.js";
 import { ProviderSettingsError, type ProviderConfigurationService, type SaveOpenAICompatibleProviderInput } from "./provider-settings.js";
@@ -17,7 +17,8 @@ const LOOPBACK = "127.0.0.1";
 const BODY_LIMIT = 65_536;
 const BROWSER_BLOCKED_PORTS = new Set([1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79, 87, 95, 101, 102, 103, 104, 109, 110, 111, 113, 115, 117, 119, 123, 135, 137, 139, 143, 161, 179, 389, 427, 465, 512, 513, 514, 515, 526, 530, 531, 532, 540, 548, 554, 556, 563, 587, 601, 636, 989, 990, 993, 995, 1719, 1720, 1723, 2049, 3659, 4045, 4190, 5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668, 6669, 6697, 10080]);
 const USER = Object.freeze({ kind: "user" as const, actorId: "local-research-owner" });
-const CSP = "default-src 'self'; base-uri 'none'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self' blob:; object-src 'none'; script-src 'self'; style-src 'self'";
+const CSP = "default-src 'self'; base-uri 'none'; connect-src 'self'; font-src 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self' blob:; manifest-src 'self'; object-src 'none'; script-src 'self'; style-src 'self'";
+const DEFAULT_CLIENT_ASSET_ROOT = resolve(fileURLToPath(new URL("../dist/client", import.meta.url)));
 
 export interface ResearchRoomServerOptions {
   readonly host?: string;
@@ -27,6 +28,7 @@ export interface ResearchRoomServerOptions {
   readonly directoryPicker?: DirectoryPicker;
   readonly languagePreferenceStore?: LanguagePreferenceStore;
   readonly providerConfigurationService?: ProviderConfigurationService;
+  readonly clientAssetRoot?: string;
 }
 
 export interface DirectoryPicker {
@@ -56,6 +58,12 @@ interface ProjectOpenResult {
   readonly directoryScanPerformed: false;
 }
 
+interface PendingProjectInitialization {
+  readonly root: string;
+  readonly title: string;
+  readonly confirmationNonce: string;
+}
+
 class HttpProblem extends Error {
   constructor(readonly status: number, readonly code: string, message: string) { super(message); }
 }
@@ -75,9 +83,23 @@ function json(response: ServerResponse, status: number, body: unknown): void {
   response.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" });
   response.end(JSON.stringify(body));
 }
-function asset(response: ServerResponse, contentType: string, body: string): void {
-  response.writeHead(200, { "content-type": contentType, "cache-control": "no-store", "content-security-policy": CSP, "referrer-policy": "no-referrer", "x-content-type-options": "nosniff", "x-frame-options": "DENY" });
+function asset(response: ServerResponse, contentType: string, body: string | Uint8Array, immutable = false): void {
+  response.writeHead(200, { "content-type": contentType, "cache-control": immutable ? "public, max-age=31536000, immutable" : "no-store", "content-security-policy": CSP, "cross-origin-opener-policy": "same-origin", "referrer-policy": "no-referrer", "x-content-type-options": "nosniff", "x-frame-options": "DENY" });
   response.end(body);
+}
+
+function clientContentType(path: string): string | undefined {
+  switch (extname(path).toLowerCase()) {
+    case ".html": return "text/html; charset=utf-8";
+    case ".js": return "text/javascript; charset=utf-8";
+    case ".css": return "text/css; charset=utf-8";
+    case ".json": return "application/json; charset=utf-8";
+    case ".svg": return "image/svg+xml";
+    case ".png": return "image/png";
+    case ".webp": return "image/webp";
+    case ".woff2": return "font/woff2";
+    default: return undefined;
+  }
 }
 function hostAllowed(raw: string | undefined): boolean {
   if (raw === undefined) return false;
@@ -134,6 +156,7 @@ export class ResearchRoomHttpApplication {
   readonly sessionToken = randomBytes(32).toString("hex");
   #opened: OpenedProject | undefined;
   #pickerAbort: AbortController | undefined;
+  #pendingInitialization: PendingProjectInitialization | undefined;
 
   constructor(
     private readonly provider?: ResearchRoomProvider,
@@ -141,9 +164,10 @@ export class ResearchRoomHttpApplication {
     private readonly directoryPicker?: DirectoryPicker,
     private readonly languagePreferenceStore?: LanguagePreferenceStore,
     private readonly providerConfigurationService?: ProviderConfigurationService,
+    private readonly clientAssetRoot = DEFAULT_CLIENT_ASSET_ROOT,
   ) {}
 
-  close(): void { this.#pickerAbort?.abort(); this.#pickerAbort = undefined; this.#opened?.core.close(); this.#opened = undefined; }
+  close(): void { this.#pickerAbort?.abort(); this.#pickerAbort = undefined; this.#pendingInitialization = undefined; this.#opened?.core.close(); this.#opened = undefined; }
 
   private requireOpened(): OpenedProject {
     if (this.#opened === undefined) throw new HttpProblem(409, "project_not_open", "Open an initialized Sestina project first.");
@@ -273,19 +297,70 @@ export class ResearchRoomHttpApplication {
     return { project: next.project, initialized, setupRequired: brief === undefined, localOnly: true, pathPersisted: false, directoryScanPerformed: false };
   }
 
-  private async selectDirectory(): Promise<{ readonly selected: false } | ({ readonly selected: true } & ProjectOpenResult)> {
+  private async pickDirectory(): Promise<string | undefined> {
     if (this.directoryPicker === undefined) throw new HttpProblem(501, "directory_picker_unavailable", "The system folder picker is unavailable. Use manual path entry instead.");
     if (this.#pickerAbort !== undefined) throw new HttpProblem(409, "directory_picker_busy", "A system folder picker is already open.");
     const controller = new AbortController(); this.#pickerAbort = controller;
     try {
-      let selected: string | undefined;
-      try { selected = await this.directoryPicker.pick(controller.signal); }
+      try { return await this.directoryPicker.pick(controller.signal); }
       catch { throw new HttpProblem(502, "directory_picker_failed", "The system folder picker could not be opened. Use manual path entry instead."); }
-      if (selected === undefined) return { selected: false };
-      return { selected: true, ...await this.openProject({ projectPath: selected, initializeIfNeeded: true }) };
     } finally {
       if (this.#pickerAbort === controller) this.#pickerAbort = undefined;
     }
+  }
+
+  private async selectDirectory(): Promise<{ readonly selected: false } | ({ readonly selected: true } & ProjectOpenResult)> {
+    const selected = await this.pickDirectory();
+    if (selected === undefined) return { selected: false };
+    return { selected: true, ...await this.openProject({ projectPath: selected, initializeIfNeeded: true }) };
+  }
+
+  private async previewSelectedDirectory(): Promise<unknown> {
+    const selected = await this.pickDirectory();
+    if (selected === undefined) { this.#pendingInitialization = undefined; return { selected: false }; }
+    let root: string;
+    try { root = await realpath(selected); } catch { throw new HttpProblem(404, "project_not_found", "The selected directory is unavailable."); }
+    if (await entryKind(root) !== "directory") throw new HttpProblem(400, "invalid_input", "Choose a local project directory.");
+    const stateDirectory = join(root, ".sestina");
+    const [stateKind, databaseKind, briefKind] = await Promise.all([
+      entryKind(stateDirectory),
+      entryKind(join(stateDirectory, "state.sqlite")),
+      entryKind(join(stateDirectory, "research-brief.yaml")),
+    ]);
+    if (stateKind === "directory" && databaseKind === "file" && briefKind === "file") {
+      this.#pendingInitialization = undefined;
+      return { selected: true, initializationRequired: false, ...await this.openProject({ projectPath: root, initializeIfNeeded: false }) };
+    }
+    if (stateKind === "missing" && databaseKind === "missing" && briefKind === "missing") {
+      const pending = { root, title: basename(root), confirmationNonce: randomBytes(32).toString("hex") };
+      this.#pendingInitialization = pending;
+      return {
+        selected: true,
+        initializationRequired: true,
+        projectTitle: pending.title,
+        confirmationNonce: pending.confirmationNonce,
+        localOnly: true,
+        pathPersisted: false,
+        directoryScanPerformed: false,
+        writesPerformed: false,
+        creates: [".sestina/state.sqlite", ".sestina/research-brief.yaml", ".sestina/gitignore-suggestion.txt"],
+      };
+    }
+    this.#pendingInitialization = undefined;
+    throw new HttpProblem(409, "state_conflict", "A foreign or partial .sestina directory was preserved.");
+  }
+
+  private async initializeSelectedDirectory(input: unknown): Promise<ProjectOpenResult> {
+    if (!isRecord(input)) throw new HttpProblem(400, "invalid_input", "The initialization confirmation is invalid.");
+    const nonce = text(input.confirmationNonce, 256);
+    const pending = this.#pendingInitialization;
+    if (nonce === undefined || nonce !== pending?.confirmationNonce) throw new HttpProblem(409, "initialization_confirmation_invalid", "Select the folder again before initializing it.");
+    this.#pendingInitialization = undefined;
+    const next = await this.initializeProject(pending.root, pending.title);
+    const brief = resultValue(next.core.getBriefState(next.project.id));
+    this.#opened?.core.close();
+    this.#opened = next;
+    return { project: next.project, initialized: true, setupRequired: brief === undefined, localOnly: true, pathPersisted: false, directoryScanPerformed: false };
   }
 
   private async activateInitialBrief(input: unknown): Promise<unknown> {
@@ -328,14 +403,37 @@ export class ResearchRoomHttpApplication {
     return resultValue(opened.core.getResearchRoomState(opened.project.id));
   }
 
+  private async serveClient(pathname: string, response: ServerResponse): Promise<void> {
+    const decoded = decodeURIComponent(pathname);
+    const isClientRoute = decoded === "/" || decoded === "/index.html" || (extname(decoded) === "" && !decoded.startsWith("/assets/"));
+    const relative = isClientRoute ? "index.html" : decoded.slice(1);
+    if (relative.includes("..") || relative.includes("\\") || (!isClientRoute && !relative.startsWith("assets/"))) {
+      throw new HttpProblem(404, "client_asset_not_found", "The requested client asset was not found.");
+    }
+    const contentType = clientContentType(relative);
+    if (contentType === undefined) throw new HttpProblem(404, "client_asset_not_found", "The requested client asset was not found.");
+    try {
+      const body = await readFile(join(this.clientAssetRoot, relative));
+      asset(response, contentType, body, !isClientRoute && /^assets\/[A-Za-z0-9_.-]+-[A-Za-z0-9_-]{6,}\.[A-Za-z0-9]+$/u.test(relative));
+    } catch (error) {
+      if (isRecord(error) && error.code === "ENOENT") {
+        if (isClientRoute) throw new HttpProblem(503, "client_assets_unavailable", "The production Research Room client is missing. Rebuild the local App.");
+        throw new HttpProblem(404, "client_asset_not_found", "The requested client asset was not found.");
+      }
+      throw error;
+    }
+  }
+
   async handle(request: IncomingMessage, response: ServerResponse): Promise<void> {
     try {
       if (!hostAllowed(request.headers.host)) throw new HttpProblem(421, "loopback_host_required", "The Research Room accepts only loopback Host headers.");
       const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
-      if (request.method === "GET" && url.pathname === "/") { asset(response, "text/html; charset=utf-8", RESEARCH_ROOM_HTML); return; }
-      if (request.method === "GET" && url.pathname === "/app.css") { asset(response, "text/css; charset=utf-8", RESEARCH_ROOM_CSS); return; }
-      if (request.method === "GET" && url.pathname === "/app.js") { asset(response, "text/javascript; charset=utf-8", RESEARCH_ROOM_JS); return; }
-      if (request.method === "GET" && url.pathname === "/api/status") { const languagePreference = await this.readLanguagePreference(); json(response, 200, { ok: true, value: { localOnly: true, telemetry: false, projectOpen: this.#opened !== undefined, directoryPickerAvailable: this.directoryPicker !== undefined, languagePreference: languagePreference ?? null, sessionToken: this.sessionToken } }); return; }
+      if (request.method === "GET" && !url.pathname.startsWith("/api/")) { await this.serveClient(url.pathname, response); return; }
+      if (request.method === "GET" && url.pathname === "/api/status") {
+        const languagePreference = await this.readLanguagePreference();
+        const brief = this.#opened === undefined ? undefined : resultValue(this.#opened.core.getBriefState(this.#opened.project.id));
+        json(response, 200, { ok: true, value: { localOnly: true, telemetry: false, projectOpen: this.#opened !== undefined, projectSetupRequired: this.#opened !== undefined && brief === undefined, ...(this.#opened ? { project: this.#opened.project } : {}), directoryPickerAvailable: this.directoryPicker !== undefined, languagePreference: languagePreference ?? null, sessionToken: this.sessionToken } }); return;
+      }
 
       if (request.method === "POST" || request.method === "DELETE") this.authorize(request);
       if (request.method === "POST" && url.pathname === "/api/preferences/language") { json(response, 200, { ok: true, value: await this.setLanguagePreference(await readBody(request)) }); return; }
@@ -344,6 +442,8 @@ export class ResearchRoomHttpApplication {
       if (request.method === "POST" && url.pathname === "/api/provider") { json(response, 200, { ok: true, value: await this.saveProvider(await readBody(request)) }); return; }
       if (request.method === "DELETE" && url.pathname === "/api/provider/config") { json(response, 200, { ok: true, value: await this.deleteProviderConfig() }); return; }
       if (request.method === "DELETE" && url.pathname === "/api/provider/secret") { json(response, 200, { ok: true, value: await this.deleteProviderSecret() }); return; }
+      if (request.method === "POST" && url.pathname === "/api/project/select-directory/preview") { json(response, 200, { ok: true, value: await this.previewSelectedDirectory() }); return; }
+      if (request.method === "POST" && url.pathname === "/api/project/initialize-selected") { json(response, 200, { ok: true, value: await this.initializeSelectedDirectory(await readBody(request)) }); return; }
       if (request.method === "POST" && url.pathname === "/api/project/select-directory") { json(response, 200, { ok: true, value: await this.selectDirectory() }); return; }
       if (request.method === "POST" && url.pathname === "/api/project/open") { json(response, 200, { ok: true, value: await this.openProject(await readBody(request)) }); return; }
       if (request.method === "POST" && url.pathname === "/api/project/brief") { json(response, 200, { ok: true, value: await this.activateInitialBrief(await readBody(request)) }); return; }
@@ -395,7 +495,7 @@ export function createResearchRoomServer(options: ResearchRoomServerOptions = {}
   if (host !== LOOPBACK) throw new Error("Research Room must bind to 127.0.0.1.");
   const port = options.port ?? 0;
   if (!Number.isSafeInteger(port) || port < 0 || port > 65_535) throw new Error("Invalid Research Room port.");
-  const application = new ResearchRoomHttpApplication(options.provider, options.providerTimeoutMs, options.directoryPicker, options.languagePreferenceStore, options.providerConfigurationService);
+  const application = new ResearchRoomHttpApplication(options.provider, options.providerTimeoutMs, options.directoryPicker, options.languagePreferenceStore, options.providerConfigurationService, options.clientAssetRoot);
   const server = createServer((request, response) => { void application.handle(request, response); });
   server.on("clientError", (_error, socket) => { socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n"); });
   return {

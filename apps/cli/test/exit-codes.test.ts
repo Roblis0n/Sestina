@@ -13,9 +13,11 @@ describe("CLI exit-code contract", () => {
       infrastructureFailure: 6,
       userConfirmationRequired: 7,
       unsupportedFormat: 8,
+      operationCancelled: 9,
     });
     expect(exitCodeForCoreError("review_blocked")).toBe(5);
     expect(exitCodeForCoreError("unsupported_format")).toBe(8);
+    expect(exitCodeForCoreError("operation_cancelled")).toBe(9);
   });
 
   it("keeps human help stable and expressed as a research workflow", async () => {

@@ -21,15 +21,21 @@
     "README.md"
   ],
   "scripts": {
-    "build": "tsc --noEmit && node ../../scripts/build-research-room.mjs",
+    "build": "tsc --noEmit && tsc --noEmit -p client/tsconfig.json && node ../../scripts/build-research-room.mjs",
     "test": "vitest run --root ../.. --project unit apps/research-room/test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p client/tsconfig.json"
   },
   "dependencies": {
-    "@sestina/core": "workspace:*"
+    "@sestina/core": "workspace:*",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.1.0",
     "typescript": "^5.8.0",
+    "vite": "^8.2.2",
     "vitest": "^3.0.0"
   }
 }

@@ -157,6 +157,13 @@ interface AnalyzedEntry extends AnalyzedResearchRoomReview {
   readonly evidenceClass: ResearchRoomEvidenceClass;
 }
 
+interface InFlightReview {
+  readonly confirmationNonce: string;
+  readonly manifestHash: string;
+  readonly controller: AbortController;
+  cancelled: boolean;
+}
+
 function hash(value: unknown): CoreResult<string> { return fromDomain(stableResearchHash(value)); }
 function isText(value: unknown, maxBytes: number): value is string { return typeof value === "string" && value.trim().length > 0 && Buffer.byteLength(value.trim(), "utf8") <= maxBytes; }
 function nonce(): string { return randomBytes(32).toString("hex"); }
@@ -254,6 +261,7 @@ function providerFailureReason(error: unknown, timedOut: boolean): NonNullable<A
 
 export class ResearchRoomService {
   readonly #pending = new Map<string, PendingReview>();
+  readonly #inFlight = new Map<string, InFlightReview>();
   readonly #analyzed = new Map<string, AnalyzedEntry>();
   constructor(
     private readonly store: ResearchStore,
@@ -383,8 +391,14 @@ export class ResearchRoomService {
 
   cancel(input: { readonly reviewId: string; readonly confirmationNonce: string; readonly manifestHash: string }): CoreResult<{ readonly cancelled: true }> {
     const pending = this.#pending.get(input.reviewId);
-    if (pending?.confirmationNonce !== input.confirmationNonce || pending.manifestHash !== input.manifestHash) return coreErr("user_confirmation_required");
-    this.#pending.delete(input.reviewId);
+    if (pending?.confirmationNonce === input.confirmationNonce && pending.manifestHash === input.manifestHash) {
+      this.#pending.delete(input.reviewId);
+      return coreOk(Object.freeze({ cancelled: true as const }));
+    }
+    const inFlight = this.#inFlight.get(input.reviewId);
+    if (inFlight?.confirmationNonce !== input.confirmationNonce || inFlight.manifestHash !== input.manifestHash) return coreErr("user_confirmation_required");
+    inFlight.cancelled = true;
+    inFlight.controller.abort();
     return coreOk(Object.freeze({ cancelled: true as const }));
   }
 
@@ -398,28 +412,37 @@ export class ResearchRoomService {
     let providerStatus: "semantic_ready" | "ledger_only" = "ledger_only";
     let ledgerOnlyReason: AnalyzedResearchRoomReview["ledgerOnlyReason"] = "provider_not_configured";
     let analysis = ledgerOnlyAnalysis(pending.suggestion);
-    let semanticJudge: ResearchRoomSemanticJudgeTrace | undefined;
-    let invoked = false;
-    let networkUsed = false;
-    if (this.provider !== undefined && pending.judgeRequest !== undefined && pending.providerInput !== undefined) {
-      invoked = true; networkUsed = this.provider.networkAccess !== "none";
-      const controller = new AbortController(); const timer = setTimeout(() => { controller.abort(); }, this.timeoutMs);
-      try {
-        const response = await Promise.race([
-          this.provider.analyze(pending.judgeRequest, pending.providerInput, { signal: controller.signal }),
-          new Promise<never>((_resolve, reject) => { controller.signal.addEventListener("abort", () => { reject(new Error("provider_timeout")); }, { once: true }); }),
-        ]);
-        const parsed = submitResearchRoomSemanticJudge(pending.judgeRequest, response);
+      let semanticJudge: ResearchRoomSemanticJudgeTrace | undefined;
+      let invoked = false;
+      let networkUsed = false;
+      if (this.provider !== undefined && pending.judgeRequest !== undefined && pending.providerInput !== undefined) {
+        invoked = true; networkUsed = this.provider.networkAccess !== "none";
+        const controller = new AbortController();
+        const inFlight: InFlightReview = { confirmationNonce: pending.confirmationNonce, manifestHash: pending.manifestHash, controller, cancelled: false };
+        this.#inFlight.set(pending.reviewId, inFlight);
+        let timedOut = false;
+        const timer = setTimeout(() => { timedOut = true; controller.abort(); }, this.timeoutMs);
+        try {
+          const response = await Promise.race([
+            this.provider.analyze(pending.judgeRequest, pending.providerInput, { signal: controller.signal }),
+            new Promise<never>((_resolve, reject) => { controller.signal.addEventListener("abort", () => { reject(new Error(inFlight.cancelled ? "operation_cancelled" : "provider_timeout")); }, { once: true }); }),
+          ]);
+          if (inFlight.cancelled) return coreErr("operation_cancelled");
+          const parsed = submitResearchRoomSemanticJudge(pending.judgeRequest, response);
         if (parsed.ok) {
           providerStatus = "semantic_ready";
           ledgerOnlyReason = undefined;
           analysis = analysisFrom(pending.suggestion, parsed.value);
           semanticJudge = traceFrom(parsed.value);
         } else ledgerOnlyReason = "provider_invalid_response";
-      } catch (error) {
-        ledgerOnlyReason = providerFailureReason(error, controller.signal.aborted || (error instanceof Error && error.message === "provider_timeout"));
-      } finally { clearTimeout(timer); }
-    }
+        } catch (error) {
+          if (inFlight.cancelled) return coreErr("operation_cancelled");
+          ledgerOnlyReason = providerFailureReason(error, timedOut);
+        } finally {
+          clearTimeout(timer);
+          this.#inFlight.delete(pending.reviewId);
+        }
+      }
     const manifest: ResearchRoomContextManifest = Object.freeze({ ...pending.manifest, sendStatus: invoked ? "sent_to_provider" : "not_sent", networkUsed });
     const entry: AnalyzedEntry = Object.freeze({ reviewId: pending.reviewId, providerStatus, ...(ledgerOnlyReason ? { ledgerOnlyReason } : {}), manifest, analysis, ...(semanticJudge ? { semanticJudge } : {}), authorityNonce: nonce(), stateBinding: pending.stateBinding, suggestionHash: pending.manifest.suggestionHash, evidenceClass: pending.evidenceClass });
     this.#analyzed.set(entry.reviewId, entry);

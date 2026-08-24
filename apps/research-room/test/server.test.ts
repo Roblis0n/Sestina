@@ -55,6 +55,28 @@ class Ri48FixtureProvider implements ResearchRoomProvider {
   }
 }
 
+class CancellableProvider extends Ri48FixtureProvider {
+  readonly started: Promise<void>;
+  private markStarted!: () => void;
+  aborted = false;
+
+  constructor() {
+    super();
+    this.started = new Promise((resolve) => { this.markStarted = resolve; });
+  }
+
+  override analyze(_request: ResearchRoomSemanticJudgeRequest, _preview: unknown, options: { readonly signal: AbortSignal }): Promise<unknown> {
+    this.calls += 1;
+    this.markStarted();
+    return new Promise((_resolve, reject) => {
+      options.signal.addEventListener("abort", () => {
+        this.aborted = true;
+        reject(Object.assign(new Error("provider_aborted"), { code: "provider_aborted" }));
+      }, { once: true });
+    });
+  }
+}
+
 class MemoryLanguagePreferenceStore implements LanguagePreferenceStore {
   writes = 0;
   constructor(public language: AppLanguage | undefined, private readonly failWrites = false) {}
@@ -396,6 +418,24 @@ describe("RI-48 loopback Research Room", () => {
     expect(apiValue(beforeCommit).receipts).toHaveLength(0);
     const committed = await request<ResearchRoomReceipt>(server.origin, session.sessionToken, "/api/reviews/commit", { projectId: fixture.projectId, reviewId: analysisValue.reviewId, authorityNonce: analysisValue.authorityNonce, expectedStateBinding: analysisValue.stateBinding, disposition: "accepted", reason: "The owner accepts this bounded synthetic increment." });
     expect(apiValue(committed.body)).toMatchObject({ disposition: { kind: "accepted", reason: "The owner accepts this bounded synthetic increment." }, evidenceClass: "synthetic_fixture", countsAsExternalEvidence: false, authority: { actor: { kind: "user" } } });
+  });
+
+  it("cancels an in-flight analysis through the loopback API without partial state", async () => {
+    const fixture = await createRi48Project(); cleanups.push(() => fixture.cleanup());
+    const provider = new CancellableProvider(); const server = await start(provider); const session = await status(server.origin);
+    await request<unknown>(server.origin, session.sessionToken, "/api/project/open", { projectPath: fixture.root });
+    const prepared = apiValue((await request<PreparedResearchRoomReview>(server.origin, session.sessionToken, "/api/reviews/prepare", { suggestion: "Cancel this synthetic analysis before it produces a result.", evidenceClass: "synthetic_fixture" })).body);
+    const analyzing = request<AnalyzedResearchRoomReview>(server.origin, session.sessionToken, "/api/reviews/analyze", { reviewId: prepared.reviewId, confirmationNonce: prepared.confirmationNonce, manifestHash: prepared.manifestHash });
+    await provider.started;
+
+    const cancelled = await request<{ readonly cancelled: true }>(server.origin, session.sessionToken, "/api/reviews/cancel", { reviewId: prepared.reviewId, confirmationNonce: prepared.confirmationNonce, manifestHash: prepared.manifestHash });
+    expect(cancelled.body).toEqual({ ok: true, value: { cancelled: true } });
+    const analysis = await analyzing;
+    expect(analysis.response.status).toBe(400);
+    expect(analysis.body).toMatchObject({ ok: false, error: { code: "operation_cancelled" } });
+    expect(provider.aborted).toBe(true);
+    const state = await (await fetch(`${server.origin}/api/state`)).json() as ApiEnvelope<ResearchRoomState>;
+    expect(apiValue(state).receipts).toHaveLength(0);
   });
 
   it("defaults to ledger_only and creates no Provider call or background network contract", async () => {

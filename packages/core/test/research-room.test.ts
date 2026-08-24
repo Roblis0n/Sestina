@@ -82,6 +82,28 @@ class FixtureProvider implements ResearchRoomProvider {
   }
 }
 
+class CancellableProvider extends FixtureProvider {
+  readonly started: Promise<void>;
+  private markStarted!: () => void;
+  aborted = false;
+
+  constructor() {
+    super();
+    this.started = new Promise((resolve) => { this.markStarted = resolve; });
+  }
+
+  override analyze(request: ResearchRoomSemanticJudgeRequest, preview: unknown, options: { readonly signal: AbortSignal }): Promise<unknown> {
+    this.calls.push(structuredClone({ request, preview }));
+    this.markStarted();
+    return new Promise((_resolve, reject) => {
+      options.signal.addEventListener("abort", () => {
+        this.aborted = true;
+        reject(Object.assign(new Error("provider_aborted"), { code: "provider_aborted" }));
+      }, { once: true });
+    });
+  }
+}
+
 function semanticJudgeResponse(request: ResearchRoomSemanticJudgeRequest): ResearchRoomSemanticJudgeResponse {
   const span = createStableTextSpan(request.context.suggestionDocument, 0, request.context.suggestionDocument.normalizedText.length);
   if (!span.ok) throw new Error(span.error.code);
@@ -195,6 +217,19 @@ describe("RI-48 Research Deliberation Kernel", () => {
     expect(await state.core.analyzeResearchRoomSuggestion({ reviewId: prepared.reviewId, confirmationNonce: prepared.confirmationNonce, manifestHash: prepared.manifestHash })).toMatchObject({ ok: false, error: { code: "user_confirmation_required" } });
     expect(provider.calls).toHaveLength(0);
     expect(valueOf(state.core.listResearchRoomReceipts(state.projectId))).toHaveLength(0);
+  });
+
+  it("cancels an in-flight Provider call without producing an analyzed or committable result", async () => {
+    const provider = new CancellableProvider(); const state = await fixture(provider);
+    const prepared = valueOf(state.core.prepareResearchRoomReview({ projectId: state.projectId, suggestion: "Keep this cancellable and bounded.", evidenceClass: "synthetic_fixture", countsAsExternalEvidence: false }));
+    const analysis = state.core.analyzeResearchRoomSuggestion({ reviewId: prepared.reviewId, confirmationNonce: prepared.confirmationNonce, manifestHash: prepared.manifestHash });
+    await provider.started;
+
+    expect(state.core.cancelResearchRoomReview({ reviewId: prepared.reviewId, confirmationNonce: prepared.confirmationNonce, manifestHash: prepared.manifestHash })).toEqual({ ok: true, value: { cancelled: true } });
+    await expect(analysis).resolves.toMatchObject({ ok: false, error: { code: "operation_cancelled" } });
+    expect(provider.aborted).toBe(true);
+    expect(valueOf(state.core.listResearchRoomReceipts(state.projectId))).toHaveLength(0);
+    expect(await state.core.analyzeResearchRoomSuggestion({ reviewId: prepared.reviewId, confirmationNonce: prepared.confirmationNonce, manifestHash: prepared.manifestHash })).toMatchObject({ ok: false, error: { code: "user_confirmation_required" } });
   });
 
   it("shows an exact Context Manifest before invoking any Provider and does not write before Authority Gate", async () => {

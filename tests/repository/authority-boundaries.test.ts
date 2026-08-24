@@ -42,6 +42,7 @@ const ENTRY_FILES = [
 
 const PRODUCT_DEFINITION =
   "Sestina 最终应当是一个本地交互式科研 App。其内部本体是 Research Deliberation Kernel，主要交互面是 Research Room；MCP、Skill、Hooks、CLI 只是外部宿主接入、自动化和恢复接口。Sestina 作为本地科研过程调试器，让 AI 始终围绕当前研究问题工作，记住已经作出的研究决定，识别目标替换、重复审计、论证跳跃和伪深度，并要求每一轮修改说明真正增加了什么。";
+const UI_01_STATUS = "completed_and_verified";
 
 const GUIDANCE_FIXTURES: Record<string, string> = {
   "docs/product/CURRENT-PRODUCT-DEFINITION.md": [
@@ -52,7 +53,9 @@ const GUIDANCE_FIXTURES: Record<string, string> = {
   "docs/execution/CURRENT-PLAN.md": [
     "accepted_current_guide",
     "RI-43 为 `pilot_kit_ready_external_validation_deferred_by_user`",
-    "RI-48 首次语言与电脑端体验基线已完成并验证",
+    "UI-01 Production App Shell",
+    UI_01_STATUS,
+    "当前没有活动编码任务",
     "completed_and_verified_implementation_real_provider_evidence_blocked",
     "Market Gate 0",
   ].join("\n"),
@@ -65,6 +68,20 @@ const GUIDANCE_FIXTURES: Record<string, string> = {
     "required_before_every_task",
     "Gate A：方向成立",
     "final: ready_to_start | do_not_start",
+  ].join("\n"),
+  "docs/execution/UI-01-PRODUCTION-APP-SHELL-TASK-START-RECORD.md": [
+    "task: UI-01",
+    "status: ready_to_start",
+    "final: ready_to_start",
+    "ri49_status: not_started",
+    "blocked_missing_user_config",
+  ].join("\n"),
+  "docs/execution/UI-01-PRODUCTION-APP-SHELL-TASK-RESULT.md": [
+    "task: UI-01",
+    "status: completed_and_verified",
+    "pnpm_verify: passed",
+    "ri49_status: not_started",
+    "blocked_missing_user_config",
   ].join("\n"),
 };
 
@@ -84,8 +101,9 @@ function activeBlock(currentTask: string): string {
     "<!-- sestina-guide-status: accepted_current -->",
     "<!-- sestina-prework-direction-gate: required -->",
     `<!-- sestina-current-task: ${currentTask} -->`,
+    `<!-- sestina-current-status: ${UI_01_STATUS} -->`,
     "<!-- sestina-next-code-goal: none_active_RI49_not_started -->",
-    "<!-- sestina-next-execution-goal: await_explicit_user_provider_config_for_real_provider_evidence -->",
+    "<!-- sestina-next-execution-goal: await_explicit_user_authorization -->",
     "<!-- sestina-next-code-sequence: none_active_RI49_not_started -->",
     "<!-- sestina-ri44-to-ri47-status: superseded_unstarted -->",
     "<!-- sestina-ri48-status: completed_and_verified_implementation_real_provider_evidence_blocked -->",
@@ -150,7 +168,7 @@ function writeValidEntries(
   writeGuidanceFiles(root);
   for (const entry of ENTRY_FILES) {
     const isBoard = entry === "docs/execution/WORK-BOARD.md";
-    const task = "RI-03";
+    const task = "UI-01";
     const body = isBoard
       ? workBoardBody(task)
       : "\n\nLegacy prose stays below.\n";
@@ -230,7 +248,7 @@ describe("verify-authority negative fixtures", () => {
   it("N3. inconsistent current-task markers across entries fail as AUTH-R003", () => {
     const r = runAuthority("neg-task-mismatch", (root) => {
       writeValidEntries(root, {
-        "CLAUDE.md": activeBlock("RI-04"),
+        "CLAUDE.md": activeBlock("UI-02"),
       });
     });
     expect(r.exitCode).toBe(1);
@@ -243,9 +261,9 @@ describe("verify-authority negative fixtures", () => {
       for (const entry of ENTRY_FILES) {
         const isBoard = entry === "docs/execution/WORK-BOARD.md";
         const body = isBoard
-          ? workBoardBody("RI-09")
+          ? workBoardBody("UI-02")
           : "\n\nLegacy prose stays below.\n";
-        writeEntry(root, entry, activeBlock("RI-03") + body);
+        writeEntry(root, entry, activeBlock("UI-01") + body);
       }
     });
     expect(r.exitCode).toBe(1);

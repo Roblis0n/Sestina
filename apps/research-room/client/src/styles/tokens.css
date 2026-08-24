@@ -1,0 +1,148 @@
+:root {
+  color-scheme: light dark;
+  --font-ui: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Cascadia Mono", "SFMono-Regular", Consolas, monospace;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.25rem;
+  --text-xl: clamp(1.85rem, 3vw, 3rem);
+  --line: 1.55;
+  --radius-sm: 0.25rem;
+  --radius-md: 0.5rem;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --chrome-height: 3.75rem;
+  --nav-width: 17.5rem;
+  --inspector-width: 23.5rem;
+  --surface-canvas: #f1f2ee;
+  --surface-chrome: #e8eae5;
+  --surface-primary: #fafaf7;
+  --surface-secondary: #f4f5f1;
+  --surface-raised: #ffffff;
+  --surface-overlay: rgba(24, 30, 27, 0.52);
+  --text-primary: #18201c;
+  --text-secondary: #56605a;
+  --text-muted: #727b75;
+  --border-subtle: #d6dad4;
+  --border-strong: #9da69f;
+  --accent-primary: #234f3b;
+  --accent-hover: #193c2d;
+  --accent-soft: #e1ebe5;
+  --status-ready: #276044;
+  --status-ready-bg: #e5eee8;
+  --status-warning: #745b19;
+  --status-warning-bg: #f4ecd5;
+  --status-danger: #8b302b;
+  --status-danger-bg: #f5e4e1;
+  --status-working: #2f5968;
+  --status-working-bg: #e2edf0;
+  --focus-ring: #1966d2;
+  --shadow-overlay: 0 1.25rem 3.5rem rgba(18, 25, 21, 0.2);
+  --transition-fast: 140ms ease;
+  --transition-slow: 220ms ease;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]), :root[data-theme="system"] {
+    --surface-canvas: #151a17;
+    --surface-chrome: #1b211d;
+    --surface-primary: #202722;
+    --surface-secondary: #262e28;
+    --surface-raised: #2b332d;
+    --surface-overlay: rgba(0, 0, 0, 0.72);
+    --text-primary: #eef1ed;
+    --text-secondary: #b8c0ba;
+    --text-muted: #929c95;
+    --border-subtle: #39433c;
+    --border-strong: #606d64;
+    --accent-primary: #9bcbb0;
+    --accent-hover: #b8dec7;
+    --accent-soft: #293f33;
+    --status-ready: #a6d8b9;
+    --status-ready-bg: #243d2e;
+    --status-warning: #e5cc79;
+    --status-warning-bg: #413719;
+    --status-danger: #f0aaa3;
+    --status-danger-bg: #492b29;
+    --status-working: #a7d4e1;
+    --status-working-bg: #243b43;
+    --focus-ring: #8ab9ff;
+    --shadow-overlay: 0 1.25rem 3.5rem rgba(0, 0, 0, 0.5);
+  }
+}
+
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-canvas: #151a17;
+  --surface-chrome: #1b211d;
+  --surface-primary: #202722;
+  --surface-secondary: #262e28;
+  --surface-raised: #2b332d;
+  --surface-overlay: rgba(0, 0, 0, 0.72);
+  --text-primary: #eef1ed;
+  --text-secondary: #b8c0ba;
+  --text-muted: #929c95;
+  --border-subtle: #39433c;
+  --border-strong: #606d64;
+  --accent-primary: #9bcbb0;
+  --accent-hover: #b8dec7;
+  --accent-soft: #293f33;
+  --status-ready: #a6d8b9;
+  --status-ready-bg: #243d2e;
+  --status-warning: #e5cc79;
+  --status-warning-bg: #413719;
+  --status-danger: #f0aaa3;
+  --status-danger-bg: #492b29;
+  --status-working: #a7d4e1;
+  --status-working-bg: #243b43;
+  --focus-ring: #8ab9ff;
+  --shadow-overlay: 0 1.25rem 3.5rem rgba(0, 0, 0, 0.5);
+}
+
+:root[data-theme="high_contrast"] {
+  color-scheme: light;
+  --surface-canvas: #ffffff;
+  --surface-chrome: #ffffff;
+  --surface-primary: #ffffff;
+  --surface-secondary: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-overlay: #000000;
+  --text-primary: #000000;
+  --text-secondary: #000000;
+  --text-muted: #000000;
+  --border-subtle: #000000;
+  --border-strong: #000000;
+  --accent-primary: #000000;
+  --accent-hover: #000000;
+  --accent-soft: #ffffff;
+  --status-ready: #000000;
+  --status-ready-bg: #ffffff;
+  --status-warning: #000000;
+  --status-warning-bg: #ffffff;
+  --status-danger: #000000;
+  --status-danger-bg: #ffffff;
+  --status-working: #000000;
+  --status-working-bg: #ffffff;
+  --focus-ring: #0000ff;
+  --shadow-overlay: none;
+  --transition-fast: 0ms;
+  --transition-slow: 0ms;
+}
+
+:root[data-transparency="reduced"], :root[data-theme="high_contrast"] {
+  --surface-overlay: var(--surface-canvas);
+  --shadow-overlay: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root:not([data-motion="off"]) { --transition-fast: 0ms; --transition-slow: 0ms; }
+}
+
+:root[data-motion="on"] { --transition-fast: 0ms; --transition-slow: 0ms; }
