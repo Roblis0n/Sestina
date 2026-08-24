@@ -379,6 +379,39 @@ describe("RI-48 loopback Research Room", () => {
     expect(apiValue((await first).body)).toEqual({ selected: false });
   });
 
+  it("lets the Start Center explicitly abort a slow native picker without project writes", async () => {
+    let pickerStarted!: () => void;
+    const started = new Promise<void>((resolve) => { pickerStarted = resolve; });
+    let observedSignal: AbortSignal | undefined;
+    const server = await start(undefined, {
+      pick: (signal) => {
+        observedSignal = signal;
+        pickerStarted();
+        return new Promise<undefined>((_resolve, reject) => {
+          signal.addEventListener("abort", () => { reject(new Error("cancelled")); }, { once: true });
+        });
+      },
+    });
+    const session = await status(server.origin);
+
+    const first = request<unknown>(server.origin, session.sessionToken, "/api/project/select-directory/preview", {});
+    await started;
+    const cancellationResponse = await fetch(`${server.origin}/api/project/select-directory`, {
+      method: "DELETE",
+      headers: { "x-sestina-session": session.sessionToken },
+    });
+    expect(cancellationResponse.status).toBe(200);
+    await expect(cancellationResponse.json()).resolves.toEqual({
+      ok: true,
+      value: { cancelRequested: true },
+    });
+    expect(observedSignal?.aborted).toBe(true);
+
+    const cancelled = await first;
+    expect(cancelled.response.status).toBe(409);
+    expect(cancelled.body).toMatchObject({ ok: false, error: { code: "directory_picker_cancelled" } });
+  });
+
   it("keeps manual mode available when no native directory picker is configured", async () => {
     const server = await start(); const session = await status(server.origin);
     const statusResponse = await fetch(`${server.origin}/api/status`);

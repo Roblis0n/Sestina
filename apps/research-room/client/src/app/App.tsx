@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { researchRoomApi, ResearchRoomApiError } from "../api/client.js";
 import type {
   AnalyzedReviewDto,
@@ -49,6 +49,7 @@ export function App() {
   const [providerOpen, setProviderOpen] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [appearance, setAppearance] = useState<AppearancePreferences>(() => readAppearancePreferences());
+  const pickerRequest = useRef<AbortController | undefined>(undefined);
   const busy = busyCount > 0;
 
   const runBusy = useCallback(async <T,>(action: () => Promise<T>): Promise<T> => {
@@ -147,7 +148,15 @@ export function App() {
   }
 
   async function previewNative(): Promise<SelectedDirectoryPreviewDto> {
-    return runBusy(() => researchRoomApi.previewSelectedDirectory());
+    const controller = new AbortController();
+    pickerRequest.current = controller;
+    try { return await runBusy(() => researchRoomApi.previewSelectedDirectory(controller.signal)); }
+    finally { if (pickerRequest.current === controller) pickerRequest.current = undefined; }
+  }
+
+  async function cancelNative() {
+    pickerRequest.current?.abort();
+    await researchRoomApi.cancelDirectorySelection();
   }
 
   async function openManual(path: string, initializeIfNeeded: boolean): Promise<ProjectOpenResultDto> {
@@ -201,7 +210,7 @@ export function App() {
       <div className="live-region" role="status" aria-live="polite" data-tone={notice?.tone ?? "ready"}>{notice?.message ?? ""}</div>
       {phase === "boot" ? <main className="boot-screen"><div className="boot-mark">S</div><p>Starting the local Research Room…</p></main> : null}
     {phase === "language" ? <LanguageScreen busy={busy} onChoose={(next) => void chooseLanguage(next)} /> : null}
-    {phase === "start" && status ? <StartCenter language={language} directoryPickerAvailable={status.directoryPickerAvailable} busy={busy} onPreviewNative={previewNative} onOpenManual={openManual} onInitializeNative={initializeNative} onOpened={(value) => void opened(value)} onNotice={showNotice} /> : null}
+    {phase === "start" && status ? <StartCenter language={language} directoryPickerAvailable={status.directoryPickerAvailable} busy={busy} onPreviewNative={previewNative} onCancelNative={cancelNative} onOpenManual={openManual} onInitializeNative={initializeNative} onOpened={(value) => void opened(value)} onNotice={showNotice} /> : null}
     {phase === "brief" && openedProject ? <BriefSetup language={language} projectTitle={openedProject.title} busy={busy} onActivate={activateBrief} onActivated={activated} onError={(message) => { showNotice(message, "danger"); }} /> : null}
     {phase === "shell" && state ? <ProjectShell language={language} state={state} busy={busy} prepared={prepared} analyzed={analyzed} inspectorOpen={inspectorOpen} inspectorSelection={inspectorSelection} onInspector={(open, selection) => { setInspectorOpen(open); if (selection) setInspectorSelection(selection); }} onSwitchProject={() => { setPrepared(undefined); setAnalyzed(undefined); setInspectorOpen(false); setPhase("start"); }} onPrepared={setPrepared} onAnalyzed={setAnalyzed} onPrepare={prepareReview} onAnalyze={analyzeReview} onCancel={cancelReview} onCommit={commitDisposition} onCommitted={committed} onDownload={downloadReceipt} onRollback={rollbackReceipt} onRuntime={setRuntime} onNotice={showNotice} /> : null}
     {phase === "fatal" ? <main id="main-content" className="fatal-screen"><StatusBadge tone="danger">{t(language, "offline")}</StatusBadge><h1>{t(language, "service_unavailable")}</h1><p>{t(language, "recovery_hint")}</p><button type="button" onClick={() => { window.location.reload(); }}>{t(language, "retry")}</button></main> : null}

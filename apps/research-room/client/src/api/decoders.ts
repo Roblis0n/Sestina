@@ -148,6 +148,13 @@ export function decodeSelectedDirectory(value: unknown): SelectedDirectoryDto {
   return { selected: true, ...decodeProjectOpenResult(opened) };
 }
 
+export function decodeDirectoryPickerCancellation(value: unknown): { readonly cancelRequested: boolean } {
+  const cancellation = record(value, "directory picker cancellation");
+  exactKeys(cancellation, ["cancelRequested"], "directory picker cancellation");
+  if (typeof cancellation.cancelRequested !== "boolean") fail("directory picker cancellation.cancelRequested");
+  return { cancelRequested: cancellation.cancelRequested };
+}
+
 export function decodeSelectedDirectoryPreview(value: unknown): SelectedDirectoryPreviewDto {
   const preview = record(value, "directory selection preview");
   if (preview.selected === false) {

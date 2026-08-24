@@ -32,6 +32,9 @@ importers:
       typescript-eslint:
         specifier: ^8.66.0
         version: 8.66.0(eslint@9.39.5(supports-color@7.2.0))(supports-color@7.2.0)(typescript@5.9.3)
+      vite-node:
+        specifier: ^3.0.0
+        version: 3.2.4(@types/node@24.13.3)(lightningcss@1.33.0)(supports-color@7.2.0)
       vitest:
         specifier: ^3.0.0
         version: 3.2.7(@types/node@24.13.3)(lightningcss@1.33.0)(supports-color@7.2.0)

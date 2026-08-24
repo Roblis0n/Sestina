@@ -17,6 +17,13 @@ folder** action creates `.sestina`. The owner then supplies the initial research
 question and current task. No first-render, picker-preview, or cancelled action
 writes to the selected directory.
 
+The Windows adapter uses the lightweight Shell folder browser rooted at This PC
+instead of loading WinForms. Its child process runs at below-normal priority
+when the host permits it. While the window is open, Start Center exposes an
+explicit cancel action that aborts both the browser request and the local picker
+process; cancellation is a normal zero-write outcome and manual mode remains
+available immediately.
+
 The top-right Provider settings dialog supports exactly one
 `openai_compatible` family. Enter a Base URL, model, and API key for external
 HTTPS; explicit loopback HTTP may be configured without a key. The Provider
@@ -54,6 +61,13 @@ same-origin CSP and security headers, returns a diagnosable JSON 404 for missing
 assets, and supports extensionless SPA refreshes. No CDN, remote font, telemetry,
 or client-side project-path history is used.
 
+The production composition root imports secure storage only through the
+`@sestina/core` package root. A Research Room-only build resolver statically
+includes the secure-storage implementation in this production bundle without
+exposing a cross-package subpath or changing other Core consumers. The production-entry test
+builds and spawns `dist/main.js`, initializes a clean project, activates its
+Brief, and reads the persisted state back without a development server.
+
 From the repository root:
 
 ```text
@@ -74,13 +88,20 @@ initialization. Cancelling the system dialog or declining initialization
 performs no write. On hosts where the native picker is unavailable, the UI
 exposes manual mode immediately.
 
+If an existing project's local state cannot be read or updated, the bilingual
+recovery message names `.sestina/state.sqlite`, confirms that existing files
+were preserved, and asks the owner to close another Sestina instance, confirm
+the folder is writable, and reopen it. Stable copy is rendered directly; HTML
+entities such as `&#x20;` are rejected by regression tests.
+
 The shipped UI is a desktop `Thread + Inspector` research workstation with a
 Start Center, project/Review Room navigation, a central review workflow, a
 conditional Context Inspector, receipts, rollback, runtime status, and
 bilingual recovery copy. Appearance preferences are a strict versioned
 allowlist in browser storage: follow system, light, dark, or high contrast;
 reduced motion and reduced transparency are independent. High contrast forces
-opaque black/white surfaces. The 1280px layout collapses project navigation and
+opaque dark surfaces with vivid cyan, green, yellow, red, blue, and magenta
+semantic colors plus stronger borders and focus rings. The 1280px layout collapses project navigation and
 presents the Inspector as a focus-trapped sheet; Escape closes it and focus is
 restored. The same core workflow remains usable by keyboard and at 200% text.
 

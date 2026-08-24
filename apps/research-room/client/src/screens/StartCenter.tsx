@@ -18,6 +18,7 @@ interface StartCenterProps {
   readonly directoryPickerAvailable: boolean;
   readonly busy: boolean;
   readonly onPreviewNative: () => Promise<SelectedDirectoryPreviewDto>;
+  readonly onCancelNative: () => Promise<void>;
   readonly onOpenManual: (path: string, initializeIfNeeded: boolean) => Promise<ProjectOpenResultDto>;
   readonly onInitializeNative: (nonce: string) => Promise<ProjectOpenResultDto>;
   readonly onOpened: (opened: ProjectOpenResultDto) => void;
@@ -26,12 +27,15 @@ interface StartCenterProps {
 
 const CREATES = [".sestina/state.sqlite", ".sestina/research-brief.yaml", ".sestina/gitignore-suggestion.txt"] as const;
 
-export function StartCenter({ language, directoryPickerAvailable, busy, onPreviewNative, onOpenManual, onInitializeNative, onOpened, onNotice }: StartCenterProps) {
+export function StartCenter({ language, directoryPickerAvailable, busy, onPreviewNative, onCancelNative, onOpenManual, onInitializeNative, onOpened, onNotice }: StartCenterProps) {
   const [pending, setPending] = useState<PendingInitialization>();
   const [path, setPath] = useState("");
+  const [pickerPending, setPickerPending] = useState(false);
   const chooseButtonRef = useRef<HTMLButtonElement>(null);
 
   async function chooseFolder() {
+    setPickerPending(true);
+    onNotice(t(language, "picker_opening"), "warning");
     try {
       const preview = await onPreviewNative();
       if (!preview.selected) {
@@ -44,8 +48,17 @@ export function StartCenter({ language, directoryPickerAvailable, busy, onPrevie
       }
       onOpened(preview);
     } catch (error) {
-      onNotice(localizedError(language, error), "danger");
+      if (error instanceof ResearchRoomApiError && ["request_cancelled", "directory_picker_cancelled"].includes(error.code)) onNotice(t(language, "initialization_cancelled"), "ready");
+      else onNotice(localizedError(language, error), "danger");
+    } finally {
+      setPickerPending(false);
     }
+  }
+
+  async function cancelFolderPicker() {
+    onNotice(t(language, "picker_cancel_requested"), "warning");
+    try { await onCancelNative(); }
+    catch (error) { onNotice(localizedError(language, error), "danger"); }
   }
 
   async function submitManual(event: SyntheticEvent<HTMLFormElement>) {
@@ -98,6 +111,10 @@ export function StartCenter({ language, directoryPickerAvailable, busy, onPrevie
             <strong>{t(language, "choose_folder")}</strong>
             <small>{t(language, "choose_folder_hint")}</small>
           </Button>
+          {pickerPending ? <div className="picker-pending" role="status">
+            <span>{t(language, "picker_opening")}</span>
+            <Button type="button" variant="danger" onClick={() => void cancelFolderPicker()}>{t(language, "cancel_folder_picker")}</Button>
+          </div> : null}
           {!directoryPickerAvailable ? <p className="inline-warning">{language === "en" ? "System picker unavailable. Use the manual path below." : "系统选择器不可用，请使用下方手动路径。"}</p> : null}
           <p className="muted">{t(language, "zero_write")}</p>
         </div>

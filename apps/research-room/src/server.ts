@@ -303,10 +303,19 @@ export class ResearchRoomHttpApplication {
     const controller = new AbortController(); this.#pickerAbort = controller;
     try {
       try { return await this.directoryPicker.pick(controller.signal); }
-      catch { throw new HttpProblem(502, "directory_picker_failed", "The system folder picker could not be opened. Use manual path entry instead."); }
+      catch {
+        if (controller.signal.aborted) throw new HttpProblem(409, "directory_picker_cancelled", "The system folder picker was cancelled. Use manual path entry if needed.");
+        throw new HttpProblem(502, "directory_picker_failed", "The system folder picker could not be opened. Use manual path entry instead.");
+      }
     } finally {
       if (this.#pickerAbort === controller) this.#pickerAbort = undefined;
     }
+  }
+
+  private cancelDirectoryPicker(): { readonly cancelRequested: boolean } {
+    if (this.#pickerAbort === undefined) return { cancelRequested: false };
+    this.#pickerAbort.abort();
+    return { cancelRequested: true };
   }
 
   private async selectDirectory(): Promise<{ readonly selected: false } | ({ readonly selected: true } & ProjectOpenResult)> {
@@ -445,6 +454,7 @@ export class ResearchRoomHttpApplication {
       if (request.method === "POST" && url.pathname === "/api/project/select-directory/preview") { json(response, 200, { ok: true, value: await this.previewSelectedDirectory() }); return; }
       if (request.method === "POST" && url.pathname === "/api/project/initialize-selected") { json(response, 200, { ok: true, value: await this.initializeSelectedDirectory(await readBody(request)) }); return; }
       if (request.method === "POST" && url.pathname === "/api/project/select-directory") { json(response, 200, { ok: true, value: await this.selectDirectory() }); return; }
+      if (request.method === "DELETE" && url.pathname === "/api/project/select-directory") { json(response, 200, { ok: true, value: this.cancelDirectoryPicker() }); return; }
       if (request.method === "POST" && url.pathname === "/api/project/open") { json(response, 200, { ok: true, value: await this.openProject(await readBody(request)) }); return; }
       if (request.method === "POST" && url.pathname === "/api/project/brief") { json(response, 200, { ok: true, value: await this.activateInitialBrief(await readBody(request)) }); return; }
       const opened = this.requireOpened();

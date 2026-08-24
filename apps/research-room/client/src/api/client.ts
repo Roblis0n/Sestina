@@ -2,6 +2,7 @@ import {
   ApiPayloadError,
   decodeAnalyzedReview,
   decodeApiEnvelope,
+  decodeDirectoryPickerCancellation,
   decodeLanguage,
   decodePreparedReview,
   decodeProjectOpenResult,
@@ -16,6 +17,7 @@ import type {
   AnalyzedReviewDto,
   AppLanguage,
   CommitDispositionInput,
+  DirectoryPickerCancellationDto,
   EvidenceClass,
   PreparedReviewDto,
   ProjectOpenResultDto,
@@ -86,8 +88,12 @@ export class ResearchRoomApi {
     return this.request("/api/project/select-directory", decodeSelectedDirectory, { method: "POST", mutation: true, body: {} });
   }
 
-  async previewSelectedDirectory(): Promise<SelectedDirectoryPreviewDto> {
-    return this.request("/api/project/select-directory/preview", decodeSelectedDirectoryPreview, { method: "POST", mutation: true, body: {} });
+  async previewSelectedDirectory(signal?: AbortSignal): Promise<SelectedDirectoryPreviewDto> {
+    return this.request("/api/project/select-directory/preview", decodeSelectedDirectoryPreview, { method: "POST", mutation: true, body: {}, signal });
+  }
+
+  async cancelDirectorySelection(): Promise<DirectoryPickerCancellationDto> {
+    return this.request("/api/project/select-directory", decodeDirectoryPickerCancellation, { method: "DELETE", mutation: true });
   }
 
   async initializeSelectedDirectory(confirmationNonce: string): Promise<ProjectOpenResultDto> {

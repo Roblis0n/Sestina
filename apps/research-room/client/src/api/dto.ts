@@ -55,6 +55,10 @@ export interface SelectedDirectoryDto extends Partial<ProjectOpenResultDto> {
   readonly selected: boolean;
 }
 
+export interface DirectoryPickerCancellationDto {
+  readonly cancelRequested: boolean;
+}
+
 export type SelectedDirectoryPreviewDto =
   | { readonly selected: false }
   | ({ readonly selected: true; readonly initializationRequired: false } & ProjectOpenResultDto)

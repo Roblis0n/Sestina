@@ -83,6 +83,22 @@ const GUIDANCE_FIXTURES: Record<string, string> = {
     "ri49_status: not_started",
     "blocked_missing_user_config",
   ].join("\n"),
+  "docs/execution/UI-01-PRODUCTION-STARTUP-CORRECTION-TASK-START-RECORD.md": [
+    "task: UI-01",
+    "slice: production_startup_packaging_correction",
+    "status: ready_to_start",
+    "final: ready_to_start",
+    "ri49_status: not_started",
+    "blocked_missing_user_config",
+  ].join("\n"),
+  "docs/execution/UI-01-PRODUCTION-STARTUP-CORRECTION-TASK-RESULT.md": [
+    "task: UI-01",
+    "slice: production_startup_packaging_correction",
+    "status: completed_and_verified",
+    "pnpm_verify: passed",
+    "ri49_status: not_started",
+    "blocked_missing_user_config",
+  ].join("\n"),
 };
 
 /** The canonical active-authority marker block every entry must carry. */

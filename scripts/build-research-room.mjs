@@ -9,6 +9,23 @@ const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const appRequire = createRequire(resolve(root, "apps/research-room/package.json"));
 const { build: buildClient } = await import(pathToFileURL(appRequire.resolve("vite")).href);
 const outdir = resolve(root, "apps/research-room/dist");
+const coreProviderSecrets = resolve(root, "packages/core/src/provider-secrets.ts");
+const productionSecretBackendPlugin = {
+  name: "sestina-production-secret-backend",
+  setup(buildContext) {
+    buildContext.onLoad(
+      { filter: /provider-secrets\.ts$/ },
+      (args) => {
+        if (resolve(args.path) !== coreProviderSecrets) return null;
+        return {
+          contents: 'export { createSecretBackend } from "@sestina/secrets";\n',
+          loader: "ts",
+          resolveDir: resolve(root, "packages/core/src"),
+        };
+      },
+    );
+  },
+};
 await rm(outdir, { recursive: true, force: true });
 await mkdir(outdir, { recursive: true });
 await buildClient({ configFile: resolve(root, "apps/research-room/vite.config.ts") });
@@ -23,6 +40,7 @@ await build({
   target: "node24",
   format: "esm",
   packages: "bundle",
+  plugins: [productionSecretBackendPlugin],
   // Native secure-storage bindings must stay runtime-loaded. Bundling their
   // JavaScript shims makes esbuild traverse platform-specific `.node` files
   // and either fail the build or produce a non-portable artifact.

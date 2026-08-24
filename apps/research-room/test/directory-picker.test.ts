@@ -3,7 +3,7 @@ import { Buffer } from "node:buffer";
 import { createNativeDirectoryPicker, type DirectoryPickerCommandRunner } from "../src/directory-picker.js";
 
 describe("RI-48 native directory picker adapter", () => {
-  it("uses a static Windows STA FolderBrowserDialog command and returns only its selected directory", async () => {
+  it("uses the lightweight Windows Shell picker without loading WinForms and returns only its selected directory", async () => {
     let observed: { readonly executable: string; readonly args: readonly string[] } | undefined;
     const runner: DirectoryPickerCommandRunner = {
       run: (request) => {
@@ -17,10 +17,15 @@ describe("RI-48 native directory picker adapter", () => {
     await expect(picker?.pick(new AbortController().signal)).resolves.toBe("C:\\selected-research");
     expect(observed?.executable).toBe("powershell.exe");
     expect(observed?.args).toContain("-STA");
+    expect(observed?.args).not.toContain("-NonInteractive");
     const encoded = observed?.args.at(-1);
     expect(typeof encoded).toBe("string");
     const command = Buffer.from(encoded ?? "", "base64").toString("utf16le");
-    expect(command).toContain("System.Windows.Forms.FolderBrowserDialog");
+    expect(command).toContain("Shell.Application");
+    expect(command).toContain("BrowseForFolder");
+    expect(command).toContain("0x71");
+    expect(command).not.toContain("Add-Type");
+    expect(command).not.toContain("System.Windows.Forms");
     expect(command).not.toContain("C:\\selected-research");
   });
 

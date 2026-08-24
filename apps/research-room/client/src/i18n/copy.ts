@@ -22,6 +22,9 @@ const EN = {
   open_existing: "Open existing project",
   inspect_path: "Check this path",
   zero_write: "Cancel leaves the folder unchanged. No recent-project history is created.",
+  picker_opening: "Opening the Windows folder window. If it is not visible immediately, cancel here and use the manual path.",
+  cancel_folder_picker: "Cancel folder window",
+  picker_cancel_requested: "Cancelling the folder window. No project data will be written.",
   initialization_title: "Initialize this local project?",
   initialization_deck: "Nothing has been written yet. Confirm to create only the local Sestina state listed below.",
   initialize: "Initialize project",
@@ -173,6 +176,9 @@ const ZH: Record<CopyKey, string> = {
   open_existing: "打开已有项目",
   inspect_path: "检查此路径",
   zero_write: "取消不会改变文件夹，也不会建立最近项目历史。",
+  picker_opening: "正在打开 Windows 文件夹窗口；如果没有立即看到，请在这里取消并改用手动路径。",
+  cancel_folder_picker: "取消文件夹窗口",
+  picker_cancel_requested: "正在取消文件夹窗口，不会写入项目数据。",
   initialization_title: "初始化这个本地项目？",
   initialization_deck: "目前尚未写入任何内容。确认后只创建下列 Sestina 本地状态。",
   initialize: "初始化项目",
@@ -306,6 +312,10 @@ export function t(language: AppLanguage, key: CopyKey): string {
   return COPY[language][key];
 }
 
+const EN_ERROR_COPY: Readonly<Record<string, string>> = Object.freeze({
+  infrastructure_failure: "Sestina could not read or update .sestina/state.sqlite in the selected folder. Existing files were preserved. Close any other Sestina instance, confirm the folder is writable, and reopen it.",
+});
+
 const ZH_ERROR_COPY: Readonly<Record<string, string>> = Object.freeze({
   offline: "本地 Research Room 不可用。请确认本地服务正在运行，然后重试。",
   invalid_payload: "本地服务返回的数据不符合当前客户端合同，已拒绝使用。请重试；若仍出现，请重启本地服务。",
@@ -321,6 +331,8 @@ const ZH_ERROR_COPY: Readonly<Record<string, string>> = Object.freeze({
   explicit_action_required: "该操作需要当前本地会话中的显式用户动作。",
   directory_picker_unavailable: "系统文件夹选择器不可用，请使用手动绝对路径入口。",
   directory_picker_failed: "系统文件夹选择器未能打开，请使用手动绝对路径入口。",
+  directory_picker_cancelled: "已取消系统文件夹选择，没有写入项目数据；可改用手动绝对路径。",
+  infrastructure_failure: "Sestina 无法读取或更新所选目录的 .sestina/state.sqlite；现有文件未被覆盖。请关闭其他 Sestina 实例，确认该目录可写后重新打开。",
   initialization_confirmation_invalid: "初始化确认已失效，请重新选择文件夹并核对将创建的内容。",
   provider_settings_unavailable: "Provider 设置当前不可用；Research Room 将保持 ledger_only。",
   session_unavailable: "当前本地会话不可用，请刷新页面后重试。",
@@ -329,9 +341,8 @@ const ZH_ERROR_COPY: Readonly<Record<string, string>> = Object.freeze({
 
 export function localizedError(language: AppLanguage, error: unknown): string {
   const fallback = error instanceof Error ? error.message : t(language, "service_unavailable");
-  if (language === "en") return fallback;
   const code = typeof error === "object" && error !== null && "code" in error ? String((error as { readonly code: unknown }).code) : "";
-  return ZH_ERROR_COPY[code] ?? fallback;
+  return (language === "en" ? EN_ERROR_COPY[code] : ZH_ERROR_COPY[code]) ?? fallback;
 }
 
 export type { CopyKey };

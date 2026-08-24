@@ -78,6 +78,7 @@ pre { max-height: 22rem; overflow: auto; padding: var(--space-3); border: 1px so
 .manual-entry summary { color: var(--text-secondary); font-weight: 620; }
 .manual-entry form { display: grid; gap: var(--space-2); margin-top: var(--space-3); }
 .inline-warning { border-left: 0.2rem solid var(--status-warning); padding-left: var(--space-3); color: var(--status-warning); }
+.picker-pending { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-top: var(--space-3); border: 2px solid var(--status-warning); padding: var(--space-3); background: var(--status-warning-bg); color: var(--status-warning); }
 .project-label { display: flex; flex-direction: column; border-top: 1px solid var(--border-subtle); padding-top: var(--space-4); }
 .project-label span { color: var(--text-muted); font-size: var(--text-xs); text-transform: uppercase; }
 .brief-form { display: grid; gap: var(--space-2); }
@@ -210,4 +211,7 @@ input[type="checkbox"], input[type="radio"] { width: auto; }
 }
 :root[data-motion="on"] *, :root[data-motion="on"] *::before, :root[data-motion="on"] *::after { scroll-behavior: auto !important; animation-duration: 0ms !important; animation-iteration-count: 1 !important; transition-duration: 0ms !important; }
 
-:root[data-theme="high_contrast"] .button, :root[data-theme="high_contrast"] input, :root[data-theme="high_contrast"] textarea, :root[data-theme="high_contrast"] select, :root[data-theme="high_contrast"] .status-badge { border-width: 2px; }
+:root[data-theme="high_contrast"] .button, :root[data-theme="high_contrast"] input, :root[data-theme="high_contrast"] textarea, :root[data-theme="high_contrast"] select, :root[data-theme="high_contrast"] .status-badge, :root[data-theme="high_contrast"] .app-chrome, :root[data-theme="high_contrast"] .project-navigation, :root[data-theme="high_contrast"] .context-inspector, :root[data-theme="high_contrast"] .thread-event { border-width: 2px; }
+:root[data-theme="high_contrast"] a { text-decoration-thickness: 0.18em; text-underline-offset: 0.2em; }
+:root[data-theme="high_contrast"] .brand__mark { border-width: 3px; background: var(--accent-primary); color: var(--surface-primary); }
+:root[data-theme="high_contrast"] .room-link { border: 2px solid var(--accent-primary); border-left-width: 0.5rem; }

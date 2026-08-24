@@ -197,7 +197,11 @@ test.describe("RI-48 real browser vertical slice", () => {
     await chooseAppearance(page, "高对比");
     await expect(page.locator("html")).toHaveAttribute("data-theme", "high_contrast");
     await expect(page.locator("html")).toHaveAttribute("data-transparency", "reduced");
+    await page.mouse.move(0, 0);
+    await expect(page.locator("body")).toHaveCSS("background-color", "rgb(2, 8, 23)");
+    await expect(page.getByRole("button", { name: "选择文件夹并打开" })).toHaveCSS("background-color", "rgb(0, 229, 255)");
     await expect(page.getByRole("button", { name: "选择文件夹并打开" })).toHaveCSS("border-top-width", "2px");
+    await captureHealthyScreenshot(page, testInfo, "ui01-vivid-high-contrast-start-center-1280x800.png", 1280, 800);
   });
 
   test("reduced motion: the desktop workflow remains operable without nonessential transitions", async ({ page }) => {
@@ -235,6 +239,28 @@ test.describe("RI-48 real browser vertical slice", () => {
     await expect(page.getByRole("heading", { name: "Research Room" })).toBeVisible();
     await expect(page.getByText("How should first-use browser initialization preserve research authority?", { exact: true })).toBeVisible();
     expect(await readFile(canary, "utf8")).toBe("must remain unchanged\n");
+  });
+
+  test("a slow system folder window can be cancelled immediately and returns to manual entry", async ({ page }) => {
+    const server = await createResearchRoomServer({
+      directoryPicker: {
+        pick: (signal) => new Promise<undefined>((_resolve, reject) => {
+          signal.addEventListener("abort", () => { reject(new Error("cancelled")); }, { once: true });
+        }),
+      },
+      languagePreferenceStore: new MemoryLanguagePreferenceStore("zh-CN"),
+    }).start();
+    servers.push(server);
+    await page.goto(server.origin);
+
+    await page.getByRole("button", { name: "选择文件夹并打开" }).click();
+    const cancelPicker = page.getByRole("button", { name: "取消文件夹窗口" });
+    await expect(cancelPicker).toBeVisible();
+    await cancelPicker.click();
+    await expect(cancelPicker).toBeHidden();
+    await expect(page.getByRole("status")).toContainText("已取消文件夹选择");
+    await page.getByText("手动输入绝对路径", { exact: true }).click();
+    await expect(page.getByLabel("项目绝对路径")).toBeEnabled();
   });
 
   test("fallback mode: manual absolute-path entry remains available", async ({ page }) => {
