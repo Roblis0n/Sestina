@@ -1,0 +1,51 @@
+{
+  "schemaVersion": "1.0.0",
+  "benchmarkClass": "development_synthetic",
+  "lockedBeforeAnyProviderRun": true,
+  "lockedAt": "2026-08-24T00:00:00.000Z",
+  "caseCount": 96,
+  "categoryCount": 12,
+  "languages": [
+    "zh-CN",
+    "en"
+  ],
+  "variants": [
+    "positive",
+    "hard-negative",
+    "boundary",
+    "missing-context"
+  ],
+  "files": {
+    "test": {
+      "path": "data/test.jsonl",
+      "sha256": "07402bb73df09267f39f20affc7e633b59c6bf84aff965285ea8c4d2a82fe1da"
+    },
+    "protocolAdversarial": {
+      "path": "data/protocol-adversarial.jsonl",
+      "sha256": "d319be2ab038e709f3ffc462849f64cc93a496d84e38c558002164133f758c14"
+    },
+    "caseSchema": {
+      "path": "schema/case.schema.json",
+      "sha256": "d79e3061387f96fdbedb6a60edbca0afb1cc70f38a48a6ab21ae4176abf79f37"
+    },
+    "predictionSchema": {
+      "path": "schema/prediction.schema.json",
+      "sha256": "24569b8b7771b1fee2979940fd3db39ae11c69cc5d3758ad58f89e0ee2786972"
+    },
+    "thresholds": {
+      "path": "thresholds.json",
+      "sha256": "ad792140ef05942ace7af44c408ea017629232e35a71eaf4d73b7a9b2244c5f9"
+    },
+    "codebook": {
+      "path": "CODEBOOK.md",
+      "sha256": "b06e84eb83ea847cad6954335f085c9ca2a32d7c2c78d868d64590690aae9591"
+    }
+  },
+  "protocolVersion": "1.0.0",
+  "protocolHash": "e3ad5ce8d7528d2fa6ed5a9b84c196acaf3a4d5248b6ff8623b2e611f99dbd67",
+  "promptVersion": "1.0.0",
+  "promptHash": "a93285a7e4afc92a6069ffcff994036a7c95c1b1e58c5387fc009cc683d7ca12",
+  "rubricVersion": "1.0.0",
+  "rubricHash": "ea7d8c5beed3ba5f8c3a852c8decf7aec46752e6b51d8d3100438a93ee0820d4",
+  "lockHash": "645fd9aad1786f3106d640f5ff60c4b3b8328e0435ed9dd54d300f4852a2f0c2"
+}

@@ -1,6 +1,8 @@
 import { createResearchRoomServer } from "./server.js";
 import { createNativeDirectoryPicker } from "./directory-picker.js";
 import { createFileLanguagePreferenceStore, resolveDefaultLanguagePreferencePath } from "./language-preferences.js";
+import { createSecretBackend, type SecretPlatform } from "@sestina/core";
+import { ProviderConfigurationService, createFileProviderConfigStore, resolveDefaultProviderConfigPath } from "./provider-settings.js";
 
 function requestedPort(argv: readonly string[]): number {
   const index = argv.indexOf("--port");
@@ -13,7 +15,13 @@ function requestedPort(argv: readonly string[]): number {
 try {
   const directoryPicker = createNativeDirectoryPicker();
   const languagePreferenceStore = createFileLanguagePreferenceStore({ filePath: resolveDefaultLanguagePreferencePath() });
-  const instance = createResearchRoomServer({ host: "127.0.0.1", port: requestedPort(process.argv.slice(2)), languagePreferenceStore, ...(directoryPicker ? { directoryPicker } : {}) });
+  if (!["win32", "darwin", "linux"].includes(process.platform)) throw new Error("This desktop platform is not supported.");
+  const secretBackend = await createSecretBackend(process.platform as SecretPlatform);
+  const providerConfigurationService = new ProviderConfigurationService(
+    createFileProviderConfigStore({ filePath: resolveDefaultProviderConfigPath() }),
+    secretBackend,
+  );
+  const instance = createResearchRoomServer({ host: "127.0.0.1", port: requestedPort(process.argv.slice(2)), languagePreferenceStore, providerConfigurationService, ...(directoryPicker ? { directoryPicker } : {}) });
   const running = await instance.start();
   process.stdout.write(`Sestina Research Room: ${running.origin}\n`);
   let stopping = false;

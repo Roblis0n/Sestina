@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Development Semantic Judge evaluation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "status",
+    "evidenceClass",
+    "decision",
+    "metrics",
+    "failureCases",
+    "realProviderHostSmoke",
+    "developmentSemanticMetrics",
+    "externalUserUsability",
+    "realSecondUse",
+    "marketEvidence",
+    "testLockHash",
+    "candidateProvenance"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "status": {
+      "enum": [
+        "blocked_missing_user_config",
+        "evaluated"
+      ]
+    },
+    "evidenceClass": {
+      "const": "development_synthetic"
+    },
+    "split": {
+      "enum": [
+        "development",
+        "test"
+      ]
+    },
+    "decision": {
+      "enum": [
+        "unproven",
+        "development_pass",
+        "development_conditional",
+        "development_semantic_no_go"
+      ]
+    },
+    "metrics": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "failureCases": {
+      "type": "array"
+    },
+    "realProviderHostSmoke": {
+      "enum": [
+        "blocked_missing_user_config",
+        "verified_for_synthetic_cases_in_this_run",
+        "unproven_from_imported_or_baseline"
+      ]
+    },
+    "developmentSemanticMetrics": {
+      "enum": [
+        "blocked_missing_user_config",
+        "development_pass",
+        "development_conditional",
+        "development_semantic_no_go"
+      ]
+    },
+    "externalUserUsability": {
+      "const": "unproven"
+    },
+    "realSecondUse": {
+      "const": "unproven"
+    },
+    "marketEvidence": {
+      "const": "unproven"
+    },
+    "testLockHash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "candidateProvenance": {
+      "type": [
+        "array",
+        "null"
+      ]
+    }
+  }
+}

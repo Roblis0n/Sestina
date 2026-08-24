@@ -10,7 +10,18 @@ export type {
   ResearchRoomState,
   RollbackResearchRoomReceiptInput,
 } from "./research-room.js";
-export type { ResearchRoomAnalysisPayload, ResearchRoomContextManifest, ResearchRoomReceipt, ResearchRoomStateBinding } from "@sestina/research";
+export type { ResearchRoomAnalysisPayload, ResearchRoomContextManifest, ResearchRoomReceipt, ResearchRoomSemanticJudgeTrace, ResearchRoomStateBinding } from "@sestina/research";
+export {
+  compileResearchRoomSemanticJudgePrompt,
+  createStableTextSpan,
+  prepareResearchRoomSemanticJudge,
+} from "@sestina/review";
+export type {
+  ResearchRoomSemanticJudgeRequest,
+  ResearchRoomSemanticProviderBinding,
+} from "@sestina/review";
+export { createSecretBackend } from "./provider-secrets.js";
+export type { SecretBackend, SecretBackendStatus, SecretPlatform } from "@sestina/secrets";
 export { coreErr, coreOk } from "./errors.js";
 export type { CoreError, CoreErrorCode, CoreResult } from "./errors.js";
 export { getPrivacyManifest } from "./privacy.js";

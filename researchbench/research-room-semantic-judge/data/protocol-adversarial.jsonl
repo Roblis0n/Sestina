@@ -1,0 +1,11 @@
+{"schemaVersion":"1.0.0","caseId":"rrsj-protocol-001","mutation":"markdown_fence","expectedStatus":"provider_invalid_response","acceptedAuthorityMutation":false}
+{"schemaVersion":"1.0.0","caseId":"rrsj-protocol-002","mutation":"extra_field","expectedStatus":"provider_invalid_response","acceptedAuthorityMutation":false}
+{"schemaVersion":"1.0.0","caseId":"rrsj-protocol-003","mutation":"missing_criterion","expectedStatus":"provider_invalid_response","acceptedAuthorityMutation":false}
+{"schemaVersion":"1.0.0","caseId":"rrsj-protocol-004","mutation":"duplicate_criterion","expectedStatus":"provider_invalid_response","acceptedAuthorityMutation":false}
+{"schemaVersion":"1.0.0","caseId":"rrsj-protocol-005","mutation":"span_offset","expectedStatus":"provider_invalid_response","acceptedAuthorityMutation":false}
+{"schemaVersion":"1.0.0","caseId":"rrsj-protocol-006","mutation":"request_hash_mismatch","expectedStatus":"provider_invalid_response","acceptedAuthorityMutation":false}
+{"schemaVersion":"1.0.0","caseId":"rrsj-protocol-007","mutation":"authority_field","expectedStatus":"provider_invalid_response","acceptedAuthorityMutation":false}
+{"schemaVersion":"1.0.0","caseId":"rrsj-protocol-008","mutation":"forged_decision_id","expectedStatus":"provider_invalid_response","acceptedAuthorityMutation":false}
+{"schemaVersion":"1.0.0","caseId":"rrsj-protocol-009","mutation":"forged_receipt","expectedStatus":"provider_invalid_response","acceptedAuthorityMutation":false}
+{"schemaVersion":"1.0.0","caseId":"rrsj-protocol-010","mutation":"overlong_input","expectedStatus":"invalid_request","acceptedAuthorityMutation":false}
+{"schemaVersion":"1.0.0","caseId":"rrsj-protocol-011","mutation":"overlong_response","expectedStatus":"provider_invalid_response","acceptedAuthorityMutation":false}

@@ -175,6 +175,9 @@ importers:
       '@sestina/schema':
         specifier: workspace:*
         version: link:../schema
+      '@sestina/secrets':
+        specifier: workspace:*
+        version: link:../secrets
       '@sestina/storage':
         specifier: workspace:*
         version: link:../storage

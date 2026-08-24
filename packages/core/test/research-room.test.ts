@@ -1,4 +1,5 @@
 import { readFile, rm, mkdtemp } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -9,6 +10,8 @@ import {
   type ResearchRoomProvider,
   type SestinaCore,
 } from "../src/index.js";
+import { createStableTextSpan, type ResearchRoomSemanticJudgeRequest, type ResearchRoomSemanticJudgeResponse } from "@sestina/review";
+import { parseResearchRoomReceipt, stableResearchHash } from "@sestina/research";
 
 const USER = { kind: "user", actorId: "ri48-owner" } as const;
 const MODEL = { kind: "model", provider: "fixture", model: "deterministic" } as const;
@@ -47,13 +50,66 @@ class FixtureProvider implements ResearchRoomProvider {
   readonly id = "ri48-deterministic-fixture";
   readonly kind = "deterministic_fixture" as const;
   readonly networkAccess = "none" as const;
+  readonly binding = Object.freeze({
+    id: this.id,
+    family: "openai_compatible" as const,
+    model: "deterministic",
+    baseUrlOrigin: "http://127.0.0.1:1",
+    locality: "local" as const,
+    configGeneration: 1,
+  });
   readonly calls: unknown[] = [];
-  constructor(private readonly response: unknown = semanticPayload(), private readonly failure?: Error) {}
-  analyze(input: unknown): Promise<unknown> {
-    this.calls.push(structuredClone(input));
-    if (this.failure) return Promise.reject(this.failure);
-    return Promise.resolve(structuredClone(this.response));
+  constructor(private readonly response?: unknown, private readonly failure?: Error) {}
+  prepare(request: ResearchRoomSemanticJudgeRequest) {
+    const requestBody = JSON.stringify(request);
+    return Object.freeze({
+      schemaVersion: "1.0.0" as const,
+      endpoint: "http://127.0.0.1:1/v1/chat/completions",
+      provider: this.binding,
+      requestHash: request.requestHash,
+      requestBody,
+      requestBodyHash: createHash("sha256").update(requestBody, "utf8").digest("hex"),
+      requestBodyBytes: Buffer.byteLength(requestBody, "utf8"),
+      responseLimitBytes: request.limits.maxResponseBytes,
+      redirectPolicy: "error" as const,
+      retryCount: 0 as const,
+    });
   }
+  analyze(request: ResearchRoomSemanticJudgeRequest, preview: unknown): Promise<unknown> {
+    this.calls.push(structuredClone({ request, preview }));
+    if (this.failure) return Promise.reject(this.failure);
+    return Promise.resolve(structuredClone(this.response ?? semanticJudgeResponse(request)));
+  }
+}
+
+function semanticJudgeResponse(request: ResearchRoomSemanticJudgeRequest): ResearchRoomSemanticJudgeResponse {
+  const span = createStableTextSpan(request.context.suggestionDocument, 0, request.context.suggestionDocument.normalizedText.length);
+  if (!span.ok) throw new Error(span.error.code);
+  return {
+    schemaVersion: "1.0.0",
+    protocolVersion: request.protocol.version,
+    protocolHash: request.protocol.hash,
+    promptVersion: request.prompt.version,
+    promptHash: request.prompt.hash,
+    rubricVersion: request.rubric.version,
+    rubricHash: request.rubric.hash,
+    reviewId: request.reviewId,
+    projectId: request.projectId,
+    stateBindingHash: request.stateBindingHash,
+    requestHash: request.requestHash,
+    provider: request.provider,
+    assessments: request.criteria.map((criterion) => ({
+      criterionId: criterion.id,
+      verdict: criterion.id === "argument-delta" ? "positive" as const : "negative" as const,
+      evidenceSpans: [span.value],
+      referencedDecisionIds: [],
+      referencedIssueIds: [],
+      publicRationale: criterion.id === "argument-delta" ? "The suggestion adds one bounded reporting qualification." : `No ${criterion.positiveMeaning} is present.`,
+      minimalCorrection: "No correction is proposed.",
+      uncertainty: "No material uncertainty in the cited suggestion span.",
+      missingContext: [],
+    })),
+  };
 }
 
 interface FixtureState {
@@ -132,6 +188,15 @@ afterEach(async () => {
 });
 
 describe("RI-48 Research Deliberation Kernel", () => {
+  it("cancels a prepared review before send and invalidates its confirmation", async () => {
+    const provider = new FixtureProvider(); const state = await fixture(provider);
+    const prepared = valueOf(state.core.prepareResearchRoomReview({ projectId: state.projectId, suggestion: "Keep this local and bounded.", evidenceClass: "synthetic_fixture", countsAsExternalEvidence: false }));
+    expect(state.core.cancelResearchRoomReview({ reviewId: prepared.reviewId, confirmationNonce: prepared.confirmationNonce, manifestHash: prepared.manifestHash })).toEqual({ ok: true, value: { cancelled: true } });
+    expect(await state.core.analyzeResearchRoomSuggestion({ reviewId: prepared.reviewId, confirmationNonce: prepared.confirmationNonce, manifestHash: prepared.manifestHash })).toMatchObject({ ok: false, error: { code: "user_confirmation_required" } });
+    expect(provider.calls).toHaveLength(0);
+    expect(valueOf(state.core.listResearchRoomReceipts(state.projectId))).toHaveLength(0);
+  });
+
   it("shows an exact Context Manifest before invoking any Provider and does not write before Authority Gate", async () => {
     const provider = new FixtureProvider(); const state = await fixture(provider);
     const before = valueOf(state.core.listResearchRoomReceipts(state.projectId));
@@ -142,8 +207,16 @@ describe("RI-48 Research Deliberation Kernel", () => {
     expect(prepared).toMatchObject({ contextManifestVisible: true, providerStatus: "ready" });
     expect(prepared.manifest).toMatchObject({ sendStatus: "not_sent", networkRequired: false, countsAsExternalEvidence: false });
     expect(prepared.manifest.fields.map((field) => field.category)).toEqual(expect.arrayContaining([
-      "research_question", "current_task", "fixed_decisions", "accepted_decisions", "open_issues", "current_episode", "single_suggestion",
+      "research_question", "current_stage", "current_task", "fixed_decisions", "expected_deltas", "evidence_boundaries", "explicit_non_goals", "accepted_decisions", "issue_history", "receipt_summary", "current_episode", "single_suggestion", "semantic_criteria",
     ]));
+    const semanticManifest = prepared.manifest.semanticJudge;
+    expect(semanticManifest).toBeDefined();
+    if (semanticManifest === undefined) throw new Error("missing Semantic Judge manifest");
+    expect(semanticManifest.provider).toMatchObject({ family: "openai_compatible", model: "deterministic", configGeneration: 1 });
+    expect(semanticManifest.request.retryCount).toBe(0);
+    expect(semanticManifest.request.redirectPolicy).toBe("error");
+    expect(semanticManifest.request.requestHash).toMatch(/^[0-9a-f]{64}$/u);
+    expect(semanticManifest.request.requestBodyHash).toMatch(/^[0-9a-f]{64}$/u);
     expect(valueOf(state.core.listResearchRoomReceipts(state.projectId))).toEqual(before);
 
     const wrong = await state.core.analyzeResearchRoomSuggestion({ reviewId: prepared.reviewId, confirmationNonce: "wrong", manifestHash: prepared.manifestHash });
@@ -155,6 +228,7 @@ describe("RI-48 Research Deliberation Kernel", () => {
     }));
     expect(provider.calls).toHaveLength(1);
     expect(result).toMatchObject({ providerStatus: "semantic_ready", manifest: { sendStatus: "sent_to_provider", networkUsed: false } });
+    expect(result.semanticJudge).toMatchObject({ reasonableIncrement: { status: "supported", authority: "system_derived", canMutateAuthority: false } });
     expect(valueOf(state.core.listResearchRoomReceipts(state.projectId))).toEqual(before);
   });
 
@@ -258,6 +332,16 @@ describe("RI-48 Research Deliberation Kernel", () => {
       redirectQuestion: "How should the synthetic selection mechanism itself be studied?",
       reason: "The owner explicitly changes direction.", actor: USER,
     }));
+    const { receiptHash: _newHash, semanticJudge: _semanticJudge, manifest: newManifest, ...legacyBase } = receipt;
+    const { semanticJudge: _manifestSemanticJudge, ...legacyManifest } = newManifest;
+    void _newHash; void _semanticJudge; void _manifestSemanticJudge;
+    const legacyPayload = { ...legacyBase, manifest: legacyManifest };
+    const legacyHash = stableResearchHash(legacyPayload);
+    if (!legacyHash.ok) throw new Error(legacyHash.error.code);
+    expect(parseResearchRoomReceipt({ ...legacyPayload, receiptHash: legacyHash.value })).toMatchObject({
+      ok: true,
+      value: { id: receipt.id, providerStatus: "semantic_ready" },
+    });
     state.core.close(); cores.splice(cores.indexOf(state.core), 1);
     const reopened = valueOf(await openSestina({ databasePath: join(state.root, "state.sqlite") })); cores.push(reopened);
     const restoredReceipts = valueOf(reopened.listResearchRoomReceipts(state.projectId));

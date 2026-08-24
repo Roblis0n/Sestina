@@ -907,6 +907,7 @@ export class SestinaCore {
 
   getResearchRoomState(projectId: string): CoreResult<ResearchRoomState> { return this.#researchRoom.getState(projectId); }
   prepareResearchRoomReview(input: PrepareResearchRoomReviewInput): CoreResult<PreparedResearchRoomReview> { return this.#researchRoom.prepare(input); }
+  cancelResearchRoomReview(input: { readonly reviewId: string; readonly confirmationNonce: string; readonly manifestHash: string }): CoreResult<{ readonly cancelled: true }> { return this.#researchRoom.cancel(input); }
   analyzeResearchRoomSuggestion(input: { readonly reviewId: string; readonly confirmationNonce: string; readonly manifestHash: string }): Promise<CoreResult<AnalyzedResearchRoomReview>> { return this.#researchRoom.analyze(input); }
   commitResearchRoomDisposition(input: CommitResearchRoomDispositionInput): CoreResult<ResearchRoomReceipt> { return this.#researchRoom.commit(input); }
   listResearchRoomReceipts(projectId: string): CoreResult<readonly ResearchRoomReceipt[]> { return this.#researchRoom.listReceipts(projectId); }

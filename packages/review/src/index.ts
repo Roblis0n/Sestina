@@ -57,6 +57,8 @@ export { FOCUS_SUBSTITUTION_RUBRIC, validateFocusSubstitutionAssessment } from "
 export type { FocusSubstitutionAssessment, FocusSubstitutionVerdict, IntentRelationship } from "./semantic/rubrics/focus-substitution.js";
 export { AUDIT_HIJACKING_RUBRIC, validateAuditHijackingAssessment } from "./semantic/rubrics/audit-hijacking.js";
 export type { AuditClassification, AuditHijackingAssessment } from "./semantic/rubrics/audit-hijacking.js";
+export { REPEATED_AUDIT_RUBRIC } from "./semantic/rubrics/repeated-audit.js";
+export { ARGUMENT_LEAP_RUBRIC } from "./semantic/rubrics/argument-leap.js";
 export { SEMANTIC_SCOPE_RUBRIC, resolveScopeAssessment, validateSemanticScopeAssessment } from "./semantic/rubrics/semantic-scope.js";
 export type { DeterministicScopeResult, ResolvedScopeAssessment, ScopeChangeRelationship, SemanticScopeAssessment, SemanticScopeCategory, SemanticScopeChange } from "./semantic/rubrics/semantic-scope.js";
 export { DECISION_INTEGRITY_RUBRIC, validateDecisionIntegrityAssessment } from "./semantic/rubrics/decision-integrity.js";
@@ -67,6 +69,28 @@ export { SHALLOW_ABSTRACTION_RUBRIC, validateShallowAbstractionAssessment } from
 export type { ShallowAbstractionAssessment } from "./semantic/rubrics/shallow-abstraction.js";
 export { EVIDENCE_BOUNDARY_RUBRIC, evaluateEvidenceBoundary } from "./semantic/rubrics/evidence-boundary.js";
 export type { EvidenceBoundaryCode, EvidenceBoundaryFinding, EvidenceBoundaryInput } from "./semantic/rubrics/evidence-boundary.js";
+export {
+  RESEARCH_ROOM_SEMANTIC_JUDGE_PROTOCOL_VERSION,
+  RESEARCH_ROOM_SEMANTIC_JUDGE_PROMPT_VERSION,
+  RESEARCH_ROOM_SEMANTIC_JUDGE_RUBRIC_VERSION,
+  RESEARCH_ROOM_SEMANTIC_JUDGE_RESPONSE_SCHEMA,
+  compileResearchRoomSemanticJudgePrompt,
+  prepareResearchRoomSemanticJudge,
+  submitResearchRoomSemanticJudge,
+} from "./semantic/research-room-semantic-judge.js";
+export type {
+  CompiledResearchRoomSemanticJudgePrompt,
+  PrepareResearchRoomSemanticJudgeInput,
+  ResearchRoomSemanticAssessment,
+  ResearchRoomSemanticCriterionId,
+  ResearchRoomSemanticJudgeCriterion,
+  ResearchRoomSemanticJudgeLimits,
+  ResearchRoomSemanticJudgeRequest,
+  ResearchRoomSemanticJudgeResponse,
+  ResearchRoomSemanticJudgeResult,
+  ResearchRoomSemanticProviderBinding,
+  ResearchRoomSemanticVerdict,
+} from "./semantic/research-room-semantic-judge.js";
 export { EvidenceFreshnessChecker, evaluateEvidenceFreshness } from "./checkers/evidence-freshness-checker.js";
 export type { CurrentEvidenceRevision, EvidenceFreshnessIssue } from "./checkers/evidence-freshness-checker.js";
 export { mergeFindings } from "./findings/merge-findings.js";

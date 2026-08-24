@@ -70,7 +70,8 @@ const GUIDANCE_FILES = [
     required: [
       "accepted_current_guide",
       "RI-43 为 `pilot_kit_ready_external_validation_deferred_by_user`",
-      "RI-48 首次语言与电脑端体验修正已完成并验证",
+      "RI-48 首次语言与电脑端体验基线已完成并验证",
+      "completed_and_verified_implementation_real_provider_evidence_blocked",
       "Market Gate 0",
     ],
   },
@@ -147,24 +148,24 @@ const MARKER_CONTRACT = {
     why: "the current task id must be a well-formed RI-XX id consistent across entries",
   },
   "sestina-next-code-goal": {
-    exact: "await_new_task_start_record_after_RI48",
-    why: "RI-48 is complete and no later task is authorized without a new start record",
+    exact: "none_active_RI49_not_started",
+    why: "the RI-48 implementation slice is complete and RI-49 has not started",
   },
   "sestina-next-execution-goal": {
-    exact: "do_not_start_RI49_without_new_gate",
-    why: "RI-49 remains not started and must pass a new gate",
+    exact: "await_explicit_user_provider_config_for_real_provider_evidence",
+    why: "real Provider evidence requires an explicit user configuration",
   },
   "sestina-next-code-sequence": {
     exact: "none_active_RI49_not_started",
-    why: "there is no active code sequence after the verified RI-48 correction",
+    why: "no coding slice is active and RI-49 remains not started",
   },
   "sestina-ri44-to-ri47-status": {
     exact: "superseded_unstarted",
     why: "old RI-44 through RI-47 were superseded without being implemented",
   },
   "sestina-ri48-status": {
-    exact: "completed_and_verified_implementation_only",
-    why: "the first-run language and desktop experience correction is complete with implementation evidence only",
+    exact: "completed_and_verified_implementation_real_provider_evidence_blocked",
+    why: "the RI-48 implementation is verified while real Provider evidence awaits explicit user configuration",
   },
   "sestina-market-gate-0": {
     exact: "deferred_by_user_nonblocking",

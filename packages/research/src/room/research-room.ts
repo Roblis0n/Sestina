@@ -59,7 +59,7 @@ export interface ResearchRoomContextManifest {
   readonly sendStatus: "not_sent" | "sent_to_provider";
   readonly networkUsed: boolean;
   readonly fields: readonly {
-    readonly category: "research_question" | "current_task" | "fixed_decisions" | "accepted_decisions" | "open_issues" | "current_episode" | "single_suggestion";
+    readonly category: "research_question" | "current_stage" | "current_task" | "fixed_decisions" | "expected_deltas" | "evidence_boundaries" | "explicit_non_goals" | "accepted_decisions" | "open_issues" | "issue_history" | "receipt_summary" | "current_episode" | "single_suggestion" | "semantic_criteria";
     readonly source: "active_research_brief" | "versioned_research_state" | "explicit_user_input";
     readonly sensitivity: "research_state" | "user_supplied_text";
     readonly included: true;
@@ -70,6 +70,83 @@ export interface ResearchRoomContextManifest {
   readonly stateBindingHash: string;
   readonly evidenceClass: ResearchRoomEvidenceClass;
   readonly countsAsExternalEvidence: false;
+  readonly semanticJudge?: {
+    readonly protocol: { readonly version: string; readonly hash: string };
+    readonly prompt: { readonly version: string; readonly hash: string };
+    readonly rubric: { readonly version: string; readonly hash: string };
+    readonly provider: {
+      readonly id: string;
+      readonly family: "openai_compatible";
+      readonly model: string;
+      readonly baseUrlOrigin: string;
+      readonly locality: "local" | "external";
+      readonly configGeneration: number;
+    };
+    readonly request: {
+      readonly endpoint: string;
+      readonly requestHash: string;
+      readonly requestBody: string;
+      readonly requestBodyHash: string;
+      readonly requestBodyBytes: number;
+      readonly responseLimitBytes: number;
+      readonly redirectPolicy: "error";
+      readonly retryCount: 0;
+    };
+    readonly excludedFields: readonly string[];
+  };
+}
+
+export interface ResearchRoomSemanticJudgeTrace {
+  readonly responseHashes: {
+    readonly protocolHash: string;
+    readonly promptHash: string;
+    readonly rubricHash: string;
+    readonly requestHash: string;
+  };
+  readonly assessments: readonly {
+    readonly criterionId: string;
+    readonly verdict: "positive" | "negative" | "unknown";
+    readonly evidenceSpans: readonly {
+      readonly projectId: string;
+      readonly artifactId: string;
+      readonly revisionId: string;
+      readonly normalizedTextHash: string;
+      readonly start: number;
+      readonly end: number;
+      readonly quote: string;
+      readonly quoteHash: string;
+      readonly normalizationVersion: string;
+      readonly indexUnit: string;
+    }[];
+    readonly referencedDecisionIds: readonly string[];
+    readonly referencedIssueIds: readonly string[];
+    readonly publicRationale: string;
+    readonly minimalCorrection: string;
+    readonly uncertainty: string;
+    readonly missingContext: readonly string[];
+  }[];
+  readonly findings: readonly {
+    readonly id: string;
+    readonly kind: string;
+    readonly severity: "info" | "warning" | "error";
+    readonly rationale: string;
+    readonly minimumRecovery: string;
+    readonly decisionIds: readonly string[];
+    readonly issueIds: readonly string[];
+    readonly authority: "model_proposed";
+  }[];
+  readonly argumentDelta: {
+    readonly status: "substantive" | "no_substantive_delta" | "unknown";
+    readonly summary: string;
+    readonly evidenceSpans: ResearchRoomSemanticJudgeTrace["assessments"][number]["evidenceSpans"];
+  };
+  readonly reasonableIncrement: {
+    readonly status: "supported" | "not_supported" | "unknown";
+    readonly authority: "system_derived";
+    readonly canMutateAuthority: false;
+    readonly blockingCriteria: readonly string[];
+  };
+  readonly derivation: "system_derived_from_validated_assessments";
 }
 
 export interface ResearchRoomReceipt {
@@ -80,12 +157,13 @@ export interface ResearchRoomReceipt {
   readonly sourceEpisodeId?: string;
   readonly status: "committed" | "rolled_back";
   readonly providerStatus: ResearchRoomProviderStatus;
-  readonly ledgerOnlyReason?: "provider_not_configured" | "provider_failed" | "provider_timeout" | "provider_invalid_response";
+  readonly ledgerOnlyReason?: "provider_not_configured" | "provider_failed" | "provider_timeout" | "provider_invalid_response" | "provider_configuration_changed" | "provider_aborted";
   readonly evidenceClass: ResearchRoomEvidenceClass;
   readonly countsAsExternalEvidence: false;
   readonly suggestionHash: string;
   readonly manifest: ResearchRoomContextManifest;
   readonly analysis: ResearchRoomAnalysisPayload;
+  readonly semanticJudge?: ResearchRoomSemanticJudgeTrace;
   readonly disposition: {
     readonly kind: ResearchRoomDispositionKind;
     readonly reason: string;
@@ -131,6 +209,53 @@ function stringList(value: unknown, maxItems = 32): readonly string[] | undefine
 }
 
 function sha(value: unknown): value is string { return typeof value === "string" && /^[0-9a-f]{64}$/u.test(value); }
+function positiveInteger(value: unknown): value is number { return Number.isSafeInteger(value) && Number(value) > 0; }
+
+function parseSemanticProvider(input: unknown): ResearchRoomContextManifest["semanticJudge"] extends infer T
+  ? T extends { readonly provider: infer P } ? P | undefined : never
+  : never {
+  if (!isRecord(input) || !hasExactKeys(input, ["id", "family", "model", "baseUrlOrigin", "locality", "configGeneration"])) return undefined;
+  if (text(input.id, 128) === undefined || input.family !== "openai_compatible" || text(input.model, 256) === undefined || !["local", "external"].includes(String(input.locality)) || !positiveInteger(input.configGeneration)) return undefined;
+  try {
+    const url = new URL(String(input.baseUrlOrigin));
+    if (url.origin !== input.baseUrlOrigin || url.username !== "" || url.password !== "") return undefined;
+  } catch { return undefined; }
+  return cloneFrozen(input as unknown as NonNullable<ResearchRoomContextManifest["semanticJudge"]>["provider"]);
+}
+
+function parseVersionHash(input: unknown): { readonly version: string; readonly hash: string } | undefined {
+  if (!isRecord(input) || !hasExactKeys(input, ["version", "hash"]) || text(input.version, 64) === undefined || !sha(input.hash)) return undefined;
+  return cloneFrozen({ version: input.version as string, hash: input.hash });
+}
+
+function parseSemanticManifest(input: unknown): NonNullable<ResearchRoomContextManifest["semanticJudge"]> | undefined {
+  if (!isRecord(input) || !hasExactKeys(input, ["protocol", "prompt", "rubric", "provider", "request", "excludedFields"]) || !isRecord(input.request)) return undefined;
+  const protocol = parseVersionHash(input.protocol); const prompt = parseVersionHash(input.prompt); const rubric = parseVersionHash(input.rubric); const provider = parseSemanticProvider(input.provider); const excludedFields = stringList(input.excludedFields, 64);
+  if (protocol === undefined || prompt === undefined || rubric === undefined || provider === undefined || excludedFields === undefined || !hasExactKeys(input.request, ["endpoint", "requestHash", "requestBody", "requestBodyHash", "requestBodyBytes", "responseLimitBytes", "redirectPolicy", "retryCount"])) return undefined;
+  if (text(input.request.endpoint, 2_048) === undefined || !sha(input.request.requestHash) || typeof input.request.requestBody !== "string" || !sha(input.request.requestBodyHash) || !positiveInteger(input.request.requestBodyBytes) || Buffer.byteLength(input.request.requestBody, "utf8") !== input.request.requestBodyBytes || !positiveInteger(input.request.responseLimitBytes) || input.request.redirectPolicy !== "error" || input.request.retryCount !== 0) return undefined;
+  return cloneFrozen({ protocol, prompt, rubric, provider, request: input.request, excludedFields } as unknown as NonNullable<ResearchRoomContextManifest["semanticJudge"]>);
+}
+
+function parseSemanticTrace(input: unknown): ResearchRoomSemanticJudgeTrace | undefined {
+  if (!isRecord(input) || !hasExactKeys(input, ["responseHashes", "assessments", "findings", "argumentDelta", "reasonableIncrement", "derivation"]) || !isRecord(input.responseHashes) || !Array.isArray(input.assessments) || !Array.isArray(input.findings) || !isRecord(input.argumentDelta) || !isRecord(input.reasonableIncrement)) return undefined;
+  if (!hasExactKeys(input.responseHashes, ["protocolHash", "promptHash", "rubricHash", "requestHash"]) || !Object.values(input.responseHashes).every(sha) || input.derivation !== "system_derived_from_validated_assessments") return undefined;
+  if (input.assessments.length !== 9 || new Set(input.assessments.map((item) => isRecord(item) ? item.criterionId : undefined)).size !== 9) return undefined;
+  for (const assessment of input.assessments) {
+    if (!isRecord(assessment) || !hasExactKeys(assessment, ["criterionId", "verdict", "evidenceSpans", "referencedDecisionIds", "referencedIssueIds", "publicRationale", "minimalCorrection", "uncertainty", "missingContext"]) || text(assessment.criterionId, 128) === undefined || !["positive", "negative", "unknown"].includes(String(assessment.verdict)) || !Array.isArray(assessment.evidenceSpans) || assessment.evidenceSpans.length > 8 || stringList(assessment.missingContext, 8) === undefined || text(assessment.publicRationale, 4_096) === undefined || text(assessment.minimalCorrection, 4_096) === undefined || text(assessment.uncertainty, 4_096) === undefined) return undefined;
+    for (const id of Array.isArray(assessment.referencedDecisionIds) ? assessment.referencedDecisionIds : []) { if (!parseResearchIdFor(id, "rdec_").ok) return undefined; }
+    for (const id of Array.isArray(assessment.referencedIssueIds) ? assessment.referencedIssueIds : []) { if (!parseResearchIdFor(id, "riss_").ok) return undefined; }
+    if (!Array.isArray(assessment.referencedDecisionIds) || !Array.isArray(assessment.referencedIssueIds)) return undefined;
+    for (const span of assessment.evidenceSpans) {
+      if (!isRecord(span) || !hasExactKeys(span, ["projectId", "artifactId", "revisionId", "normalizedTextHash", "start", "end", "quote", "quoteHash", "normalizationVersion", "indexUnit"]) || !parseResearchIdFor(span.projectId, "rprj_").ok || !parseResearchIdFor(span.artifactId, "rart_").ok || !parseResearchIdFor(span.revisionId, "rrev_").ok || !sha(span.normalizedTextHash) || !sha(span.quoteHash) || !Number.isSafeInteger(span.start) || !Number.isSafeInteger(span.end) || Number(span.start) < 0 || Number(span.end) <= Number(span.start) || typeof span.quote !== "string" || text(span.normalizationVersion, 64) === undefined || text(span.indexUnit, 64) === undefined) return undefined;
+    }
+  }
+  for (const finding of input.findings) {
+    if (!isRecord(finding) || !hasExactKeys(finding, ["id", "kind", "severity", "rationale", "minimumRecovery", "decisionIds", "issueIds", "authority"]) || !parseResearchIdFor(finding.id, "rfnd_").ok || text(finding.kind, 128) === undefined || !["info", "warning", "error"].includes(String(finding.severity)) || text(finding.rationale, 4_096) === undefined || text(finding.minimumRecovery, 4_096) === undefined || finding.authority !== "model_proposed" || !Array.isArray(finding.decisionIds) || !Array.isArray(finding.issueIds)) return undefined;
+  }
+  if (!hasExactKeys(input.argumentDelta, ["status", "summary", "evidenceSpans"]) || !["substantive", "no_substantive_delta", "unknown"].includes(String(input.argumentDelta.status)) || text(input.argumentDelta.summary, 4_096) === undefined || !Array.isArray(input.argumentDelta.evidenceSpans)) return undefined;
+  if (!hasExactKeys(input.reasonableIncrement, ["status", "authority", "canMutateAuthority", "blockingCriteria"]) || !["supported", "not_supported", "unknown"].includes(String(input.reasonableIncrement.status)) || input.reasonableIncrement.authority !== "system_derived" || input.reasonableIncrement.canMutateAuthority !== false || stringList(input.reasonableIncrement.blockingCriteria, 32) === undefined) return undefined;
+  return cloneFrozen(input as unknown as ResearchRoomSemanticJudgeTrace);
+}
 
 export function parseResearchRoomEvidenceClass(value: unknown): ResearchResult<ResearchRoomEvidenceClass> {
   return typeof value === "string" && RESEARCH_ROOM_EVIDENCE_CLASSES.includes(value as ResearchRoomEvidenceClass)
@@ -172,8 +297,10 @@ export function parseResearchRoomContextManifest(input: unknown): ResearchResult
   if (!isRecord(input) || input.schemaVersion !== "1.0.0" || !isNonBlankString(input.providerId) || !["none", "deterministic_fixture", "local", "external"].includes(String(input.providerKind)) || typeof input.networkRequired !== "boolean" || !["not_sent", "sent_to_provider"].includes(String(input.sendStatus)) || typeof input.networkUsed !== "boolean" || !Array.isArray(input.fields) || !sha(input.contextHash) || !sha(input.suggestionHash) || !sha(input.stateBindingHash) || input.countsAsExternalEvidence !== false) return err(researchError("invalid_research_room_receipt"));
   const review = parseResearchIdFor(input.reviewId, "rrvw_"); const evidence = parseResearchRoomEvidenceClass(input.evidenceClass); if (!review.ok || !evidence.ok) return err(researchError("invalid_research_room_receipt"));
   const fields: ResearchRoomContextManifest["fields"][number][] = [];
-  for (const raw of input.fields) { if (!isRecord(raw) || !hasExactKeys(raw, ["category", "source", "sensitivity", "included", "truncated"]) || !["research_question", "current_task", "fixed_decisions", "accepted_decisions", "open_issues", "current_episode", "single_suggestion"].includes(String(raw.category)) || !["active_research_brief", "versioned_research_state", "explicit_user_input"].includes(String(raw.source)) || !["research_state", "user_supplied_text"].includes(String(raw.sensitivity)) || raw.included !== true || typeof raw.truncated !== "boolean") return err(researchError("invalid_research_room_receipt")); fields.push(raw as unknown as ResearchRoomContextManifest["fields"][number]); }
-  return ok(cloneFrozen({ ...input, reviewId: review.value.id, evidenceClass: evidence.value, countsAsExternalEvidence: false, fields } as unknown as ResearchRoomContextManifest));
+  for (const raw of input.fields) { if (!isRecord(raw) || !hasExactKeys(raw, ["category", "source", "sensitivity", "included", "truncated"]) || !["research_question", "current_stage", "current_task", "fixed_decisions", "expected_deltas", "evidence_boundaries", "explicit_non_goals", "accepted_decisions", "open_issues", "issue_history", "receipt_summary", "current_episode", "single_suggestion", "semantic_criteria"].includes(String(raw.category)) || !["active_research_brief", "versioned_research_state", "explicit_user_input"].includes(String(raw.source)) || !["research_state", "user_supplied_text"].includes(String(raw.sensitivity)) || raw.included !== true || typeof raw.truncated !== "boolean") return err(researchError("invalid_research_room_receipt")); fields.push(raw as unknown as ResearchRoomContextManifest["fields"][number]); }
+  const semanticJudge = input.semanticJudge === undefined ? undefined : parseSemanticManifest(input.semanticJudge);
+  if (input.semanticJudge !== undefined && semanticJudge === undefined) return err(researchError("invalid_research_room_receipt"));
+  return ok(cloneFrozen({ ...input, reviewId: review.value.id, evidenceClass: evidence.value, countsAsExternalEvidence: false, fields, ...(semanticJudge ? { semanticJudge } : {}) } as unknown as ResearchRoomContextManifest));
 }
 
 function receiptPayload(value: Omit<ResearchRoomReceipt, "receiptHash">): Omit<ResearchRoomReceipt, "receiptHash"> { return value; }
@@ -182,6 +309,8 @@ export function parseResearchRoomReceipt(input: unknown): ResearchResult<Researc
   if (!isRecord(input) || input.schemaVersion !== "1.0.0" || !["committed", "rolled_back"].includes(String(input.status)) || !["semantic_ready", "ledger_only"].includes(String(input.providerStatus)) || input.countsAsExternalEvidence !== false || !isRecord(input.disposition) || !isRecord(input.rollback) || !isRecord(input.authority) || !sha(input.suggestionHash) || !sha(input.receiptHash)) return err(researchError("invalid_research_room_receipt"));
   const id = parseResearchIdFor(input.id, "rrcp_"); const project = parseResearchIdFor(input.projectId, "rprj_"); const review = parseResearchIdFor(input.reviewId, "rrvw_"); const evidence = parseResearchRoomEvidenceClass(input.evidenceClass); const manifest = parseResearchRoomContextManifest(input.manifest); const analysis = parseResearchRoomAnalysisPayload(input.analysis); const before = parseResearchRoomStateBinding(input.before); const after = parseResearchRoomStateBinding(input.after); const version = parseEntityVersion(input.version); const createdAt = validateUtcTimestamp(input.createdAt); const updatedAt = validateUtcTimestamp(input.updatedAt);
   if (!id.ok || !project.ok || !review.ok || !evidence.ok || !manifest.ok || !analysis.ok || !before.ok || !after.ok || !version.ok || !createdAt.ok || !updatedAt.ok) return err(researchError("invalid_research_room_receipt"));
+  const semanticJudge = input.semanticJudge === undefined ? undefined : parseSemanticTrace(input.semanticJudge);
+  if (input.semanticJudge !== undefined && semanticJudge === undefined) return err(researchError("invalid_research_room_receipt"));
   if (input.sourceEpisodeId !== undefined) { const episode = parseResearchIdFor(input.sourceEpisodeId, "repi_"); if (!episode.ok) return err(researchError("invalid_research_room_receipt")); }
   if (!RESEARCH_ROOM_DISPOSITIONS.includes(input.disposition.kind as ResearchRoomDispositionKind) || text(input.disposition.reason, 4_096) === undefined) return err(researchError("invalid_research_room_receipt"));
   const actor = validateResearchActor(input.authority.actor); const confirmedAt = validateUtcTimestamp(input.authority.confirmedAt); if (!actor.ok || actor.value.kind !== "user" || !confirmedAt.ok) return err(researchError("user_confirmation_required"));
@@ -192,7 +321,7 @@ export function parseResearchRoomReceipt(input: unknown): ResearchResult<Researc
 export function createResearchRoomReceipt(input: Omit<ResearchRoomReceipt, "schemaVersion" | "id" | "status" | "authority" | "version" | "createdAt" | "updatedAt" | "receiptHash"> & { readonly actor: ResearchActor }, ports: { readonly clock: Clock; readonly idFactory: IdFactory }): ResearchResult<ResearchRoomReceipt> {
   const actor = validateResearchActor(input.actor); if (!actor.ok || actor.value.kind !== "user") return err(researchError("user_confirmation_required"));
   const id = parseResearchIdFor(ports.idFactory.create("rrcp_"), "rrcp_"); const at = readClock(ports.clock); if (!id.ok || !at.ok) return err(researchError("invalid_research_room_receipt"));
-  const value = receiptPayload({ schemaVersion: "1.0.0", id: id.value.id, projectId: input.projectId, reviewId: input.reviewId, ...(input.sourceEpisodeId ? { sourceEpisodeId: input.sourceEpisodeId } : {}), status: "committed", providerStatus: input.providerStatus, ...(input.ledgerOnlyReason ? { ledgerOnlyReason: input.ledgerOnlyReason } : {}), evidenceClass: input.evidenceClass, countsAsExternalEvidence: false, suggestionHash: input.suggestionHash, manifest: input.manifest, analysis: input.analysis, disposition: input.disposition, before: input.before, after: input.after, rollback: input.rollback, authority: { actor: actor.value, confirmedAt: at.value }, version: initialEntityVersion(), createdAt: at.value, updatedAt: at.value });
+  const value = receiptPayload({ schemaVersion: "1.0.0", id: id.value.id, projectId: input.projectId, reviewId: input.reviewId, ...(input.sourceEpisodeId ? { sourceEpisodeId: input.sourceEpisodeId } : {}), status: "committed", providerStatus: input.providerStatus, ...(input.ledgerOnlyReason ? { ledgerOnlyReason: input.ledgerOnlyReason } : {}), evidenceClass: input.evidenceClass, countsAsExternalEvidence: false, suggestionHash: input.suggestionHash, manifest: input.manifest, analysis: input.analysis, ...(input.semanticJudge ? { semanticJudge: input.semanticJudge } : {}), disposition: input.disposition, before: input.before, after: input.after, rollback: input.rollback, authority: { actor: actor.value, confirmedAt: at.value }, version: initialEntityVersion(), createdAt: at.value, updatedAt: at.value });
   const hash = stableResearchHash(value); return hash.ok ? parseResearchRoomReceipt({ ...value, receiptHash: hash.value }) : hash;
 }
 

@@ -271,6 +271,7 @@ export type {
   ResearchRoomFindingKind,
   ResearchRoomProviderStatus,
   ResearchRoomReceipt,
+  ResearchRoomSemanticJudgeTrace,
   ResearchRoomStateBinding,
 } from "./room/research-room.js";
 

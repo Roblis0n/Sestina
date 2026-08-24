@@ -4,8 +4,9 @@ import * as coreApi from "../src/index.js";
 describe("@sestina/core public boundary", () => {
   it("exports the application entry without storage or repository internals", () => {
     expect(Object.keys(coreApi).sort()).toEqual([
-      "SestinaCore", "coreErr", "coreOk", "createProjectStateBackup", "getPrivacyManifest",
-      "getReleaseIdentity", "inspectProjectRecovery", "openSestina", "previewProjectStateRestore", "RELEASE_IDENTITY", "restoreProjectState",
+      "SestinaCore", "compileResearchRoomSemanticJudgePrompt", "coreErr", "coreOk", "createProjectStateBackup",
+      "createSecretBackend", "createStableTextSpan", "getPrivacyManifest", "getReleaseIdentity", "inspectProjectRecovery",
+      "openSestina", "prepareResearchRoomSemanticJudge", "previewProjectStateRestore", "RELEASE_IDENTITY", "restoreProjectState",
     ].sort());
     expect(coreApi).not.toHaveProperty("openDatabase");
     expect(coreApi).not.toHaveProperty("createResearchStore");

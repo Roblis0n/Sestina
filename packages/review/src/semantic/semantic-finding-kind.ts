@@ -1,9 +1,11 @@
 export const SEMANTIC_FINDING_KINDS = [
   "focus_substitution",
+  "repeated_audit",
   "audit_hijacking",
   "semantic_scope_violation",
   "decision_integrity",
   "argument_delta",
+  "argument_leap",
   "shallow_abstraction",
   "evidence_boundary",
 ] as const;

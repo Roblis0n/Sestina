@@ -16,6 +16,27 @@ the owner for the initial research question and current task on the next screen.
 It then shows the exact Context Manifest before any Provider call and requires a
 separate explicit owner action before a disposition can change research state.
 
+The top-right Provider settings dialog supports exactly one
+`openai_compatible` family. Enter a Base URL, model, and API key for external
+HTTPS; explicit loopback HTTP may be configured without a key. The Provider
+name already has a safe default, while timeout and output-token controls remain
+available. Saving does not probe the network or call a model. Configuration is
+App-level, not project-level; the key is stored through `@sestina/secrets`
+(current-user DPAPI on Windows) and is never returned to the page or written to
+the config file. Reopen the project after a configuration change so a new
+generation is bound to the next Manifest.
+
+For each suggestion, first select **Generate Context Manifest** and inspect the
+exact endpoint, request body, byte count, protocol/Prompt/rubric hashes, state
+and request hashes, and excluded fields. Only **I reviewed it; start analysis**
+can issue the single request. The response must contain all nine unique
+criterion assessments with valid evidence spans and bindings. The Kernel, not
+the model, derives Findings, ArgumentDelta, unknowns, and reasonable-increment
+status; only the owner can commit one of the five dispositions. Cancelling,
+timeouts, invalid output, changed configuration, or no configuration fail
+closed to the local ledger without partial semantic findings or authority
+writes.
+
 From the repository root:
 
 ```text
@@ -38,3 +59,11 @@ Room, feedback, and recovery copy. Short transitions communicate view entry,
 busy work, stage progression, findings, and receipts. When Windows or the
 browser requests reduced motion, nonessential animation is disabled and the
 entire workflow remains operable.
+
+The development-only Semantic Judge benchmark and its reproducible
+export/run/import/evaluate workflow are documented at
+`researchbench/research-room-semantic-judge/README.md`. It contains 96
+development and 96 hash-locked test cases, split equally between zh-CN and
+English. It is synthetic implementation evidence, never external-user or market
+evidence. With no user-configured Provider, the checked-in real-host smoke and
+semantic metrics remain `blocked_missing_user_config`.

@@ -1,0 +1,7 @@
+{
+  "schemaVersion": "1.0.0",
+  "status": "not_evaluated",
+  "reason": "blocked_missing_user_config",
+  "failureCases": [],
+  "testLockHash": "645fd9aad1786f3106d640f5ff60c4b3b8328e0435ed9dd54d300f4852a2f0c2"
+}

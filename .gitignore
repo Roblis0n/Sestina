@@ -3,6 +3,7 @@ node_modules/
 dist/
 build/
 coverage/
+researchbench/research-room-semantic-judge/.runs/
 .turbo/
 .cache/
 .pnpm-store/

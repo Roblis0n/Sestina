@@ -18,6 +18,10 @@ await build({
   target: "node24",
   format: "esm",
   packages: "bundle",
+  // Native secure-storage bindings must stay runtime-loaded. Bundling their
+  // JavaScript shims makes esbuild traverse platform-specific `.node` files
+  // and either fail the build or produce a non-portable artifact.
+  external: ["@napi-rs/keyring", "@napi-rs/keyring/*", "@primno/dpapi", "@primno/dpapi/*"],
   sourcemap: true,
   banner: { js: "#!/usr/bin/env node" },
 });

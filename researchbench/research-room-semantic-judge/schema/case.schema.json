@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Development Semantic Judge case",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "caseId",
+    "split",
+    "language",
+    "category",
+    "variant",
+    "syntheticOnly",
+    "countsAsExternalEvidence",
+    "suggestion",
+    "context",
+    "label",
+    "adversarialTags"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "caseId": {
+      "type": "string"
+    },
+    "split": {
+      "enum": [
+        "development",
+        "test"
+      ]
+    },
+    "language": {
+      "enum": [
+        "zh-CN",
+        "en"
+      ]
+    },
+    "category": {
+      "enum": [
+        "focus-substitution",
+        "repeated-audit",
+        "audit-hijacking",
+        "semantic-scope",
+        "decision-integrity",
+        "argument-leap",
+        "evidence-boundary",
+        "shallow-abstraction",
+        "substantive-argument-delta",
+        "no-substantive-delta",
+        "unknown-missing-context",
+        "reasonable-increment"
+      ]
+    },
+    "variant": {
+      "enum": [
+        "positive",
+        "hard-negative",
+        "boundary",
+        "missing-context"
+      ]
+    },
+    "syntheticOnly": {
+      "const": true
+    },
+    "countsAsExternalEvidence": {
+      "const": false
+    },
+    "suggestion": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 16384
+    },
+    "context": {
+      "type": "object"
+    },
+    "label": {
+      "type": "object"
+    },
+    "adversarialTags": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

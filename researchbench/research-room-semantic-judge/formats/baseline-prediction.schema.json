@@ -1,0 +1,243 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Sanitized baseline prediction",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "kind",
+    "caseId",
+    "status",
+    "language",
+    "category",
+    "criterionVerdicts",
+    "intervened",
+    "reasonableIncrement",
+    "evidenceSpanValid",
+    "criterionCoverage",
+    "authorityViolationAccepted",
+    "promptInjectionAccepted",
+    "requestBindingMismatchAccepted",
+    "latencyMs",
+    "callCount",
+    "costUsd",
+    "provenance"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0.0"
+    },
+    "kind": {
+      "const": "baseline"
+    },
+    "caseId": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "valid",
+        "invalid_response",
+        "provider_failed"
+      ]
+    },
+    "language": {
+      "enum": [
+        "zh-CN",
+        "en"
+      ]
+    },
+    "category": {
+      "enum": [
+        "focus-substitution",
+        "repeated-audit",
+        "audit-hijacking",
+        "semantic-scope",
+        "decision-integrity",
+        "argument-leap",
+        "evidence-boundary",
+        "shallow-abstraction",
+        "substantive-argument-delta",
+        "no-substantive-delta",
+        "unknown-missing-context",
+        "reasonable-increment"
+      ]
+    },
+    "criterionVerdicts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "focus-substitution": {
+          "enum": [
+            "positive",
+            "negative",
+            "unknown"
+          ]
+        },
+        "repeated-audit": {
+          "enum": [
+            "positive",
+            "negative",
+            "unknown"
+          ]
+        },
+        "audit-hijacking": {
+          "enum": [
+            "positive",
+            "negative",
+            "unknown"
+          ]
+        },
+        "semantic-scope": {
+          "enum": [
+            "positive",
+            "negative",
+            "unknown"
+          ]
+        },
+        "decision-integrity": {
+          "enum": [
+            "positive",
+            "negative",
+            "unknown"
+          ]
+        },
+        "argument-leap": {
+          "enum": [
+            "positive",
+            "negative",
+            "unknown"
+          ]
+        },
+        "evidence-boundary": {
+          "enum": [
+            "positive",
+            "negative",
+            "unknown"
+          ]
+        },
+        "shallow-abstraction": {
+          "enum": [
+            "positive",
+            "negative",
+            "unknown"
+          ]
+        },
+        "argument-delta": {
+          "enum": [
+            "positive",
+            "negative",
+            "unknown"
+          ]
+        }
+      }
+    },
+    "intervened": {
+      "type": "boolean"
+    },
+    "reasonableIncrement": {
+      "enum": [
+        "supported",
+        "not_supported",
+        "unknown"
+      ]
+    },
+    "evidenceSpanValid": {
+      "type": "boolean"
+    },
+    "criterionCoverage": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "authorityViolationAccepted": {
+      "type": "boolean"
+    },
+    "promptInjectionAccepted": {
+      "type": "boolean"
+    },
+    "requestBindingMismatchAccepted": {
+      "type": "boolean"
+    },
+    "latencyMs": {
+      "type": "number",
+      "minimum": 0
+    },
+    "callCount": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "costUsd": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "providerId",
+        "model",
+        "baseUrlOrigin",
+        "locality",
+        "configGeneration",
+        "protocolHash",
+        "promptHash",
+        "rubricHash",
+        "requestHash",
+        "executionMode"
+      ],
+      "properties": {
+        "providerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "baseUrlOrigin": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2048
+        },
+        "locality": {
+          "enum": [
+            "local",
+            "external"
+          ]
+        },
+        "configGeneration": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "protocolHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "promptHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "rubricHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "requestHash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "executionMode": {
+          "enum": [
+            "live_provider",
+            "imported_response",
+            "baseline"
+          ]
+        }
+      }
+    }
+  }
+}

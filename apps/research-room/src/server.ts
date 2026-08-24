@@ -10,9 +10,12 @@ import {
 } from "@sestina/core";
 import { RESEARCH_ROOM_CSS, RESEARCH_ROOM_HTML, RESEARCH_ROOM_JS } from "./ui.js";
 import { isAppLanguage, type LanguagePreferenceStore } from "./language-preferences.js";
+import { createOpenAICompatibleProvider } from "./openai-compatible-provider.js";
+import { ProviderSettingsError, type ProviderConfigurationService, type SaveOpenAICompatibleProviderInput } from "./provider-settings.js";
 
 const LOOPBACK = "127.0.0.1";
 const BODY_LIMIT = 65_536;
+const BROWSER_BLOCKED_PORTS = new Set([1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79, 87, 95, 101, 102, 103, 104, 109, 110, 111, 113, 115, 117, 119, 123, 135, 137, 139, 143, 161, 179, 389, 427, 465, 512, 513, 514, 515, 526, 530, 531, 532, 540, 548, 554, 556, 563, 587, 601, 636, 989, 990, 993, 995, 1719, 1720, 1723, 2049, 3659, 4045, 4190, 5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668, 6669, 6697, 10080]);
 const USER = Object.freeze({ kind: "user" as const, actorId: "local-research-owner" });
 const CSP = "default-src 'self'; base-uri 'none'; connect-src 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self' blob:; object-src 'none'; script-src 'self'; style-src 'self'";
 
@@ -23,6 +26,7 @@ export interface ResearchRoomServerOptions {
   readonly providerTimeoutMs?: number;
   readonly directoryPicker?: DirectoryPicker;
   readonly languagePreferenceStore?: LanguagePreferenceStore;
+  readonly providerConfigurationService?: ProviderConfigurationService;
 }
 
 export interface DirectoryPicker {
@@ -136,6 +140,7 @@ export class ResearchRoomHttpApplication {
     private readonly providerTimeoutMs = 15_000,
     private readonly directoryPicker?: DirectoryPicker,
     private readonly languagePreferenceStore?: LanguagePreferenceStore,
+    private readonly providerConfigurationService?: ProviderConfigurationService,
   ) {}
 
   close(): void { this.#pickerAbort?.abort(); this.#pickerAbort = undefined; this.#opened?.core.close(); this.#opened = undefined; }
@@ -169,6 +174,51 @@ export class ResearchRoomHttpApplication {
     return { language: input.language };
   }
 
+  private providerProblem(error: unknown): never {
+    if (error instanceof ProviderSettingsError) {
+      const status = error.code === "invalid_provider_config" ? 400 : error.code === "provider_config_corrupt" ? 409 : 503;
+      throw new HttpProblem(status, error.code, error.message);
+    }
+    throw error;
+  }
+
+  private async configuredProvider(): Promise<ResearchRoomProvider | undefined> {
+    if (this.provider !== undefined) return this.provider;
+    if (this.providerConfigurationService === undefined) return undefined;
+    try {
+      const snapshot = await this.providerConfigurationService.loadRuntimeSnapshot();
+      return snapshot === undefined ? undefined : createOpenAICompatibleProvider(snapshot, {
+        readCurrentGeneration: () => this.providerConfigurationService?.currentGeneration() ?? Promise.resolve(undefined),
+      });
+    } catch (error) { return this.providerProblem(error); }
+  }
+
+  private async providerStatus(): Promise<unknown> {
+    if (this.providerConfigurationService === undefined) return { mode: this.provider === undefined ? "offline_ledger" : "configured", injected: this.provider !== undefined };
+    try { return await this.providerConfigurationService.status(); }
+    catch (error) { return this.providerProblem(error); }
+  }
+
+  private async saveProvider(input: unknown): Promise<unknown> {
+    if (this.providerConfigurationService === undefined) throw new HttpProblem(503, "provider_settings_unavailable", "Provider settings are unavailable.");
+    try {
+      await this.providerConfigurationService.save(input as SaveOpenAICompatibleProviderInput);
+      return { ...(await this.providerConfigurationService.status()), projectReopenRequired: this.#opened !== undefined };
+    } catch (error) { return this.providerProblem(error); }
+  }
+
+  private async deleteProviderConfig(): Promise<unknown> {
+    if (this.providerConfigurationService === undefined) throw new HttpProblem(503, "provider_settings_unavailable", "Provider settings are unavailable.");
+    try { await this.providerConfigurationService.deleteConfig(); return { ...(await this.providerConfigurationService.status()), projectReopenRequired: this.#opened !== undefined }; }
+    catch (error) { return this.providerProblem(error); }
+  }
+
+  private async deleteProviderSecret(): Promise<unknown> {
+    if (this.providerConfigurationService === undefined) throw new HttpProblem(503, "provider_settings_unavailable", "Provider settings are unavailable.");
+    try { await this.providerConfigurationService.deleteSecret(); return { ...(await this.providerConfigurationService.status()), projectReopenRequired: this.#opened !== undefined }; }
+    catch (error) { return this.providerProblem(error); }
+  }
+
   private async initializeProject(root: string, title: string): Promise<OpenedProject> {
     const stateDirectory = join(root, ".sestina");
     const databasePath = join(stateDirectory, "state.sqlite");
@@ -177,7 +227,8 @@ export class ResearchRoomHttpApplication {
     try {
       await mkdir(stateDirectory);
       createdStateDirectory = true;
-      core = resultValue(await openSestina({ databasePath, ...(this.provider ? { researchRoomProvider: this.provider } : {}), researchRoomProviderTimeoutMs: this.providerTimeoutMs }));
+      const provider = await this.configuredProvider();
+      core = resultValue(await openSestina({ databasePath, ...(provider ? { researchRoomProvider: provider } : {}), researchRoomProviderTimeoutMs: this.providerTimeoutMs }));
       const project = resultValue(core.initializeProject({ title, rootPath: ".", actor: USER }));
       await writeFile(join(stateDirectory, "research-brief.yaml"), renderDraft(project.id, title), { encoding: "utf8", flag: "wx" });
       await writeFile(join(stateDirectory, "gitignore-suggestion.txt"), ".sestina/\n", { encoding: "utf8", flag: "wx" });
@@ -203,7 +254,8 @@ export class ResearchRoomHttpApplication {
     let next: OpenedProject;
     let initialized = false;
     if (stateKind === "directory" && databaseKind === "file" && briefKind === "file") {
-      const core = resultValue(await openSestina({ databasePath, ...(this.provider ? { researchRoomProvider: this.provider } : {}), researchRoomProviderTimeoutMs: this.providerTimeoutMs }));
+      const provider = await this.configuredProvider();
+      const core = resultValue(await openSestina({ databasePath, ...(provider ? { researchRoomProvider: provider } : {}), researchRoomProviderTimeoutMs: this.providerTimeoutMs }));
       const projects = resultValue(core.listProjects());
       if (projects.length !== 1 || projects[0] === undefined) { core.close(); throw new HttpProblem(409, "state_conflict", "The selected project binding is inconsistent."); }
       next = { root, project: { id: projects[0].id, title: projects[0].title }, core, createdBySession: false };
@@ -285,9 +337,13 @@ export class ResearchRoomHttpApplication {
       if (request.method === "GET" && url.pathname === "/app.js") { asset(response, "text/javascript; charset=utf-8", RESEARCH_ROOM_JS); return; }
       if (request.method === "GET" && url.pathname === "/api/status") { const languagePreference = await this.readLanguagePreference(); json(response, 200, { ok: true, value: { localOnly: true, telemetry: false, projectOpen: this.#opened !== undefined, directoryPickerAvailable: this.directoryPicker !== undefined, languagePreference: languagePreference ?? null, sessionToken: this.sessionToken } }); return; }
 
-      if (request.method === "POST") this.authorize(request);
+      if (request.method === "POST" || request.method === "DELETE") this.authorize(request);
       if (request.method === "POST" && url.pathname === "/api/preferences/language") { json(response, 200, { ok: true, value: await this.setLanguagePreference(await readBody(request)) }); return; }
       await this.requireLanguagePreference();
+      if (request.method === "GET" && url.pathname === "/api/provider") { json(response, 200, { ok: true, value: await this.providerStatus() }); return; }
+      if (request.method === "POST" && url.pathname === "/api/provider") { json(response, 200, { ok: true, value: await this.saveProvider(await readBody(request)) }); return; }
+      if (request.method === "DELETE" && url.pathname === "/api/provider/config") { json(response, 200, { ok: true, value: await this.deleteProviderConfig() }); return; }
+      if (request.method === "DELETE" && url.pathname === "/api/provider/secret") { json(response, 200, { ok: true, value: await this.deleteProviderSecret() }); return; }
       if (request.method === "POST" && url.pathname === "/api/project/select-directory") { json(response, 200, { ok: true, value: await this.selectDirectory() }); return; }
       if (request.method === "POST" && url.pathname === "/api/project/open") { json(response, 200, { ok: true, value: await this.openProject(await readBody(request)) }); return; }
       if (request.method === "POST" && url.pathname === "/api/project/brief") { json(response, 200, { ok: true, value: await this.activateInitialBrief(await readBody(request)) }); return; }
@@ -304,6 +360,10 @@ export class ResearchRoomHttpApplication {
         const body = await readBody(request); if (!isRecord(body)) throw new HttpProblem(400, "invalid_input", "The analysis confirmation is invalid.");
         const value = await opened.core.analyzeResearchRoomSuggestion({ reviewId: body.reviewId as string, confirmationNonce: body.confirmationNonce as string, manifestHash: body.manifestHash as string });
         json(response, 200, { ok: true, value: resultValue(value) }); return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/reviews/cancel") {
+        const body = await readBody(request); if (!isRecord(body)) throw new HttpProblem(400, "invalid_input", "The cancellation confirmation is invalid.");
+        json(response, 200, { ok: true, value: resultValue(opened.core.cancelResearchRoomReview({ reviewId: body.reviewId as string, confirmationNonce: body.confirmationNonce as string, manifestHash: body.manifestHash as string })) }); return;
       }
       if (request.method === "POST" && url.pathname === "/api/reviews/commit") {
         const body = await readBody(request); if (!isRecord(body)) throw new HttpProblem(400, "invalid_input", "The disposition is invalid.");
@@ -335,16 +395,22 @@ export function createResearchRoomServer(options: ResearchRoomServerOptions = {}
   if (host !== LOOPBACK) throw new Error("Research Room must bind to 127.0.0.1.");
   const port = options.port ?? 0;
   if (!Number.isSafeInteger(port) || port < 0 || port > 65_535) throw new Error("Invalid Research Room port.");
-  const application = new ResearchRoomHttpApplication(options.provider, options.providerTimeoutMs, options.directoryPicker, options.languagePreferenceStore);
+  const application = new ResearchRoomHttpApplication(options.provider, options.providerTimeoutMs, options.directoryPicker, options.languagePreferenceStore, options.providerConfigurationService);
   const server = createServer((request, response) => { void application.handle(request, response); });
   server.on("clientError", (_error, socket) => { socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n"); });
   return {
     application,
     server,
     async start() {
-      await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(port, host, () => { server.off("error", reject); resolve(); }); });
-      const address = server.address();
+      let address: ReturnType<Server["address"]> = null;
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        await new Promise<void>((resolve, reject) => { server.once("error", reject); server.listen(port, host, () => { server.off("error", reject); resolve(); }); });
+        address = server.address();
+        if (address !== null && typeof address !== "string" && (!BROWSER_BLOCKED_PORTS.has(address.port) || port !== 0)) break;
+        await new Promise<void>((resolve, reject) => server.close((error) => { if (error) reject(error); else resolve(); }));
+      }
       if (address === null || typeof address === "string" || address.address !== LOOPBACK) { server.close(); application.close(); throw new Error("Research Room did not bind to loopback."); }
+      if (BROWSER_BLOCKED_PORTS.has(address.port)) { server.close(); application.close(); throw new Error("Research Room selected a browser-blocked port."); }
       let closed = false;
       return Object.freeze({ origin: `http://${LOOPBACK}:${address.port}`, host: LOOPBACK, port: address.port, close: async () => { if (closed) return; closed = true; application.close(); await new Promise<void>((resolve, reject) => { server.close((error) => { if (error) reject(error); else resolve(); }); server.closeAllConnections(); }); } });
     },

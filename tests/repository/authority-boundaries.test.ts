@@ -52,7 +52,8 @@ const GUIDANCE_FIXTURES: Record<string, string> = {
   "docs/execution/CURRENT-PLAN.md": [
     "accepted_current_guide",
     "RI-43 为 `pilot_kit_ready_external_validation_deferred_by_user`",
-    "RI-48 首次语言与电脑端体验修正已完成并验证",
+    "RI-48 首次语言与电脑端体验基线已完成并验证",
+    "completed_and_verified_implementation_real_provider_evidence_blocked",
     "Market Gate 0",
   ].join("\n"),
   "docs/execution/CURRENT-PLAN-USAGE.md": [
@@ -83,11 +84,11 @@ function activeBlock(currentTask: string): string {
     "<!-- sestina-guide-status: accepted_current -->",
     "<!-- sestina-prework-direction-gate: required -->",
     `<!-- sestina-current-task: ${currentTask} -->`,
-    "<!-- sestina-next-code-goal: await_new_task_start_record_after_RI48 -->",
-    "<!-- sestina-next-execution-goal: do_not_start_RI49_without_new_gate -->",
+    "<!-- sestina-next-code-goal: none_active_RI49_not_started -->",
+    "<!-- sestina-next-execution-goal: await_explicit_user_provider_config_for_real_provider_evidence -->",
     "<!-- sestina-next-code-sequence: none_active_RI49_not_started -->",
     "<!-- sestina-ri44-to-ri47-status: superseded_unstarted -->",
-    "<!-- sestina-ri48-status: completed_and_verified_implementation_only -->",
+    "<!-- sestina-ri48-status: completed_and_verified_implementation_real_provider_evidence_blocked -->",
     "<!-- sestina-market-gate-0: deferred_by_user_nonblocking -->",
     "<!-- sestina-ri00: accepted_for_continuation -->",
     "<!-- sestina-ri01: deferred_by_current_user_for_direct_development -->",
@@ -343,14 +344,14 @@ describe("verify-authority negative fixtures", () => {
     expect(r.stderr).toContain("docs/execution/CURRENT-PLAN.md");
   });
 
-  it("N13. current guide losing the develop-first evidence boundary fails as AUTH-R006", () => {
-    const r = runAuthority("neg-guide-loses-develop-first-boundary", (root) => {
+  it("N13. current guide losing the active Semantic Judge boundary fails as AUTH-R006", () => {
+    const r = runAuthority("neg-guide-loses-semantic-judge-boundary", (root) => {
       writeValidEntries(root);
       writeEntry(
         root,
         "docs/execution/CURRENT-PLAN.md",
         GUIDANCE_FIXTURES["docs/execution/CURRENT-PLAN.md"].replace(
-          "RI-48 首次语言与电脑端体验修正已完成并验证",
+          "completed_and_verified_implementation_real_provider_evidence_blocked",
           "RI-48 is blocked",
         ),
       );
@@ -381,7 +382,7 @@ describe("verify-authority negative fixtures", () => {
     const r = runAuthority("neg-ri48-planned-not-active", (root) => {
       writeValidEntries(root, {
         "handoff.md": activeBlock("RI-03").replace(
-          "sestina-ri48-status: completed_and_verified_implementation_only",
+          "sestina-ri48-status: completed_and_verified_implementation_real_provider_evidence_blocked",
           "sestina-ri48-status: planned_not_active",
         ),
       });

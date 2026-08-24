@@ -5,6 +5,8 @@ import { resolve } from "node:path";
 import { test, expect, type Page } from "@playwright/test";
 import { createResearchRoomServer, type RunningResearchRoomServer } from "../../apps/research-room/src/server.js";
 import type { AppLanguage, LanguagePreferenceStore } from "../../apps/research-room/src/language-preferences.js";
+import { ProviderConfigurationService, createFileProviderConfigStore } from "../../apps/research-room/src/provider-settings.js";
+import type { SecretBackend } from "../../packages/secrets/src/index.js";
 import { createRi48Project, Ri48FixtureProvider } from "../helpers/ri48-project.js";
 
 type Scenario = "reasonable-increment" | "target-substitution" | "repeated-audit";
@@ -41,9 +43,12 @@ async function prepareAndAnalyze(page: Page, fixture: ScenarioFixture, provider:
   await page.getByRole("button", { name: "先生成 Context Manifest" }).click();
   await expect(page.getByRole("heading", { name: "Context Manifest（发送前）" })).toBeVisible();
   await expect(page.getByText(/当前未发送/u)).toBeVisible();
+  await expect(page.getByText(/protocol 1\.0\.0/u)).toBeVisible();
+  await expect(page.locator("#manifest-excluded")).toContainText("api_keys");
   expect(provider.calls).toBe(0);
   await page.getByRole("button", { name: "我已核对，开始分析" }).click();
-  await expect(page.getByText(new RegExp(fixture.expected.findingKind, "u"))).toBeVisible();
+  await expect(page.locator("#findings")).toContainText(fixture.expected.findingKind);
+  await expect(page.getByRole("heading", { name: "Authority Gate — 只有你能处置" })).toBeVisible();
   expect(provider.calls).toBe(1);
 }
 
@@ -89,6 +94,32 @@ test.describe("RI-48 real browser vertical slice", () => {
     await expect(page.getByText("How should a persistent language preference remain separate from research authority?", { exact: true })).toBeVisible();
     await expect(page.getByText("Choose text file", { exact: true })).toBeVisible();
     await expect(page.getByText("No file selected", { exact: true })).toBeVisible();
+  });
+
+  test("Provider settings: one external OpenAI-compatible configuration saves without a model call and never renders the key", async ({ page }, testInfo) => {
+    const root = await mkdtemp(join(tmpdir(), "sestina-ri48-provider-ui-"));
+    cleanups.push(() => rm(root, { recursive: true, force: true }));
+    const values = new Map<string, string>();
+    const secrets: SecretBackend = {
+      get: (ref) => Promise.resolve(values.get(ref)), set: (ref, value) => { values.set(ref, value); return Promise.resolve(); },
+      delete: (ref) => { values.delete(ref); return Promise.resolve(); }, describe: (ref) => Promise.resolve({ configured: values.has(ref) }),
+      health: () => Promise.resolve({ available: true, backend: "dpapi" }),
+    };
+    const providerConfigurationService = new ProviderConfigurationService(createFileProviderConfigStore({ filePath: join(root, "provider.json") }), secrets);
+    const server = await createResearchRoomServer({ languagePreferenceStore: new MemoryLanguagePreferenceStore("en"), providerConfigurationService }).start(); servers.push(server);
+    await page.goto(server.origin);
+    await page.getByRole("button", { name: "Provider settings" }).click();
+    await expect(page.getByRole("heading", { name: "Semantic Judge Provider" })).toBeVisible();
+    await page.getByLabel("Provider name").fill("external-judge");
+    await page.getByLabel("Model").fill("judge-model");
+    await page.getByLabel("Base URL").fill("https://models.example.test/v1");
+    await page.getByLabel("API key (required for external HTTPS)").fill("browser-key-never-render");
+    await page.getByRole("button", { name: "Save configuration" }).click();
+    await expect(page.getByRole("status")).toContainText("no network request was made");
+    await expect(page.locator("#provider-status-box")).toContainText("external-judge / judge-model");
+    await expect(page.locator("body")).not.toContainText("browser-key-never-render");
+    expect(await readFile(join(root, "provider.json"), "utf8")).not.toContain("browser-key-never-render");
+    await page.screenshot({ path: testInfo.outputPath("provider-settings.png"), fullPage: true });
   });
 
   test("reduced motion: the desktop workflow remains operable without nonessential transitions", async ({ page }) => {
@@ -137,9 +168,10 @@ test.describe("RI-48 real browser vertical slice", () => {
     await expect(page.getByRole("heading", { name: "建立这项研究的工作主线" })).toBeVisible();
   });
 
-  test("reasonable increment: Manifest first, owner accepts, complete receipt persists", async ({ page }) => {
+  test("reasonable increment: Manifest first, owner accepts, complete receipt persists", async ({ page }, testInfo) => {
     const fixture = await scenario("reasonable-increment"); const provider = new Ri48FixtureProvider("reasonable_increment");
     await openRoom(page, provider); await prepareAndAnalyze(page, fixture, provider);
+    await page.screenshot({ path: testInfo.outputPath("semantic-analysis.png"), fullPage: true });
     await page.getByLabel("你的处置理由").fill("The owner accepts the bounded synthetic increment.");
     await page.getByRole("button", { name: "接受", exact: true }).click();
     await expect(page.getByRole("status")).toContainText("已提交");
@@ -164,7 +196,7 @@ test.describe("RI-48 real browser vertical slice", () => {
   test("repeated audit: analysis rejects pseudo-depth without reopening resolved work", async ({ page }) => {
     const fixture = await scenario("repeated-audit"); const provider = new Ri48FixtureProvider("repeated_audit");
     await openRoom(page, provider); await prepareAndAnalyze(page, fixture, provider);
-    await expect(page.getByText(/No traceable mechanism relation is added/u)).toBeVisible();
+    await expect(page.locator("#delta")).toContainText("No traceable mechanism relation is added");
     await page.getByLabel("你的处置理由").fill("The owner rejects a repeated audit that adds no mechanism relation.");
     await page.getByRole("button", { name: "拒绝" }).click();
     await expect(page.getByText("rejected · committed", { exact: true })).toBeVisible();
