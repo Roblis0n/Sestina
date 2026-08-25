@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { Fragment, useEffect, useRef } from "react";
 import type { AnalyzedReviewDto, AppLanguage, PreparedReviewDto, ResearchRoomReceiptDto } from "../../api/dto.js";
 import { t } from "../../i18n/copy.js";
 import { Button } from "../primitives/Button.js";
@@ -8,16 +8,18 @@ export type InspectorSelection =
   | { readonly kind: "manifest"; readonly value: PreparedReviewDto }
   | { readonly kind: "analysis"; readonly value: AnalyzedReviewDto }
   | { readonly kind: "receipt"; readonly value: ResearchRoomReceiptDto }
+  | { readonly kind: "research_object"; readonly title: string; readonly status?: string; readonly fields: readonly { readonly label: string; readonly value: string }[]; readonly relations?: readonly { readonly label: string; readonly href: string }[] }
   | { readonly kind: "error"; readonly title: string; readonly message: string; readonly recovery: string };
 
 interface ContextInspectorProps {
   readonly language: AppLanguage;
   readonly open: boolean;
   readonly selection?: InspectorSelection;
+  readonly onNavigate: (href: string) => void;
   readonly onClose: () => void;
 }
 
-export function ContextInspector({ language, open, selection, onClose }: ContextInspectorProps) {
+export function ContextInspector({ language, open, selection, onNavigate, onClose }: ContextInspectorProps) {
   const rootRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const priorFocusRef = useRef<HTMLElement | null>(null);
@@ -55,8 +57,9 @@ export function ContextInspector({ language, open, selection, onClose }: Context
         <div className="context-inspector__body">
           {!selection ? <p className="empty-state">{language === "en" ? "Select a Manifest, assessment, Finding, or receipt." : "请选择 Manifest、assessment、Finding 或凭证。"}</p> : null}
           {selection?.kind === "manifest" ? <ManifestInspector language={language} prepared={selection.value} /> : null}
-          {selection?.kind === "analysis" ? <AnalysisInspector language={language} analyzed={selection.value} /> : null}
+          {selection?.kind === "analysis" ? <AnalysisInspector language={language} analyzed={selection.value} onNavigate={onNavigate} /> : null}
           {selection?.kind === "receipt" ? <ReceiptInspector language={language} receipt={selection.value} /> : null}
+          {selection?.kind === "research_object" ? <section><StatusBadge tone="neutral">{selection.status ?? (language === "en" ? "Structured state" : "结构化状态")}</StatusBadge><h3>{selection.title}</h3><dl className="inspector-list">{selection.fields.map((field) => <Fragment key={field.label}><dt>{field.label}</dt><dd>{field.value}</dd></Fragment>)}</dl>{selection.relations?.length ? <><h3>{language === "en" ? "One-hop relations" : "一跳关系"}</h3><ul className="inspector-relations">{selection.relations.map((relation) => <li key={`${relation.label}-${relation.href}`}><button type="button" className="text-link" onClick={() => { onNavigate(relation.href); }}>{relation.label}</button></li>)}</ul></> : null}</section> : null}
           {selection?.kind === "error" ? <section><StatusBadge tone="danger">{selection.title}</StatusBadge><p>{selection.message}</p><h3>{language === "en" ? "Recovery" : "恢复"}</h3><p>{selection.recovery}</p></section> : null}
         </div>
       </aside>
@@ -83,13 +86,13 @@ function ManifestInspector({ language, prepared }: { readonly language: AppLangu
   </>;
 }
 
-function AnalysisInspector({ language, analyzed }: { readonly language: AppLanguage; readonly analyzed: AnalyzedReviewDto }) {
+function AnalysisInspector({ language, analyzed, onNavigate }: { readonly language: AppLanguage; readonly analyzed: AnalyzedReviewDto; readonly onNavigate: (href: string) => void }) {
   return <>
     <StatusBadge tone={analyzed.providerStatus === "semantic_ready" ? "ready" : "warning"}>{analyzed.providerStatus}</StatusBadge>
     {analyzed.ledgerOnlyReason ? <p>{analyzed.ledgerOnlyReason}</p> : null}
     <h3>{t(language, "assessments")}</h3>
     <ol className="assessment-list">{analyzed.semanticJudge?.assessments.map((assessment) => <li key={assessment.criterionId} data-verdict={assessment.verdict}><strong>{assessment.criterionId}</strong><span>{assessment.verdict} · {t(language, "proposal_only")}</span><p>{assessment.publicRationale}</p>{assessment.uncertainty ? <p><b>{t(language, "unknowns")}:</b> {assessment.uncertainty}</p> : null}{assessment.missingContext.length > 0 ? <p><b>{t(language, "missing_context")}:</b> {assessment.missingContext.join(" · ")}</p> : null}{assessment.evidenceSpans.map((span) => <blockquote key={span.quoteHash}>{span.quote} [{span.start}–{span.end}]</blockquote>)}</li>) ?? <li>{t(language, "ledger_only")}</li>}</ol>
-    {analyzed.semanticJudge?.findings.length ? <><h3>Semantic Findings · {t(language, "proposal_only")}</h3><ul>{analyzed.semanticJudge.findings.map((finding) => <li key={finding.id}><strong>{finding.kind}</strong><span>{finding.severity} · {finding.authority}</span><p>{finding.rationale}</p><p><b>{language === "en" ? "Minimum recovery" : "最小恢复"}:</b> {finding.minimumRecovery}</p></li>)}</ul></> : null}
+    {analyzed.semanticJudge?.findings.length ? <><h3>Semantic Findings · {t(language, "proposal_only")}</h3><ul>{analyzed.semanticJudge.findings.map((finding) => <li key={finding.id}><strong>{finding.kind}</strong><span>{finding.severity} · {finding.authority}</span><p>{finding.rationale}</p><p><b>{language === "en" ? "Minimum recovery" : "最小恢复"}:</b> {finding.minimumRecovery}</p>{finding.decisionIds.length || finding.issueIds.length ? <div className="relation-actions" aria-label={language === "en" ? "Related research objects" : "相关研究对象"}>{finding.decisionIds.map((id) => <button key={`decision-${id}`} type="button" className="text-link" onClick={() => { onNavigate(`/project/decisions/${id}`); }}>Decision {id}</button>)}{finding.issueIds.map((id) => <button key={`issue-${id}`} type="button" className="text-link" onClick={() => { onNavigate(`/project/issues/${id}`); }}>Issue {id}</button>)}</div> : null}</li>)}</ul></> : null}
     <h3>{t(language, "kernel_findings")}</h3>
     <ul>{analyzed.analysis.findings.map((finding, index) => <li key={`${finding.kind}-${index}`}><strong>{finding.kind}</strong><span>{finding.summary}</span></li>)}</ul>
     <h3>{t(language, "argument_delta")}</h3><p>{analyzed.analysis.argumentDelta.genuineAdditions.join(" · ") || analyzed.analysis.argumentDelta.summary}</p>

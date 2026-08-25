@@ -21,7 +21,8 @@ export function exitCodeForCoreError(code: CoreErrorCode): CliExitCode {
     case "stale_state":
     case "state_conflict": return EXIT_CODES.stateConflict;
     case "review_blocked": return EXIT_CODES.reviewBlockingIssue;
-    case "infrastructure_failure": return EXIT_CODES.infrastructureFailure;
+    case "infrastructure_failure":
+    case "projection_write_failure": return EXIT_CODES.infrastructureFailure;
     case "user_confirmation_required": return EXIT_CODES.userConfirmationRequired;
     case "unsupported_format": return EXIT_CODES.unsupportedFormat;
     case "operation_cancelled": return EXIT_CODES.operationCancelled;

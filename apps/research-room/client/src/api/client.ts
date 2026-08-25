@@ -2,32 +2,57 @@ import {
   ApiPayloadError,
   decodeAnalyzedReview,
   decodeApiEnvelope,
+  decodeAttention,
+  decodeBriefActivation,
+  decodeBriefWorkspace,
+  decodeDecisionSupersede,
   decodeDirectoryPickerCancellation,
   decodeLanguage,
   decodePreparedReview,
   decodeProjectOpenResult,
   decodeProviderStatus,
+  decodeProjectOverview,
   decodeReceiptResult,
   decodeResearchRoomState,
+  decodeResearchObjectDetail,
+  decodeResearchObjectSearch,
   decodeSelectedDirectory,
   decodeSelectedDirectoryPreview,
   decodeStatus,
+  decodeWorkspacePage,
 } from "./decoders.js";
 import type {
   AnalyzedReviewDto,
   AppLanguage,
+  AttentionDto,
+  BriefWorkspaceDto,
   CommitDispositionInput,
+  DecisionDetailDto,
+  DecisionSummaryDto,
+  EvidenceDetailDto,
+  EvidenceSummaryDto,
+  EpisodeDetailDto,
+  EpisodeSummaryDto,
   DirectoryPickerCancellationDto,
   EvidenceClass,
   PreparedReviewDto,
+  ProjectOverviewDto,
   ProjectOpenResultDto,
   ProviderSaveInput,
   ProviderStatusDto,
   ResearchRoomReceiptDto,
   ResearchRoomStateDto,
+  ResearchObjectKind,
+  ResearchObjectSearchDto,
+  IssueDetailDto,
+  IssueSummaryDto,
+  ObjectReceiptDetailDto,
+  ObjectReceiptSummaryDto,
   SelectedDirectoryDto,
   SelectedDirectoryPreviewDto,
   StatusDto,
+  WorkspaceListRequest,
+  WorkspacePage,
 } from "./dto.js";
 
 interface RequestOptions {
@@ -112,6 +137,70 @@ export class ResearchRoomApi {
     return this.request("/api/state", decodeResearchRoomState);
   }
 
+  async projectOverview(): Promise<ProjectOverviewDto> {
+    return this.request("/api/project/overview", decodeProjectOverview);
+  }
+
+  async briefWorkspace(historyLimit = 50): Promise<BriefWorkspaceDto> {
+    return this.request(`/api/project/brief?historyLimit=${encodeURIComponent(String(historyLimit))}`, decodeBriefWorkspace);
+  }
+
+  async listResearchObjects(kind: ResearchObjectKind, input: WorkspaceListRequest): Promise<WorkspacePage<DecisionSummaryDto | IssueSummaryDto | EvidenceSummaryDto | EpisodeSummaryDto | ObjectReceiptSummaryDto>> {
+    const collection = kind === "decision" ? "decisions" : kind === "issue" ? "issues" : kind === "evidence" ? "evidence" : kind === "episode" ? "episodes" : "receipts";
+    const query = new URLSearchParams({ limit: String(input.limit) });
+    if (input.cursor) query.set("cursor", input.cursor);
+    if (input.status) query.set("status", input.status);
+    if (input.query !== undefined) query.set("query", input.query);
+    if (input.source) query.set("source", input.source);
+    if (input.scope) query.set("scope", input.scope);
+    if (input.active !== undefined) query.set("active", String(input.active));
+    if (input.referencedByCurrentBrief !== undefined) query.set("referencedByCurrentBrief", String(input.referencedByCurrentBrief));
+    if (input.issueKind) query.set("issueKind", input.issueKind);
+    if (input.relevance) query.set("relevance", input.relevance);
+    if (input.unresolved !== undefined) query.set("unresolved", String(input.unresolved));
+    if (input.disposition) query.set("disposition", input.disposition);
+    if (input.providerStatus) query.set("providerStatus", input.providerStatus);
+    return this.request(`/api/project/${collection}?${query.toString()}`, (value) => decodeWorkspacePage(value, kind));
+  }
+
+  async researchObject(kind: ResearchObjectKind, id: string): Promise<DecisionDetailDto | IssueDetailDto | EvidenceDetailDto | EpisodeDetailDto | ObjectReceiptDetailDto> {
+    const collection = kind === "decision" ? "decisions" : kind === "issue" ? "issues" : kind === "evidence" ? "evidence" : kind === "episode" ? "episodes" : "receipts";
+    return this.request(`/api/project/${collection}/${encodeURIComponent(id)}`, (value) => decodeResearchObjectDetail(value, kind));
+  }
+
+  async attention(): Promise<AttentionDto> { return this.request("/api/project/attention", decodeAttention); }
+
+  async searchResearchObjects(query: string, limit = 50, cursor?: string): Promise<ResearchObjectSearchDto> {
+    const parameters = new URLSearchParams({ q: query, limit: String(limit) });
+    if (cursor) parameters.set("cursor", cursor);
+    return this.request(`/api/project/search?${parameters.toString()}`, decodeResearchObjectSearch);
+  }
+
+  async proposeBriefCandidate(projectId: string, expectedVersion: number, changes: Readonly<Record<string, unknown>>, reason: string): Promise<BriefWorkspaceDto> {
+    return this.request("/api/commands/brief/candidate", decodeBriefWorkspace, { method: "POST", mutation: true, body: { commandType: "propose_brief_change", projectId, expectedVersion, changes, reason, confirmed: true } });
+  }
+
+  async activateBriefCandidate(projectId: string, proposalId: string, expectedVersion: number, reason: string): Promise<{ readonly schemaVersion: "1.0.0"; readonly workspace: BriefWorkspaceDto; readonly changedFields: readonly string[] }> {
+    return this.request("/api/commands/brief/activate", decodeBriefActivation, { method: "POST", mutation: true, body: { commandType: "activate_brief_candidate", projectId, proposalId, expectedVersion, reason, confirmed: true } });
+  }
+
+  async recordDecision(input: { readonly projectId: string; readonly expectedVersion: number; readonly effectiveBriefVersionId: string; readonly statement: string; readonly scope: Readonly<Record<string, unknown>>; readonly rationale: string; readonly reopenConditions: readonly string[]; readonly reason: string }): Promise<DecisionDetailDto> {
+    return this.request("/api/commands/decisions/record", (value) => decodeResearchObjectDetail(value, "decision") as DecisionDetailDto, { method: "POST", mutation: true, body: { commandType: "record_decision", ...input, confirmed: true } });
+  }
+
+  async transitionDecision(input: { readonly projectId: string; readonly decisionId: string; readonly expectedVersion: number; readonly target: "accepted" | "rejected" | "frozen"; readonly reason: string }): Promise<DecisionDetailDto> {
+    return this.request("/api/commands/decisions/transition", (value) => decodeResearchObjectDetail(value, "decision") as DecisionDetailDto, { method: "POST", mutation: true, body: { commandType: "transition_decision", ...input, confirmed: true } });
+  }
+
+  async supersedeDecision(input: { readonly projectId: string; readonly decisionId: string; readonly expectedVersion: number; readonly effectiveBriefVersionId: string; readonly statement: string; readonly scope: Readonly<Record<string, unknown>>; readonly rationale: string; readonly reopenConditions: readonly string[]; readonly reason: string }): Promise<{ readonly schemaVersion: "1.0.0"; readonly superseded: DecisionDetailDto; readonly replacement: DecisionDetailDto }> {
+    return this.request("/api/commands/decisions/supersede", decodeDecisionSupersede, { method: "POST", mutation: true, body: { commandType: "supersede_decision", ...input, confirmed: true } });
+  }
+
+  async issueCommand(action: "resolve" | "waive" | "dispute" | "reopen", input: Readonly<Record<string, unknown>>): Promise<IssueDetailDto> {
+    const commandType = `${action}_issue`;
+    return this.request(`/api/commands/issues/${action}`, (value) => decodeResearchObjectDetail(value, "issue") as IssueDetailDto, { method: "POST", mutation: true, body: { commandType, ...input, confirmed: true } });
+  }
+
   async prepareReview(suggestion: string, evidenceClass: EvidenceClass): Promise<PreparedReviewDto> {
     return this.request("/api/reviews/prepare", decodePreparedReview, { method: "POST", mutation: true, body: { suggestion, evidenceClass } });
   }
@@ -128,8 +217,8 @@ export class ResearchRoomApi {
     return this.request("/api/reviews/commit", decodeReceiptResult, { method: "POST", mutation: true, body: input });
   }
 
-  async rollbackReceipt(receiptId: string, expectedVersion: number, reason: string): Promise<ResearchRoomReceiptDto> {
-    return this.request(`/api/receipts/${encodeURIComponent(receiptId)}/rollback`, decodeReceiptResult, { method: "POST", mutation: true, body: { expectedVersion, reason } });
+  async rollbackReceipt(projectId: string, receiptId: string, expectedVersion: number, reason: string): Promise<ObjectReceiptDetailDto> {
+    return this.request("/api/commands/receipts/rollback", (value) => decodeResearchObjectDetail(value, "receipt") as ObjectReceiptDetailDto, { method: "POST", mutation: true, body: { commandType: "rollback_receipt", projectId, receiptId, expectedVersion, reason, confirmed: true } });
   }
 
   async downloadReceipt(receiptId: string): Promise<Blob> {

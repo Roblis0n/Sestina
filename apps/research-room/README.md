@@ -105,6 +105,37 @@ semantic colors plus stronger borders and focus rings. The 1280px layout collaps
 presents the Inspector as a focus-trapped sheet; Escape closes it and focus is
 restored. The same core workflow remains usable by keyboard and at 200% text.
 
+## Project continuity workspaces
+
+After a project is open, the production navigation also exposes Overview,
+Brief, Decisions, Issues, canonical Evidence, Episodes, Receipts, and Attention.
+The URL identifies the selected workspace and optional object ID, so direct
+links, refresh, Back, and Forward restore the same Core projection. Lists use
+bounded project-bound cursor pages; selecting an item loads its full provenance,
+relations, history, state bindings, lineage, and Core-derived legal actions.
+
+The Brief workspace keeps an editable candidate separate from the active
+version. Creating a candidate only records a proposal and field diff. A second
+explicit activation binds the project, proposal, current version, user actor,
+confirmation, and reason. The Core compare-and-swap and atomic
+`.sestina/research-brief.yaml` publication either agree or return a stable
+failure without reporting partial success.
+
+Decision and Issue forms send explicit confirmed commands through the Core
+Authority Gate. The browser never assumes success: it renders the fresh
+projection returned after the Store transaction. Issue resolution requires
+current canonical Evidence; waiver, dispute, reopen, Decision transitions,
+supersession, and Receipt rollback preserve their existing version and legal
+transition rules.
+
+Project search examines structured projection fields only. It does not scan
+ordinary files, other projects, browser history, credentials, or Provider raw
+responses. Attention is rebuildable from canonical object state; transient
+signals remain in the current App session and cannot accept, resolve, waive,
+freeze, supersede, or otherwise change research authority. The complete
+contract is documented in
+`docs/architecture/02-RESEARCH-OBJECT-WORKSPACES.md`.
+
 The development-only Semantic Judge benchmark and its reproducible
 export/run/import/evaluate workflow are documented at
 `researchbench/research-room-semantic-judge/README.md`. It contains 96

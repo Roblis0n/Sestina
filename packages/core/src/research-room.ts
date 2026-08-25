@@ -25,6 +25,9 @@ import {
   type ResearchRoomReceipt,
   type ResearchRoomSemanticJudgeTrace,
   type ResearchRoomStateBinding,
+  type ResearchPage,
+  type ResearchPageRequest,
+  type ResearchResult,
   type RevisionEpisode,
 } from "@sestina/research";
 import {
@@ -36,6 +39,7 @@ import {
 } from "@sestina/review";
 import type { ResearchStore } from "@sestina/research-store";
 import { coreErr, coreOk, fromDomain, type CoreResult } from "./errors.js";
+import type { TransientAttentionSignal } from "./research-object-workspaces.js";
 
 const PAGE = Object.freeze({ limit: 200 });
 const MAX_SUGGESTION_BYTES = 16_384;
@@ -138,7 +142,11 @@ interface StateBundle {
   readonly issues: readonly ResearchIssue[];
   readonly allIssues: readonly ResearchIssue[];
   readonly episode?: RevisionEpisode;
+  readonly issueHistoryTruncated: boolean;
+  readonly receiptHistoryTruncated: boolean;
 }
+
+type RoomPageReader<T> = (page: ResearchPageRequest) => ResearchResult<ResearchPage<T>>;
 
 interface PendingReview {
   readonly reviewId: string;
@@ -148,6 +156,7 @@ interface PendingReview {
   readonly manifestHash: string;
   readonly confirmationNonce: string;
   readonly stateBinding: ResearchRoomStateBinding;
+  readonly createdAt: string;
   readonly providerInput?: ResearchRoomProviderInput;
   readonly judgeRequest?: ResearchRoomSemanticJudgeRequest;
 }
@@ -155,6 +164,7 @@ interface PendingReview {
 interface AnalyzedEntry extends AnalyzedResearchRoomReview {
   readonly suggestionHash: string;
   readonly evidenceClass: ResearchRoomEvidenceClass;
+  readonly createdAt: string;
 }
 
 interface InFlightReview {
@@ -263,6 +273,7 @@ export class ResearchRoomService {
   readonly #pending = new Map<string, PendingReview>();
   readonly #inFlight = new Map<string, InFlightReview>();
   readonly #analyzed = new Map<string, AnalyzedEntry>();
+  readonly #rollbackConflicts = new Map<string, { readonly projectId: string; readonly receiptId: string; readonly createdAt: string }>();
   constructor(
     private readonly store: ResearchStore,
     private readonly clock: Clock,
@@ -279,6 +290,45 @@ export class ResearchRoomService {
     const page = fromDomain(this.store.roomReceipts.listByProject(projectId, PAGE));
     if (!page.ok) return page;
     return page.value.nextCursor === undefined ? coreOk(page.value.items) : coreErr("state_conflict");
+  }
+
+  getAttentionSignals(projectId: string): readonly TransientAttentionSignal[] {
+    const signals: TransientAttentionSignal[] = [];
+    const current = this.readState(projectId);
+    for (const pending of this.#pending.values()) {
+      if (pending.stateBinding.projectId !== projectId) continue;
+      const stale = !current.ok || !same(current.value.state.stateBinding, pending.stateBinding);
+      signals.push(Object.freeze({
+        id: pending.reviewId,
+        kind: stale ? "manifest" as const : "review" as const,
+        title: stale ? "Stale Context Manifest" : "Prepared Review",
+        reason: stale ? "The project state changed after this Manifest was prepared; rebuild it before analysis." : "This prepared Review still awaits explicit confirmation or cancellation.",
+        severity: "high" as const,
+        href: "/project/review",
+        primaryAction: stale ? "Rebuild Context Manifest" : "Confirm analysis or cancel Review",
+        sourceObject: Object.freeze({ kind: "review", id: pending.reviewId }),
+        createdAt: pending.createdAt,
+      }));
+    }
+    for (const analyzed of this.#analyzed.values()) {
+      if (analyzed.stateBinding.projectId !== projectId) continue;
+      signals.push(Object.freeze({ id: analyzed.reviewId, kind: "review" as const, title: "Review waiting for disposition", reason: "The analysis exists, but only the user can record its disposition.", severity: "high" as const, href: "/project/review", primaryAction: "Open the Review Authority Gate", sourceObject: Object.freeze({ kind: "review", id: analyzed.reviewId }), createdAt: analyzed.createdAt }));
+      if (analyzed.ledgerOnlyReason !== undefined && analyzed.ledgerOnlyReason !== "provider_not_configured" && analyzed.ledgerOnlyReason !== "provider_aborted") signals.push(Object.freeze({ id: `${analyzed.reviewId}-provider`, kind: "provider" as const, title: "Provider result unavailable", reason: `${analyzed.ledgerOnlyReason}; the pending Review is restricted to ledger_only dispositions.`, severity: "high" as const, href: "/project/review", primaryAction: "Reject or defer, or prepare a new Review after recovery", sourceObject: Object.freeze({ kind: "review", id: analyzed.reviewId }), createdAt: analyzed.createdAt }));
+    }
+    for (const conflict of this.#rollbackConflicts.values()) {
+      if (conflict.projectId !== projectId) continue;
+      const receipt = this.store.roomReceipts.getById(projectId, conflict.receiptId);
+      if (!receipt.ok || receipt.value?.status !== "committed") {
+        this.#rollbackConflicts.delete(conflict.receiptId);
+        continue;
+      }
+      if (!receipt.value.rollback.available || !current.ok || same(current.value.state.stateBinding, receipt.value.after)) {
+        this.#rollbackConflicts.delete(conflict.receiptId);
+        continue;
+      }
+      signals.push(Object.freeze({ id: conflict.receiptId, kind: "rollback" as const, title: "Rollback conflict", reason: "Newer project state no longer matches this Receipt's post-state; rollback remains stopped without a partial write.", severity: "high" as const, href: `/project/receipts/${conflict.receiptId}`, primaryAction: "Inspect the Receipt and current state", sourceObject: Object.freeze({ kind: "receipt", id: conflict.receiptId }), createdAt: conflict.createdAt }));
+    }
+    return Object.freeze(signals);
   }
 
   prepare(input: PrepareResearchRoomReviewInput): CoreResult<PreparedResearchRoomReview> {
@@ -354,8 +404,8 @@ export class ResearchRoomService {
       { category: "evidence_boundaries", source: "active_research_brief", sensitivity: "research_state", included: true, truncated: false },
       { category: "explicit_non_goals", source: "active_research_brief", sensitivity: "research_state", included: true, truncated: false },
       { category: "accepted_decisions", source: "versioned_research_state", sensitivity: "research_state", included: true, truncated: false },
-      { category: "issue_history", source: "versioned_research_state", sensitivity: "research_state", included: true, truncated: false },
-      { category: "receipt_summary", source: "versioned_research_state", sensitivity: "research_state", included: true, truncated: false },
+      { category: "issue_history", source: "versioned_research_state", sensitivity: "research_state", included: true, truncated: bundle.value.issueHistoryTruncated },
+      { category: "receipt_summary", source: "versioned_research_state", sensitivity: "research_state", included: true, truncated: bundle.value.receiptHistoryTruncated },
       { category: "current_episode", source: "versioned_research_state", sensitivity: "research_state", included: true, truncated: false },
       { category: "single_suggestion", source: "explicit_user_input", sensitivity: "user_supplied_text", included: true, truncated: false },
       { category: "semantic_criteria", source: "versioned_research_state", sensitivity: "research_state", included: true, truncated: false },
@@ -385,7 +435,9 @@ export class ResearchRoomService {
     });
     const manifestHash = hash(manifest); if (!manifestHash.ok) return manifestHash;
     const confirmationNonce = nonce();
-    this.#pending.set(reviewId, { reviewId, suggestion: input.suggestion.trim(), evidenceClass: evidence.value, manifest, manifestHash: manifestHash.value, confirmationNonce, stateBinding: bundle.value.state.stateBinding, ...(providerInput ? { providerInput } : {}), ...(judgeRequest ? { judgeRequest } : {}) });
+    const createdAtValue = this.clock.now();
+    if (!(createdAtValue instanceof Date) || !Number.isFinite(createdAtValue.getTime())) return coreErr("infrastructure_failure");
+    this.#pending.set(reviewId, { reviewId, suggestion: input.suggestion.trim(), evidenceClass: evidence.value, manifest, manifestHash: manifestHash.value, confirmationNonce, stateBinding: bundle.value.state.stateBinding, createdAt: createdAtValue.toISOString(), ...(providerInput ? { providerInput } : {}), ...(judgeRequest ? { judgeRequest } : {}) });
     return coreOk(Object.freeze({ reviewId, contextManifestVisible: true, providerStatus: this.provider ? "ready" : "ledger_only", manifest, manifestHash: manifestHash.value, confirmationNonce, stateBinding: bundle.value.state.stateBinding }));
   }
 
@@ -444,7 +496,7 @@ export class ResearchRoomService {
         }
       }
     const manifest: ResearchRoomContextManifest = Object.freeze({ ...pending.manifest, sendStatus: invoked ? "sent_to_provider" : "not_sent", networkUsed });
-    const entry: AnalyzedEntry = Object.freeze({ reviewId: pending.reviewId, providerStatus, ...(ledgerOnlyReason ? { ledgerOnlyReason } : {}), manifest, analysis, ...(semanticJudge ? { semanticJudge } : {}), authorityNonce: nonce(), stateBinding: pending.stateBinding, suggestionHash: pending.manifest.suggestionHash, evidenceClass: pending.evidenceClass });
+    const entry: AnalyzedEntry = Object.freeze({ reviewId: pending.reviewId, providerStatus, ...(ledgerOnlyReason ? { ledgerOnlyReason } : {}), manifest, analysis, ...(semanticJudge ? { semanticJudge } : {}), authorityNonce: nonce(), stateBinding: pending.stateBinding, suggestionHash: pending.manifest.suggestionHash, evidenceClass: pending.evidenceClass, createdAt: pending.createdAt });
     this.#analyzed.set(entry.reviewId, entry);
     return coreOk(entry);
   }
@@ -507,7 +559,11 @@ export class ResearchRoomService {
     if (located.value === undefined) return coreErr("not_found"); const receipt = located.value;
     if (receipt.version !== input.expectedVersion) return coreErr("stale_state");
     const current = this.readState(input.projectId); if (!current.ok) return current;
-    if (!same(current.value.state.stateBinding, receipt.after)) return coreErr("stale_state");
+    if (!same(current.value.state.stateBinding, receipt.after)) {
+      const at = this.clock.now();
+      if (at instanceof Date && Number.isFinite(at.getTime())) this.#rollbackConflicts.set(receipt.id, Object.freeze({ projectId: input.projectId, receiptId: receipt.id, createdAt: at.toISOString() }));
+      return coreErr("stale_state");
+    }
     const result = this.store.unitOfWork.commit(() => {
       let restored = current.value; let rollbackBriefVersionId: string | undefined;
       if (receipt.disposition.kind === "direction_changed") {
@@ -527,20 +583,75 @@ export class ResearchRoomService {
       const rolled = rollBackResearchRoomReceipt(receipt, { actor: actor.value, expectedVersion: expectedVersion.value, reason: input.reason.trim(), restoredStateHash: restored.state.stateBinding.stateHash, ...(rollbackBriefVersionId ? { rollbackBriefVersionId } : {}) }, this.clock);
       return rolled.ok ? this.store.roomReceipts.compareAndSwap(rolled.value, expectedVersion.value) : rolled;
     });
-    return fromDomain(result);
+    const mapped = fromDomain(result);
+    if (mapped.ok) this.#rollbackConflicts.delete(receipt.id);
+    return mapped;
+  }
+
+  private forEachPaged<T>(reader: RoomPageReader<T>, visit: (item: T) => void): CoreResult<void> {
+    let cursor: string | undefined;
+    do {
+      const page = fromDomain(reader({ limit: PAGE.limit, ...(cursor ? { cursor } : {}) }));
+      if (!page.ok) return page;
+      for (const item of page.value.items) visit(item);
+      cursor = page.value.nextCursor;
+    } while (cursor !== undefined);
+    return coreOk(undefined);
   }
 
   private readState(projectId: string): CoreResult<StateBundle> {
     const project = fromDomain(this.store.projects.getById(projectId)); if (!project.ok) return project; if (project.value === undefined) return coreErr("not_found");
-    const briefs = fromDomain(this.store.briefs.listByProject(projectId, PAGE)); const decisionPage = fromDomain(this.store.decisions.listByScope(projectId, undefined, PAGE)); const issuePage = fromDomain(this.store.issues.listByStatus(projectId, undefined, PAGE)); const episodePage = fromDomain(this.store.episodes.listByProject(projectId, PAGE)); const receiptPage = fromDomain(this.store.roomReceipts.listByProject(projectId, PAGE));
-    if (!briefs.ok) return briefs; if (!decisionPage.ok) return decisionPage; if (!issuePage.ok) return issuePage; if (!episodePage.ok) return episodePage; if (!receiptPage.ok) return receiptPage;
-    if ([briefs.value, decisionPage.value, issuePage.value, episodePage.value, receiptPage.value].some((page) => page.nextCursor !== undefined)) return coreErr("state_conflict");
-    const activeBriefs = briefs.value.items.flatMap((brief) => { const version = getActiveResearchBriefVersion(brief); return version ? [{ brief, version }] : []; }).sort((a, b) => b.version.createdAt.localeCompare(a.version.createdAt) || b.version.id.localeCompare(a.version.id));
-    const active = activeBriefs[0]; if (active === undefined) return coreErr("state_conflict");
-    const decisions = decisionPage.value.items.filter((item): item is ResearchDecision & { readonly status: "accepted" | "frozen" } => item.status === "accepted" || item.status === "frozen").sort((a, b) => a.id.localeCompare(b.id));
-    const allIssues = [...issuePage.value.items].sort((a, b) => a.id.localeCompare(b.id));
-    const issues = allIssues.filter((item) => !["resolved", "suppressed", "waived"].includes(item.status));
-    const episode = [...episodePage.value.items].sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id))[0];
+    let active: { readonly brief: ResearchBrief; readonly version: ResearchBriefVersion } | undefined;
+    const briefs = this.forEachPaged(this.store.briefs.listByProject.bind(this.store.briefs, projectId), (brief) => {
+      const version = getActiveResearchBriefVersion(brief); if (version === undefined) return;
+      if (active === undefined || version.createdAt > active.version.createdAt || (version.createdAt === active.version.createdAt && version.id > active.version.id)) active = { brief, version };
+    });
+    if (!briefs.ok) return briefs;
+    if (active === undefined) return coreErr("state_conflict");
+
+    const decisions: (ResearchDecision & { readonly status: "accepted" | "frozen" })[] = [];
+    let activeDecisionCount = 0;
+    const decisionScan = this.forEachPaged(this.store.decisions.listByScope.bind(this.store.decisions, projectId, undefined), (item) => {
+      if (item.status !== "accepted" && item.status !== "frozen") return;
+      activeDecisionCount += 1;
+      if (decisions.length < PAGE.limit) decisions.push(item as ResearchDecision & { readonly status: "accepted" | "frozen" });
+    });
+    if (!decisionScan.ok) return decisionScan;
+    if (activeDecisionCount > decisions.length) return coreErr("state_conflict");
+    decisions.sort((a, b) => a.id.localeCompare(b.id));
+
+    const issues: ResearchIssue[] = [];
+    const recentIssues: ResearchIssue[] = [];
+    let unresolvedIssueCount = 0;
+    let issueCount = 0;
+    const issueScan = this.forEachPaged(this.store.issues.listByStatus.bind(this.store.issues, projectId, undefined), (item) => {
+      issueCount += 1;
+      recentIssues.push(item);
+      recentIssues.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || right.id.localeCompare(left.id));
+      if (recentIssues.length > PAGE.limit) recentIssues.length = PAGE.limit;
+      if (["resolved", "suppressed", "waived"].includes(item.status)) return;
+      unresolvedIssueCount += 1;
+      if (issues.length < PAGE.limit) issues.push(item);
+    });
+    if (!issueScan.ok) return issueScan;
+    if (unresolvedIssueCount > issues.length) return coreErr("state_conflict");
+    issues.sort((a, b) => a.id.localeCompare(b.id));
+    const allIssues = [...new Map([...issues, ...recentIssues].map((item) => [item.id, item])).values()].sort((a, b) => a.id.localeCompare(b.id)).slice(0, PAGE.limit);
+
+    let episode: RevisionEpisode | undefined;
+    const episodeScan = this.forEachPaged(this.store.episodes.listByProject.bind(this.store.episodes, projectId), (item) => {
+      if (episode === undefined || item.createdAt > episode.createdAt || (item.createdAt === episode.createdAt && item.id > episode.id)) episode = item;
+    });
+    if (!episodeScan.ok) return episodeScan;
+
+    const receipts: ResearchRoomReceipt[] = [];
+    let receiptCount = 0;
+    const receiptScan = this.forEachPaged(this.store.roomReceipts.listByProject.bind(this.store.roomReceipts, projectId), (item) => {
+      receiptCount += 1;
+      receipts.push(item);
+      if (receipts.length > PAGE.limit) receipts.shift();
+    });
+    if (!receiptScan.ok) return receiptScan;
     const semantic = {
       projectId,
       brief: { projectQuestion: active.version.projectQuestion, currentStage: active.version.currentStage, currentTask: active.version.currentTask, fixedDecisions: active.version.fixedDecisions, expectedDeltas: active.version.expectedDeltas, evidenceBoundaries: active.version.evidenceBoundaries, explicitNonGoals: active.version.explicitNonGoals },
@@ -556,8 +667,8 @@ export class ResearchRoomService {
       decisions: Object.freeze(decisions.map((item) => ({ id: item.id, statement: item.statement, rationale: item.rationale, status: item.status, version: item.version }))),
       issues: Object.freeze(issues.map((item) => ({ id: item.id, kind: item.kind, summary: item.summary, status: item.status, version: item.version }))),
       ...(episode ? { currentEpisode: Object.freeze({ id: episode.id, status: episode.status, version: episode.version, artifactId: episode.artifactId, createdAt: episode.createdAt }) } : {}),
-      stateBinding, receipts: receiptPage.value.items,
+      stateBinding, receipts: Object.freeze(receipts),
     });
-    return coreOk({ state, brief: active.brief, briefVersion: active.version, decisions, issues, allIssues, ...(episode ? { episode } : {}) });
+    return coreOk({ state, brief: active.brief, briefVersion: active.version, decisions, issues, allIssues, ...(episode ? { episode } : {}), issueHistoryTruncated: issueCount > allIssues.length, receiptHistoryTruncated: receiptCount > receipts.length });
   }
 }

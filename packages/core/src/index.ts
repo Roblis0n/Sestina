@@ -1,5 +1,5 @@
 export { openSestina, SestinaCore } from "./sestina-core.js";
-export type { CoreBriefMutation, CoreBriefState, CoreDatabaseDiagnostics, CoreReviewSummary, DeterministicReviewResult, EpisodeIntegritySummary, OpenSestinaOptions } from "./sestina-core.js";
+export type { BriefProjectionPublication, BriefProjectionPublisher, CoreBriefMutation, CoreBriefState, CoreDatabaseDiagnostics, CoreReviewSummary, DeterministicReviewResult, EpisodeIntegritySummary, OpenSestinaOptions } from "./sestina-core.js";
 export type {
   AnalyzedResearchRoomReview,
   CommitResearchRoomDispositionInput,
@@ -35,3 +35,26 @@ export type {
 } from "./recovery.js";
 export type * from "./commands/index.js";
 export type * from "./queries/index.js";
+export type {
+  AttentionItemProjection,
+  AttentionProjection,
+  BriefWorkspaceProjection,
+  DecisionDetailProjection,
+  DecisionSummaryProjection,
+  EvidenceDetailProjection,
+  EvidenceSummaryProjection,
+  EpisodeDetailProjection,
+  EpisodeSummaryProjection,
+  IssueDetailProjection,
+  IssueSummaryProjection,
+  ProjectOverviewProjection,
+  ProvenanceProjection,
+  ReceiptDetailProjection,
+  ReceiptSummaryProjection,
+  ResearchObjectKind,
+  ResearchObjectSearchProjection,
+  ResearchObjectSearchResult,
+  WorkspaceListRequest,
+  WorkspacePage,
+  WorkspaceProviderStatus,
+} from "./research-object-workspaces.js";

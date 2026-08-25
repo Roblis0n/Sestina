@@ -313,6 +313,19 @@ export function t(language: AppLanguage, key: CopyKey): string {
 }
 
 const EN_ERROR_COPY: Readonly<Record<string, string>> = Object.freeze({
+  offline: "The local Research Room is unavailable. Confirm the local service is running, then retry.",
+  invalid_payload: "The local service returned data outside this client contract, so Sestina refused to use it. Retry or restart the local service.",
+  invalid_input: "The input does not satisfy this operation. Review the fields and retry.",
+  not_found: "This research object is not available in the currently opened project.",
+  cross_project_reference: "This command references another project and was refused.",
+  stale_state: "The research state changed after this page was read. Reload, review the new state, and retry.",
+  state_conflict: "The requested transition is not legal for the current research state.",
+  invalid_transition: "The requested authority transition is not legal for the current object state.",
+  user_confirmation_required: "This operation requires a new explicit user confirmation.",
+  evidence_required: "Resolving this Issue requires current canonical Evidence from this project.",
+  projection_write_failure: "The active Brief was not changed because its durable local projection could not be published.",
+  storage_unavailable: "Sestina could not read or update the selected project's local research state. Existing files were preserved.",
+  rollback_conflict: "Rollback stopped because newer project state no longer matches this Receipt. No partial write was made.",
   infrastructure_failure: "Sestina could not read or update .sestina/state.sqlite in the selected folder. Existing files were preserved. Close any other Sestina instance, confirm the folder is writable, and reopen it.",
 });
 
@@ -322,11 +335,18 @@ const ZH_ERROR_COPY: Readonly<Record<string, string>> = Object.freeze({
   request_cancelled: "请求已取消，没有形成可用结果。",
   operation_cancelled: "操作已在形成可用结果前取消。",
   invalid_input: "输入不符合当前操作要求，请核对后重试。",
+  not_found: "当前打开的项目中没有这个研究对象。",
+  cross_project_reference: "该命令引用了另一个项目，Sestina 已拒绝执行。",
   project_not_found: "所选目录不可用。请确认目录存在且当前用户有权访问。",
   project_not_open: "请先显式打开一个已初始化的 Sestina 项目。",
   state_conflict: "本地项目状态与当前操作冲突。请重新打开项目并核对当前状态。",
+  invalid_transition: "当前对象状态不允许这项权威操作。请刷新并核对可用动作。",
   stale_state: "页面依据的研究状态已经变化。请刷新并重新核对后再操作。",
   user_confirmation_required: "该操作需要新的用户显式确认。",
+  evidence_required: "解决这个 Issue 必须绑定当前项目中的 current canonical Evidence。",
+  projection_write_failure: "持久 Brief 投影发布失败，Active Brief 未改变；请确认 .sestina 目录可写后重试。",
+  storage_unavailable: "Sestina 无法读取或更新当前项目的本地研究状态；现有文件未被覆盖。",
+  rollback_conflict: "项目已有更新，已停止回滚且没有形成部分写入。请先检查当前状态与该 Receipt。",
   review_blocked: "当前审议没有形成可用结果；不能执行这项处置。",
   explicit_action_required: "该操作需要当前本地会话中的显式用户动作。",
   directory_picker_unavailable: "系统文件夹选择器不可用，请使用手动绝对路径入口。",

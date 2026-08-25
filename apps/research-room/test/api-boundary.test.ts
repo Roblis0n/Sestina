@@ -7,8 +7,12 @@ import {
   decodeApiEnvelope,
   decodeDirectoryPickerCancellation,
   decodeProjectOpenResult,
+  decodeProjectOverview,
+  decodeResearchObjectDetail,
+  decodeResearchObjectSearch,
   decodeResearchRoomState,
   decodeStatus,
+  decodeWorkspacePage,
 } from "../client/src/api/decoders.js";
 import { localizedError } from "../client/src/i18n/copy.js";
 
@@ -19,7 +23,9 @@ describe("Research Room typed API boundary", () => {
     const infrastructure = Object.assign(new Error("The local research state is unavailable."), { code: "infrastructure_failure" });
     expect(localizedError("zh-CN", offline)).toContain("本地服务");
     expect(localizedError("zh-CN", invalid)).toContain("已拒绝使用");
-    expect(localizedError("en", offline)).toBe("The local Research Room is unavailable.");
+    expect(localizedError("en", offline)).toBe(
+      "The local Research Room is unavailable. Confirm the local service is running, then retry.",
+    );
     expect(localizedError("zh-CN", infrastructure)).toContain(".sestina/state.sqlite");
     expect(localizedError("en", infrastructure)).toContain(".sestina/state.sqlite");
     expect(localizedError("en", infrastructure)).not.toContain("&#x20;");
@@ -137,6 +143,38 @@ describe("Research Room typed API boundary", () => {
         semanticJudge: { assessments: [] },
       }),
     ).toThrow(ApiPayloadError);
+  });
+
+  it("decodes exact UI-02 overview and bounded Decision pages while rejecting sensitive or unknown fields", () => {
+    const overview = {
+      schemaVersion: "1.0.0",
+      project: { id: "rprj_01ARZ3NDEKTSV4RRFFQ69G5FAV", title: "Research", version: 1, updatedAt: "2026-08-25T00:00:00.000Z" },
+      providerStatus: "ledger_only",
+      brief: { id: "rbrf_01ARZ3NDEKTSV4RRFFQ69G5FAV", versionId: "rbrf_01ARZ3NDEKTSV4RRFFQ69G5FAW", versionNumber: 1, question: "Question", stage: "revision", task: "Task" },
+      counts: { decisions: 1, issues: 0, evidence: 0, episodes: 0, receipts: 0 },
+      statuses: { decisions: { proposed: 1 }, issues: {}, evidence: {}, episodes: {}, receipts: {} },
+      attention: { total: 1, top: [{ id: "rdec_01ARZ3NDEKTSV4RRFFQ69G5FAV", kind: "decision", title: "Decision", reason: "Pending", severity: "high", href: "/project/decisions/rdec_01ARZ3NDEKTSV4RRFFQ69G5FAV", primaryAction: "Open Decision", sourceObject: { kind: "decision", id: "rdec_01ARZ3NDEKTSV4RRFFQ69G5FAV" }, valid: true, createdAt: "2026-08-25T00:00:00.000Z" }] },
+      recentChanges: [],
+    };
+    expect(decodeProjectOverview(overview)).toMatchObject({ schemaVersion: "1.0.0", counts: { decisions: 1 } });
+    expect(() => decodeProjectOverview({ ...overview, rootPath: "H:\\AI" })).toThrow(ApiPayloadError);
+
+    const page = {
+      schemaVersion: "1.0.0", projectId: overview.project.id, datasetVersion: "a".repeat(64),
+      items: [{ kind: "decision", id: "rdec_01ARZ3NDEKTSV4RRFFQ69G5FAV", statement: "Decision", status: "proposed", scope: { kind: "project" }, rationale: "Reason", effectiveBriefVersionId: overview.brief.versionId, reopenConditions: [], active: false, referencedByCurrentBrief: true, version: 1, createdAt: "2026-08-25T00:00:00.000Z", updatedAt: "2026-08-25T00:00:00.000Z", provenance: { authority: "user_recorded", actorKind: "user", recordedAt: "2026-08-25T00:00:00.000Z" } }],
+    };
+    expect(decodeWorkspacePage(page, "decision").items).toHaveLength(1);
+    expect(() => decodeWorkspacePage({ ...page, items: [{ ...page.items[0], stack: "private" }] }, "decision")).toThrow(ApiPayloadError);
+    expect(() => decodeWorkspacePage({ ...page, schemaVersion: "2.0.0" }, "decision")).toThrow(ApiPayloadError);
+
+    const detail = { ...page.items[0], availableActions: ["accept", "reject"], timeline: [], lineage: [{ id: page.items[0]?.id, statement: "Decision", status: "proposed", version: 1, relation: "current" }], lineageTruncated: false, relatedBriefVersionIds: [overview.brief.versionId], relatedIssueIds: [], relatedEpisodeIds: [], relatedReceiptIds: [], relationsTruncated: false };
+    expect(decodeResearchObjectDetail(detail, "decision")).toMatchObject({ kind: "decision", lineage: [{ relation: "current" }] });
+    const withoutLineage = Object.fromEntries(Object.entries(detail).filter(([key]) => key !== "lineage"));
+    expect(() => decodeResearchObjectDetail(withoutLineage, "decision")).toThrow(ApiPayloadError);
+
+    const search = { schemaVersion: "1.0.0", projectId: overview.project.id, datasetVersion: "b".repeat(64), query: "Decision", truncated: false, items: [{ kind: "decision", id: page.items[0]?.id, title: "Decision", detail: "Reason", status: "proposed", source: "user_recorded:user", projectId: overview.project.id, href: `/project/decisions/${page.items[0]?.id}` }] };
+    expect(decodeResearchObjectSearch(search).items).toHaveLength(1);
+    expect(() => decodeResearchObjectSearch({ ...search, items: [{ ...search.items[0], projectId: "rprj_01ARZ3NDEKTSV4RRFFQ69G5FAX" }] })).toThrow(ApiPayloadError);
   });
 
   it("gives high contrast an opaque dark base with vivid accent, status, and focus colors", async () => {

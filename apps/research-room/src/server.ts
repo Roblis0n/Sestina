@@ -1,10 +1,14 @@
 import { randomBytes } from "node:crypto";
+import { existsSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { lstat, mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { basename, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   openSestina,
+  coreErr,
+  coreOk,
+  type BriefProjectionPublisher,
   type CoreResult,
   type ResearchRoomProvider,
   type SestinaCore,
@@ -69,6 +73,10 @@ class HttpProblem extends Error {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
+function hasExactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
+  const actual = Object.keys(value).sort(); const expected = [...keys].sort();
+  return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
+}
 function text(value: unknown, maxBytes: number): string | undefined {
   if (typeof value !== "string") return undefined;
   const normalized = value.trim();
@@ -76,8 +84,46 @@ function text(value: unknown, maxBytes: number): string | undefined {
 }
 function resultValue<T>(result: CoreResult<T>): T {
   if (result.ok) return result.value;
-  const status = result.error.code === "not_found" ? 404 : result.error.code === "stale_state" || result.error.code === "state_conflict" ? 409 : result.error.code === "infrastructure_failure" ? 503 : 400;
+  const status = result.error.code === "not_found" ? 404 : result.error.code === "stale_state" || result.error.code === "state_conflict" ? 409 : result.error.code === "infrastructure_failure" || result.error.code === "projection_write_failure" ? 503 : 400;
   throw new HttpProblem(status, result.error.code, result.error.message);
+}
+
+function authorityResultValue<T>(result: CoreResult<T>): T {
+  if (!result.ok && result.error.code === "state_conflict") throw new HttpProblem(409, "invalid_transition", "The authority transition is not legal for the current object state.");
+  return resultValue(result);
+}
+
+function workspaceResultValue<T>(result: CoreResult<T>): T {
+  if (!result.ok && result.error.code === "infrastructure_failure") throw new HttpProblem(503, "storage_unavailable", "The local structured research state is unavailable.");
+  return resultValue(result);
+}
+
+function workspaceListRequest(url: URL): { readonly limit: number; readonly cursor?: string; readonly status?: string; readonly query?: string; readonly source?: string; readonly scope?: string; readonly active?: boolean; readonly referencedByCurrentBrief?: boolean; readonly issueKind?: string; readonly relevance?: "current_brief"; readonly unresolved?: boolean; readonly disposition?: string; readonly providerStatus?: string } {
+  const allowed = new Set(["active", "cursor", "disposition", "issueKind", "limit", "providerStatus", "query", "referencedByCurrentBrief", "relevance", "scope", "source", "status", "unresolved"]);
+  if ([...url.searchParams.keys()].some((key) => !allowed.has(key))) throw new HttpProblem(400, "invalid_input", "The list query is invalid.");
+  const limitRaw = url.searchParams.get("limit") ?? "50";
+  if (!/^\d{1,3}$/u.test(limitRaw)) throw new HttpProblem(400, "invalid_input", "The list limit is invalid.");
+  const limit = Number(limitRaw);
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200) throw new HttpProblem(400, "invalid_input", "The list limit is invalid.");
+  const cursor = url.searchParams.get("cursor") ?? undefined;
+  const status = url.searchParams.get("status") ?? undefined;
+  const query = url.searchParams.get("query") ?? undefined;
+  const short = (name: string): string | undefined => { const value = url.searchParams.get(name) ?? undefined; if (value !== undefined && (value.length === 0 || value.length > 128)) throw new HttpProblem(400, "invalid_input", "The list query is invalid."); return value; };
+  const bool = (name: string): boolean | undefined => { const value = url.searchParams.get(name); if (value === null) return undefined; if (value === "true") return true; if (value === "false") return false; throw new HttpProblem(400, "invalid_input", "The list boolean filter is invalid."); };
+  const source = short("source"); const scope = short("scope"); const issueKind = short("issueKind"); const relevanceValue = short("relevance"); const disposition = short("disposition"); const providerStatus = short("providerStatus");
+  const active = bool("active"); const referencedByCurrentBrief = bool("referencedByCurrentBrief"); const unresolved = bool("unresolved");
+  if (relevanceValue !== undefined && relevanceValue !== "current_brief") throw new HttpProblem(400, "invalid_input", "The Issue relevance filter is invalid.");
+  if ((cursor !== undefined && (cursor.length === 0 || cursor.length > 8192)) || (status !== undefined && (status.length === 0 || status.length > 64)) || (query !== undefined && Buffer.byteLength(query, "utf8") > 512)) throw new HttpProblem(400, "invalid_input", "The list query is invalid.");
+  return { limit, ...(cursor ? { cursor } : {}), ...(status ? { status } : {}), ...(query !== undefined ? { query } : {}), ...(source ? { source } : {}), ...(scope ? { scope } : {}), ...(active === undefined ? {} : { active }), ...(referencedByCurrentBrief === undefined ? {} : { referencedByCurrentBrief }), ...(issueKind ? { issueKind } : {}), ...(relevanceValue === "current_brief" ? { relevance: relevanceValue } : {}), ...(unresolved === undefined ? {} : { unresolved }), ...(disposition ? { disposition } : {}), ...(providerStatus ? { providerStatus } : {}) };
+}
+
+function confirmedCommand(input: unknown, commandType: string, keys: readonly string[], projectId: string): Record<string, unknown> {
+  if (!isRecord(input) || !hasExactKeys(input, keys) || input.commandType !== commandType) throw new HttpProblem(400, "invalid_input", "The explicit command is invalid.");
+  if (input.projectId !== projectId) throw new HttpProblem(409, "cross_project_reference", "The command is bound to another project.");
+  if (input.confirmed !== true) throw new HttpProblem(400, "user_confirmation_required", "The command requires explicit user confirmation.");
+  if (text(input.reason, 4_096) === undefined) throw new HttpProblem(400, "invalid_input", "The command reason is required.");
+  if (!Number.isSafeInteger(input.expectedVersion) || Number(input.expectedVersion) < 1) throw new HttpProblem(400, "invalid_input", "The expected version is invalid.");
+  return input;
 }
 function json(response: ServerResponse, status: number, body: unknown): void {
   response.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "x-content-type-options": "nosniff" });
@@ -412,6 +458,40 @@ export class ResearchRoomHttpApplication {
     return resultValue(opened.core.getResearchRoomState(opened.project.id));
   }
 
+  private briefProjectionPublisher(opened: OpenedProject): BriefProjectionPublisher {
+    return (yaml) => {
+      const target = join(opened.root, ".sestina", "research-brief.yaml");
+      const suffix = randomBytes(12).toString("hex");
+      const staged = join(opened.root, ".sestina", `.research-brief.${suffix}.tmp`);
+      const backup = join(opened.root, ".sestina", `.research-brief.${suffix}.bak`);
+      let targetMoved = false;
+      let stagedPublished = false;
+      try {
+        if (!existsSync(target)) return coreErr("projection_write_failure");
+        writeFileSync(staged, yaml, { encoding: "utf8", flag: "wx" });
+        renameSync(target, backup); targetMoved = true;
+        renameSync(staged, target); stagedPublished = true;
+        return coreOk(Object.freeze({
+          rollback: () => {
+            if (stagedPublished && existsSync(target)) rmSync(target, { force: true });
+            if (targetMoved && existsSync(backup)) renameSync(backup, target);
+            if (existsSync(staged)) rmSync(staged, { force: true });
+          },
+          finalize: () => {
+            if (existsSync(backup)) rmSync(backup, { force: true });
+            if (existsSync(staged)) rmSync(staged, { force: true });
+          },
+        }));
+      } catch {
+        try {
+          if (!stagedPublished && targetMoved && !existsSync(target) && existsSync(backup)) renameSync(backup, target);
+          if (existsSync(staged)) rmSync(staged, { force: true });
+        } catch { /* Recovery is reported through the stable projection failure code. */ }
+        return coreErr("projection_write_failure");
+      }
+    };
+  }
+
   private async serveClient(pathname: string, response: ServerResponse): Promise<void> {
     const decoded = decodeURIComponent(pathname);
     const isClientRoute = decoded === "/" || decoded === "/index.html" || (extname(decoded) === "" && !decoded.startsWith("/assets/"));
@@ -458,9 +538,121 @@ export class ResearchRoomHttpApplication {
       if (request.method === "POST" && url.pathname === "/api/project/open") { json(response, 200, { ok: true, value: await this.openProject(await readBody(request)) }); return; }
       if (request.method === "POST" && url.pathname === "/api/project/brief") { json(response, 200, { ok: true, value: await this.activateInitialBrief(await readBody(request)) }); return; }
       const opened = this.requireOpened();
+      if (request.method === "GET" && url.pathname === "/api/project/overview") {
+        const provider = await this.providerStatus();
+        const providerStatus = isRecord(provider) && provider.mode === "configured" ? "configured" as const : "ledger_only" as const;
+        json(response, 200, { ok: true, value: workspaceResultValue(opened.core.getProjectOverviewProjection(opened.project.id, { providerStatus })) }); return;
+      }
+      if (request.method === "GET" && url.pathname === "/api/project/brief") {
+        if ([...url.searchParams.keys()].some((key) => key !== "historyLimit")) throw new HttpProblem(400, "invalid_input", "The Brief query is invalid.");
+        const raw = url.searchParams.get("historyLimit") ?? "50";
+        if (!/^\d{1,3}$/u.test(raw) || Number(raw) < 1 || Number(raw) > 200) throw new HttpProblem(400, "invalid_input", "The Brief history limit is invalid.");
+        json(response, 200, { ok: true, value: workspaceResultValue(opened.core.getBriefWorkspaceProjection(opened.project.id, Number(raw))) }); return;
+      }
+      const workspaceLists = Object.freeze({
+        "/api/project/decisions": (query: ReturnType<typeof workspaceListRequest>) => opened.core.listDecisionProjections(opened.project.id, query),
+        "/api/project/issues": (query: ReturnType<typeof workspaceListRequest>) => opened.core.listIssueProjections(opened.project.id, query),
+        "/api/project/evidence": (query: ReturnType<typeof workspaceListRequest>) => opened.core.listEvidenceProjections(opened.project.id, query),
+        "/api/project/episodes": (query: ReturnType<typeof workspaceListRequest>) => opened.core.listEpisodeProjections(opened.project.id, query),
+        "/api/project/receipts": (query: ReturnType<typeof workspaceListRequest>) => opened.core.listReceiptProjections(opened.project.id, query),
+      });
+      if (request.method === "GET" && url.pathname in workspaceLists) {
+        const read = workspaceLists[url.pathname as keyof typeof workspaceLists];
+        const projection = read(workspaceListRequest(url)) as CoreResult<unknown>;
+        json(response, 200, { ok: true, value: workspaceResultValue(projection) }); return;
+      }
+      const workspaceDetail = /^\/api\/project\/(decisions|issues|evidence|episodes|receipts)\/([a-z]+_[0-9A-HJKMNP-TV-Z]{26})$/u.exec(url.pathname);
+      if (request.method === "GET" && workspaceDetail?.[1] && workspaceDetail[2]) {
+        const id = workspaceDetail[2];
+        const value = workspaceDetail[1] === "decisions" ? workspaceResultValue(opened.core.getDecisionProjection(opened.project.id, id))
+          : workspaceDetail[1] === "issues" ? workspaceResultValue(opened.core.getIssueProjection(opened.project.id, id))
+            : workspaceDetail[1] === "evidence" ? workspaceResultValue(opened.core.getEvidenceProjection(opened.project.id, id))
+              : workspaceDetail[1] === "episodes" ? workspaceResultValue(opened.core.getEpisodeProjection(opened.project.id, id))
+                : workspaceResultValue(opened.core.getReceiptProjection(opened.project.id, id));
+        if (value === undefined) throw new HttpProblem(404, "not_found", "The requested research record was not found.");
+        json(response, 200, { ok: true, value }); return;
+      }
+      if (request.method === "GET" && url.pathname === "/api/project/attention") {
+        if ([...url.searchParams.keys()].length > 0) throw new HttpProblem(400, "invalid_input", "The Attention query is invalid.");
+        json(response, 200, { ok: true, value: workspaceResultValue(opened.core.getAttentionProjection(opened.project.id)) }); return;
+      }
+      if (request.method === "GET" && url.pathname === "/api/project/search") {
+        if ([...url.searchParams.keys()].some((key) => key !== "q" && key !== "limit" && key !== "cursor")) throw new HttpProblem(400, "invalid_input", "The project search is invalid.");
+        const query = url.searchParams.get("q") ?? ""; const rawLimit = url.searchParams.get("limit") ?? "50";
+        const cursor = url.searchParams.get("cursor") ?? undefined;
+        if (!/^\d{1,3}$/u.test(rawLimit) || Number(rawLimit) < 1 || Number(rawLimit) > 200 || Buffer.byteLength(query, "utf8") > 512 || (cursor !== undefined && (cursor.length === 0 || cursor.length > 8192))) throw new HttpProblem(400, "invalid_input", "The project search is invalid.");
+        json(response, 200, { ok: true, value: workspaceResultValue(opened.core.searchResearchObjects(opened.project.id, { query, limit: Number(rawLimit), ...(cursor ? { cursor } : {}) })) }); return;
+      }
       if (request.method === "GET" && url.pathname === "/api/state") {
         if (resultValue(opened.core.getBriefState(opened.project.id)) === undefined) throw new HttpProblem(409, "brief_setup_required", "Complete the initial Research Brief in this browser.");
         json(response, 200, { ok: true, value: resultValue(opened.core.getResearchRoomState(opened.project.id)) }); return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/commands/brief/candidate") {
+        const body = confirmedCommand(await readBody(request), "propose_brief_change", ["changes", "commandType", "confirmed", "expectedVersion", "projectId", "reason"], opened.project.id);
+        resultValue(opened.core.proposeBriefChange({ projectId: opened.project.id, actor: USER, changes: body.changes as never, reason: String(body.reason), expectedVersion: Number(body.expectedVersion) }));
+        json(response, 200, { ok: true, value: resultValue(opened.core.getBriefWorkspaceProjection(opened.project.id)) }); return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/commands/brief/activate") {
+        const body = confirmedCommand(await readBody(request), "activate_brief_candidate", ["commandType", "confirmed", "expectedVersion", "projectId", "proposalId", "reason"], opened.project.id);
+        const proposalId = text(body.proposalId, 128); if (proposalId === undefined) throw new HttpProblem(400, "invalid_input", "The Brief candidate is invalid.");
+        const mutation = resultValue(opened.core.acceptBriefChangeWithProjection({ projectId: opened.project.id, proposalId, actor: USER, reason: String(body.reason), expectedVersion: Number(body.expectedVersion) }, this.briefProjectionPublisher(opened)));
+        json(response, 200, { ok: true, value: { schemaVersion: "1.0.0", workspace: resultValue(opened.core.getBriefWorkspaceProjection(opened.project.id)), changedFields: mutation.changedFields } }); return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/commands/decisions/record") {
+        const body = confirmedCommand(await readBody(request), "record_decision", ["commandType", "confirmed", "effectiveBriefVersionId", "expectedVersion", "projectId", "rationale", "reason", "reopenConditions", "scope", "statement"], opened.project.id);
+        const brief = resultValue(opened.core.getBriefWorkspaceProjection(opened.project.id, 1));
+        if (brief.entityVersion !== Number(body.expectedVersion) || brief.active.id !== body.effectiveBriefVersionId) throw new HttpProblem(409, "stale_state", "The active Research Brief changed before the command.");
+        const statement = text(body.statement, 4_096); const rationale = text(body.rationale, 4_096); const reason = text(body.reason, 4_096);
+        if (statement === undefined || rationale === undefined || reason === undefined || !Array.isArray(body.reopenConditions)) throw new HttpProblem(400, "invalid_input", "The Decision proposal is invalid.");
+        const created = resultValue(opened.core.recordDecision({ projectId: opened.project.id, actor: USER, statement, scope: body.scope as never, rationale: `${rationale}\n\nCommand reason: ${reason}`, effectiveBriefVersionId: brief.active.id, reopenConditions: body.reopenConditions as string[], status: "proposed" }));
+        json(response, 200, { ok: true, value: resultValue(opened.core.getDecisionProjection(opened.project.id, created.id)) }); return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/commands/decisions/transition") {
+        const body = confirmedCommand(await readBody(request), "transition_decision", ["commandType", "confirmed", "decisionId", "expectedVersion", "projectId", "reason", "target"], opened.project.id);
+        if (!["accepted", "rejected", "frozen"].includes(String(body.target))) throw new HttpProblem(400, "invalid_input", "The Decision transition is invalid.");
+        const changed = authorityResultValue(opened.core.transitionDecision({ projectId: opened.project.id, decisionId: body.decisionId as string, actor: USER, target: body.target as never, reason: body.reason as string, expectedVersion: Number(body.expectedVersion) }));
+        json(response, 200, { ok: true, value: resultValue(opened.core.getDecisionProjection(opened.project.id, changed.id)) }); return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/commands/decisions/supersede") {
+        const body = confirmedCommand(await readBody(request), "supersede_decision", ["commandType", "confirmed", "decisionId", "effectiveBriefVersionId", "expectedVersion", "projectId", "rationale", "reason", "reopenConditions", "scope", "statement"], opened.project.id);
+        if (!Array.isArray(body.reopenConditions)) throw new HttpProblem(400, "invalid_input", "The replacement Decision is invalid.");
+        const changed = authorityResultValue(opened.core.supersedeDecision({ projectId: opened.project.id, decisionId: body.decisionId as string, actor: USER, statement: body.statement as string, scope: body.scope as never, rationale: body.rationale as string, effectiveBriefVersionId: body.effectiveBriefVersionId as string, reopenConditions: body.reopenConditions as string[], reason: body.reason as string, expectedVersion: Number(body.expectedVersion) }));
+        json(response, 200, { ok: true, value: { schemaVersion: "1.0.0", superseded: resultValue(opened.core.getDecisionProjection(opened.project.id, changed.superseded.id)), replacement: resultValue(opened.core.getDecisionProjection(opened.project.id, changed.replacement.id)) } }); return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/commands/issues/resolve") {
+        const body = confirmedCommand(await readBody(request), "resolve_issue", ["commandType", "confirmed", "expectedVersion", "issueId", "projectId", "reason", "resolutionEvidenceId"], opened.project.id);
+        const evidenceId = text(body.resolutionEvidenceId, 128); if (evidenceId === undefined) throw new HttpProblem(400, "evidence_required", "Current canonical Evidence is required.");
+        const evidence = workspaceResultValue(opened.core.getEvidenceProjection(opened.project.id, evidenceId));
+        if (evidence?.state !== "current") throw new HttpProblem(400, "evidence_required", "Current canonical Evidence is required.");
+        const changed = authorityResultValue(opened.core.resolveIssueWithCanonicalEvidence({ projectId: opened.project.id, issueId: body.issueId as string, actor: USER, reason: body.reason as string, resolutionEvidenceId: evidenceId, expectedVersion: Number(body.expectedVersion) }));
+        json(response, 200, { ok: true, value: resultValue(opened.core.getIssueProjection(opened.project.id, changed.id)) }); return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/commands/issues/waive") {
+        const body = confirmedCommand(await readBody(request), "waive_issue", ["commandType", "confirmed", "expectedVersion", "invalidationCondition", "issueId", "projectId", "reason", "scope"], opened.project.id);
+        const invalidationCondition = text(body.invalidationCondition, 4_096); if (invalidationCondition === undefined) throw new HttpProblem(400, "invalid_input", "The waiver invalidation condition is required.");
+        const changed = authorityResultValue(opened.core.waiveIssue({ projectId: opened.project.id, issueId: body.issueId as string, actor: USER, scope: body.scope as never, reason: body.reason as string, invalidationCondition, expectedVersion: Number(body.expectedVersion) }));
+        json(response, 200, { ok: true, value: resultValue(opened.core.getIssueProjection(opened.project.id, changed.id)) }); return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/commands/issues/dispute") {
+        const body = confirmedCommand(await readBody(request), "dispute_issue", ["commandType", "confirmed", "expectedVersion", "issueId", "projectId", "reason"], opened.project.id);
+        const changed = authorityResultValue(opened.core.disputeIssue({ projectId: opened.project.id, issueId: body.issueId as string, actor: USER, reason: body.reason as string, expectedVersion: Number(body.expectedVersion) }));
+        json(response, 200, { ok: true, value: resultValue(opened.core.getIssueProjection(opened.project.id, changed.id)) }); return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/commands/issues/reopen") {
+        const body = confirmedCommand(await readBody(request), "reopen_issue", ["commandType", "confirmed", "context", "expectedVersion", "issueId", "projectId", "reason"], opened.project.id);
+        const changed = authorityResultValue(opened.core.reopenIssue({ projectId: opened.project.id, issueId: body.issueId as string, actor: USER, reason: body.reason as string, context: body.context as never, expectedVersion: Number(body.expectedVersion) }));
+        json(response, 200, { ok: true, value: resultValue(opened.core.getIssueProjection(opened.project.id, changed.id)) }); return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/commands/receipts/rollback") {
+        const body = confirmedCommand(await readBody(request), "rollback_receipt", ["commandType", "confirmed", "expectedVersion", "projectId", "reason", "receiptId"], opened.project.id);
+        const receiptId = text(body.receiptId, 128); if (receiptId === undefined) throw new HttpProblem(400, "invalid_input", "The Receipt identifier is invalid.");
+        const before = workspaceResultValue(opened.core.getReceiptProjection(opened.project.id, receiptId));
+        if (before === undefined) throw new HttpProblem(404, "not_found", "The Receipt was not found.");
+        if (before.version !== Number(body.expectedVersion)) throw new HttpProblem(409, "stale_state", "The Receipt version changed before rollback.");
+        const rolled = opened.core.rollbackResearchRoomReceipt({ projectId: opened.project.id, receiptId, expectedVersion: Number(body.expectedVersion), reason: String(body.reason), actor: USER });
+        if (!rolled.ok && rolled.error.code === "stale_state") throw new HttpProblem(409, "rollback_conflict", "Newer project state prevents this rollback; no partial write was made.");
+        resultValue(rolled);
+        json(response, 200, { ok: true, value: workspaceResultValue(opened.core.getReceiptProjection(opened.project.id, receiptId)) }); return;
       }
       if (request.method === "POST" && url.pathname === "/api/reviews/prepare") {
         const body = await readBody(request); if (!isRecord(body)) throw new HttpProblem(400, "invalid_input", "The review request is invalid.");

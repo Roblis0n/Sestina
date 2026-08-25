@@ -16,6 +16,7 @@ describe("CLI exit-code contract", () => {
       operationCancelled: 9,
     });
     expect(exitCodeForCoreError("review_blocked")).toBe(5);
+    expect(exitCodeForCoreError("projection_write_failure")).toBe(6);
     expect(exitCodeForCoreError("unsupported_format")).toBe(8);
     expect(exitCodeForCoreError("operation_cancelled")).toBe(9);
   });

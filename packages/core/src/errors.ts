@@ -6,6 +6,7 @@ export type CoreErrorCode =
   | "user_confirmation_required"
   | "review_blocked"
   | "operation_cancelled"
+  | "projection_write_failure"
   | "infrastructure_failure"
   | "unsupported_format";
 
@@ -26,6 +27,7 @@ const MESSAGES: Readonly<Record<CoreErrorCode, string>> = {
   user_confirmation_required: "An explicit user action is required.",
   review_blocked: "The review could not establish a usable result.",
   operation_cancelled: "The operation was cancelled before a usable result was created.",
+  projection_write_failure: "The durable local projection could not be published.",
   infrastructure_failure: "The local research state is unavailable.",
   unsupported_format: "The requested output format is not supported.",
 };

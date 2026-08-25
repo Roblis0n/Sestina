@@ -72,6 +72,7 @@ const GUIDANCE_FILES = [
       "RI-43 为 `pilot_kit_ready_external_validation_deferred_by_user`",
       "UI-01 Production App Shell",
       "completed_and_verified",
+      "UI-02 Research Object Workspaces and Project Continuity",
       "当前没有活动编码任务",
       "completed_and_verified_implementation_real_provider_evidence_blocked",
       "Market Gate 0",
@@ -91,6 +92,28 @@ const GUIDANCE_FILES = [
       "required_before_every_task",
       "Gate A：方向成立",
       "final: ready_to_start | do_not_start",
+    ],
+  },
+  {
+    path: "docs/execution/UI-02-RESEARCH-OBJECT-WORKSPACES-TASK-START-RECORD.md",
+    required: [
+      "task: UI-02",
+      "status: ready_to_start",
+      "activity_status: active_research_object_workspaces_and_project_continuity",
+      "final: ready_to_start",
+      "ri49_status: not_started",
+      "blocked_missing_user_config",
+    ],
+  },
+  {
+    path: "docs/execution/UI-02-RESEARCH-OBJECT-WORKSPACES-TASK-RESULT.md",
+    required: [
+      "task: UI-02",
+      "status: completed_and_verified",
+      "pnpm_verify: passed",
+      "ri49_status: not_started",
+      "next_code_task: none_active_RI49_not_started",
+      "blocked_missing_user_config",
     ],
   },
   {
@@ -193,11 +216,11 @@ const MARKER_CONTRACT = {
   },
   "sestina-current-status": {
     exact: "completed_and_verified",
-    why: "UI-01 is the most recently completed task and the full production migration is verified",
+    why: "UI-02 is the most recently completed and verified governed task",
   },
   "sestina-next-code-goal": {
     exact: "none_active_RI49_not_started",
-    why: "no next code task is authorized and RI-49 remains not started",
+    why: "UI-02 is complete, no next code task is authorized, and RI-49 remains not started",
   },
   "sestina-next-execution-goal": {
     exact: "await_explicit_user_authorization",
@@ -205,7 +228,7 @@ const MARKER_CONTRACT = {
   },
   "sestina-next-code-sequence": {
     exact: "none_active_RI49_not_started",
-    why: "UI-01 is complete, no code sequence is active, and RI-49 remains not started",
+    why: "UI-02 is complete, no code sequence is active, and RI-49 remains not started",
   },
   "sestina-ri44-to-ri47-status": {
     exact: "superseded_unstarted",
@@ -370,9 +393,9 @@ for (const entry of ENTRY_FILES) {
 const tasks = [...currentTasks.entries()];
 if (tasks.length > 0) {
   const first = tasks[0][1];
-  if (first !== "UI-01") {
+  if (first !== "UI-02") {
     err(
-      `[AUTH-R003] ${tasks[0][0]}: current task is '${first}' but the latest governed task is 'UI-01'`,
+      `[AUTH-R003] ${tasks[0][0]}: current task is '${first}' but the latest governed task is 'UI-02'`,
     );
   }
   for (const [entry, task] of tasks) {

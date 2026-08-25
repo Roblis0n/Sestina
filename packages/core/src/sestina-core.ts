@@ -130,6 +130,26 @@ import {
   type RollbackResearchRoomReceiptInput,
 } from "./research-room.js";
 import type { ResearchRoomReceipt } from "@sestina/research";
+import {
+  ResearchObjectWorkspaceService,
+  type AttentionProjection,
+  type BriefWorkspaceProjection,
+  type DecisionDetailProjection,
+  type DecisionSummaryProjection,
+  type EvidenceDetailProjection,
+  type EvidenceSummaryProjection,
+  type EpisodeDetailProjection,
+  type EpisodeSummaryProjection,
+  type IssueDetailProjection,
+  type IssueSummaryProjection,
+  type ProjectOverviewProjection,
+  type ReceiptDetailProjection,
+  type ReceiptSummaryProjection,
+  type ResearchObjectSearchProjection,
+  type WorkspaceListRequest,
+  type WorkspacePage,
+  type WorkspaceProviderStatus,
+} from "./research-object-workspaces.js";
 
 const PAGE = Object.freeze({ limit: 200 });
 const SYSTEM_ACTOR: ResearchActor = Object.freeze({ kind: "system", component: "sestina-core" });
@@ -175,6 +195,13 @@ export interface CoreBriefMutation {
   readonly version: ResearchBriefVersion;
   readonly changedFields: readonly string[];
 }
+
+export interface BriefProjectionPublication {
+  rollback(): void;
+  finalize(): void;
+}
+
+export type BriefProjectionPublisher = (yaml: string) => CoreResult<BriefProjectionPublication>;
 
 export interface EpisodeIntegritySummary {
   readonly unresolved: readonly string[];
@@ -294,6 +321,7 @@ export class SestinaCore {
   readonly #idFactory: IdFactory;
   readonly #unitOfWork: CoreUnitOfWork;
   readonly #researchRoom: ResearchRoomService;
+  readonly #researchObjects: ResearchObjectWorkspaceService;
 
   constructor(database: StorageDatabase, clock: Clock, idFactory: IdFactory, researchRoomProvider?: ResearchRoomProvider, researchRoomProviderTimeoutMs = 15_000) {
     this.#database = database;
@@ -303,6 +331,7 @@ export class SestinaCore {
     this.#idFactory = idFactory;
     this.#unitOfWork = new CoreUnitOfWork(database);
     this.#researchRoom = new ResearchRoomService(this.#store, clock, idFactory, researchRoomProvider, researchRoomProviderTimeoutMs);
+    this.#researchObjects = new ResearchObjectWorkspaceService(this.#store);
   }
 
   close(): void { this.#database.close(); }
@@ -389,6 +418,32 @@ export class SestinaCore {
     const stored = fromDomain(this.#store.briefs.compareAndSwap(confirmed.value, located.value.brief.version)); if (!stored.ok) return stored;
     const version = getActiveResearchBriefVersion(stored.value); if (version === undefined) return coreErr("infrastructure_failure");
     return coreOk(Object.freeze({ brief: stored.value, version, changedFields: located.value.proposal.diffFields }));
+  }
+
+  acceptBriefChangeWithProjection(
+    input: AcceptBriefChangeCommand & { readonly reason: string },
+    publish: BriefProjectionPublisher,
+  ): CoreResult<CoreBriefMutation> {
+    const user = requireUser(input.actor); if (!user.ok) return user;
+    if (typeof input.reason !== "string" || input.reason.trim().length === 0 || input.reason.trim().length > 4_096 || typeof publish !== "function") return coreErr("invalid_input");
+    const located = this.findBriefProposal(input.projectId, input.proposalId); if (!located.ok) return located;
+    if (input.expectedVersion === undefined || input.expectedVersion !== located.value.brief.version) return coreErr("stale_state");
+    const confirmed = fromDomain(confirmBriefChangeProposal(located.value.brief, input.proposalId, user.value, located.value.brief.version, this.ports)); if (!confirmed.ok) return confirmed;
+    let publication: BriefProjectionPublication | undefined;
+    const committed = this.#unitOfWork.commit(() => {
+      const stored = fromDomain(this.#store.briefs.compareAndSwap(confirmed.value, located.value.brief.version)); if (!stored.ok) return stored;
+      const version = getActiveResearchBriefVersion(stored.value); if (version === undefined) return coreErr("infrastructure_failure");
+      const yaml = fromDomain(exportResearchBriefYaml(version)); if (!yaml.ok) return yaml;
+      const projected = publish(yaml.value); if (!projected.ok) return projected;
+      publication = projected.value;
+      return coreOk(Object.freeze({ brief: stored.value, version, changedFields: located.value.proposal.diffFields }));
+    });
+    if (!committed.ok) {
+      try { publication?.rollback(); } catch { return coreErr("projection_write_failure"); }
+      return committed;
+    }
+    try { publication?.finalize(); } catch { /* The database and active projection already agree; stale backup cleanup is recoverable. */ }
+    return committed;
   }
 
   createArtifact(input: CreateArtifactCommand): CoreResult<ResearchArtifact> {
@@ -484,6 +539,12 @@ export class SestinaCore {
       frozenDecisionIds: decisions.value.filter((item) => item.status === "frozen").map((item) => item.id),
     }, this.#clock));
     return resolved.ok ? fromDomain(this.#store.issues.appendTransition(resolved.value, current.value.version)) : resolved;
+  }
+
+  resolveIssueWithCanonicalEvidence(input: ResolveIssueCommand): CoreResult<ResearchIssue> {
+    const evidence = found(fromDomain(this.#store.argumentEvidence.getById(input.projectId, input.resolutionEvidenceId))); if (!evidence.ok) return evidence;
+    if (evidence.value.state !== "current") return coreErr("state_conflict");
+    return this.resolveIssue(input);
   }
 
   waiveIssue(input: WaiveIssueCommand): CoreResult<ResearchIssue> {
@@ -912,6 +973,21 @@ export class SestinaCore {
   commitResearchRoomDisposition(input: CommitResearchRoomDispositionInput): CoreResult<ResearchRoomReceipt> { return this.#researchRoom.commit(input); }
   listResearchRoomReceipts(projectId: string): CoreResult<readonly ResearchRoomReceipt[]> { return this.#researchRoom.listReceipts(projectId); }
   rollbackResearchRoomReceipt(input: RollbackResearchRoomReceiptInput): CoreResult<ResearchRoomReceipt> { return this.#researchRoom.rollback(input); }
+
+  getProjectOverviewProjection(projectId: string, input: { readonly providerStatus: WorkspaceProviderStatus }): CoreResult<ProjectOverviewProjection> { return this.#researchObjects.getOverview(projectId, input, this.#researchRoom.getAttentionSignals(projectId)); }
+  getBriefWorkspaceProjection(projectId: string, historyLimit?: number): CoreResult<BriefWorkspaceProjection> { return this.#researchObjects.getBriefWorkspace(projectId, historyLimit); }
+  listDecisionProjections(projectId: string, request: WorkspaceListRequest): CoreResult<WorkspacePage<DecisionSummaryProjection>> { return this.#researchObjects.listDecisions(projectId, request); }
+  getDecisionProjection(projectId: string, decisionId: string): CoreResult<DecisionDetailProjection | undefined> { return this.#researchObjects.getDecision(projectId, decisionId); }
+  listIssueProjections(projectId: string, request: WorkspaceListRequest): CoreResult<WorkspacePage<IssueSummaryProjection>> { return this.#researchObjects.listIssues(projectId, request); }
+  getIssueProjection(projectId: string, issueId: string): CoreResult<IssueDetailProjection | undefined> { return this.#researchObjects.getIssue(projectId, issueId); }
+  listEvidenceProjections(projectId: string, request: WorkspaceListRequest): CoreResult<WorkspacePage<EvidenceSummaryProjection>> { return this.#researchObjects.listEvidence(projectId, request); }
+  getEvidenceProjection(projectId: string, evidenceId: string): CoreResult<EvidenceDetailProjection | undefined> { return this.#researchObjects.getEvidence(projectId, evidenceId); }
+  listEpisodeProjections(projectId: string, request: WorkspaceListRequest): CoreResult<WorkspacePage<EpisodeSummaryProjection>> { return this.#researchObjects.listEpisodes(projectId, request); }
+  getEpisodeProjection(projectId: string, episodeId: string): CoreResult<EpisodeDetailProjection | undefined> { return this.#researchObjects.getEpisode(projectId, episodeId); }
+  listReceiptProjections(projectId: string, request: WorkspaceListRequest): CoreResult<WorkspacePage<ReceiptSummaryProjection>> { return this.#researchObjects.listReceipts(projectId, request); }
+  getReceiptProjection(projectId: string, receiptId: string): CoreResult<ReceiptDetailProjection | undefined> { return this.#researchObjects.getReceipt(projectId, receiptId); }
+  getAttentionProjection(projectId: string): CoreResult<AttentionProjection> { return this.#researchObjects.getAttention(projectId, this.#researchRoom.getAttentionSignals(projectId)); }
+  searchResearchObjects(projectId: string, input: { readonly query: string; readonly limit: number; readonly cursor?: string }): CoreResult<ResearchObjectSearchProjection> { return this.#researchObjects.search(projectId, input); }
 
   private get ports(): { readonly clock: Clock; readonly idFactory: IdFactory } { return { clock: this.#clock, idFactory: this.#idFactory }; }
 
