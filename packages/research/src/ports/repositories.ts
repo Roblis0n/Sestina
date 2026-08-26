@@ -20,6 +20,7 @@ import type { ClaimEvidenceLink } from "../argument/claim-evidence-link.js";
 import type { MechanismEvidenceLink } from "../argument/mechanism-evidence-link.js";
 import type { ArgumentDelta } from "../argument/argument-delta.js";
 import type { ResearchRoomReceipt } from "../room/research-room.js";
+import type { CorrectionAppeal } from "../appeal/correction-appeal.js";
 
 export const RESEARCH_PAGE_LIMIT_MAX = 200;
 
@@ -143,6 +144,14 @@ export interface ResearchRoomReceiptRepository {
   compareAndSwap(value: ResearchRoomReceipt, expectedVersion: EntityVersion): ResearchResult<ResearchRoomReceipt>;
 }
 
+export interface CorrectionAppealRepository {
+  create(value: CorrectionAppeal): ResearchResult<CorrectionAppeal>;
+  getById(projectId: string, appealId: string): ResearchResult<CorrectionAppeal | undefined>;
+  getActiveBySource(projectId: string, reviewId: string, findingId: string): ResearchResult<CorrectionAppeal | undefined>;
+  listByProject(projectId: string, page: ResearchPageRequest): ResearchResult<ResearchPage<CorrectionAppeal>>;
+  compareAndSwap(value: CorrectionAppeal, expectedVersion: EntityVersion): ResearchResult<CorrectionAppeal>;
+}
+
 export interface ResearchRepositories extends ArgumentGraphRepositories {
   readonly projects: ResearchProjectRepository;
   readonly artifacts: ResearchArtifactRepository;
@@ -153,6 +162,7 @@ export interface ResearchRepositories extends ArgumentGraphRepositories {
   readonly episodes: RevisionEpisodeRepository;
   readonly snapshots: ResearchSnapshotRepository;
   readonly roomReceipts: ResearchRoomReceiptRepository;
+  readonly correctionAppeals: CorrectionAppealRepository;
 }
 
 export interface ResearchUnitOfWork {

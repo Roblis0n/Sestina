@@ -37,6 +37,7 @@ export function App() {
   const [status, setStatus] = useState<StatusDto>();
   const [language, setLanguage] = useState<AppLanguage>("zh-CN");
   const [provider, setProvider] = useState<ProviderStatusDto>();
+  const [secondOpinionProvider, setSecondOpinionProvider] = useState<ProviderStatusDto>();
   const [state, setState] = useState<ResearchRoomStateDto>();
   const [openedProject, setOpenedProject] = useState<{ readonly id: string; readonly title: string }>();
   const [prepared, setPrepared] = useState<PreparedReviewDto>();
@@ -47,6 +48,7 @@ export function App() {
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [inspectorSelection, setInspectorSelection] = useState<InspectorSelection>();
   const [providerOpen, setProviderOpen] = useState(false);
+  const [secondOpinionProviderOpen, setSecondOpinionProviderOpen] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [appearance, setAppearance] = useState<AppearancePreferences>(() => readAppearancePreferences());
   const pickerRequest = useRef<AbortController | undefined>(undefined);
@@ -73,8 +75,9 @@ export function App() {
   const restore = useCallback(async (initialStatus: StatusDto, activeLanguage: AppLanguage) => {
     setStatus(initialStatus);
     setLanguage(activeLanguage);
-    const providerStatus = await researchRoomApi.provider();
+    const [providerStatus, secondOpinionProviderStatus] = await Promise.all([researchRoomApi.provider(), researchRoomApi.secondOpinionProvider()]);
     setProvider(providerStatus);
+    setSecondOpinionProvider(secondOpinionProviderStatus);
     if (!initialStatus.projectOpen) { setPhase("start"); setRuntime("ready"); showNotice(activeLanguage === "en" ? "Local service is ready." : "本地服务已就绪。", "ready"); return; }
     if (initialStatus.projectSetupRequired) {
       setOpenedProject(initialStatus.project);
@@ -150,7 +153,9 @@ export function App() {
   async function previewNative(): Promise<SelectedDirectoryPreviewDto> {
     const controller = new AbortController();
     pickerRequest.current = controller;
-    try { return await runBusy(() => researchRoomApi.previewSelectedDirectory(controller.signal)); }
+    // The native picker owns its own pending state. Keeping it outside the global
+    // busy counter leaves manual path entry, cancellation, language, and appearance responsive.
+    try { return await researchRoomApi.previewSelectedDirectory(controller.signal); }
     finally { if (pickerRequest.current === controller) pickerRequest.current = undefined; }
   }
 
@@ -187,6 +192,22 @@ export function App() {
     await runBusy(async () => { setProvider(await researchRoomApi.deleteProviderSecret()); showNotice(language === "en" ? "Provider secret deleted." : "Provider 密钥已删除。", "ready"); });
   }
 
+  async function saveSecondOpinionProvider(input: ProviderSaveInput) {
+    await runBusy(async () => { const next = await researchRoomApi.saveSecondOpinionProvider(input); setSecondOpinionProvider(next); showNotice(language === "en" ? "Independent second-opinion configuration saved locally; no research data was sent." : "独立第二意见配置已保存在本机；没有发送任何研究数据。", "ready"); });
+  }
+
+  async function deleteSecondOpinionProviderConfig() {
+    await runBusy(async () => { setSecondOpinionProvider(await researchRoomApi.deleteSecondOpinionProviderConfig()); showNotice(language === "en" ? "Independent second-opinion configuration deleted." : "独立第二意见配置已删除。", "ready"); });
+  }
+
+  async function deleteSecondOpinionProviderSecret() {
+    await runBusy(async () => { setSecondOpinionProvider(await researchRoomApi.deleteSecondOpinionProviderSecret()); showNotice(language === "en" ? "Independent second-opinion secret deleted." : "独立第二意见密钥已删除。", "ready"); });
+  }
+
+  async function testSecondOpinionProvider() {
+    await runBusy(async () => { const result = await researchRoomApi.testSecondOpinionProvider(); showNotice(language === "en" ? `Independent metadata connection reached ${result.providerId} (${result.httpStatus}); no research context was sent.` : `独立元数据连接已到达 ${result.providerId}（${result.httpStatus}）；未发送研究上下文。`, "ready"); });
+  }
+
   async function prepareReview(suggestion: string, evidenceClass: EvidenceClass) { return runBusy(() => researchRoomApi.prepareReview(suggestion, evidenceClass)); }
   async function analyzeReview(value: PreparedReviewDto, signal: AbortSignal) { return runBusy(() => researchRoomApi.analyzeReview(value, signal)); }
   async function cancelReview(value: PreparedReviewDto) { await runBusy(() => researchRoomApi.cancelReview(value).then(() => undefined)); }
@@ -202,7 +223,7 @@ export function App() {
     await runBusy(async () => { const result = await researchRoomApi.rollbackReceipt(state?.project.id ?? "", receipt.id, receipt.version, reason); await refreshState(); setInspectorSelection({ kind: "research_object", title: `Receipt ${result.id}`, status: result.status, fields: [{ label: "ID", value: result.id }, { label: "Version", value: String(result.version) }, { label: "Hash", value: result.receiptHash }] }); setInspectorOpen(true); setRuntime("ready"); showNotice(t(language, "rolled_back"), "ready"); });
   }
 
-  const chrome = phase !== "language" && phase !== "boot" ? <AppChrome language={language} provider={provider} runtime={runtime} busy={busy} providerOpen={providerOpen} appearanceOpen={appearanceOpen} appearance={appearance} onLanguage={(next) => void changeLanguage(next)} onProviderOpen={setProviderOpen} onAppearanceOpen={setAppearanceOpen} onAppearance={applyAppearance} onSaveProvider={saveProvider} onDeleteProviderConfig={deleteProviderConfig} onDeleteProviderSecret={deleteProviderSecret} onError={(message) => { showNotice(message, "danger"); }} /> : null;
+  const chrome = phase !== "language" && phase !== "boot" ? <AppChrome language={language} provider={provider} secondOpinionProvider={secondOpinionProvider} runtime={runtime} busy={busy} providerOpen={providerOpen} secondOpinionProviderOpen={secondOpinionProviderOpen} appearanceOpen={appearanceOpen} appearance={appearance} onLanguage={(next) => void changeLanguage(next)} onProviderOpen={setProviderOpen} onSecondOpinionProviderOpen={setSecondOpinionProviderOpen} onAppearanceOpen={setAppearanceOpen} onAppearance={applyAppearance} onSaveProvider={saveProvider} onDeleteProviderConfig={deleteProviderConfig} onDeleteProviderSecret={deleteProviderSecret} onSaveSecondOpinionProvider={saveSecondOpinionProvider} onDeleteSecondOpinionProviderConfig={deleteSecondOpinionProviderConfig} onDeleteSecondOpinionProviderSecret={deleteSecondOpinionProviderSecret} onTestSecondOpinionProvider={testSecondOpinionProvider} onError={(message) => { showNotice(message, "danger"); }} /> : null;
 
   return <div className="app-root" aria-busy={busy}>
       <a className="skip-link" href="#main-content">Skip to main content</a>

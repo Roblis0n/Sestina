@@ -7,6 +7,7 @@ import {
   ProviderConfigurationService,
   ProviderSettingsError,
   createFileProviderConfigStore,
+  resolveDefaultSecondOpinionProviderConfigPath,
   resolveDefaultProviderConfigPath,
   validateOpenAICompatibleBaseUrl,
 } from "../src/provider-settings.js";
@@ -122,5 +123,30 @@ describe("Research Room Provider settings", () => {
       environment: { LOCALAPPDATA: "   " },
       homeDirectory: "C:\\profile",
     })).toBe(win32.join("C:\\profile", "AppData", "Local", "Sestina", "provider.json"));
+    expect(resolveDefaultSecondOpinionProviderConfigPath({
+      platform: "win32",
+      environment: { LOCALAPPDATA: "C:\\local-app-data" },
+      homeDirectory: "C:\\unused",
+    })).toBe(win32.join("C:\\local-app-data", "Sestina", "second-opinion-provider.json"));
+  });
+
+  it("keeps the original judge and selected second-opinion connection in separate config and secret slots", async () => {
+    const root = await mkdtemp(join(tmpdir(), "sestina-provider-role-isolation-"));
+    try {
+      const secrets = memorySecrets();
+      const primary = new ProviderConfigurationService(createFileProviderConfigStore({ filePath: join(root, "provider.json") }), secrets);
+      const second = new ProviderConfigurationService(createFileProviderConfigStore({ filePath: join(root, "second-opinion-provider.json") }), secrets, { secretRef: "sestina/research-room/second-opinion/openai-compatible/api-key" });
+      await primary.save({ providerId: "original-judge", baseUrl: "https://original.example.test/v1", model: "original", timeoutMs: 2_000, apiKey: "original-key" });
+      await second.save({ providerId: "independent-judge", baseUrl: "https://independent.example.test/v1", model: "independent", timeoutMs: 3_000, apiKey: "independent-key" });
+      expect(await primary.loadRuntimeSnapshot()).toMatchObject({ config: { providerId: "original-judge" }, apiKey: "original-key" });
+      expect(await second.loadRuntimeSnapshot()).toMatchObject({ config: { providerId: "independent-judge" }, apiKey: "independent-key" });
+      expect(await readFile(join(root, "provider.json"), "utf8")).not.toContain("independent");
+      expect(await readFile(join(root, "second-opinion-provider.json"), "utf8")).not.toContain("original");
+      await second.deleteSecret();
+      expect(await primary.status()).toMatchObject({ secretConfigured: true });
+      expect(await second.status()).toMatchObject({ secretConfigured: false });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });

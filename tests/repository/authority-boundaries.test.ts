@@ -42,7 +42,7 @@ const ENTRY_FILES = [
 
 const PRODUCT_DEFINITION =
   "Sestina 最终应当是一个本地交互式科研 App。其内部本体是 Research Deliberation Kernel，主要交互面是 Research Room；MCP、Skill、Hooks、CLI 只是外部宿主接入、自动化和恢复接口。Sestina 作为本地科研过程调试器，让 AI 始终围绕当前研究问题工作，记住已经作出的研究决定，识别目标替换、重复审计、论证跳跃和伪深度，并要求每一轮修改说明真正增加了什么。";
-const UI_02_STATUS = "completed_and_verified";
+const CURRENT_STATUS = "completed_and_verified";
 
 const GUIDANCE_FIXTURES: Record<string, string> = {
   "docs/product/CURRENT-PRODUCT-DEFINITION.md": [
@@ -56,7 +56,10 @@ const GUIDANCE_FIXTURES: Record<string, string> = {
     "UI-01 Production App Shell",
     "completed_and_verified",
     "UI-02 Research Object Workspaces and Project Continuity",
+    "RI-49 Correction Appeal and One Independent Second Opinion",
+    "RI-49（已完成）",
     "当前没有活动编码任务",
+    "none_active_RI50_not_started",
     "completed_and_verified_implementation_real_provider_evidence_blocked",
     "Market Gate 0",
   ].join("\n"),
@@ -69,6 +72,22 @@ const GUIDANCE_FIXTURES: Record<string, string> = {
     "required_before_every_task",
     "Gate A：方向成立",
     "final: ready_to_start | do_not_start",
+  ].join("\n"),
+  "docs/execution/RI-49-CORRECTION-APPEAL-AND-INDEPENDENT-SECOND-OPINION-TASK-START-RECORD.md": [
+    "task: RI-49",
+    "status: ready_to_start",
+    "activity_status: active_correction_appeal_and_independent_second_opinion",
+    "final: ready_to_start",
+    "blocked_missing_user_config",
+    "ri50_status: not_started",
+  ].join("\n"),
+  "docs/execution/RI-49-CORRECTION-APPEAL-AND-INDEPENDENT-SECOND-OPINION-TASK-RESULT.md": [
+    "task: RI-49",
+    "status: completed_and_verified",
+    "pnpm_verify: passed",
+    "next_code_task: none_active_RI50_not_started",
+    "blocked_missing_user_config",
+    "non_redundant_value_in_real_cases: unproven",
   ].join("\n"),
   "docs/execution/UI-02-RESEARCH-OBJECT-WORKSPACES-TASK-START-RECORD.md": [
     "task: UI-02",
@@ -134,10 +153,13 @@ function activeBlock(currentTask: string): string {
     "<!-- sestina-guide-status: accepted_current -->",
     "<!-- sestina-prework-direction-gate: required -->",
     `<!-- sestina-current-task: ${currentTask} -->`,
-    `<!-- sestina-current-status: ${UI_02_STATUS} -->`,
-    "<!-- sestina-next-code-goal: none_active_RI49_not_started -->",
+    `<!-- sestina-current-status: ${CURRENT_STATUS} -->`,
+    "<!-- sestina-last-completed-task: RI-49 -->",
+    "<!-- sestina-last-completed-status: completed_and_verified -->",
+    "<!-- sestina-implementation-base: 579e50055f9fb7e84bf4aa272eb643d37c228895 -->",
+    "<!-- sestina-next-code-goal: none_active_RI50_not_started -->",
     "<!-- sestina-next-execution-goal: await_explicit_user_authorization -->",
-    "<!-- sestina-next-code-sequence: none_active_RI49_not_started -->",
+    "<!-- sestina-next-code-sequence: none_active_RI50_not_started -->",
     "<!-- sestina-ri44-to-ri47-status: superseded_unstarted -->",
     "<!-- sestina-ri48-status: completed_and_verified_implementation_real_provider_evidence_blocked -->",
     "<!-- sestina-market-gate-0: deferred_by_user_nonblocking -->",
@@ -201,7 +223,7 @@ function writeValidEntries(
   writeGuidanceFiles(root);
   for (const entry of ENTRY_FILES) {
     const isBoard = entry === "docs/execution/WORK-BOARD.md";
-    const task = "UI-02";
+    const task = "RI-49";
     const body = isBoard
       ? workBoardBody(task)
       : "\n\nLegacy prose stays below.\n";

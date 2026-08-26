@@ -1,6 +1,5 @@
 import { spawn } from "node:child_process";
 import { Buffer } from "node:buffer";
-import { constants as priorityConstants, setPriority } from "node:os";
 import { win32 } from "node:path";
 import type { DirectoryPicker } from "./server.js";
 
@@ -46,9 +45,6 @@ const SYSTEM_RUNNER: DirectoryPickerCommandRunner = Object.freeze({
     return new Promise((resolve, reject) => {
       if (request.signal.aborted) { reject(new Error("The system folder picker was cancelled.")); return; }
       const child = spawn(request.executable, request.args, { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
-      if (child.pid !== undefined) {
-        try { setPriority(child.pid, priorityConstants.priority.PRIORITY_BELOW_NORMAL); } catch { /* Best effort: never raise picker priority. */ }
-      }
       const stdout: Buffer[] = []; let outputBytes = 0; let settled = false;
       const finish = (action: () => void) => { if (settled) return; settled = true; request.signal.removeEventListener("abort", abort); action(); };
       const abort = () => { child.kill(); finish(() => { reject(new Error("The system folder picker was cancelled.")); }); };

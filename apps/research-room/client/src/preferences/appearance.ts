@@ -79,5 +79,5 @@ export function applyAppearanceToDocument(preferences: AppearancePreferences, do
   documentRoot.dataset.theme = preferences.theme;
   documentRoot.dataset.motion = preferences.reducedMotion;
   documentRoot.dataset.transparency = preferences.reducedTransparency || preferences.theme === "high_contrast" ? "reduced" : "normal";
-  documentRoot.style.colorScheme = preferences.theme === "dark" ? "dark" : preferences.theme === "light" || preferences.theme === "high_contrast" ? "light" : "light dark";
+  documentRoot.style.colorScheme = preferences.theme === "dark" || preferences.theme === "high_contrast" ? "dark" : preferences.theme === "light" ? "light" : "light dark";
 }

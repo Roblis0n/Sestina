@@ -8,8 +8,10 @@ import {
   decodeDecisionSupersede,
   decodeDirectoryPickerCancellation,
   decodeLanguage,
+  decodePreparedAppealSecondOpinion,
   decodePreparedReview,
   decodeProjectOpenResult,
+  decodeProviderConnectionTest,
   decodeProviderStatus,
   decodeProjectOverview,
   decodeReceiptResult,
@@ -24,6 +26,10 @@ import {
 import type {
   AnalyzedReviewDto,
   AppLanguage,
+  AppealDetailDto,
+  AppealResolutionKindDto,
+  AppealStatementDto,
+  AppealSummaryDto,
   AttentionDto,
   BriefWorkspaceDto,
   CommitDispositionInput,
@@ -36,9 +42,11 @@ import type {
   DirectoryPickerCancellationDto,
   EvidenceClass,
   PreparedReviewDto,
+  PreparedAppealSecondOpinionDto,
   ProjectOverviewDto,
   ProjectOpenResultDto,
   ProviderSaveInput,
+  ProviderConnectionTestDto,
   ProviderStatusDto,
   ResearchRoomReceiptDto,
   ResearchRoomStateDto,
@@ -109,6 +117,26 @@ export class ResearchRoomApi {
     return this.request("/api/provider/secret", decodeProviderStatus, { method: "DELETE", mutation: true });
   }
 
+  async secondOpinionProvider(): Promise<ProviderStatusDto> {
+    return this.request("/api/second-opinion-provider", decodeProviderStatus);
+  }
+
+  async saveSecondOpinionProvider(input: ProviderSaveInput): Promise<ProviderStatusDto> {
+    return this.request("/api/second-opinion-provider", decodeProviderStatus, { method: "POST", mutation: true, body: input });
+  }
+
+  async deleteSecondOpinionProviderConfig(): Promise<ProviderStatusDto> {
+    return this.request("/api/second-opinion-provider/config", decodeProviderStatus, { method: "DELETE", mutation: true });
+  }
+
+  async deleteSecondOpinionProviderSecret(): Promise<ProviderStatusDto> {
+    return this.request("/api/second-opinion-provider/secret", decodeProviderStatus, { method: "DELETE", mutation: true });
+  }
+
+  async testSecondOpinionProvider(): Promise<ProviderConnectionTestDto> {
+    return this.request("/api/second-opinion-provider/test", decodeProviderConnectionTest, { method: "POST", mutation: true, body: {} });
+  }
+
   async selectDirectory(): Promise<SelectedDirectoryDto> {
     return this.request("/api/project/select-directory", decodeSelectedDirectory, { method: "POST", mutation: true, body: {} });
   }
@@ -145,8 +173,8 @@ export class ResearchRoomApi {
     return this.request(`/api/project/brief?historyLimit=${encodeURIComponent(String(historyLimit))}`, decodeBriefWorkspace);
   }
 
-  async listResearchObjects(kind: ResearchObjectKind, input: WorkspaceListRequest): Promise<WorkspacePage<DecisionSummaryDto | IssueSummaryDto | EvidenceSummaryDto | EpisodeSummaryDto | ObjectReceiptSummaryDto>> {
-    const collection = kind === "decision" ? "decisions" : kind === "issue" ? "issues" : kind === "evidence" ? "evidence" : kind === "episode" ? "episodes" : "receipts";
+  async listResearchObjects(kind: ResearchObjectKind, input: WorkspaceListRequest): Promise<WorkspacePage<DecisionSummaryDto | IssueSummaryDto | EvidenceSummaryDto | EpisodeSummaryDto | ObjectReceiptSummaryDto | AppealSummaryDto>> {
+    const collection = kind === "decision" ? "decisions" : kind === "issue" ? "issues" : kind === "evidence" ? "evidence" : kind === "episode" ? "episodes" : kind === "receipt" ? "receipts" : "appeals";
     const query = new URLSearchParams({ limit: String(input.limit) });
     if (input.cursor) query.set("cursor", input.cursor);
     if (input.status) query.set("status", input.status);
@@ -163,8 +191,8 @@ export class ResearchRoomApi {
     return this.request(`/api/project/${collection}?${query.toString()}`, (value) => decodeWorkspacePage(value, kind));
   }
 
-  async researchObject(kind: ResearchObjectKind, id: string): Promise<DecisionDetailDto | IssueDetailDto | EvidenceDetailDto | EpisodeDetailDto | ObjectReceiptDetailDto> {
-    const collection = kind === "decision" ? "decisions" : kind === "issue" ? "issues" : kind === "evidence" ? "evidence" : kind === "episode" ? "episodes" : "receipts";
+  async researchObject(kind: ResearchObjectKind, id: string): Promise<DecisionDetailDto | IssueDetailDto | EvidenceDetailDto | EpisodeDetailDto | ObjectReceiptDetailDto | AppealDetailDto> {
+    const collection = kind === "decision" ? "decisions" : kind === "issue" ? "issues" : kind === "evidence" ? "evidence" : kind === "episode" ? "episodes" : kind === "receipt" ? "receipts" : "appeals";
     return this.request(`/api/project/${collection}/${encodeURIComponent(id)}`, (value) => decodeResearchObjectDetail(value, kind));
   }
 
@@ -219,6 +247,38 @@ export class ResearchRoomApi {
 
   async rollbackReceipt(projectId: string, receiptId: string, expectedVersion: number, reason: string): Promise<ObjectReceiptDetailDto> {
     return this.request("/api/commands/receipts/rollback", (value) => decodeResearchObjectDetail(value, "receipt") as ObjectReceiptDetailDto, { method: "POST", mutation: true, body: { commandType: "rollback_receipt", projectId, receiptId, expectedVersion, reason, confirmed: true } });
+  }
+
+  async createCorrectionAppeal(projectId: string, receiptId: string, findingId: string, statement: AppealStatementDto): Promise<AppealDetailDto> {
+    return this.request("/api/project/appeals", (value) => decodeResearchObjectDetail(value, "appeal") as AppealDetailDto, { method: "POST", mutation: true, body: { commandType: "create_correction_appeal", projectId, receiptId, findingId, statement, confirmed: true } });
+  }
+
+  async updateCorrectionAppeal(projectId: string, appealId: string, expectedVersion: number, statement: AppealStatementDto): Promise<AppealDetailDto> {
+    return this.request(`/api/project/appeals/${encodeURIComponent(appealId)}/update`, (value) => decodeResearchObjectDetail(value, "appeal") as AppealDetailDto, { method: "POST", mutation: true, body: { commandType: "update_correction_appeal", projectId, expectedVersion, statement, confirmed: true } });
+  }
+
+  async recordCorrectionAppeal(projectId: string, appealId: string, expectedVersion: number): Promise<AppealDetailDto> {
+    return this.request(`/api/project/appeals/${encodeURIComponent(appealId)}/record`, (value) => decodeResearchObjectDetail(value, "appeal") as AppealDetailDto, { method: "POST", mutation: true, body: { commandType: "record_correction_appeal", projectId, expectedVersion, confirmed: true } });
+  }
+
+  async markCorrectionAppealRecordOnly(projectId: string, appealId: string, expectedVersion: number): Promise<AppealDetailDto> {
+    return this.request(`/api/project/appeals/${encodeURIComponent(appealId)}/record-only`, (value) => decodeResearchObjectDetail(value, "appeal") as AppealDetailDto, { method: "POST", mutation: true, body: { commandType: "mark_correction_appeal_record_only", projectId, expectedVersion, confirmed: true } });
+  }
+
+  async prepareCorrectionAppealSecondOpinion(projectId: string, appealId: string, expectedVersion: number, allowedContext: { readonly includeBrief: boolean; readonly decisionIds: readonly string[]; readonly issueIds: readonly string[]; readonly evidenceIds: readonly string[] }): Promise<PreparedAppealSecondOpinionDto> {
+    return this.request(`/api/project/appeals/${encodeURIComponent(appealId)}/prepare-second-opinion`, decodePreparedAppealSecondOpinion, { method: "POST", mutation: true, body: { commandType: "prepare_correction_appeal_second_opinion", projectId, expectedVersion, allowedContext, confirmed: true } });
+  }
+
+  async runCorrectionAppealSecondOpinion(projectId: string, appealId: string, expectedVersion: number, prepared: PreparedAppealSecondOpinionDto, signal?: AbortSignal): Promise<AppealDetailDto> {
+    return this.request(`/api/project/appeals/${encodeURIComponent(appealId)}/run-second-opinion`, (value) => decodeResearchObjectDetail(value, "appeal") as AppealDetailDto, { method: "POST", mutation: true, signal, body: { commandType: "run_correction_appeal_second_opinion", projectId, expectedVersion, attemptId: prepared.attemptId, confirmationNonce: prepared.confirmationNonce, manifestHash: prepared.manifest.canonicalHash, confirmed: true } });
+  }
+
+  async cancelCorrectionAppealSecondOpinion(projectId: string, appealId: string, expectedVersion: number, attemptId: string): Promise<AppealDetailDto> {
+    return this.request(`/api/project/appeals/${encodeURIComponent(appealId)}/cancel-second-opinion`, (value) => decodeResearchObjectDetail(value, "appeal") as AppealDetailDto, { method: "POST", mutation: true, body: { commandType: "cancel_correction_appeal_second_opinion", projectId, expectedVersion, attemptId, confirmed: true } });
+  }
+
+  async resolveCorrectionAppeal(projectId: string, appealId: string, expectedVersion: number, kind: AppealResolutionKindDto, publicReason: string): Promise<AppealDetailDto> {
+    return this.request(`/api/project/appeals/${encodeURIComponent(appealId)}/resolve`, (value) => decodeResearchObjectDetail(value, "appeal") as AppealDetailDto, { method: "POST", mutation: true, body: { commandType: "resolve_correction_appeal", projectId, expectedVersion, kind, publicReason, confirmed: true } });
   }
 
   async downloadReceipt(receiptId: string): Promise<Blob> {

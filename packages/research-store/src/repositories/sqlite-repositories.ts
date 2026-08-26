@@ -7,6 +7,7 @@ import {
   parseIssueStatus,
   parseResearchArtifact,
   parseResearchBrief,
+  parseCorrectionAppeal,
   parseResearchDecision,
   parseResearchIdFor,
   parseResearchIssue,
@@ -21,6 +22,7 @@ import {
   type IssueStatus,
   type ResearchArtifact,
   type ResearchBrief,
+  type CorrectionAppeal,
   type ResearchDecision,
   type ResearchIdPrefix,
   type ResearchIssue,
@@ -1014,5 +1016,82 @@ export function createResearchRepositories(db: StorageDatabase): ResearchReposit
     },
   };
 
-  return Object.freeze({ projects, artifacts, revisions, briefs, decisions, issues, episodes, snapshots, roomReceipts, ...createArgumentGraphRepositories(db) });
+  const correctionAppeals: ResearchRepositories["correctionAppeals"] = {
+    create(value) {
+      return writeResult(db, () => {
+        const parsed = parseCorrectionAppeal(value); if (!parsed.ok) return parsed;
+        const project = requireProject(db, parsed.value.projectId); if (!project.ok) return project;
+        if (db.get("SELECT appeal_id FROM correction_appeals WHERE appeal_id = ?", parsed.value.id)) return { ok: false, error: researchError("version_conflict") };
+        if (db.get("SELECT appeal_id FROM correction_appeals WHERE project_id = ? AND review_id = ? AND finding_id = ? AND status <> 'resolved'", parsed.value.projectId, parsed.value.source.reviewId, parsed.value.source.findingId)) return { ok: false, error: researchError("appeal_already_active") };
+        if (parsed.value.lineage.previousAppealId !== undefined) {
+          const previous = db.get<{ status: string }>("SELECT status FROM correction_appeals WHERE project_id = ? AND appeal_id = ?", parsed.value.projectId, parsed.value.lineage.previousAppealId);
+          if (previous?.status !== "resolved") return { ok: false, error: researchError("appeal_source_mismatch") };
+        }
+        const data = encodeDomainJson(parsed.value, parseCorrectionAppeal); if (!data.ok) return data;
+        try {
+          db.run(
+            `INSERT INTO correction_appeals
+               (appeal_id, project_id, review_id, source_receipt_id, finding_id, previous_appeal_id,
+                status, version, finding_hash, created_at, updated_at, data)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            parsed.value.id, parsed.value.projectId, parsed.value.source.reviewId, parsed.value.source.receiptId,
+            parsed.value.source.findingId, parsed.value.lineage.previousAppealId ?? null, parsed.value.status,
+            parsed.value.version, parsed.value.source.findingHash, parsed.value.createdAt, parsed.value.updatedAt, data.value,
+          );
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "";
+          if (message.includes("idx_correction_appeals_one_active_finding") || message.includes("correction_appeals.project_id, correction_appeals.review_id, correction_appeals.finding_id")) return { ok: false, error: researchError("appeal_already_active") };
+          throw error;
+        }
+        return parsed;
+      });
+    },
+    getById(projectId, appealId) {
+      return readResult<CorrectionAppeal | undefined>(() => {
+        const project = validId(projectId, "rprj_"); const id = validId(appealId, "rapl_");
+        if (!project.ok || !id.ok) return { ok: false, error: researchError("invalid_correction_appeal") };
+        const row = db.get<{ data: string }>("SELECT data FROM correction_appeals WHERE project_id = ? AND appeal_id = ?", project.value, id.value);
+        return row === undefined ? { ok: true, value: undefined } : decodeDomainJson(row.data, parseCorrectionAppeal);
+      });
+    },
+    getActiveBySource(projectId, reviewId, findingId) {
+      return readResult<CorrectionAppeal | undefined>(() => {
+        const project = validId(projectId, "rprj_"); const review = validId(reviewId, "rrvw_"); const finding = validId(findingId, "rfnd_");
+        if (!project.ok || !review.ok || !finding.ok) return { ok: false, error: researchError("invalid_correction_appeal") };
+        const row = db.get<{ data: string }>("SELECT data FROM correction_appeals WHERE project_id = ? AND review_id = ? AND finding_id = ? AND status <> 'resolved'", project.value, review.value, finding.value);
+        return row === undefined ? { ok: true, value: undefined } : decodeDomainJson(row.data, parseCorrectionAppeal);
+      });
+    },
+    listByProject(projectId, page) {
+      return readResult(() => pageRows(db, {
+        table: "correction_appeals", idColumn: "appeal_id", idPrefix: "rapl_",
+        projectId, where: "project_id = ?", params: [projectId], page, parser: parseCorrectionAppeal,
+      }));
+    },
+    compareAndSwap(value, expectedVersion) {
+      return writeResult(db, () => {
+        const next = parseCorrectionAppeal(value); const expected = parseEntityVersion(expectedVersion);
+        if (!next.ok || !expected.ok) return { ok: false, error: researchError("invalid_correction_appeal") };
+        const row = db.get<{ data: string }>("SELECT data FROM correction_appeals WHERE project_id = ? AND appeal_id = ? AND version = ?", next.value.projectId, next.value.id, expected.value);
+        if (row === undefined) return { ok: false, error: researchError("version_conflict") };
+        const current = decodeDomainJson(row.data, parseCorrectionAppeal); if (!current.ok) return current;
+        const versions = requireExpectedNext(current.value.version, expected.value, next.value.version); if (!versions.ok) return versions;
+        if (current.value.projectId !== next.value.projectId || current.value.id !== next.value.id || current.value.createdAt !== next.value.createdAt || !sameValue(current.value.source, next.value.source) || !sameValue(current.value.lineage, next.value.lineage)) return { ok: false, error: researchError("appeal_source_mismatch") };
+        const currentTransitions = next.value.transitions.slice(0, current.value.transitions.length);
+        const currentStatements = next.value.statements.slice(0, current.value.statements.length);
+        const currentResolutions = next.value.resolutions.slice(0, current.value.resolutions.length);
+        if (!sameValue(currentTransitions, current.value.transitions) || !sameValue(currentStatements, current.value.statements) || !sameValue(currentResolutions, current.value.resolutions)) return { ok: false, error: researchError("version_conflict") };
+        const data = encodeDomainJson(next.value, parseCorrectionAppeal); if (!data.ok) return data;
+        const update = db.run(
+          `UPDATE correction_appeals SET status = ?, version = ?, updated_at = ?, data = ?
+           WHERE project_id = ? AND appeal_id = ? AND version = ?`,
+          next.value.status, next.value.version, next.value.updatedAt, data.value,
+          next.value.projectId, next.value.id, expected.value,
+        );
+        return Number(update.changes) === 1 ? next : { ok: false, error: researchError("version_conflict") };
+      });
+    },
+  };
+
+  return Object.freeze({ projects, artifacts, revisions, briefs, decisions, issues, episodes, snapshots, roomReceipts, correctionAppeals, ...createArgumentGraphRepositories(db) });
 }

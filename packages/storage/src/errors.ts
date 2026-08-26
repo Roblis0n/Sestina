@@ -8,6 +8,7 @@ export const SQLITE_BUSY = 5;
 export const SQLITE_LOCKED = 6;
 export const SQLITE_READONLY = 8;
 export const SQLITE_CORRUPT = 11;
+export const SQLITE_CANTOPEN = 14;
 export const SQLITE_FULL = 13;
 export const SQLITE_NOTADB = 26;
 
@@ -34,6 +35,8 @@ export function mapSqliteError(err: unknown, message: string): SestinaError {
     case SQLITE_CORRUPT:
     case SQLITE_NOTADB:
       return new SestinaError(SestinaErrorCode.database_corrupt, message);
+    case SQLITE_CANTOPEN:
+      return new SestinaError(SestinaErrorCode.database_unavailable, message);
     case SQLITE_READONLY:
       return new SestinaError(SestinaErrorCode.database_readonly, message);
     case SQLITE_FULL:

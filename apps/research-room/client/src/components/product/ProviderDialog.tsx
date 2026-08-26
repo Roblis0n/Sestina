@@ -16,9 +16,13 @@ interface ProviderDialogProps {
   readonly onDeleteConfig: () => Promise<void>;
   readonly onDeleteSecret: () => Promise<void>;
   readonly onError: (message: string) => void;
+  readonly idPrefix?: string;
+  readonly title?: string;
+  readonly description?: string;
+  readonly onTest?: () => Promise<void>;
 }
 
-export function ProviderDialog({ open, language, status, busy, returnFocusRef, onClose, onSave, onDeleteConfig, onDeleteSecret, onError }: ProviderDialogProps) {
+export function ProviderDialog({ open, language, status, busy, returnFocusRef, onClose, onSave, onDeleteConfig, onDeleteSecret, onError, idPrefix = "provider", title, description, onTest }: ProviderDialogProps) {
   const [providerId, setProviderId] = useState("openai-compatible");
   const [model, setModel] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
@@ -48,7 +52,7 @@ export function ProviderDialog({ open, language, status, busy, returnFocusRef, o
   }
 
   return (
-    <Modal open={open} title={t(language, "provider_heading")} description={t(language, "provider_deck")} closeLabel={t(language, "close")} onClose={onClose} returnFocusRef={returnFocusRef} className="provider-modal">
+    <Modal open={open} title={title ?? t(language, "provider_heading")} description={description ?? t(language, "provider_deck")} closeLabel={t(language, "close")} onClose={onClose} returnFocusRef={returnFocusRef} className="provider-modal">
       <div className="provider-current" id="provider-status-box" aria-live="polite">
         <StatusBadge tone={status?.mode === "configured" ? "ready" : "warning"}>
           {status?.mode === "configured" ? t(language, "provider_configured") : t(language, "provider_not_configured")}
@@ -57,21 +61,22 @@ export function ProviderDialog({ open, language, status, busy, returnFocusRef, o
         <p>{status?.secretConfigured ? (language === "en" ? "Secret configured" : "密钥已配置") : (language === "en" ? "No secret configured" : "未配置密钥")}</p>
       </div>
       <form className="provider-form" onSubmit={(event) => void submit(event)}>
-        <label htmlFor="provider-id">{t(language, "provider_name")}</label>
-        <input id="provider-id" required maxLength={128} autoComplete="off" value={providerId} onChange={(event) => { setProviderId(event.target.value); }} />
-        <label htmlFor="provider-model">{t(language, "model")}</label>
-        <input id="provider-model" required maxLength={256} autoComplete="off" value={model} onChange={(event) => { setModel(event.target.value); }} />
-        <label htmlFor="provider-url">{t(language, "base_url")}</label>
-        <input id="provider-url" required maxLength={2048} autoComplete="url" value={baseUrl} onChange={(event) => { setBaseUrl(event.target.value); }} />
+        <label htmlFor={`${idPrefix}-id`}>{t(language, "provider_name")}</label>
+        <input id={`${idPrefix}-id`} required maxLength={128} autoComplete="off" value={providerId} onChange={(event) => { setProviderId(event.target.value); }} />
+        <label htmlFor={`${idPrefix}-model`}>{t(language, "model")}</label>
+        <input id={`${idPrefix}-model`} required maxLength={256} autoComplete="off" value={model} onChange={(event) => { setModel(event.target.value); }} />
+        <label htmlFor={`${idPrefix}-url`}>{t(language, "base_url")}</label>
+        <input id={`${idPrefix}-url`} required maxLength={2048} autoComplete="url" value={baseUrl} onChange={(event) => { setBaseUrl(event.target.value); }} />
         <div className="form-grid">
-          <div><label htmlFor="provider-timeout">{t(language, "timeout")}</label><input id="provider-timeout" type="number" min={100} max={120000} required value={timeoutMs} onChange={(event) => { setTimeoutMs(event.target.value); }} /></div>
-          <div><label htmlFor="provider-max-tokens">{t(language, "max_tokens")}</label><input id="provider-max-tokens" type="number" min={1} max={65536} value={maxOutputTokens} onChange={(event) => { setMaxOutputTokens(event.target.value); }} /></div>
+          <div><label htmlFor={`${idPrefix}-timeout`}>{t(language, "timeout")}</label><input id={`${idPrefix}-timeout`} type="number" min={100} max={120000} required value={timeoutMs} onChange={(event) => { setTimeoutMs(event.target.value); }} /></div>
+          <div><label htmlFor={`${idPrefix}-max-tokens`}>{t(language, "max_tokens")}</label><input id={`${idPrefix}-max-tokens`} type="number" min={1} max={65536} value={maxOutputTokens} onChange={(event) => { setMaxOutputTokens(event.target.value); }} /></div>
         </div>
-        <label htmlFor="provider-key">{t(language, "api_key")}</label>
-        <input ref={keyRef} id="provider-key" type="password" maxLength={8192} autoComplete="new-password" value={apiKey} onChange={(event) => { setApiKey(event.target.value); }} />
+        <label htmlFor={`${idPrefix}-key`}>{t(language, "api_key")}</label>
+        <input ref={keyRef} id={`${idPrefix}-key`} type="password" maxLength={8192} autoComplete="new-password" value={apiKey} onChange={(event) => { setApiKey(event.target.value); }} />
         <p className="muted">{t(language, "api_key_hint")}</p>
         <div className="button-row">
           <Button type="submit" variant="primary" disabled={busy}>{t(language, "save_provider")}</Button>
+          {onTest ? <Button type="button" variant="secondary" disabled={busy || status?.mode !== "configured"} onClick={() => { void onTest().catch((error: unknown) => { onError(localizedError(language, error)); }); }}>{language === "en" ? "Test metadata connection" : "测试元数据连接"}</Button> : null}
           <Button type="button" variant="secondary" disabled={busy} onClick={() => void onDeleteConfig()}>{t(language, "delete_config")}</Button>
           <Button type="button" variant="danger" disabled={busy} onClick={() => void onDeleteSecret()}>{t(language, "delete_key")}</Button>
         </div>

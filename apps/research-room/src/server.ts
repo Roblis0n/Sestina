@@ -9,12 +9,13 @@ import {
   coreErr,
   coreOk,
   type BriefProjectionPublisher,
+  type CorrectionAppealSecondOpinionProvider,
   type CoreResult,
   type ResearchRoomProvider,
   type SestinaCore,
 } from "@sestina/core";
 import { isAppLanguage, type LanguagePreferenceStore } from "./language-preferences.js";
-import { createOpenAICompatibleProvider } from "./openai-compatible-provider.js";
+import { createOpenAICompatibleProvider, createOpenAICompatibleSecondOpinionProvider, OpenAICompatibleProviderError, testOpenAICompatibleProviderConnection } from "./openai-compatible-provider.js";
 import { ProviderSettingsError, type ProviderConfigurationService, type SaveOpenAICompatibleProviderInput } from "./provider-settings.js";
 
 const LOOPBACK = "127.0.0.1";
@@ -28,10 +29,13 @@ export interface ResearchRoomServerOptions {
   readonly host?: string;
   readonly port?: number;
   readonly provider?: ResearchRoomProvider;
+  readonly correctionAppealSecondOpinionProvider?: CorrectionAppealSecondOpinionProvider;
   readonly providerTimeoutMs?: number;
+  readonly correctionAppealSecondOpinionProviderTimeoutMs?: number;
   readonly directoryPicker?: DirectoryPicker;
   readonly languagePreferenceStore?: LanguagePreferenceStore;
   readonly providerConfigurationService?: ProviderConfigurationService;
+  readonly secondOpinionProviderConfigurationService?: ProviderConfigurationService;
   readonly clientAssetRoot?: string;
 }
 
@@ -84,7 +88,11 @@ function text(value: unknown, maxBytes: number): string | undefined {
 }
 function resultValue<T>(result: CoreResult<T>): T {
   if (result.ok) return result.value;
-  const status = result.error.code === "not_found" ? 404 : result.error.code === "stale_state" || result.error.code === "state_conflict" ? 409 : result.error.code === "infrastructure_failure" || result.error.code === "projection_write_failure" ? 503 : 400;
+  const status = result.error.code === "not_found" ? 404
+    : result.error.code === "stale_state" || result.error.code === "state_conflict" || result.error.code === "storage_corrupt" ? 409
+      : result.error.code === "storage_readonly" ? 403
+        : ["infrastructure_failure", "projection_write_failure", "storage_busy", "storage_unavailable"].includes(result.error.code) ? 503
+          : 400;
   throw new HttpProblem(status, result.error.code, result.error.message);
 }
 
@@ -94,7 +102,6 @@ function authorityResultValue<T>(result: CoreResult<T>): T {
 }
 
 function workspaceResultValue<T>(result: CoreResult<T>): T {
-  if (!result.ok && result.error.code === "infrastructure_failure") throw new HttpProblem(503, "storage_unavailable", "The local structured research state is unavailable.");
   return resultValue(result);
 }
 
@@ -206,10 +213,13 @@ export class ResearchRoomHttpApplication {
 
   constructor(
     private readonly provider?: ResearchRoomProvider,
+    private readonly correctionAppealSecondOpinionProvider?: CorrectionAppealSecondOpinionProvider,
     private readonly providerTimeoutMs = 15_000,
+    private readonly correctionAppealSecondOpinionProviderTimeoutMs = 15_000,
     private readonly directoryPicker?: DirectoryPicker,
     private readonly languagePreferenceStore?: LanguagePreferenceStore,
     private readonly providerConfigurationService?: ProviderConfigurationService,
+    private readonly secondOpinionProviderConfigurationService?: ProviderConfigurationService,
     private readonly clientAssetRoot = DEFAULT_CLIENT_ASSET_ROOT,
   ) {}
 
@@ -263,6 +273,17 @@ export class ResearchRoomHttpApplication {
     } catch (error) { return this.providerProblem(error); }
   }
 
+  private async configuredSecondOpinionProvider(): Promise<CorrectionAppealSecondOpinionProvider | undefined> {
+    if (this.correctionAppealSecondOpinionProvider !== undefined) return this.correctionAppealSecondOpinionProvider;
+    if (this.secondOpinionProviderConfigurationService === undefined) return undefined;
+    try {
+      const snapshot = await this.secondOpinionProviderConfigurationService.loadRuntimeSnapshot();
+      return snapshot === undefined ? undefined : createOpenAICompatibleSecondOpinionProvider(snapshot, {
+        readCurrentGeneration: () => this.secondOpinionProviderConfigurationService?.currentGeneration() ?? Promise.resolve(undefined),
+      });
+    } catch (error) { return this.providerProblem(error); }
+  }
+
   private async providerStatus(): Promise<unknown> {
     if (this.providerConfigurationService === undefined) return { mode: this.provider === undefined ? "offline_ledger" : "configured", injected: this.provider !== undefined };
     try { return await this.providerConfigurationService.status(); }
@@ -289,6 +310,44 @@ export class ResearchRoomHttpApplication {
     catch (error) { return this.providerProblem(error); }
   }
 
+  private async secondOpinionProviderStatus(): Promise<unknown> {
+    if (this.secondOpinionProviderConfigurationService === undefined) return { mode: this.correctionAppealSecondOpinionProvider === undefined ? "offline_ledger" : "configured", injected: this.correctionAppealSecondOpinionProvider !== undefined };
+    try { return await this.secondOpinionProviderConfigurationService.status(); }
+    catch (error) { return this.providerProblem(error); }
+  }
+
+  private async saveSecondOpinionProvider(input: unknown): Promise<unknown> {
+    if (this.secondOpinionProviderConfigurationService === undefined) throw new HttpProblem(503, "provider_settings_unavailable", "Second-opinion Provider settings are unavailable.");
+    try {
+      await this.secondOpinionProviderConfigurationService.save(input as SaveOpenAICompatibleProviderInput);
+      return { ...(await this.secondOpinionProviderConfigurationService.status()), projectReopenRequired: this.#opened !== undefined };
+    } catch (error) { return this.providerProblem(error); }
+  }
+
+  private async deleteSecondOpinionProviderConfig(): Promise<unknown> {
+    if (this.secondOpinionProviderConfigurationService === undefined) throw new HttpProblem(503, "provider_settings_unavailable", "Second-opinion Provider settings are unavailable.");
+    try { await this.secondOpinionProviderConfigurationService.deleteConfig(); return { ...(await this.secondOpinionProviderConfigurationService.status()), projectReopenRequired: this.#opened !== undefined }; }
+    catch (error) { return this.providerProblem(error); }
+  }
+
+  private async deleteSecondOpinionProviderSecret(): Promise<unknown> {
+    if (this.secondOpinionProviderConfigurationService === undefined) throw new HttpProblem(503, "provider_settings_unavailable", "Second-opinion Provider settings are unavailable.");
+    try { await this.secondOpinionProviderConfigurationService.deleteSecret(); return { ...(await this.secondOpinionProviderConfigurationService.status()), projectReopenRequired: this.#opened !== undefined }; }
+    catch (error) { return this.providerProblem(error); }
+  }
+
+  private async testSecondOpinionProvider(): Promise<unknown> {
+    if (this.secondOpinionProviderConfigurationService === undefined) throw new HttpProblem(503, "provider_settings_unavailable", "Second-opinion Provider settings are unavailable.");
+    try {
+      const snapshot = await this.secondOpinionProviderConfigurationService.loadRuntimeSnapshot();
+      if (snapshot === undefined) throw new HttpProblem(409, "provider_not_configured", "Configure the independent second-opinion Provider before testing it.");
+      return await testOpenAICompatibleProviderConnection(snapshot);
+    } catch (error) {
+      if (error instanceof OpenAICompatibleProviderError) throw new HttpProblem(503, error.code, error.message);
+      return this.providerProblem(error);
+    }
+  }
+
   private async initializeProject(root: string, title: string): Promise<OpenedProject> {
     const stateDirectory = join(root, ".sestina");
     const databasePath = join(stateDirectory, "state.sqlite");
@@ -298,7 +357,14 @@ export class ResearchRoomHttpApplication {
       await mkdir(stateDirectory);
       createdStateDirectory = true;
       const provider = await this.configuredProvider();
-      core = resultValue(await openSestina({ databasePath, ...(provider ? { researchRoomProvider: provider } : {}), researchRoomProviderTimeoutMs: this.providerTimeoutMs }));
+      const secondOpinionProvider = await this.configuredSecondOpinionProvider();
+      core = resultValue(await openSestina({
+        databasePath,
+        ...(provider ? { researchRoomProvider: provider } : {}),
+        ...(secondOpinionProvider ? { correctionAppealSecondOpinionProvider: secondOpinionProvider } : {}),
+        researchRoomProviderTimeoutMs: this.providerTimeoutMs,
+        correctionAppealSecondOpinionProviderTimeoutMs: this.correctionAppealSecondOpinionProviderTimeoutMs,
+      }));
       const project = resultValue(core.initializeProject({ title, rootPath: ".", actor: USER }));
       await writeFile(join(stateDirectory, "research-brief.yaml"), renderDraft(project.id, title), { encoding: "utf8", flag: "wx" });
       await writeFile(join(stateDirectory, "gitignore-suggestion.txt"), ".sestina/\n", { encoding: "utf8", flag: "wx" });
@@ -325,7 +391,14 @@ export class ResearchRoomHttpApplication {
     let initialized = false;
     if (stateKind === "directory" && databaseKind === "file" && briefKind === "file") {
       const provider = await this.configuredProvider();
-      const core = resultValue(await openSestina({ databasePath, ...(provider ? { researchRoomProvider: provider } : {}), researchRoomProviderTimeoutMs: this.providerTimeoutMs }));
+      const secondOpinionProvider = await this.configuredSecondOpinionProvider();
+      const core = resultValue(await openSestina({
+        databasePath,
+        ...(provider ? { researchRoomProvider: provider } : {}),
+        ...(secondOpinionProvider ? { correctionAppealSecondOpinionProvider: secondOpinionProvider } : {}),
+        researchRoomProviderTimeoutMs: this.providerTimeoutMs,
+        correctionAppealSecondOpinionProviderTimeoutMs: this.correctionAppealSecondOpinionProviderTimeoutMs,
+      }));
       const projects = resultValue(core.listProjects());
       if (projects.length !== 1 || projects[0] === undefined) { core.close(); throw new HttpProblem(409, "state_conflict", "The selected project binding is inconsistent."); }
       next = { root, project: { id: projects[0].id, title: projects[0].title }, core, createdBySession: false };
@@ -531,6 +604,11 @@ export class ResearchRoomHttpApplication {
       if (request.method === "POST" && url.pathname === "/api/provider") { json(response, 200, { ok: true, value: await this.saveProvider(await readBody(request)) }); return; }
       if (request.method === "DELETE" && url.pathname === "/api/provider/config") { json(response, 200, { ok: true, value: await this.deleteProviderConfig() }); return; }
       if (request.method === "DELETE" && url.pathname === "/api/provider/secret") { json(response, 200, { ok: true, value: await this.deleteProviderSecret() }); return; }
+      if (request.method === "GET" && url.pathname === "/api/second-opinion-provider") { json(response, 200, { ok: true, value: await this.secondOpinionProviderStatus() }); return; }
+      if (request.method === "POST" && url.pathname === "/api/second-opinion-provider") { json(response, 200, { ok: true, value: await this.saveSecondOpinionProvider(await readBody(request)) }); return; }
+      if (request.method === "DELETE" && url.pathname === "/api/second-opinion-provider/config") { json(response, 200, { ok: true, value: await this.deleteSecondOpinionProviderConfig() }); return; }
+      if (request.method === "DELETE" && url.pathname === "/api/second-opinion-provider/secret") { json(response, 200, { ok: true, value: await this.deleteSecondOpinionProviderSecret() }); return; }
+      if (request.method === "POST" && url.pathname === "/api/second-opinion-provider/test") { json(response, 200, { ok: true, value: await this.testSecondOpinionProvider() }); return; }
       if (request.method === "POST" && url.pathname === "/api/project/select-directory/preview") { json(response, 200, { ok: true, value: await this.previewSelectedDirectory() }); return; }
       if (request.method === "POST" && url.pathname === "/api/project/initialize-selected") { json(response, 200, { ok: true, value: await this.initializeSelectedDirectory(await readBody(request)) }); return; }
       if (request.method === "POST" && url.pathname === "/api/project/select-directory") { json(response, 200, { ok: true, value: await this.selectDirectory() }); return; }
@@ -555,20 +633,22 @@ export class ResearchRoomHttpApplication {
         "/api/project/evidence": (query: ReturnType<typeof workspaceListRequest>) => opened.core.listEvidenceProjections(opened.project.id, query),
         "/api/project/episodes": (query: ReturnType<typeof workspaceListRequest>) => opened.core.listEpisodeProjections(opened.project.id, query),
         "/api/project/receipts": (query: ReturnType<typeof workspaceListRequest>) => opened.core.listReceiptProjections(opened.project.id, query),
+        "/api/project/appeals": (query: ReturnType<typeof workspaceListRequest>) => opened.core.listAppealProjections(opened.project.id, query),
       });
       if (request.method === "GET" && url.pathname in workspaceLists) {
         const read = workspaceLists[url.pathname as keyof typeof workspaceLists];
         const projection = read(workspaceListRequest(url)) as CoreResult<unknown>;
         json(response, 200, { ok: true, value: workspaceResultValue(projection) }); return;
       }
-      const workspaceDetail = /^\/api\/project\/(decisions|issues|evidence|episodes|receipts)\/([a-z]+_[0-9A-HJKMNP-TV-Z]{26})$/u.exec(url.pathname);
+      const workspaceDetail = /^\/api\/project\/(decisions|issues|evidence|episodes|receipts|appeals)\/([a-z]+_[0-9A-HJKMNP-TV-Z]{26})$/u.exec(url.pathname);
       if (request.method === "GET" && workspaceDetail?.[1] && workspaceDetail[2]) {
         const id = workspaceDetail[2];
         const value = workspaceDetail[1] === "decisions" ? workspaceResultValue(opened.core.getDecisionProjection(opened.project.id, id))
           : workspaceDetail[1] === "issues" ? workspaceResultValue(opened.core.getIssueProjection(opened.project.id, id))
             : workspaceDetail[1] === "evidence" ? workspaceResultValue(opened.core.getEvidenceProjection(opened.project.id, id))
               : workspaceDetail[1] === "episodes" ? workspaceResultValue(opened.core.getEpisodeProjection(opened.project.id, id))
-                : workspaceResultValue(opened.core.getReceiptProjection(opened.project.id, id));
+                : workspaceDetail[1] === "receipts" ? workspaceResultValue(opened.core.getReceiptProjection(opened.project.id, id))
+                  : workspaceResultValue(opened.core.getAppealProjection(opened.project.id, id));
         if (value === undefined) throw new HttpProblem(404, "not_found", "The requested research record was not found.");
         json(response, 200, { ok: true, value }); return;
       }
@@ -582,6 +662,51 @@ export class ResearchRoomHttpApplication {
         const cursor = url.searchParams.get("cursor") ?? undefined;
         if (!/^\d{1,3}$/u.test(rawLimit) || Number(rawLimit) < 1 || Number(rawLimit) > 200 || Buffer.byteLength(query, "utf8") > 512 || (cursor !== undefined && (cursor.length === 0 || cursor.length > 8192))) throw new HttpProblem(400, "invalid_input", "The project search is invalid.");
         json(response, 200, { ok: true, value: workspaceResultValue(opened.core.searchResearchObjects(opened.project.id, { query, limit: Number(rawLimit), ...(cursor ? { cursor } : {}) })) }); return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/project/appeals") {
+        const body = await readBody(request);
+        if (!isRecord(body) || !hasExactKeys(body, ["commandType", "confirmed", "findingId", "projectId", "receiptId", "statement"]) || body.commandType !== "create_correction_appeal") throw new HttpProblem(400, "invalid_input", "The correction appeal request is invalid.");
+        if (body.projectId !== opened.project.id) throw new HttpProblem(409, "cross_project_reference", "The appeal is bound to another project.");
+        if (body.confirmed !== true) throw new HttpProblem(400, "user_confirmation_required", "Creating an appeal requires an explicit user action.");
+        const created = resultValue(opened.core.createCorrectionAppeal({ projectId: opened.project.id, receiptId: body.receiptId as string, findingId: body.findingId as string, statement: body.statement as never, actor: USER }));
+        json(response, 200, { ok: true, value: workspaceResultValue(opened.core.getAppealProjection(opened.project.id, created.id)) }); return;
+      }
+      const appealAction = /^\/api\/project\/appeals\/(rapl_[0-9A-HJKMNP-TV-Z]{26})\/(update|record|record-only|prepare-second-opinion|run-second-opinion|cancel-second-opinion|resolve)$/u.exec(url.pathname);
+      if (request.method === "POST" && appealAction?.[1] && appealAction[2]) {
+        const appealId = appealAction[1];
+        const action = appealAction[2];
+        const body = await readBody(request);
+        if (!isRecord(body) || body.projectId !== opened.project.id) {
+          if (isRecord(body) && typeof body.projectId === "string") throw new HttpProblem(409, "cross_project_reference", "The appeal command is bound to another project.");
+          throw new HttpProblem(400, "invalid_input", "The correction appeal command is invalid.");
+        }
+        if (body.confirmed !== true) throw new HttpProblem(400, "user_confirmation_required", "The appeal command requires explicit user confirmation.");
+        if (!Number.isSafeInteger(body.expectedVersion) || Number(body.expectedVersion) < 1) throw new HttpProblem(400, "invalid_input", "The expected appeal version is invalid.");
+        const common = { projectId: opened.project.id, appealId, expectedVersion: Number(body.expectedVersion) as never, actor: USER };
+        if (action === "update") {
+          if (!hasExactKeys(body, ["commandType", "confirmed", "expectedVersion", "projectId", "statement"]) || body.commandType !== "update_correction_appeal") throw new HttpProblem(400, "invalid_input", "The appeal update is invalid.");
+          resultValue(opened.core.updateCorrectionAppeal({ ...common, statement: body.statement as never }));
+        } else if (action === "record") {
+          if (!hasExactKeys(body, ["commandType", "confirmed", "expectedVersion", "projectId"]) || body.commandType !== "record_correction_appeal") throw new HttpProblem(400, "invalid_input", "The appeal record command is invalid.");
+          resultValue(opened.core.recordCorrectionAppeal(common));
+        } else if (action === "record-only") {
+          if (!hasExactKeys(body, ["commandType", "confirmed", "expectedVersion", "projectId"]) || body.commandType !== "mark_correction_appeal_record_only") throw new HttpProblem(400, "invalid_input", "The record-only command is invalid.");
+          resultValue(opened.core.markCorrectionAppealRecordOnly(common));
+        } else if (action === "prepare-second-opinion") {
+          if (!hasExactKeys(body, ["allowedContext", "commandType", "confirmed", "expectedVersion", "projectId"]) || body.commandType !== "prepare_correction_appeal_second_opinion" || !isRecord(body.allowedContext) || !hasExactKeys(body.allowedContext, ["decisionIds", "evidenceIds", "includeBrief", "issueIds"]) || typeof body.allowedContext.includeBrief !== "boolean" || ![body.allowedContext.decisionIds, body.allowedContext.issueIds, body.allowedContext.evidenceIds].every((value) => Array.isArray(value) && value.every((item) => typeof item === "string"))) throw new HttpProblem(400, "invalid_input", "The second-opinion preparation is invalid.");
+          const prepared = resultValue(opened.core.prepareCorrectionAppealSecondOpinion({ ...common, allowedContext: body.allowedContext as never }));
+          json(response, 200, { ok: true, value: { schemaVersion: "1.0.0", contextManifestVisible: prepared.contextManifestVisible, appeal: workspaceResultValue(opened.core.getAppealProjection(opened.project.id, appealId)), attemptId: prepared.attemptId, confirmationNonce: prepared.confirmationNonce, manifest: prepared.manifest, providerPreview: prepared.providerPreview } }); return;
+        } else if (action === "run-second-opinion") {
+          if (!hasExactKeys(body, ["attemptId", "commandType", "confirmationNonce", "confirmed", "expectedVersion", "manifestHash", "projectId"]) || body.commandType !== "run_correction_appeal_second_opinion") throw new HttpProblem(400, "invalid_input", "The second-opinion send confirmation is invalid.");
+          resultValue(await opened.core.runCorrectionAppealSecondOpinion({ ...common, attemptId: body.attemptId as string, confirmationNonce: body.confirmationNonce as string, manifestHash: body.manifestHash as string }));
+        } else if (action === "cancel-second-opinion") {
+          if (!hasExactKeys(body, ["attemptId", "commandType", "confirmed", "expectedVersion", "projectId"]) || body.commandType !== "cancel_correction_appeal_second_opinion") throw new HttpProblem(400, "invalid_input", "The second-opinion cancellation is invalid.");
+          resultValue(opened.core.cancelCorrectionAppealSecondOpinion({ ...common, attemptId: body.attemptId as string }));
+        } else {
+          if (!hasExactKeys(body, ["commandType", "confirmed", "expectedVersion", "kind", "projectId", "publicReason"]) || body.commandType !== "resolve_correction_appeal") throw new HttpProblem(400, "invalid_input", "The appeal resolution is invalid.");
+          resultValue(opened.core.resolveCorrectionAppeal({ ...common, kind: body.kind as never, publicReason: body.publicReason as string }));
+        }
+        json(response, 200, { ok: true, value: workspaceResultValue(opened.core.getAppealProjection(opened.project.id, appealId)) }); return;
       }
       if (request.method === "GET" && url.pathname === "/api/state") {
         if (resultValue(opened.core.getBriefState(opened.project.id)) === undefined) throw new HttpProblem(409, "brief_setup_required", "Complete the initial Research Brief in this browser.");
@@ -697,7 +822,17 @@ export function createResearchRoomServer(options: ResearchRoomServerOptions = {}
   if (host !== LOOPBACK) throw new Error("Research Room must bind to 127.0.0.1.");
   const port = options.port ?? 0;
   if (!Number.isSafeInteger(port) || port < 0 || port > 65_535) throw new Error("Invalid Research Room port.");
-  const application = new ResearchRoomHttpApplication(options.provider, options.providerTimeoutMs, options.directoryPicker, options.languagePreferenceStore, options.providerConfigurationService, options.clientAssetRoot);
+  const application = new ResearchRoomHttpApplication(
+    options.provider,
+    options.correctionAppealSecondOpinionProvider,
+    options.providerTimeoutMs,
+    options.correctionAppealSecondOpinionProviderTimeoutMs,
+    options.directoryPicker,
+    options.languagePreferenceStore,
+    options.providerConfigurationService,
+    options.secondOpinionProviderConfigurationService,
+    options.clientAssetRoot,
+  );
   const server = createServer((request, response) => { void application.handle(request, response); });
   server.on("clientError", (_error, socket) => { socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n"); });
   return {

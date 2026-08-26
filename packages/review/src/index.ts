@@ -75,6 +75,8 @@ export {
   RESEARCH_ROOM_SEMANTIC_JUDGE_RUBRIC_VERSION,
   RESEARCH_ROOM_SEMANTIC_JUDGE_RESPONSE_SCHEMA,
   compileResearchRoomSemanticJudgePrompt,
+  getResearchRoomSemanticCriterionDefinition,
+  getResearchRoomSemanticRubricSnapshot,
   prepareResearchRoomSemanticJudge,
   submitResearchRoomSemanticJudge,
 } from "./semantic/research-room-semantic-judge.js";
@@ -88,9 +90,26 @@ export type {
   ResearchRoomSemanticJudgeRequest,
   ResearchRoomSemanticJudgeResponse,
   ResearchRoomSemanticJudgeResult,
+  ResearchRoomSemanticRubricSnapshot,
   ResearchRoomSemanticProviderBinding,
   ResearchRoomSemanticVerdict,
 } from "./semantic/research-room-semantic-judge.js";
+export {
+  CORRECTION_APPEAL_SECOND_OPINION_PROMPT_VERSION,
+  CORRECTION_APPEAL_SECOND_OPINION_PROTOCOL_VERSION,
+  CORRECTION_APPEAL_SECOND_OPINION_RESPONSE_SCHEMA,
+  compileCorrectionAppealSecondOpinionPrompt,
+  prepareCorrectionAppealSecondOpinionRequest,
+  submitCorrectionAppealSecondOpinion,
+} from "./semantic/correction-appeal-second-opinion.js";
+export type {
+  CompiledCorrectionAppealSecondOpinionPrompt,
+  CorrectionAppealAllowedContextObject,
+  CorrectionAppealSecondOpinionLimits,
+  CorrectionAppealSecondOpinionRequest,
+  CorrectionAppealSecondOpinionResponse,
+  PrepareCorrectionAppealSecondOpinionInput,
+} from "./semantic/correction-appeal-second-opinion.js";
 export { EvidenceFreshnessChecker, evaluateEvidenceFreshness } from "./checkers/evidence-freshness-checker.js";
 export type { CurrentEvidenceRevision, EvidenceFreshnessIssue } from "./checkers/evidence-freshness-checker.js";
 export { mergeFindings } from "./findings/merge-findings.js";

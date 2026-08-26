@@ -73,7 +73,10 @@ const GUIDANCE_FILES = [
       "UI-01 Production App Shell",
       "completed_and_verified",
       "UI-02 Research Object Workspaces and Project Continuity",
+      "RI-49 Correction Appeal and One Independent Second Opinion",
+      "RI-49（已完成）",
       "当前没有活动编码任务",
+      "none_active_RI50_not_started",
       "completed_and_verified_implementation_real_provider_evidence_blocked",
       "Market Gate 0",
     ],
@@ -92,6 +95,28 @@ const GUIDANCE_FILES = [
       "required_before_every_task",
       "Gate A：方向成立",
       "final: ready_to_start | do_not_start",
+    ],
+  },
+  {
+    path: "docs/execution/RI-49-CORRECTION-APPEAL-AND-INDEPENDENT-SECOND-OPINION-TASK-START-RECORD.md",
+    required: [
+      "task: RI-49",
+      "status: ready_to_start",
+      "activity_status: active_correction_appeal_and_independent_second_opinion",
+      "final: ready_to_start",
+      "blocked_missing_user_config",
+      "ri50_status: not_started",
+    ],
+  },
+  {
+    path: "docs/execution/RI-49-CORRECTION-APPEAL-AND-INDEPENDENT-SECOND-OPINION-TASK-RESULT.md",
+    required: [
+      "task: RI-49",
+      "status: completed_and_verified",
+      "pnpm_verify: passed",
+      "next_code_task: none_active_RI50_not_started",
+      "blocked_missing_user_config",
+      "non_redundant_value_in_real_cases: unproven",
     ],
   },
   {
@@ -216,19 +241,31 @@ const MARKER_CONTRACT = {
   },
   "sestina-current-status": {
     exact: "completed_and_verified",
-    why: "UI-02 is the most recently completed and verified governed task",
+    why: "RI-49 is the most recently completed and verified governed task",
+  },
+  "sestina-last-completed-task": {
+    exact: "RI-49",
+    why: "RI-49 is the most recently completed governed task",
+  },
+  "sestina-last-completed-status": {
+    exact: "completed_and_verified",
+    why: "the latest governed task passed its implementation and required host evidence gates",
+  },
+  "sestina-implementation-base": {
+    exact: "579e50055f9fb7e84bf4aa272eb643d37c228895",
+    why: "RI-49 was implemented from the recorded verified repository baseline",
   },
   "sestina-next-code-goal": {
-    exact: "none_active_RI49_not_started",
-    why: "UI-02 is complete, no next code task is authorized, and RI-49 remains not started",
+    exact: "none_active_RI50_not_started",
+    why: "RI-49 is complete and RI-50 has not been authorized",
   },
   "sestina-next-execution-goal": {
     exact: "await_explicit_user_authorization",
-    why: "the next execution must await explicit user authority and a new task-start record",
+    why: "no subsequent product task is active",
   },
   "sestina-next-code-sequence": {
-    exact: "none_active_RI49_not_started",
-    why: "UI-02 is complete, no code sequence is active, and RI-49 remains not started",
+    exact: "none_active_RI50_not_started",
+    why: "RI-50 remains not started and cannot be inferred from the route map",
   },
   "sestina-ri44-to-ri47-status": {
     exact: "superseded_unstarted",
@@ -393,9 +430,9 @@ for (const entry of ENTRY_FILES) {
 const tasks = [...currentTasks.entries()];
 if (tasks.length > 0) {
   const first = tasks[0][1];
-  if (first !== "UI-02") {
+  if (first !== "RI-49") {
     err(
-      `[AUTH-R003] ${tasks[0][0]}: current task is '${first}' but the latest governed task is 'UI-02'`,
+      `[AUTH-R003] ${tasks[0][0]}: current task is '${first}' but the latest governed task is 'RI-49'`,
     );
   }
   for (const [entry, task] of tasks) {

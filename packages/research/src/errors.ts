@@ -67,7 +67,15 @@ export type ResearchErrorCode =
   | "invalid_evidence_link"
   | "invalid_research_room_review"
   | "invalid_research_room_receipt"
-  | "invalid_research_room_transition";
+  | "invalid_research_room_transition"
+  | "invalid_correction_appeal"
+  | "invalid_appeal_transition"
+  | "appeal_source_mismatch"
+  | "appeal_already_active"
+  | "user_appeal_action_required"
+  | "appeal_independence_not_proven"
+  | "invalid_second_opinion_manifest"
+  | "invalid_second_opinion_result";
 
 export type ResearchErrorDetails = Readonly<
   Record<string, string | number | boolean>
@@ -149,4 +157,12 @@ const MESSAGES: Readonly<Record<ResearchErrorCode, string>> = {
   invalid_research_room_review: "research room review is missing or malformed",
   invalid_research_room_receipt: "research room receipt is missing or malformed",
   invalid_research_room_transition: "research room state transition is not allowed",
+  invalid_correction_appeal: "correction appeal is missing or malformed",
+  invalid_appeal_transition: "correction appeal state transition is not allowed",
+  appeal_source_mismatch: "correction appeal source binding does not match its frozen hashes",
+  appeal_already_active: "an unresolved correction appeal already exists for this finding",
+  user_appeal_action_required: "an explicit user correction appeal action is required",
+  appeal_independence_not_proven: "the selected second-opinion runtime is not independently identifiable",
+  invalid_second_opinion_manifest: "second-opinion Context Manifest is missing or malformed",
+  invalid_second_opinion_result: "second-opinion result is missing, malformed, or not bound to the frozen input",
 };

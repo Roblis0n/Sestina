@@ -3,6 +3,7 @@ import {
   type ArgumentEvidence,
   type BriefChangeSet,
   type BriefChangeStatus,
+  type CorrectionAppeal,
   type DecisionScope,
   type DecisionStatus,
   type EpisodeStatus,
@@ -26,6 +27,7 @@ const STORE_PAGE_LIMIT = 200;
 const DEFAULT_HISTORY_LIMIT = 50;
 const ATTENTION_LIMIT = 200;
 const RESEARCH_ID_BODY = /^[0-9A-HJKMNP-TV-Z]{26}$/u;
+const APPEALABLE_FINDING_KINDS = new Set(["focus_substitution", "repeated_audit", "audit_hijacking", "semantic_scope_violation", "decision_integrity", "argument_leap", "evidence_boundary", "shallow_abstraction"]);
 
 function validResearchId(value: string, prefix: string): boolean {
   return value.startsWith(prefix) && RESEARCH_ID_BODY.test(value.slice(prefix.length));
@@ -38,7 +40,7 @@ function fromStored<T>(result: ResearchResult<T>): CoreResult<T> {
   return fromDomain(result);
 }
 
-export type ResearchObjectKind = "decision" | "issue" | "evidence" | "episode" | "receipt";
+export type ResearchObjectKind = "decision" | "issue" | "evidence" | "episode" | "receipt" | "appeal";
 export type WorkspaceProviderStatus = "configured" | "ledger_only";
 
 export interface WorkspaceListRequest {
@@ -266,10 +268,56 @@ export interface ReceiptDetailProjection extends ReceiptSummaryProjection {
   readonly relatedBriefVersionIds: readonly string[];
   readonly relatedDecisionIds: readonly string[];
   readonly relatedIssueIds: readonly string[];
+  readonly correctionAppeals: readonly {
+    readonly appealId: string;
+    readonly findingId: string;
+    readonly status: CorrectionAppeal["status"];
+    readonly updatedAt: string;
+    readonly href: string;
+  }[];
+  readonly appealableFindings: readonly {
+    readonly findingId: string;
+    readonly kind: string;
+    readonly severity: "info" | "warning" | "error";
+    readonly appealId?: string;
+    readonly action: "create_appeal" | "open_appeal" | "unavailable";
+    readonly href?: string;
+    readonly unavailableReason?: "semantic_trace_unavailable" | "criterion_binding_unavailable";
+  }[];
   readonly trace: readonly {
-    readonly step: "suggestion" | "context_manifest" | "provider_or_ledger" | "assessment" | "finding_and_delta" | "user_disposition" | "state_change" | "receipt" | "rollback";
+    readonly step: "suggestion" | "context_manifest" | "provider_or_ledger" | "assessment" | "finding_and_delta" | "user_disposition" | "state_change" | "receipt" | "correction_appeal" | "rollback";
     readonly summary: string;
   }[];
+}
+
+export interface AppealSummaryProjection {
+  readonly kind: "appeal";
+  readonly id: string;
+  readonly reviewId: string;
+  readonly sourceReceiptId: string;
+  readonly findingId: string;
+  readonly criterionId: string;
+  readonly status: CorrectionAppeal["status"];
+  readonly disagreement: string;
+  readonly version: number;
+  readonly attemptCount: number;
+  readonly resolutionCount: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface AppealDetailProjection extends AppealSummaryProjection {
+  readonly source: CorrectionAppeal["source"];
+  readonly lineage: CorrectionAppeal["lineage"];
+  readonly statements: CorrectionAppeal["statements"];
+  readonly attempts: CorrectionAppeal["attempts"];
+  readonly resolutions: CorrectionAppeal["resolutions"];
+  readonly timeline: CorrectionAppeal["transitions"];
+  readonly latestComparison?: NonNullable<CorrectionAppeal["attempts"][number]["comparison"]>;
+  readonly availableActions: readonly ("edit" | "record" | "record_only" | "prepare_second_opinion" | "confirm_send" | "cancel" | "resolve" | "retry_with_new_manifest")[];
+  readonly userAuthorityOnly: true;
+  readonly canAutoResolve: false;
+  readonly relatedReceiptHref: string;
 }
 
 export interface BriefWorkspaceProjection {
@@ -317,7 +365,7 @@ export interface BriefWorkspaceProjection {
 
 export interface AttentionItemProjection {
   readonly id: string;
-  readonly kind: "brief_candidate" | "decision" | "issue" | "episode" | "review" | "manifest" | "rollback" | "provider";
+  readonly kind: "brief_candidate" | "decision" | "issue" | "episode" | "appeal" | "review" | "manifest" | "rollback" | "provider";
   readonly title: string;
   readonly reason: string;
   readonly severity: "high" | "normal";
@@ -353,13 +401,14 @@ export interface ProjectOverviewProjection {
   readonly project: { readonly id: string; readonly title: string; readonly version: number; readonly updatedAt: string };
   readonly providerStatus: WorkspaceProviderStatus;
   readonly brief: { readonly id: string; readonly versionId: string; readonly versionNumber: number; readonly question: string; readonly stage: string; readonly task: string };
-  readonly counts: { readonly decisions: number; readonly issues: number; readonly evidence: number; readonly episodes: number; readonly receipts: number };
+  readonly counts: { readonly decisions: number; readonly issues: number; readonly evidence: number; readonly episodes: number; readonly receipts: number; readonly appeals: number };
   readonly statuses: {
     readonly decisions: Readonly<Record<string, number>>;
     readonly issues: Readonly<Record<string, number>>;
     readonly evidence: Readonly<Record<string, number>>;
     readonly episodes: Readonly<Record<string, number>>;
     readonly receipts: Readonly<Record<string, number>>;
+    readonly appeals: Readonly<Record<string, number>>;
   };
   readonly attention: { readonly total: number; readonly top: readonly AttentionItemProjection[] };
   readonly currentEpisode?: { readonly id: string; readonly status: string; readonly updatedAt: string; readonly href: string };
@@ -439,7 +488,7 @@ function decodeCursor(value: string | undefined): WorkspaceCursor | undefined {
     if (Object.keys(item).sort().some((key, index) => key !== expected[index]) || Object.keys(item).length !== expected.length) return undefined;
     if (item.version !== 1 || item.schemaVersion !== RESEARCH_OBJECT_WORKSPACE_SCHEMA_VERSION) return undefined;
     if (typeof item.projectId !== "string" || typeof item.datasetVersion !== "string" || typeof item.filter !== "string" || typeof item.storeCursor !== "string") return undefined;
-    if (!["decision", "issue", "evidence", "episode", "receipt"].includes(String(item.kind))) return undefined;
+    if (!["decision", "issue", "evidence", "episode", "receipt", "appeal"].includes(String(item.kind))) return undefined;
     return item as unknown as WorkspaceCursor;
   } catch {
     return undefined;
@@ -494,6 +543,20 @@ function episodeSummary(value: RevisionEpisode): EpisodeSummaryProjection {
 
 function receiptSummary(value: ResearchRoomReceipt): ReceiptSummaryProjection {
   return Object.freeze({ kind: "receipt", id: value.id, reviewId: value.reviewId, ...(value.sourceEpisodeId ? { sourceEpisodeId: value.sourceEpisodeId } : {}), status: value.status, providerStatus: value.providerStatus, evidenceClass: value.evidenceClass, disposition: value.disposition, rollback: value.rollback, version: value.version, receiptHash: value.receiptHash, createdAt: value.createdAt, updatedAt: value.updatedAt });
+}
+
+function appealSummary(value: CorrectionAppeal): AppealSummaryProjection {
+  return Object.freeze({ kind: "appeal", id: value.id, reviewId: value.source.reviewId, sourceReceiptId: value.source.receiptId, findingId: value.source.findingId, criterionId: value.source.rubric.criterionId, status: value.status, disagreement: value.statements.at(-1)?.statement.disagreement ?? "Correction appeal", version: value.version, attemptCount: value.attempts.length, resolutionCount: value.resolutions.length, createdAt: value.createdAt, updatedAt: value.updatedAt });
+}
+
+function appealAvailableActions(value: CorrectionAppeal): AppealDetailProjection["availableActions"] {
+  if (value.status === "draft") return Object.freeze(["edit", "record"]);
+  if (value.status === "recorded") return Object.freeze(["record_only", "prepare_second_opinion", "resolve"]);
+  if (value.status === "awaiting_send_confirmation") return Object.freeze(["confirm_send", "cancel"]);
+  if (value.status === "second_opinion_running") return Object.freeze(["cancel"]);
+  if (value.status === "provider_failed" || value.status === "cancelled") return Object.freeze(["record_only", "retry_with_new_manifest", "resolve"]);
+  if (value.status === "appeal_record_only" || value.status === "second_opinion_ready" || value.status === "stale_conflicted" || value.status === "waiting_user_resolution") return Object.freeze(["resolve"]);
+  return Object.freeze([]);
 }
 
 function filterSignature(request: WorkspaceListRequest): string {
@@ -930,6 +993,19 @@ export class ResearchObjectWorkspaceService {
     const relatedBriefVersionIds = [...new Set([receipt.before.briefVersionId, receipt.after.briefVersionId])];
     const relatedDecisionIds = [...new Set([...receipt.before.decisions.map((item) => item.id), ...receipt.after.decisions.map((item) => item.id)])];
     const relatedIssueIds = [...new Set([...receipt.before.issues.map((item) => item.id), ...receipt.after.issues.map((item) => item.id)])];
+    const relatedAppeals: ReceiptDetailProjection["correctionAppeals"][number][] = [];
+    const appeals = this.forEachPaged(this.store.correctionAppeals.listByProject.bind(this.store.correctionAppeals, projectId), (appeal) => {
+      if (appeal.source.receiptId === receiptId) relatedAppeals.push(Object.freeze({ appealId: appeal.id, findingId: appeal.source.findingId, status: appeal.status, updatedAt: appeal.updatedAt, href: `/project/appeals/${appeal.id}` }));
+    });
+    if (!appeals.ok) return appeals;
+    relatedAppeals.sort((left, right) => right.updatedAt.localeCompare(left.updatedAt) || left.appealId.localeCompare(right.appealId));
+    const appealByFinding = new Map(relatedAppeals.map((appeal) => [appeal.findingId, appeal]));
+    const appealableFindings: ReceiptDetailProjection["appealableFindings"] = Object.freeze((receipt.semanticJudge?.findings ?? []).map((finding) => {
+      const appeal = appealByFinding.get(finding.id);
+      if (appeal !== undefined) return Object.freeze({ findingId: finding.id, kind: finding.kind, severity: finding.severity, appealId: appeal.appealId, action: "open_appeal" as const, href: appeal.href });
+      if (!APPEALABLE_FINDING_KINDS.has(finding.kind)) return Object.freeze({ findingId: finding.id, kind: finding.kind, severity: finding.severity, action: "unavailable" as const, unavailableReason: "criterion_binding_unavailable" as const });
+      return Object.freeze({ findingId: finding.id, kind: finding.kind, severity: finding.severity, action: "create_appeal" as const, href: `/project/appeals/new?receipt=${encodeURIComponent(receipt.id)}&finding=${encodeURIComponent(finding.id)}` });
+    }));
     const trace: ReceiptDetailProjection["trace"] = Object.freeze([
       Object.freeze({ step: "suggestion" as const, summary: `Suggestion hash ${receipt.suggestionHash.slice(0, 12)}` }),
       Object.freeze({ step: "context_manifest" as const, summary: `${receipt.manifest.fields.length} explicit context fields; ${receipt.manifest.sendStatus}` }),
@@ -939,9 +1015,29 @@ export class ResearchObjectWorkspaceService {
       Object.freeze({ step: "user_disposition" as const, summary: `${receipt.disposition.kind}: ${receipt.disposition.reason}` }),
       Object.freeze({ step: "state_change" as const, summary: `${receipt.before.stateHash.slice(0, 12)} -> ${receipt.after.stateHash.slice(0, 12)}` }),
       Object.freeze({ step: "receipt" as const, summary: `${receipt.id} is ${receipt.status}` }),
+      Object.freeze({ step: "correction_appeal" as const, summary: relatedAppeals.length === 0 ? "No correction appeal has been recorded for this receipt." : `${relatedAppeals.length} correction appeal record(s) are linked to this receipt.` }),
       Object.freeze({ step: "rollback" as const, summary: receipt.rollback.available ? "Rollback remains available with a new explicit user action." : receipt.rollback.rolledBackAt ? `Rolled back at ${receipt.rollback.rolledBackAt}` : "Rollback is unavailable." }),
     ]);
-    return coreOk(Object.freeze({ ...receiptSummary(receipt), countsAsExternalEvidence: false, ...(receipt.ledgerOnlyReason ? { ledgerOnlyReason: receipt.ledgerOnlyReason } : {}), suggestionHash: receipt.suggestionHash, argumentDelta: receipt.analysis.argumentDelta, findings: receipt.analysis.findings, alternativeExplanations: receipt.analysis.alternativeExplanations, unknowns: receipt.analysis.unknowns, unproven: receipt.analysis.unproven, minimalCorrection: receipt.analysis.minimalCorrection, contextFields: Object.freeze(receipt.manifest.fields.map((field) => Object.freeze({ category: field.category, source: field.source, sensitivity: field.sensitivity, truncated: field.truncated }))), network: Object.freeze({ required: receipt.manifest.networkRequired, used: receipt.manifest.networkUsed, sendStatus: receipt.manifest.sendStatus }), authority: receipt.authority, beforeStateHash: receipt.before.stateHash, afterStateHash: receipt.after.stateHash, relatedBriefVersionIds: Object.freeze(relatedBriefVersionIds), relatedDecisionIds: Object.freeze(relatedDecisionIds), relatedIssueIds: Object.freeze(relatedIssueIds), trace }));
+    return coreOk(Object.freeze({ ...receiptSummary(receipt), countsAsExternalEvidence: false, ...(receipt.ledgerOnlyReason ? { ledgerOnlyReason: receipt.ledgerOnlyReason } : {}), suggestionHash: receipt.suggestionHash, argumentDelta: receipt.analysis.argumentDelta, findings: receipt.analysis.findings, alternativeExplanations: receipt.analysis.alternativeExplanations, unknowns: receipt.analysis.unknowns, unproven: receipt.analysis.unproven, minimalCorrection: receipt.analysis.minimalCorrection, contextFields: Object.freeze(receipt.manifest.fields.map((field) => Object.freeze({ category: field.category, source: field.source, sensitivity: field.sensitivity, truncated: field.truncated }))), network: Object.freeze({ required: receipt.manifest.networkRequired, used: receipt.manifest.networkUsed, sendStatus: receipt.manifest.sendStatus }), authority: receipt.authority, beforeStateHash: receipt.before.stateHash, afterStateHash: receipt.after.stateHash, relatedBriefVersionIds: Object.freeze(relatedBriefVersionIds), relatedDecisionIds: Object.freeze(relatedDecisionIds), relatedIssueIds: Object.freeze(relatedIssueIds), correctionAppeals: Object.freeze(relatedAppeals), appealableFindings, trace }));
+  }
+
+  listAppeals(projectId: string, request: WorkspaceListRequest): CoreResult<WorkspacePage<AppealSummaryProjection>> {
+    if (request.scope !== undefined || request.source !== undefined || request.active !== undefined || request.referencedByCurrentBrief !== undefined || request.issueKind !== undefined || request.relevance !== undefined || request.unresolved !== undefined || request.disposition !== undefined || request.providerStatus !== undefined) return coreErr("invalid_input");
+    return this.list(projectId, "appeal", request,
+      (page) => this.store.correctionAppeals.listByProject(projectId, page),
+      (item) => [item.id, item.version, item.status, item.updatedAt, item.source.findingHash, item.attempts.length, item.resolutions.length],
+      (item, query) => (request.status === undefined || item.status === request.status)
+        && (contains(item.id, query) || contains(item.source.reviewId, query) || contains(item.source.receiptId, query) || contains(item.source.findingId, query) || contains(item.source.rubric.criterionId, query) || item.statements.some((statement) => contains(statement.statement.disagreement, query) || contains(statement.statement.claimedError, query) || contains(statement.statement.missingOrMisreadContext, query) || contains(statement.statement.secondOpinionQuestion, query)) || item.resolutions.some((resolution) => contains(resolution.publicReason, query))),
+      appealSummary);
+  }
+
+  getAppeal(projectId: string, appealId: string): CoreResult<AppealDetailProjection | undefined> {
+    if (!validResearchId(projectId, "rprj_") || !validResearchId(appealId, "rapl_")) return coreErr("invalid_input");
+    const value = fromStored(this.store.correctionAppeals.getById(projectId, appealId)); if (!value.ok) return value;
+    if (value.value === undefined) return coreOk(undefined);
+    const appeal = value.value;
+    const latestComparison = [...appeal.attempts].reverse().find((attempt) => attempt.comparison !== undefined)?.comparison;
+    return coreOk(Object.freeze({ ...appealSummary(appeal), source: appeal.source, lineage: appeal.lineage, statements: appeal.statements, attempts: appeal.attempts, resolutions: appeal.resolutions, timeline: appeal.transitions, ...(latestComparison ? { latestComparison } : {}), availableActions: appealAvailableActions(appeal), userAuthorityOnly: true as const, canAutoResolve: false as const, relatedReceiptHref: `/project/receipts/${appeal.source.receiptId}` }));
   }
 
   private statusCount<T>(reader: PageReader<T>, status: (item: T) => string): CoreResult<{ readonly total: number; readonly statuses: Readonly<Record<string, number>> }> {
@@ -988,6 +1084,16 @@ export class ResearchObjectWorkspaceService {
     const episodes = this.forEachPaged(this.store.episodes.listByProject.bind(this.store.episodes, projectId), (episode) => {
       if (episode.status === "user_action_required") add({ id: episode.id, kind: "episode", title: `Episode ${episode.id}`, reason: "This episode requires a user disposition.", severity: "high", href: `/project/episodes/${episode.id}`, primaryAction: "Open Episode context and outcome", sourceObject: Object.freeze({ kind: "episode", id: episode.id }), createdAt: episode.createdAt });
     }); if (!episodes.ok) return episodes;
+    const appeals = this.forEachPaged(this.store.correctionAppeals.listByProject.bind(this.store.correctionAppeals, projectId), (appeal) => {
+      if (appeal.status === "resolved") return;
+      const action = appeal.status === "draft" ? "Finish and record the correction appeal"
+        : appeal.status === "awaiting_send_confirmation" ? "Inspect the exact Manifest and explicitly confirm or cancel"
+          : appeal.status === "second_opinion_running" ? "Monitor or cancel the second-opinion attempt"
+            : appeal.status === "second_opinion_ready" ? "Compare the independent assessment and make the user resolution"
+              : appeal.status === "provider_failed" || appeal.status === "cancelled" ? "Record only, prepare a fresh manual retry, or resolve"
+                : "Open the appeal and choose an explicit user resolution";
+      add({ id: appeal.id, kind: "appeal", title: `Correction appeal · ${appeal.source.rubric.criterionId}`, reason: `Appeal is ${appeal.status}.`, severity: ["draft", "awaiting_send_confirmation", "second_opinion_ready", "stale_conflicted"].includes(appeal.status) ? "high" : "normal", href: `/project/appeals/${appeal.id}`, primaryAction: action, sourceObject: Object.freeze({ kind: "appeal", id: appeal.id }), createdAt: appeal.updatedAt });
+    }); if (!appeals.ok) return appeals;
     for (const signal of transient) add({ ...signal });
     items.sort((left, right) => (left.severity === right.severity ? right.createdAt.localeCompare(left.createdAt) : left.severity === "high" ? -1 : 1) || left.kind.localeCompare(right.kind) || left.id.localeCompare(right.id));
     return coreOk(Object.freeze({ schemaVersion: RESEARCH_OBJECT_WORKSPACE_SCHEMA_VERSION, projectId, total, items: Object.freeze(items), truncated: total > items.length }));
@@ -1004,22 +1110,24 @@ export class ResearchObjectWorkspaceService {
     const evidence = this.statusCount(this.store.argumentEvidence.listByProject.bind(this.store.argumentEvidence, projectId), (item) => item.state); if (!evidence.ok) return evidence;
     const episodes = this.statusCount(this.store.episodes.listByProject.bind(this.store.episodes, projectId), (item) => item.status); if (!episodes.ok) return episodes;
     const receipts = this.statusCount(this.store.roomReceipts.listByProject.bind(this.store.roomReceipts, projectId), (item) => item.status); if (!receipts.ok) return receipts;
+    const appeals = this.statusCount(this.store.correctionAppeals.listByProject.bind(this.store.correctionAppeals, projectId), (item) => item.status); if (!appeals.ok) return appeals;
     const attention = this.getAttention(projectId, transient); if (!attention.ok) return attention;
     const recentDecisions = this.recent(this.store.decisions.listByScope.bind(this.store.decisions, projectId, undefined), (item) => ({ kind: "decision" as const, id: item.id, label: item.statement, status: item.status, at: item.updatedAt, href: `/project/decisions/${item.id}` }), (item) => item.updatedAt, 10); if (!recentDecisions.ok) return recentDecisions;
     const recentIssues = this.recent(this.store.issues.listByStatus.bind(this.store.issues, projectId, undefined), (item) => ({ kind: "issue" as const, id: item.id, label: item.summary, status: item.status, at: item.updatedAt, href: `/project/issues/${item.id}` }), (item) => item.updatedAt, 10); if (!recentIssues.ok) return recentIssues;
     const recentEpisodes = this.recent(this.store.episodes.listByProject.bind(this.store.episodes, projectId), (item) => ({ kind: "episode" as const, id: item.id, label: `Episode ${item.id}`, status: item.status, at: item.updatedAt, href: `/project/episodes/${item.id}` }), (item) => item.updatedAt, 10); if (!recentEpisodes.ok) return recentEpisodes;
     const recentReceipts = this.recent(this.store.roomReceipts.listByProject.bind(this.store.roomReceipts, projectId), (item) => ({ kind: "receipt" as const, id: item.id, label: item.analysis.argumentDelta.summary, status: item.status, disposition: item.disposition.kind, at: item.updatedAt, href: `/project/receipts/${item.id}` }), (item) => item.updatedAt, 10); if (!recentReceipts.ok) return recentReceipts;
+    const recentAppeals = this.recent(this.store.correctionAppeals.listByProject.bind(this.store.correctionAppeals, projectId), (item) => ({ kind: "appeal" as const, id: item.id, label: item.statements.at(-1)?.statement.disagreement ?? `Appeal ${item.id}`, status: item.status, at: item.updatedAt, href: `/project/appeals/${item.id}` }), (item) => item.updatedAt, 10); if (!recentAppeals.ok) return recentAppeals;
     const currentEpisode = recentEpisodes.value.find((item) => !["accepted", "rejected", "abandoned"].includes(item.status)) ?? recentEpisodes.value[0];
     const latestReceipt = recentReceipts.value[0];
     const briefChanges = [brief.value.active, ...brief.value.versions.slice(1)].map((version) => ({ kind: "brief" as const, id: version.id, label: version.currentTask, status: version.id === brief.value.active.id ? "active" : "historical", at: version.createdAt, href: "/project/brief" }));
-    const recentChanges = [...briefChanges, ...recentDecisions.value, ...recentIssues.value, ...recentEpisodes.value, ...recentReceipts.value].sort((left, right) => right.at.localeCompare(left.at) || left.id.localeCompare(right.id)).slice(0, 10);
+    const recentChanges = [...briefChanges, ...recentDecisions.value, ...recentIssues.value, ...recentEpisodes.value, ...recentReceipts.value, ...recentAppeals.value].sort((left, right) => right.at.localeCompare(left.at) || left.id.localeCompare(right.id)).slice(0, 10);
     return coreOk(Object.freeze({
       schemaVersion: RESEARCH_OBJECT_WORKSPACE_SCHEMA_VERSION,
       project: Object.freeze({ id: project.value.id, title: project.value.title, version: project.value.version, updatedAt: project.value.updatedAt }),
       providerStatus: input.providerStatus,
       brief: Object.freeze({ id: brief.value.briefId, versionId: brief.value.active.id, versionNumber: brief.value.active.versionNumber, question: brief.value.active.projectQuestion, stage: brief.value.active.currentStage, task: brief.value.active.currentTask }),
-      counts: Object.freeze({ decisions: decisions.value.total, issues: issues.value.total, evidence: evidence.value.total, episodes: episodes.value.total, receipts: receipts.value.total }),
-      statuses: Object.freeze({ decisions: decisions.value.statuses, issues: issues.value.statuses, evidence: evidence.value.statuses, episodes: episodes.value.statuses, receipts: receipts.value.statuses }),
+      counts: Object.freeze({ decisions: decisions.value.total, issues: issues.value.total, evidence: evidence.value.total, episodes: episodes.value.total, receipts: receipts.value.total, appeals: appeals.value.total }),
+      statuses: Object.freeze({ decisions: decisions.value.statuses, issues: issues.value.statuses, evidence: evidence.value.statuses, episodes: episodes.value.statuses, receipts: receipts.value.statuses, appeals: appeals.value.statuses }),
       attention: Object.freeze({ total: attention.value.total, top: attention.value.items.slice(0, 5) }),
       ...(currentEpisode ? { currentEpisode: Object.freeze({ id: currentEpisode.id, status: currentEpisode.status, updatedAt: currentEpisode.at, href: currentEpisode.href }) } : {}),
       ...(latestReceipt ? { latestReceipt: Object.freeze({ id: latestReceipt.id, status: latestReceipt.status, disposition: latestReceipt.disposition, updatedAt: latestReceipt.at, href: latestReceipt.href }) } : {}),
@@ -1034,7 +1142,8 @@ export class ResearchObjectWorkspaceService {
     const evidence = this.fingerprint(projectId, "evidence", this.store.argumentEvidence.listByProject.bind(this.store.argumentEvidence, projectId), (item) => [item.id, item.version, item.state, item.source.recordedAt]); if (!evidence.ok) return evidence;
     const episodes = this.fingerprint(projectId, "episode", this.store.episodes.listByProject.bind(this.store.episodes, projectId), (item) => [item.id, item.version, item.status, item.updatedAt]); if (!episodes.ok) return episodes;
     const receipts = this.fingerprint(projectId, "receipt", this.store.roomReceipts.listByProject.bind(this.store.roomReceipts, projectId), (item) => [item.id, item.version, item.status, item.updatedAt, item.receiptHash]); if (!receipts.ok) return receipts;
-    return coreOk(createHash("sha256").update(JSON.stringify({ brief: [brief.value.brief.id, brief.value.brief.version, brief.value.version.id], decisions: decisions.value, issues: issues.value, evidence: evidence.value, episodes: episodes.value, receipts: receipts.value }), "utf8").digest("hex"));
+    const appeals = this.fingerprint(projectId, "appeal", this.store.correctionAppeals.listByProject.bind(this.store.correctionAppeals, projectId), (item) => [item.id, item.version, item.status, item.updatedAt, item.source.findingHash, item.attempts.length, item.resolutions.length]); if (!appeals.ok) return appeals;
+    return coreOk(createHash("sha256").update(JSON.stringify({ brief: [brief.value.brief.id, brief.value.brief.version, brief.value.version.id], decisions: decisions.value, issues: issues.value, evidence: evidence.value, episodes: episodes.value, receipts: receipts.value, appeals: appeals.value }), "utf8").digest("hex"));
   }
 
   search(projectId: string, input: { readonly query: string; readonly limit: number; readonly cursor?: string }): CoreResult<ResearchObjectSearchProjection> {
@@ -1068,6 +1177,10 @@ export class ResearchObjectWorkspaceService {
     const receipts = this.forEachPaged(this.store.roomReceipts.listByProject.bind(this.store.roomReceipts, projectId), (item) => {
       if (contains(item.id, query) || contains(item.reviewId, query) || contains(item.analysis.argumentDelta.summary, query) || contains(item.disposition.reason, query)) add({ kind: "receipt", id: item.id, title: `Receipt ${item.id}`, detail: item.analysis.argumentDelta.summary, status: item.status, source: `user_confirmed:${item.authority.actor.kind}`, projectId, href: `/project/receipts/${item.id}` });
     }); if (!receipts.ok) return receipts;
+    const appeals = this.forEachPaged(this.store.correctionAppeals.listByProject.bind(this.store.correctionAppeals, projectId), (item) => {
+      const statement = item.statements.at(-1)?.statement;
+      if (contains(item.id, query) || contains(item.source.reviewId, query) || contains(item.source.receiptId, query) || contains(item.source.findingId, query) || contains(item.source.rubric.criterionId, query) || statement !== undefined && [statement.disagreement, statement.claimedError, statement.missingOrMisreadContext, statement.secondOpinionQuestion].some((field) => contains(field, query)) || item.resolutions.some((resolution) => contains(resolution.publicReason, query))) add({ kind: "appeal", id: item.id, title: `Correction appeal · ${item.source.rubric.criterionId}`, detail: statement?.disagreement ?? "Correction appeal", status: item.status, source: "user_recorded:user", projectId, href: `/project/appeals/${item.id}` });
+    }); if (!appeals.ok) return appeals;
     const nextOffset = offset + found.length;
     const hasMore = matches > nextOffset;
     return coreOk(Object.freeze({ schemaVersion: RESEARCH_OBJECT_WORKSPACE_SCHEMA_VERSION, projectId, datasetVersion: datasetVersion.value, query: input.query.trim(), items: Object.freeze(found), ...(hasMore ? { nextCursor: encodeSearchCursor({ version: 1, schemaVersion: RESEARCH_OBJECT_WORKSPACE_SCHEMA_VERSION, projectId, datasetVersion: datasetVersion.value, query, offset: nextOffset }) } : {}), truncated: hasMore }));

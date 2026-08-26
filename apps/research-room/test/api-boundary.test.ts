@@ -21,14 +21,23 @@ describe("Research Room typed API boundary", () => {
     const offline = Object.assign(new Error("The local Research Room is unavailable."), { code: "offline" });
     const invalid = Object.assign(new Error("Invalid analyzed review payload."), { code: "invalid_payload" });
     const infrastructure = Object.assign(new Error("The local research state is unavailable."), { code: "infrastructure_failure" });
+    const unavailable = Object.assign(new Error("The database path is unavailable."), { code: "storage_unavailable" });
+    const readonly = Object.assign(new Error("The database is read-only."), { code: "storage_readonly" });
+    const busy = Object.assign(new Error("The database is busy."), { code: "storage_busy" });
     expect(localizedError("zh-CN", offline)).toContain("本地服务");
     expect(localizedError("zh-CN", invalid)).toContain("已拒绝使用");
     expect(localizedError("en", offline)).toBe(
       "The local Research Room is unavailable. Confirm the local service is running, then retry.",
     );
-    expect(localizedError("zh-CN", infrastructure)).toContain(".sestina/state.sqlite");
-    expect(localizedError("en", infrastructure)).toContain(".sestina/state.sqlite");
+    expect(localizedError("zh-CN", infrastructure)).toContain("当前项目的本地研究状态");
+    expect(localizedError("zh-CN", infrastructure)).not.toContain("state.sqlite");
+    expect(localizedError("en", infrastructure)).toContain("current project's local research state");
+    expect(localizedError("en", infrastructure)).not.toContain("state.sqlite");
     expect(localizedError("en", infrastructure)).not.toContain("&#x20;");
+    expect(localizedError("zh-CN", unavailable)).toContain("启动方式");
+    expect(localizedError("zh-CN", unavailable)).toContain(".sestina/state.sqlite");
+    expect(localizedError("zh-CN", readonly)).toContain("写入权限");
+    expect(localizedError("zh-CN", busy)).toContain("其他 Sestina 实例");
   });
 
   it("decodes the local status envelope without widening the session contract", () => {
@@ -151,8 +160,8 @@ describe("Research Room typed API boundary", () => {
       project: { id: "rprj_01ARZ3NDEKTSV4RRFFQ69G5FAV", title: "Research", version: 1, updatedAt: "2026-08-25T00:00:00.000Z" },
       providerStatus: "ledger_only",
       brief: { id: "rbrf_01ARZ3NDEKTSV4RRFFQ69G5FAV", versionId: "rbrf_01ARZ3NDEKTSV4RRFFQ69G5FAW", versionNumber: 1, question: "Question", stage: "revision", task: "Task" },
-      counts: { decisions: 1, issues: 0, evidence: 0, episodes: 0, receipts: 0 },
-      statuses: { decisions: { proposed: 1 }, issues: {}, evidence: {}, episodes: {}, receipts: {} },
+      counts: { decisions: 1, issues: 0, evidence: 0, episodes: 0, receipts: 0, appeals: 0 },
+      statuses: { decisions: { proposed: 1 }, issues: {}, evidence: {}, episodes: {}, receipts: {}, appeals: {} },
       attention: { total: 1, top: [{ id: "rdec_01ARZ3NDEKTSV4RRFFQ69G5FAV", kind: "decision", title: "Decision", reason: "Pending", severity: "high", href: "/project/decisions/rdec_01ARZ3NDEKTSV4RRFFQ69G5FAV", primaryAction: "Open Decision", sourceObject: { kind: "decision", id: "rdec_01ARZ3NDEKTSV4RRFFQ69G5FAV" }, valid: true, createdAt: "2026-08-25T00:00:00.000Z" }] },
       recentChanges: [],
     };

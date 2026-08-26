@@ -11,12 +11,33 @@ export type {
   RollbackResearchRoomReceiptInput,
 } from "./research-room.js";
 export type { ResearchRoomAnalysisPayload, ResearchRoomContextManifest, ResearchRoomReceipt, ResearchRoomSemanticJudgeTrace, ResearchRoomStateBinding } from "@sestina/research";
+export type { AppealComparison, AppealReceipt, AppealResolution, AppealResolutionKind, AppealSourceBinding, AppealStatement, CorrectionAppeal, CorrectionAppealStatus, SecondOpinionAttempt, SecondOpinionManifest, SecondOpinionResult } from "@sestina/research";
+export type {
+  CancelCorrectionAppealSecondOpinionInput,
+  CorrectionAppealAllowedContextSelection,
+  CorrectionAppealCommandInput,
+  CorrectionAppealSecondOpinionProvider,
+  CorrectionAppealSecondOpinionProviderInput,
+  CreateCorrectionAppealInput,
+  PrepareCorrectionAppealSecondOpinionCoreInput,
+  PreparedCorrectionAppealSecondOpinion,
+  ResolveCorrectionAppealInput,
+  RunCorrectionAppealSecondOpinionInput,
+  UpdateCorrectionAppealInput,
+} from "./correction-appeal.js";
+export { createCorrectionAppealProviderEndpointIdentityHash } from "./correction-appeal.js";
 export {
+  compileCorrectionAppealSecondOpinionPrompt,
   compileResearchRoomSemanticJudgePrompt,
   createStableTextSpan,
+  getResearchRoomSemanticCriterionDefinition,
+  prepareCorrectionAppealSecondOpinionRequest,
   prepareResearchRoomSemanticJudge,
+  submitCorrectionAppealSecondOpinion,
 } from "@sestina/review";
 export type {
+  CorrectionAppealSecondOpinionRequest,
+  CorrectionAppealSecondOpinionResponse,
   ResearchRoomSemanticJudgeRequest,
   ResearchRoomSemanticProviderBinding,
 } from "@sestina/review";
@@ -36,6 +57,8 @@ export type {
 export type * from "./commands/index.js";
 export type * from "./queries/index.js";
 export type {
+  AppealDetailProjection,
+  AppealSummaryProjection,
   AttentionItemProjection,
   AttentionProjection,
   BriefWorkspaceProjection,

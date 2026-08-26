@@ -2,7 +2,13 @@ import { createResearchRoomServer } from "./server.js";
 import { createNativeDirectoryPicker } from "./directory-picker.js";
 import { createFileLanguagePreferenceStore, resolveDefaultLanguagePreferencePath } from "./language-preferences.js";
 import { createSecretBackend, type SecretPlatform } from "@sestina/core";
-import { ProviderConfigurationService, createFileProviderConfigStore, resolveDefaultProviderConfigPath } from "./provider-settings.js";
+import {
+  ProviderConfigurationService,
+  SECOND_OPINION_OPENAI_COMPATIBLE_API_KEY_REF,
+  createFileProviderConfigStore,
+  resolveDefaultProviderConfigPath,
+  resolveDefaultSecondOpinionProviderConfigPath,
+} from "./provider-settings.js";
 
 function requestedPort(argv: readonly string[]): number {
   const index = argv.indexOf("--port");
@@ -21,7 +27,19 @@ try {
     createFileProviderConfigStore({ filePath: resolveDefaultProviderConfigPath() }),
     secretBackend,
   );
-  const instance = createResearchRoomServer({ host: "127.0.0.1", port: requestedPort(process.argv.slice(2)), languagePreferenceStore, providerConfigurationService, ...(directoryPicker ? { directoryPicker } : {}) });
+  const secondOpinionProviderConfigurationService = new ProviderConfigurationService(
+    createFileProviderConfigStore({ filePath: resolveDefaultSecondOpinionProviderConfigPath() }),
+    secretBackend,
+    { secretRef: SECOND_OPINION_OPENAI_COMPATIBLE_API_KEY_REF },
+  );
+  const instance = createResearchRoomServer({
+    host: "127.0.0.1",
+    port: requestedPort(process.argv.slice(2)),
+    languagePreferenceStore,
+    providerConfigurationService,
+    secondOpinionProviderConfigurationService,
+    ...(directoryPicker ? { directoryPicker } : {}),
+  });
   const running = await instance.start();
   process.stdout.write(`Sestina Research Room: ${running.origin}\n`);
   let stopping = false;

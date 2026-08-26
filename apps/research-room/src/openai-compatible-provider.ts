@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
 import {
+  compileCorrectionAppealSecondOpinionPrompt,
   compileResearchRoomSemanticJudgePrompt,
+  createCorrectionAppealProviderEndpointIdentityHash,
+  type CorrectionAppealSecondOpinionProvider,
+  type CorrectionAppealSecondOpinionProviderInput,
+  type CorrectionAppealSecondOpinionRequest,
   type ResearchRoomSemanticJudgeRequest,
   type ResearchRoomSemanticProviderBinding,
 } from "@sestina/core";
@@ -65,6 +70,39 @@ export interface CreateOpenAICompatibleProviderOptions {
   readonly fetchImplementation?: typeof fetch;
 }
 
+export interface OpenAICompatibleConnectionTestResult {
+  readonly reachable: true;
+  readonly requestKind: "metadata_only_no_research_context";
+  readonly endpoint: string;
+  readonly providerId: string;
+  readonly model: string;
+  readonly locality: "local" | "external";
+  readonly httpStatus: number;
+}
+
+export async function testOpenAICompatibleProviderConnection(
+  snapshot: ProviderRuntimeSnapshot,
+  options: { readonly fetchImplementation?: typeof fetch } = {},
+): Promise<OpenAICompatibleConnectionTestResult> {
+  const endpoint = `${snapshot.config.baseUrl}/models`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => { controller.abort(); }, snapshot.config.timeoutMs);
+  let response: Response;
+  try {
+    response = await (options.fetchImplementation ?? fetch)(endpoint, {
+      method: "GET",
+      headers: { accept: "application/json", ...(snapshot.apiKey === undefined ? {} : { authorization: `Bearer ${snapshot.apiKey}` }) },
+      redirect: "error",
+      signal: controller.signal,
+    });
+  } catch {
+    throw new OpenAICompatibleProviderError(controller.signal.aborted ? "provider_timeout" : "provider_network_failed");
+  } finally { clearTimeout(timer); }
+  try { await response.body?.cancel(); } catch { /* Metadata test never retains a response body. */ }
+  if (!response.ok) throw new OpenAICompatibleProviderError("provider_http_error");
+  return Object.freeze({ reachable: true, requestKind: "metadata_only_no_research_context", endpoint, providerId: snapshot.config.providerId, model: snapshot.config.model, locality: snapshot.config.locality, httpStatus: response.status });
+}
+
 function sha256(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
@@ -90,9 +128,39 @@ function compileBody(snapshot: ProviderRuntimeSnapshot, request: ResearchRoomSem
   });
 }
 
+function compileSecondOpinionBody(snapshot: ProviderRuntimeSnapshot, request: CorrectionAppealSecondOpinionRequest): string {
+  const compiled = compileCorrectionAppealSecondOpinionPrompt(request);
+  if (!compiled.ok) throw new OpenAICompatibleProviderError("provider_invalid_request");
+  return JSON.stringify({
+    model: snapshot.config.model,
+    messages: compiled.value.messages,
+    temperature: 0,
+    stream: false,
+    response_format: { type: "json_object" },
+    ...(snapshot.config.maxOutputTokens === undefined ? {} : { max_tokens: snapshot.config.maxOutputTokens }),
+  });
+}
+
 function previewFor(snapshot: ProviderRuntimeSnapshot, binding: ResearchRoomSemanticProviderBinding, request: ResearchRoomSemanticJudgeRequest): OpenAICompatibleCallPreview {
   if (!sameBinding(request.provider, binding)) throw new OpenAICompatibleProviderError("provider_invalid_request");
   const requestBody = compileBody(snapshot, request);
+  return Object.freeze({
+    schemaVersion: "1.0.0",
+    endpoint: `${snapshot.config.baseUrl}/chat/completions`,
+    provider: binding,
+    requestHash: request.requestHash,
+    requestBody,
+    requestBodyHash: sha256(requestBody),
+    requestBodyBytes: Buffer.byteLength(requestBody, "utf8"),
+    responseLimitBytes: request.limits.maxResponseBytes,
+    redirectPolicy: "error",
+    retryCount: 0,
+  });
+}
+
+function secondOpinionPreviewFor(snapshot: ProviderRuntimeSnapshot, binding: ResearchRoomSemanticProviderBinding, request: CorrectionAppealSecondOpinionRequest): CorrectionAppealSecondOpinionProviderInput {
+  if (!sameBinding(request.provider, binding)) throw new OpenAICompatibleProviderError("provider_invalid_request");
+  const requestBody = compileSecondOpinionBody(snapshot, request);
   return Object.freeze({
     schemaVersion: "1.0.0",
     endpoint: `${snapshot.config.baseUrl}/chat/completions`,
@@ -184,6 +252,86 @@ export function createOpenAICompatibleProvider(
       { signal }: { readonly signal: AbortSignal },
     ): Promise<string> {
       const expected = previewFor(snapshot, binding, request);
+      if (!validPreview(preview, expected)) throw new OpenAICompatibleProviderError("provider_invalid_request");
+      if (await options.readCurrentGeneration() !== snapshot.config.generation) throw new OpenAICompatibleProviderError("provider_configuration_changed");
+      if (signal.aborted) throw new OpenAICompatibleProviderError("provider_aborted");
+
+      const controller = new AbortController();
+      const abortState = { timedOut: false, callerAborted: false };
+      const propagateAbort = () => { abortState.callerAborted = true; controller.abort(); };
+      signal.addEventListener("abort", propagateAbort, { once: true });
+      const timer = setTimeout(() => { abortState.timedOut = true; controller.abort(); }, snapshot.config.timeoutMs);
+      let response: Response;
+      try {
+        response = await fetchImplementation(expected.endpoint, {
+          method: "POST",
+          headers: {
+            accept: "application/json",
+            "content-type": "application/json",
+            ...(snapshot.apiKey === undefined ? {} : { authorization: `Bearer ${snapshot.apiKey}` }),
+          },
+          body: expected.requestBody,
+          redirect: "error",
+          signal: controller.signal,
+        });
+      } catch {
+        if (abortState.timedOut) throw new OpenAICompatibleProviderError("provider_timeout");
+        if (abortState.callerAborted) throw new OpenAICompatibleProviderError("provider_aborted");
+        throw new OpenAICompatibleProviderError("provider_network_failed");
+      } finally {
+        clearTimeout(timer);
+        signal.removeEventListener("abort", propagateAbort);
+      }
+      if (!response.ok) throw new OpenAICompatibleProviderError("provider_http_error");
+      const mediaType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
+      if (mediaType !== "application/json") throw new OpenAICompatibleProviderError("provider_invalid_response");
+      let raw: string;
+      try { raw = await readBoundedBody(response, expected.responseLimitBytes); }
+      catch (error) {
+        if (error instanceof OpenAICompatibleProviderError) throw error;
+        throw new OpenAICompatibleProviderError("provider_invalid_response");
+      }
+      let envelope: unknown;
+      try { envelope = JSON.parse(raw); }
+      catch { throw new OpenAICompatibleProviderError("provider_invalid_response"); }
+      const content = extractAssistantContent(envelope);
+      if (content === undefined || Buffer.byteLength(content, "utf8") > expected.responseLimitBytes) throw new OpenAICompatibleProviderError("provider_invalid_response");
+      return content;
+    },
+  });
+}
+
+export function createOpenAICompatibleSecondOpinionProvider(
+  snapshot: ProviderRuntimeSnapshot,
+  options: CreateOpenAICompatibleProviderOptions,
+): CorrectionAppealSecondOpinionProvider {
+  const binding: ResearchRoomSemanticProviderBinding = Object.freeze({
+    id: snapshot.config.providerId,
+    family: "openai_compatible",
+    model: snapshot.config.model,
+    baseUrlOrigin: new URL(snapshot.config.baseUrl).origin,
+    locality: snapshot.config.locality,
+    configGeneration: snapshot.config.generation,
+  });
+  const endpointIdentityHash = createCorrectionAppealProviderEndpointIdentityHash(binding);
+  if (endpointIdentityHash === undefined) throw new OpenAICompatibleProviderError("provider_invalid_request");
+  const fetchImplementation = options.fetchImplementation ?? fetch;
+  return Object.freeze({
+    id: snapshot.config.providerId,
+    connectionId: snapshot.config.providerId,
+    kind: snapshot.config.locality,
+    networkAccess: snapshot.config.locality === "external" ? "external" as const : "loopback" as const,
+    endpointIdentityHash,
+    binding,
+    prepare(request: CorrectionAppealSecondOpinionRequest): CorrectionAppealSecondOpinionProviderInput {
+      return secondOpinionPreviewFor(snapshot, binding, request);
+    },
+    async analyze(
+      request: CorrectionAppealSecondOpinionRequest,
+      preview: CorrectionAppealSecondOpinionProviderInput,
+      { signal }: { readonly signal: AbortSignal },
+    ): Promise<string> {
+      const expected = secondOpinionPreviewFor(snapshot, binding, request);
       if (!validPreview(preview, expected)) throw new OpenAICompatibleProviderError("provider_invalid_request");
       if (await options.readCurrentGeneration() !== snapshot.config.generation) throw new OpenAICompatibleProviderError("provider_configuration_changed");
       if (signal.aborted) throw new OpenAICompatibleProviderError("provider_aborted");

@@ -130,8 +130,23 @@ import {
   type RollbackResearchRoomReceiptInput,
 } from "./research-room.js";
 import type { ResearchRoomReceipt } from "@sestina/research";
+import type { CorrectionAppeal } from "@sestina/research";
+import {
+  CorrectionAppealService,
+  type CancelCorrectionAppealSecondOpinionInput,
+  type CorrectionAppealCommandInput,
+  type CorrectionAppealSecondOpinionProvider,
+  type CreateCorrectionAppealInput,
+  type PrepareCorrectionAppealSecondOpinionCoreInput,
+  type PreparedCorrectionAppealSecondOpinion,
+  type ResolveCorrectionAppealInput,
+  type RunCorrectionAppealSecondOpinionInput,
+  type UpdateCorrectionAppealInput,
+} from "./correction-appeal.js";
 import {
   ResearchObjectWorkspaceService,
+  type AppealDetailProjection,
+  type AppealSummaryProjection,
   type AttentionProjection,
   type BriefWorkspaceProjection,
   type DecisionDetailProjection,
@@ -166,6 +181,8 @@ export interface OpenSestinaOptions {
   readonly idFactory?: IdFactory;
   readonly researchRoomProvider?: ResearchRoomProvider;
   readonly researchRoomProviderTimeoutMs?: number;
+  readonly correctionAppealSecondOpinionProvider?: CorrectionAppealSecondOpinionProvider;
+  readonly correctionAppealSecondOpinionProviderTimeoutMs?: number;
 }
 
 export interface DeterministicReviewResult {
@@ -321,9 +338,10 @@ export class SestinaCore {
   readonly #idFactory: IdFactory;
   readonly #unitOfWork: CoreUnitOfWork;
   readonly #researchRoom: ResearchRoomService;
+  readonly #correctionAppeals: CorrectionAppealService;
   readonly #researchObjects: ResearchObjectWorkspaceService;
 
-  constructor(database: StorageDatabase, clock: Clock, idFactory: IdFactory, researchRoomProvider?: ResearchRoomProvider, researchRoomProviderTimeoutMs = 15_000) {
+  constructor(database: StorageDatabase, clock: Clock, idFactory: IdFactory, researchRoomProvider?: ResearchRoomProvider, researchRoomProviderTimeoutMs = 15_000, correctionAppealSecondOpinionProvider?: CorrectionAppealSecondOpinionProvider, correctionAppealSecondOpinionProviderTimeoutMs = 15_000) {
     this.#database = database;
     this.#store = createResearchStore(database);
     this.#reviews = createSqliteReviewRunRepository(database);
@@ -331,6 +349,7 @@ export class SestinaCore {
     this.#idFactory = idFactory;
     this.#unitOfWork = new CoreUnitOfWork(database);
     this.#researchRoom = new ResearchRoomService(this.#store, clock, idFactory, researchRoomProvider, researchRoomProviderTimeoutMs);
+    this.#correctionAppeals = new CorrectionAppealService(this.#store, clock, idFactory, (projectId) => this.#researchRoom.getState(projectId), correctionAppealSecondOpinionProvider, correctionAppealSecondOpinionProviderTimeoutMs);
     this.#researchObjects = new ResearchObjectWorkspaceService(this.#store);
   }
 
@@ -974,6 +993,17 @@ export class SestinaCore {
   listResearchRoomReceipts(projectId: string): CoreResult<readonly ResearchRoomReceipt[]> { return this.#researchRoom.listReceipts(projectId); }
   rollbackResearchRoomReceipt(input: RollbackResearchRoomReceiptInput): CoreResult<ResearchRoomReceipt> { return this.#researchRoom.rollback(input); }
 
+  createCorrectionAppeal(input: CreateCorrectionAppealInput): CoreResult<CorrectionAppeal> { return this.#correctionAppeals.create(input); }
+  updateCorrectionAppeal(input: UpdateCorrectionAppealInput): CoreResult<CorrectionAppeal> { return this.#correctionAppeals.update(input); }
+  recordCorrectionAppeal(input: CorrectionAppealCommandInput): CoreResult<CorrectionAppeal> { return this.#correctionAppeals.record(input); }
+  markCorrectionAppealRecordOnly(input: CorrectionAppealCommandInput): CoreResult<CorrectionAppeal> { return this.#correctionAppeals.markRecordOnly(input); }
+  prepareCorrectionAppealSecondOpinion(input: PrepareCorrectionAppealSecondOpinionCoreInput): CoreResult<PreparedCorrectionAppealSecondOpinion> { return this.#correctionAppeals.prepare(input); }
+  runCorrectionAppealSecondOpinion(input: RunCorrectionAppealSecondOpinionInput): Promise<CoreResult<CorrectionAppeal>> { return this.#correctionAppeals.run(input); }
+  cancelCorrectionAppealSecondOpinion(input: CancelCorrectionAppealSecondOpinionInput): CoreResult<CorrectionAppeal> { return this.#correctionAppeals.cancel(input); }
+  resolveCorrectionAppeal(input: ResolveCorrectionAppealInput): CoreResult<CorrectionAppeal> { return this.#correctionAppeals.resolve(input); }
+  listCorrectionAppeals(projectId: string): CoreResult<readonly CorrectionAppeal[]> { return this.#correctionAppeals.list(projectId); }
+  getCorrectionAppeal(projectId: string, appealId: string): CoreResult<CorrectionAppeal | undefined> { return this.#correctionAppeals.get(projectId, appealId); }
+
   getProjectOverviewProjection(projectId: string, input: { readonly providerStatus: WorkspaceProviderStatus }): CoreResult<ProjectOverviewProjection> { return this.#researchObjects.getOverview(projectId, input, this.#researchRoom.getAttentionSignals(projectId)); }
   getBriefWorkspaceProjection(projectId: string, historyLimit?: number): CoreResult<BriefWorkspaceProjection> { return this.#researchObjects.getBriefWorkspace(projectId, historyLimit); }
   listDecisionProjections(projectId: string, request: WorkspaceListRequest): CoreResult<WorkspacePage<DecisionSummaryProjection>> { return this.#researchObjects.listDecisions(projectId, request); }
@@ -986,6 +1016,8 @@ export class SestinaCore {
   getEpisodeProjection(projectId: string, episodeId: string): CoreResult<EpisodeDetailProjection | undefined> { return this.#researchObjects.getEpisode(projectId, episodeId); }
   listReceiptProjections(projectId: string, request: WorkspaceListRequest): CoreResult<WorkspacePage<ReceiptSummaryProjection>> { return this.#researchObjects.listReceipts(projectId, request); }
   getReceiptProjection(projectId: string, receiptId: string): CoreResult<ReceiptDetailProjection | undefined> { return this.#researchObjects.getReceipt(projectId, receiptId); }
+  listAppealProjections(projectId: string, request: WorkspaceListRequest): CoreResult<WorkspacePage<AppealSummaryProjection>> { return this.#researchObjects.listAppeals(projectId, request); }
+  getAppealProjection(projectId: string, appealId: string): CoreResult<AppealDetailProjection | undefined> { return this.#researchObjects.getAppeal(projectId, appealId); }
   getAttentionProjection(projectId: string): CoreResult<AttentionProjection> { return this.#researchObjects.getAttention(projectId, this.#researchRoom.getAttentionSignals(projectId)); }
   searchResearchObjects(projectId: string, input: { readonly query: string; readonly limit: number; readonly cursor?: string }): CoreResult<ResearchObjectSearchProjection> { return this.#researchObjects.search(projectId, input); }
 
@@ -1045,13 +1077,14 @@ export async function openSestina(options: OpenSestinaOptions): Promise<CoreResu
   if (typeof options.databasePath !== "string" || options.databasePath.trim().length === 0) return coreErr("invalid_input");
   if (options.immutable === true && options.readOnly !== true) return coreErr("invalid_input");
   if (options.researchRoomProviderTimeoutMs !== undefined && (!Number.isSafeInteger(options.researchRoomProviderTimeoutMs) || options.researchRoomProviderTimeoutMs < 10 || options.researchRoomProviderTimeoutMs > 120_000)) return coreErr("invalid_input");
+  if (options.correctionAppealSecondOpinionProviderTimeoutMs !== undefined && (!Number.isSafeInteger(options.correctionAppealSecondOpinionProviderTimeoutMs) || options.correctionAppealSecondOpinionProviderTimeoutMs < 10 || options.correctionAppealSecondOpinionProviderTimeoutMs > 120_000)) return coreErr("invalid_input");
   try {
     const database = await openDatabase({
       path: options.databasePath,
       readOnly: options.readOnly,
       immutable: options.immutable,
     });
-    return coreOk(new SestinaCore(database, options.clock ?? new SystemClock(), options.idFactory ?? new RandomIdFactory(), options.researchRoomProvider, options.researchRoomProviderTimeoutMs));
+    return coreOk(new SestinaCore(database, options.clock ?? new SystemClock(), options.idFactory ?? new RandomIdFactory(), options.researchRoomProvider, options.researchRoomProviderTimeoutMs, options.correctionAppealSecondOpinionProvider, options.correctionAppealSecondOpinionProviderTimeoutMs));
   } catch (error) {
     return { ok: false, error: mapDomainError(typeof error === "object" && error !== null ? error : {}) };
   }

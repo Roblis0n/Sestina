@@ -32,6 +32,8 @@ export function StartCenter({ language, directoryPickerAvailable, busy, onPrevie
   const [path, setPath] = useState("");
   const [pickerPending, setPickerPending] = useState(false);
   const chooseButtonRef = useRef<HTMLButtonElement>(null);
+  const languageRef = useRef(language);
+  languageRef.current = language;
 
   async function chooseFolder() {
     setPickerPending(true);
@@ -39,7 +41,7 @@ export function StartCenter({ language, directoryPickerAvailable, busy, onPrevie
     try {
       const preview = await onPreviewNative();
       if (!preview.selected) {
-        onNotice(t(language, "initialization_cancelled"), "ready");
+        onNotice(t(languageRef.current, "initialization_cancelled"), "ready");
         return;
       }
       if (preview.initializationRequired) {
@@ -48,8 +50,8 @@ export function StartCenter({ language, directoryPickerAvailable, busy, onPrevie
       }
       onOpened(preview);
     } catch (error) {
-      if (error instanceof ResearchRoomApiError && ["request_cancelled", "directory_picker_cancelled"].includes(error.code)) onNotice(t(language, "initialization_cancelled"), "ready");
-      else onNotice(localizedError(language, error), "danger");
+      if (error instanceof ResearchRoomApiError && ["request_cancelled", "directory_picker_cancelled"].includes(error.code)) onNotice(t(languageRef.current, "initialization_cancelled"), "ready");
+      else onNotice(localizedError(languageRef.current, error), "danger");
     } finally {
       setPickerPending(false);
     }
@@ -58,7 +60,7 @@ export function StartCenter({ language, directoryPickerAvailable, busy, onPrevie
   async function cancelFolderPicker() {
     onNotice(t(language, "picker_cancel_requested"), "warning");
     try { await onCancelNative(); }
-    catch (error) { onNotice(localizedError(language, error), "danger"); }
+    catch (error) { onNotice(localizedError(languageRef.current, error), "danger"); }
   }
 
   async function submitManual(event: SyntheticEvent<HTMLFormElement>) {
@@ -73,7 +75,7 @@ export function StartCenter({ language, directoryPickerAvailable, busy, onPrevie
         setPending({ source: "manual", title: pieces.at(-1) ?? cleanPath, creates: CREATES, projectPath: cleanPath });
         return;
       }
-      onNotice(localizedError(language, error), "danger");
+      onNotice(localizedError(languageRef.current, error), "danger");
     }
   }
 
@@ -88,7 +90,7 @@ export function StartCenter({ language, directoryPickerAvailable, busy, onPrevie
       onOpened(opened);
     } catch (error) {
       setPending(undefined);
-      onNotice(localizedError(language, error), "danger");
+      onNotice(localizedError(languageRef.current, error), "danger");
     }
   }
 

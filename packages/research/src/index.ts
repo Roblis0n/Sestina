@@ -275,6 +275,46 @@ export type {
   ResearchRoomStateBinding,
 } from "./room/research-room.js";
 
+export {
+  APPEAL_RESOLUTION_KINDS,
+  CORRECTION_APPEAL_STATUSES,
+  SECOND_OPINION_FAILURES,
+  cancelCorrectionAppealSecondOpinion,
+  completeCorrectionAppealSecondOpinion,
+  createCorrectionAppeal,
+  deriveAppealComparison,
+  failCorrectionAppealSecondOpinion,
+  markCorrectionAppealRecordOnly,
+  markCorrectionAppealStale,
+  parseAppealSourceBinding,
+  parseCorrectionAppeal,
+  parseSecondOpinionResult,
+  prepareCorrectionAppealSecondOpinion,
+  recordCorrectionAppeal,
+  resolveCorrectionAppeal,
+  startCorrectionAppealSecondOpinion,
+  updateCorrectionAppealStatement,
+} from "./appeal/correction-appeal.js";
+export type {
+  AppealComparison,
+  AppealIndependenceBasis,
+  AppealReceipt,
+  AppealResolution,
+  AppealResolutionKind,
+  AppealSourceBinding,
+  AppealStatement,
+  AppealStatementVersion,
+  AppealTransition,
+  CorrectionAppeal,
+  CorrectionAppealStatus,
+  SecondOpinionAttempt,
+  SecondOpinionEvidenceSpan,
+  SecondOpinionFailure,
+  SecondOpinionManifest,
+  SecondOpinionParticipantSnapshot,
+  SecondOpinionResult,
+} from "./appeal/correction-appeal.js";
+
 export { CLAIM_KINDS, parseArgumentClaim, parseClaim } from "./argument/claim.js";
 export type { ArgumentClaim, Claim, ClaimKind } from "./argument/claim.js";
 export { parseMechanismLink } from "./argument/mechanism-link.js";
@@ -312,6 +352,7 @@ export type {
   MechanismEvidenceLinkRepository,
   ArgumentGraphRepositories,
   ResearchRoomReceiptRepository,
+  CorrectionAppealRepository,
   ResearchRepositories,
   ResearchUnitOfWork,
 } from "./ports/repositories.js";

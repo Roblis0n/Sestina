@@ -97,6 +97,12 @@ describe("openDatabase security pragmas (docs/17 §3.1)", () => {
     });
   });
 
+  it("reports an unreachable database path as database_unavailable", async () => {
+    await expect(openDatabase({ path: join(dir, "missing-parent", "state.sqlite") })).rejects.toSatisfy((err: unknown) => {
+      return isSestinaError(err) && err.code === SestinaErrorCode.database_unavailable;
+    });
+  });
+
   it("supports multiple connections to the same WAL database", async () => {
     const path = join(dir, "sestina.db");
     const a = await openDatabase({ path });

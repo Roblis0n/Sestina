@@ -5,6 +5,7 @@ import { dirname, join, posix, win32 } from "node:path";
 import type { SecretBackend, SecretBackendStatus } from "@sestina/core";
 
 export const OPENAI_COMPATIBLE_API_KEY_REF = "sestina/research-room/openai-compatible/api-key";
+export const SECOND_OPINION_OPENAI_COMPATIBLE_API_KEY_REF = "sestina/research-room/second-opinion/openai-compatible/api-key";
 
 export type ProviderSettingsErrorCode =
   | "invalid_provider_config"
@@ -194,6 +195,14 @@ export function resolveDefaultProviderConfigPath(options: DefaultProviderConfigP
   return posix.join(config, "sestina", "provider.json");
 }
 
+export function resolveDefaultSecondOpinionProviderConfigPath(options: DefaultProviderConfigPathOptions = {}): string {
+  const primary = resolveDefaultProviderConfigPath(options);
+  const platform = options.platform ?? process.platform;
+  return platform === "win32"
+    ? win32.join(win32.dirname(primary), "second-opinion-provider.json")
+    : posix.join(posix.dirname(primary), "second-opinion-provider.json");
+}
+
 export function createFileProviderConfigStore(options: FileProviderConfigStoreOptions): ProviderConfigStore {
   const filePath = options.filePath;
   let writes = Promise.resolve();
@@ -239,10 +248,15 @@ function safeHealth(status: SecretBackendStatus): SecretBackendStatus {
 }
 
 export class ProviderConfigurationService {
+  readonly #secretRef: string;
+
   constructor(
     private readonly store: ProviderConfigStore,
     private readonly secrets: SecretBackend,
-  ) {}
+    options: { readonly secretRef?: string } = {},
+  ) {
+    this.#secretRef = options.secretRef ?? OPENAI_COMPATIBLE_API_KEY_REF;
+  }
 
   async status(): Promise<ProviderConfigurationStatus> {
     const config = await this.store.read();
@@ -251,7 +265,7 @@ export class ProviderConfigurationService {
     try {
       [secureStorage, { configured: secretConfigured }] = await Promise.all([
         this.secrets.health(),
-        this.secrets.describe(OPENAI_COMPATIBLE_API_KEY_REF),
+        this.secrets.describe(this.#secretRef),
       ]);
     } catch {
       secureStorage = { available: false, backend: "none", reason: "Secure storage is unavailable." };
@@ -276,7 +290,7 @@ export class ProviderConfigurationService {
     const apiKey = input.apiKey === undefined ? undefined : cleanText(input.apiKey, 8_192);
     if (input.apiKey !== undefined && apiKey === undefined) throw new ProviderSettingsError("invalid_provider_config", "The API key is invalid.");
     let secretConfigured = false;
-    try { secretConfigured = (await this.secrets.describe(OPENAI_COMPATIBLE_API_KEY_REF)).configured; }
+    try { secretConfigured = (await this.secrets.describe(this.#secretRef)).configured; }
     catch { /* handled below */ }
     if (validated.locality === "external" && apiKey === undefined && !secretConfigured) throw new ProviderSettingsError("provider_key_required", "External HTTPS Providers require a securely stored API key.");
     if (apiKey !== undefined) {
@@ -284,7 +298,7 @@ export class ProviderConfigurationService {
       try { health = await this.secrets.health(); }
       catch { health = { available: false, backend: "none" }; }
       if (!health.available) throw new ProviderSettingsError("secure_storage_unavailable", "Secure storage is unavailable; the API key was not saved.");
-      try { await this.secrets.set(OPENAI_COMPATIBLE_API_KEY_REF, apiKey); }
+      try { await this.secrets.set(this.#secretRef, apiKey); }
       catch { throw new ProviderSettingsError("secure_storage_unavailable", "Secure storage is unavailable; the API key was not saved."); }
     }
     const config: OpenAICompatibleProviderConfig = Object.freeze({
@@ -307,7 +321,7 @@ export class ProviderConfigurationService {
   }
 
   async deleteSecret(): Promise<void> {
-    try { await this.secrets.delete(OPENAI_COMPATIBLE_API_KEY_REF); }
+    try { await this.secrets.delete(this.#secretRef); }
     catch { throw new ProviderSettingsError("secure_storage_unavailable", "Secure storage is unavailable; the API key was not deleted."); }
   }
 
@@ -315,7 +329,7 @@ export class ProviderConfigurationService {
     const config = await this.store.read();
     if (config === undefined) return undefined;
     let apiKey: string | undefined;
-    try { apiKey = await this.secrets.get(OPENAI_COMPATIBLE_API_KEY_REF); }
+    try { apiKey = await this.secrets.get(this.#secretRef); }
     catch { throw new ProviderSettingsError("secure_storage_unavailable", "Secure storage is unavailable; Provider use is blocked."); }
     if (config.locality === "external" && apiKey === undefined) throw new ProviderSettingsError("provider_key_required", "The external Provider key is missing; Provider use is blocked.");
     return Object.freeze({ config, ...(apiKey === undefined ? {} : { apiKey }) });

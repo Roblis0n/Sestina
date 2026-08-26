@@ -18,11 +18,12 @@ question and current task. No first-render, picker-preview, or cancelled action
 writes to the selected directory.
 
 The Windows adapter uses the lightweight Shell folder browser rooted at This PC
-instead of loading WinForms. Its child process runs at below-normal priority
-when the host permits it. While the window is open, Start Center exposes an
-explicit cancel action that aborts both the browser request and the local picker
-process; cancellation is a normal zero-write outcome and manual mode remains
-available immediately.
+instead of loading WinForms. The picker process keeps normal interactive
+priority, while the App tracks picker progress separately from its global busy
+state. While the window is open, Start Center keeps language, appearance,
+manual-path fallback, and an explicit cancel action responsive. Cancellation
+aborts both the browser request and the local picker process and remains a
+normal zero-write outcome.
 
 The top-right Provider settings dialog supports exactly one
 `openai_compatible` family. Enter a Base URL, model, and API key for external
@@ -90,9 +91,10 @@ exposes manual mode immediately.
 
 If an existing project's local state cannot be read or updated, the bilingual
 recovery message names `.sestina/state.sqlite`, confirms that existing files
-were preserved, and asks the owner to close another Sestina instance, confirm
-the folder is writable, and reopen it. Stable copy is rendered directly; HTML
-entities such as `&#x20;` are rejected by regression tests.
+were preserved, and distinguishes unavailable, read-only, busy/locked, corrupt,
+and generic storage failures. Each case presents one primary recovery action
+instead of blaming every failure on another App instance. Stable copy is
+rendered directly; HTML entities such as `&#x20;` are rejected by regression tests.
 
 The shipped UI is a desktop `Thread + Inspector` research workstation with a
 Start Center, project/Review Room navigation, a central review workflow, a
@@ -135,6 +137,30 @@ signals remain in the current App session and cannot accept, resolve, waive,
 freeze, supersede, or otherwise change research authority. The complete
 contract is documented in
 `docs/architecture/02-RESEARCH-OBJECT-WORKSPACES.md`.
+
+## Correction appeals and one second opinion
+
+An eligible committed Semantic Finding can open the Appeal workspace. The owner
+versions and records a public appeal statement while the original Finding,
+source, criterion, rubric, and input bindings remain immutable. With no second
+Provider, the complete `appeal_record_only` path still supports reload, Search,
+Attention, Receipt/Trace, and a user resolution.
+
+The separate **Second-opinion Provider** dialog has its own configuration,
+secret reference, generation, runtime identity, and metadata-only `/models`
+connection test. It is never silently substituted for the original Judge and a
+same-runtime identity cannot be labelled independent. Before one assessment is
+sent, the owner selects the allowed Context, inspects included/excluded fields,
+source/config/state hashes, request size, limits, privacy and independence, and
+confirms that exact Manifest. Changed state invalidates confirmation.
+
+The response is strict per-criterion data, not free-form authority. Core rejects
+wrong source/request hashes, extra keys, invalid spans, stale or late responses,
+and deterministically compares only normalized values. Provider output never
+resolves an appeal. Only a direct owner command can uphold, overturn, reinterpret,
+defer, or preserve disagreement, with a public reason and append-only Receipt.
+The complete contract is documented in
+`docs/architecture/03-CORRECTION-APPEALS-AND-SECOND-OPINION.md`.
 
 The development-only Semantic Judge benchmark and its reproducible
 export/run/import/evaluate workflow are documented at

@@ -403,6 +403,28 @@ function criterionFrom(rubric: StructuredSemanticRubric): ResearchRoomSemanticJu
   });
 }
 
+export interface ResearchRoomSemanticRubricSnapshot {
+  readonly version: typeof RESEARCH_ROOM_SEMANTIC_JUDGE_RUBRIC_VERSION;
+  readonly hash: string;
+  readonly criteria: readonly ResearchRoomSemanticJudgeCriterion[];
+}
+
+export function getResearchRoomSemanticRubricSnapshot(): ResearchRoomSemanticRubricSnapshot {
+  const criteria = RUBRICS.map(criterionFrom);
+  const rubricHash = hash({ version: RESEARCH_ROOM_SEMANTIC_JUDGE_RUBRIC_VERSION, criteria });
+  if (rubricHash === undefined) throw new Error("research_room_semantic_rubric_hash_failed");
+  return cloneReviewValue({ version: RESEARCH_ROOM_SEMANTIC_JUDGE_RUBRIC_VERSION, hash: rubricHash, criteria });
+}
+
+export function getResearchRoomSemanticCriterionDefinition(id: string): { readonly id: ResearchRoomSemanticCriterionId; readonly version: string; readonly definition: string; readonly hash: string; readonly sourceRubricHash: string } | undefined {
+  const snapshot = getResearchRoomSemanticRubricSnapshot();
+  const criterion = snapshot.criteria.find((item) => item.id === id);
+  if (criterion === undefined) return undefined;
+  const definition = JSON.stringify(criterion);
+  const criterionHash = hash({ id: criterion.id, definition, version: snapshot.version });
+  return criterionHash === undefined ? undefined : cloneReviewValue({ id: criterion.id, version: snapshot.version, definition, hash: criterionHash, sourceRubricHash: snapshot.hash });
+}
+
 function validPrepareInput(input: PrepareResearchRoomSemanticJudgeInput): boolean {
   if (!record(input) || !validProvider(input.provider) || !sha(input.stateBindingHash)) return false;
   if (!parseResearchIdFor(input.reviewId, "rrvw_").ok || !parseResearchIdFor(input.projectId, "rprj_").ok) return false;

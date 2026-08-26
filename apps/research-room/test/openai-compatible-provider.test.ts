@@ -3,19 +3,24 @@ import { createServer, type RequestListener, type Server } from "node:http";
 import { once } from "node:events";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  getResearchRoomSemanticCriterionDefinition,
+  prepareCorrectionAppealSecondOpinionRequest,
   prepareResearchRoomSemanticJudge,
+  type CorrectionAppealSecondOpinionRequest,
   type ResearchRoomSemanticJudgeRequest,
 } from "@sestina/core";
 import {
   OpenAICompatibleProviderError,
   createOpenAICompatibleProvider,
+  createOpenAICompatibleSecondOpinionProvider,
+  testOpenAICompatibleProviderConnection,
 } from "../src/openai-compatible-provider.js";
 import type { OpenAICompatibleProviderConfig, ProviderRuntimeSnapshot } from "../src/provider-settings.js";
 
 const CROCKFORD_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 let idCounter = 8_100;
 
-function testId(prefix: "rprj_" | "rrvw_" | "rbrf_" | "rart_" | "rrev_"): string {
+function testId(prefix: "rprj_" | "rrvw_" | "rbrf_" | "rart_" | "rrev_" | "rapl_" | "rsop_" | "rfnd_"): string {
   idCounter += 1;
   let remaining = idCounter;
   let encoded = "";
@@ -24,6 +29,28 @@ function testId(prefix: "rprj_" | "rrvw_" | "rbrf_" | "rart_" | "rrev_"): string
     remaining = Math.floor(remaining / 32);
   }
   return prefix + encoded.padStart(26, "0");
+}
+
+function appealRequest(provider: ResearchRoomSemanticJudgeRequest["provider"]): CorrectionAppealSecondOpinionRequest {
+  const projectId = testId("rprj_");
+  const criterion = getResearchRoomSemanticCriterionDefinition("argument-leap");
+  if (criterion === undefined) throw new Error("criterion missing");
+  const result = prepareCorrectionAppealSecondOpinionRequest({
+    appealId: testId("rapl_"),
+    attemptId: testId("rsop_"),
+    projectId,
+    reviewId: testId("rrvw_"),
+    findingId: testId("rfnd_"),
+    findingHash: "a".repeat(64),
+    stateBindingHash: "b".repeat(64),
+    provider,
+    criterion: { id: criterion.id, definition: criterion.definition, version: criterion.version, hash: criterion.hash },
+    userQuestion: "Does the frozen sentence contain an unsupported argument leap?",
+    frozenInput: { projectId, artifactId: testId("rart_"), revisionId: testId("rrev_"), text: "The observational estimate does not establish causality." },
+    allowedContext: [],
+  });
+  if (!result.ok) throw new Error(result.error.code);
+  return result.value;
 }
 const servers: Server[] = [];
 
@@ -73,6 +100,42 @@ afterEach(async () => {
 });
 
 describe("one-shot OpenAI-compatible Semantic Judge adapter", () => {
+  it("tests only the metadata endpoint and sends no research context", async () => {
+    const received: { method?: string; url?: string; body: string } = { body: "" };
+    const { origin } = await localServer((incoming, response) => {
+      received.method = incoming.method;
+      received.url = incoming.url;
+      incoming.on("data", (chunk: Buffer) => { received.body += chunk.toString("utf8"); });
+      incoming.on("end", () => { response.writeHead(200, { "content-type": "application/json" }); response.end("{\"data\":[]}"); });
+    });
+    const result = await testOpenAICompatibleProviderConnection(snapshot(`${origin}/v1`));
+    expect(result).toMatchObject({ reachable: true, requestKind: "metadata_only_no_research_context", endpoint: `${origin}/v1/models`, httpStatus: 200 });
+    expect(received).toEqual({ method: "GET", url: "/v1/models", body: "" });
+  });
+
+  it("uses a separately identifiable connection for one strict second-opinion request", async () => {
+    let receivedBody = "";
+    const { origin } = await localServer((incoming, response) => {
+      const chunks: Buffer[] = [];
+      incoming.on("data", (chunk: Buffer) => chunks.push(chunk));
+      incoming.on("end", () => {
+        receivedBody = Buffer.concat(chunks).toString("utf8");
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify({ choices: [{ message: { role: "assistant", content: "{\"assessment\":\"uncertain\"}" } }] }));
+      });
+    });
+    const provider = createOpenAICompatibleSecondOpinionProvider(snapshot(`${origin}/v1`, { providerId: "independent-judge", model: "independent-model" }), { readCurrentGeneration: () => Promise.resolve(4) });
+    expect(provider.connectionId).toBe("independent-judge");
+    expect(provider.endpointIdentityHash).toMatch(/^[0-9a-f]{64}$/u);
+    const request = appealRequest(provider.binding);
+    const preview = provider.prepare(request);
+    expect(preview.requestHash).toBe(request.requestHash);
+    expect(preview.requestBody).not.toContain("The original finding was definitely correct");
+    expect(JSON.stringify(preview)).not.toContain("apiKey");
+    await expect(provider.analyze(request, preview, { signal: new AbortController().signal })).resolves.toBe("{\"assessment\":\"uncertain\"}");
+    expect(receivedBody).toBe(preview.requestBody);
+  });
+
   it("previews and sends one exact, hash-bound request without putting the API key in visible data", async () => {
     const received: { headers?: Record<string, string | string[] | undefined>; body?: string; count: number } = { count: 0 };
     const { origin } = await localServer((incoming, response) => {
