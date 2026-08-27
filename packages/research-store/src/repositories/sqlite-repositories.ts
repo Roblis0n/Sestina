@@ -8,7 +8,9 @@ import {
   parseResearchArtifact,
   parseResearchBrief,
   parseCorrectionAppeal,
+  parseDeliberationRoom,
   parseResearchDecision,
+  parseResearchId,
   parseResearchIdFor,
   parseResearchIssue,
   parseResearchPageRequest,
@@ -23,6 +25,7 @@ import {
   type ResearchArtifact,
   type ResearchBrief,
   type CorrectionAppeal,
+  type DeliberationRoom,
   type ResearchDecision,
   type ResearchIdPrefix,
   type ResearchIssue,
@@ -1093,5 +1096,82 @@ export function createResearchRepositories(db: StorageDatabase): ResearchReposit
     },
   };
 
-  return Object.freeze({ projects, artifacts, revisions, briefs, decisions, issues, episodes, snapshots, roomReceipts, correctionAppeals, ...createArgumentGraphRepositories(db) });
+  const deliberationRooms: ResearchRepositories["deliberationRooms"] = {
+    create(value) {
+      return writeResult(db, () => {
+        const parsed = parseDeliberationRoom(value); if (!parsed.ok) return parsed;
+        const project = requireProject(db, parsed.value.projectId); if (!project.ok) return project;
+        if (db.get("SELECT room_id FROM deliberation_rooms WHERE room_id = ?", parsed.value.id)) return { ok: false, error: researchError("version_conflict") };
+        if (db.get("SELECT room_id FROM deliberation_rooms WHERE project_id = ? AND source_kind = ? AND source_object_id = ? AND status NOT IN ('resolved','closed')", parsed.value.projectId, parsed.value.source.kind, parsed.value.source.objectId)) return { ok: false, error: researchError("deliberation_room_already_active") };
+        const data = encodeDomainJson(parsed.value, parseDeliberationRoom); if (!data.ok) return data;
+        try {
+          db.run(
+            `INSERT INTO deliberation_rooms
+               (room_id, project_id, source_kind, source_object_id, status, version, source_hash, created_at, updated_at, data)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            parsed.value.id, parsed.value.projectId, parsed.value.source.kind, parsed.value.source.objectId,
+            parsed.value.status, parsed.value.version, parsed.value.source.sourceHash, parsed.value.createdAt,
+            parsed.value.updatedAt, data.value,
+          );
+        } catch (error) {
+          const message = error instanceof Error ? error.message : "";
+          if (message.includes("idx_deliberation_rooms_one_active_source") || message.includes("deliberation_rooms.project_id, deliberation_rooms.source_kind, deliberation_rooms.source_object_id")) return { ok: false, error: researchError("deliberation_room_already_active") };
+          throw error;
+        }
+        return parsed;
+      });
+    },
+    getById(projectId, roomId) {
+      return readResult<DeliberationRoom | undefined>(() => {
+        const project = validId(projectId, "rprj_"); const id = validId(roomId, "rdlr_");
+        if (!project.ok || !id.ok) return { ok: false, error: researchError("invalid_deliberation_room") };
+        const row = db.get<{ data: string }>("SELECT data FROM deliberation_rooms WHERE project_id = ? AND room_id = ?", project.value, id.value);
+        return row === undefined ? { ok: true, value: undefined } : decodeDomainJson(row.data, parseDeliberationRoom);
+      });
+    },
+    getActiveBySource(projectId, sourceKind, sourceObjectId) {
+      return readResult<DeliberationRoom | undefined>(() => {
+        const project = validId(projectId, "rprj_"); const object = parseResearchId(sourceObjectId);
+        const validKind = ["correction_appeal", "unresolved_conflict", "research_issue", "research_decision", "research_brief", "explicit_project_object"].includes(sourceKind);
+        if (!project.ok || !object.ok || !validKind) return { ok: false, error: researchError("invalid_deliberation_source") };
+        const row = db.get<{ data: string }>("SELECT data FROM deliberation_rooms WHERE project_id = ? AND source_kind = ? AND source_object_id = ? AND status NOT IN ('resolved','closed')", project.value, sourceKind, sourceObjectId);
+        return row === undefined ? { ok: true, value: undefined } : decodeDomainJson(row.data, parseDeliberationRoom);
+      });
+    },
+    listByProject(projectId, page) {
+      return readResult(() => pageRows(db, {
+        table: "deliberation_rooms", idColumn: "room_id", idPrefix: "rdlr_",
+        projectId, where: "project_id = ?", params: [projectId], page, parser: parseDeliberationRoom,
+      }));
+    },
+    compareAndSwap(value, expectedVersion) {
+      return writeResult(db, () => {
+        const next = parseDeliberationRoom(value); const expected = parseEntityVersion(expectedVersion);
+        if (!next.ok || !expected.ok) return { ok: false, error: researchError("invalid_deliberation_room") };
+        const row = db.get<{ data: string }>("SELECT data FROM deliberation_rooms WHERE project_id = ? AND room_id = ? AND version = ?", next.value.projectId, next.value.id, expected.value);
+        if (row === undefined) return { ok: false, error: researchError("version_conflict") };
+        const current = decodeDomainJson(row.data, parseDeliberationRoom); if (!current.ok) return current;
+        const versions = requireExpectedNext(current.value.version, expected.value, next.value.version); if (!versions.ok) return versions;
+        if (current.value.projectId !== next.value.projectId || current.value.id !== next.value.id || current.value.createdAt !== next.value.createdAt || !sameValue(current.value.source, next.value.source) || !sameValue(current.value.participants, next.value.participants)) return { ok: false, error: researchError("invalid_deliberation_source") };
+        const transitionPrefix = next.value.transitions.slice(0, current.value.transitions.length);
+        const manualPrefix = next.value.manualExternalOpinions.slice(0, current.value.manualExternalOpinions.length);
+        const resolutionPrefix = next.value.resolutions.slice(0, current.value.resolutions.length);
+        const commandPrefix = next.value.commandReceipts.slice(0, current.value.commandReceipts.length);
+        if (!sameValue(transitionPrefix, current.value.transitions) || !sameValue(manualPrefix, current.value.manualExternalOpinions) || !sameValue(resolutionPrefix, current.value.resolutions) || !sameValue(commandPrefix, current.value.commandReceipts)) return { ok: false, error: researchError("version_conflict") };
+        if (current.value.manifests !== undefined && !sameValue(current.value.manifests, next.value.manifests)) return { ok: false, error: researchError("version_conflict") };
+        if (current.value.initialRound !== undefined && next.value.initialRound === undefined) return { ok: false, error: researchError("version_conflict") };
+        if (current.value.challenge !== undefined && next.value.challenge === undefined) return { ok: false, error: researchError("version_conflict") };
+        const data = encodeDomainJson(next.value, parseDeliberationRoom); if (!data.ok) return data;
+        const update = db.run(
+          `UPDATE deliberation_rooms SET status = ?, version = ?, updated_at = ?, data = ?
+           WHERE project_id = ? AND room_id = ? AND version = ?`,
+          next.value.status, next.value.version, next.value.updatedAt, data.value,
+          next.value.projectId, next.value.id, expected.value,
+        );
+        return Number(update.changes) === 1 ? next : { ok: false, error: researchError("version_conflict") };
+      });
+    },
+  };
+
+  return Object.freeze({ projects, artifacts, revisions, briefs, decisions, issues, episodes, snapshots, roomReceipts, correctionAppeals, deliberationRooms, ...createArgumentGraphRepositories(db) });
 }

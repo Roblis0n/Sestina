@@ -11,12 +11,13 @@ import {
   type BriefProjectionPublisher,
   type CorrectionAppealSecondOpinionProvider,
   type CoreResult,
+  type DeliberationParticipantProvider,
   type ResearchRoomProvider,
   type SestinaCore,
 } from "@sestina/core";
 import { isAppLanguage, type LanguagePreferenceStore } from "./language-preferences.js";
-import { createOpenAICompatibleProvider, createOpenAICompatibleSecondOpinionProvider, OpenAICompatibleProviderError, testOpenAICompatibleProviderConnection } from "./openai-compatible-provider.js";
-import { ProviderSettingsError, type ProviderConfigurationService, type SaveOpenAICompatibleProviderInput } from "./provider-settings.js";
+import { createOpenAICompatibleDeliberationParticipant, createOpenAICompatibleProvider, createOpenAICompatibleSecondOpinionProvider, OpenAICompatibleProviderError, testOpenAICompatibleProviderConnection } from "./openai-compatible-provider.js";
+import { OPENAI_COMPATIBLE_API_KEY_REF, ProviderSettingsError, SECOND_OPINION_OPENAI_COMPATIBLE_API_KEY_REF, type ProviderConfigurationService, type SaveOpenAICompatibleProviderInput } from "./provider-settings.js";
 
 const LOOPBACK = "127.0.0.1";
 const BODY_LIMIT = 65_536;
@@ -30,8 +31,10 @@ export interface ResearchRoomServerOptions {
   readonly port?: number;
   readonly provider?: ResearchRoomProvider;
   readonly correctionAppealSecondOpinionProvider?: CorrectionAppealSecondOpinionProvider;
+  readonly deliberationParticipantProviders?: readonly [DeliberationParticipantProvider, DeliberationParticipantProvider];
   readonly providerTimeoutMs?: number;
   readonly correctionAppealSecondOpinionProviderTimeoutMs?: number;
+  readonly deliberationParticipantProviderTimeoutMs?: number;
   readonly directoryPicker?: DirectoryPicker;
   readonly languagePreferenceStore?: LanguagePreferenceStore;
   readonly providerConfigurationService?: ProviderConfigurationService;
@@ -214,8 +217,10 @@ export class ResearchRoomHttpApplication {
   constructor(
     private readonly provider?: ResearchRoomProvider,
     private readonly correctionAppealSecondOpinionProvider?: CorrectionAppealSecondOpinionProvider,
+    private readonly deliberationParticipantProviders?: readonly [DeliberationParticipantProvider, DeliberationParticipantProvider],
     private readonly providerTimeoutMs = 15_000,
     private readonly correctionAppealSecondOpinionProviderTimeoutMs = 15_000,
+    private readonly deliberationParticipantProviderTimeoutMs = 15_000,
     private readonly directoryPicker?: DirectoryPicker,
     private readonly languagePreferenceStore?: LanguagePreferenceStore,
     private readonly providerConfigurationService?: ProviderConfigurationService,
@@ -281,6 +286,19 @@ export class ResearchRoomHttpApplication {
       return snapshot === undefined ? undefined : createOpenAICompatibleSecondOpinionProvider(snapshot, {
         readCurrentGeneration: () => this.secondOpinionProviderConfigurationService?.currentGeneration() ?? Promise.resolve(undefined),
       });
+    } catch (error) { return this.providerProblem(error); }
+  }
+
+  private async configuredDeliberationParticipants(): Promise<readonly [DeliberationParticipantProvider, DeliberationParticipantProvider] | undefined> {
+    if (this.deliberationParticipantProviders !== undefined) return this.deliberationParticipantProviders;
+    if (this.providerConfigurationService === undefined || this.secondOpinionProviderConfigurationService === undefined) return undefined;
+    try {
+      const [primary, secondary] = await Promise.all([this.providerConfigurationService.loadRuntimeSnapshot(), this.secondOpinionProviderConfigurationService.loadRuntimeSnapshot()]);
+      if (primary === undefined || secondary === undefined) return undefined;
+      return Object.freeze([
+        createOpenAICompatibleDeliberationParticipant(primary, { connectionId: `primary:${primary.config.providerId}`, secretRef: OPENAI_COMPATIBLE_API_KEY_REF, readCurrentGeneration: () => this.providerConfigurationService?.currentGeneration() ?? Promise.resolve(undefined) }),
+        createOpenAICompatibleDeliberationParticipant(secondary, { connectionId: `second-opinion:${secondary.config.providerId}`, secretRef: SECOND_OPINION_OPENAI_COMPATIBLE_API_KEY_REF, readCurrentGeneration: () => this.secondOpinionProviderConfigurationService?.currentGeneration() ?? Promise.resolve(undefined) }),
+      ]);
     } catch (error) { return this.providerProblem(error); }
   }
 
@@ -358,12 +376,15 @@ export class ResearchRoomHttpApplication {
       createdStateDirectory = true;
       const provider = await this.configuredProvider();
       const secondOpinionProvider = await this.configuredSecondOpinionProvider();
+      const deliberationProviders = await this.configuredDeliberationParticipants();
       core = resultValue(await openSestina({
         databasePath,
         ...(provider ? { researchRoomProvider: provider } : {}),
         ...(secondOpinionProvider ? { correctionAppealSecondOpinionProvider: secondOpinionProvider } : {}),
+        ...(deliberationProviders ? { deliberationParticipantProviders: deliberationProviders } : {}),
         researchRoomProviderTimeoutMs: this.providerTimeoutMs,
         correctionAppealSecondOpinionProviderTimeoutMs: this.correctionAppealSecondOpinionProviderTimeoutMs,
+        deliberationParticipantProviderTimeoutMs: this.deliberationParticipantProviderTimeoutMs,
       }));
       const project = resultValue(core.initializeProject({ title, rootPath: ".", actor: USER }));
       await writeFile(join(stateDirectory, "research-brief.yaml"), renderDraft(project.id, title), { encoding: "utf8", flag: "wx" });
@@ -392,12 +413,15 @@ export class ResearchRoomHttpApplication {
     if (stateKind === "directory" && databaseKind === "file" && briefKind === "file") {
       const provider = await this.configuredProvider();
       const secondOpinionProvider = await this.configuredSecondOpinionProvider();
+      const deliberationProviders = await this.configuredDeliberationParticipants();
       const core = resultValue(await openSestina({
         databasePath,
         ...(provider ? { researchRoomProvider: provider } : {}),
         ...(secondOpinionProvider ? { correctionAppealSecondOpinionProvider: secondOpinionProvider } : {}),
+        ...(deliberationProviders ? { deliberationParticipantProviders: deliberationProviders } : {}),
         researchRoomProviderTimeoutMs: this.providerTimeoutMs,
         correctionAppealSecondOpinionProviderTimeoutMs: this.correctionAppealSecondOpinionProviderTimeoutMs,
+        deliberationParticipantProviderTimeoutMs: this.deliberationParticipantProviderTimeoutMs,
       }));
       const projects = resultValue(core.listProjects());
       if (projects.length !== 1 || projects[0] === undefined) { core.close(); throw new HttpProblem(409, "state_conflict", "The selected project binding is inconsistent."); }
@@ -634,13 +658,14 @@ export class ResearchRoomHttpApplication {
         "/api/project/episodes": (query: ReturnType<typeof workspaceListRequest>) => opened.core.listEpisodeProjections(opened.project.id, query),
         "/api/project/receipts": (query: ReturnType<typeof workspaceListRequest>) => opened.core.listReceiptProjections(opened.project.id, query),
         "/api/project/appeals": (query: ReturnType<typeof workspaceListRequest>) => opened.core.listAppealProjections(opened.project.id, query),
+        "/api/project/deliberation-rooms": (query: ReturnType<typeof workspaceListRequest>) => opened.core.listDeliberationRoomProjections(opened.project.id, query),
       });
       if (request.method === "GET" && url.pathname in workspaceLists) {
         const read = workspaceLists[url.pathname as keyof typeof workspaceLists];
         const projection = read(workspaceListRequest(url)) as CoreResult<unknown>;
         json(response, 200, { ok: true, value: workspaceResultValue(projection) }); return;
       }
-      const workspaceDetail = /^\/api\/project\/(decisions|issues|evidence|episodes|receipts|appeals)\/([a-z]+_[0-9A-HJKMNP-TV-Z]{26})$/u.exec(url.pathname);
+      const workspaceDetail = /^\/api\/project\/(decisions|issues|evidence|episodes|receipts|appeals|deliberation-rooms)\/([a-z]+_[0-9A-HJKMNP-TV-Z]{26})$/u.exec(url.pathname);
       if (request.method === "GET" && workspaceDetail?.[1] && workspaceDetail[2]) {
         const id = workspaceDetail[2];
         const value = workspaceDetail[1] === "decisions" ? workspaceResultValue(opened.core.getDecisionProjection(opened.project.id, id))
@@ -648,7 +673,8 @@ export class ResearchRoomHttpApplication {
             : workspaceDetail[1] === "evidence" ? workspaceResultValue(opened.core.getEvidenceProjection(opened.project.id, id))
               : workspaceDetail[1] === "episodes" ? workspaceResultValue(opened.core.getEpisodeProjection(opened.project.id, id))
                 : workspaceDetail[1] === "receipts" ? workspaceResultValue(opened.core.getReceiptProjection(opened.project.id, id))
-                  : workspaceResultValue(opened.core.getAppealProjection(opened.project.id, id));
+                  : workspaceDetail[1] === "appeals" ? workspaceResultValue(opened.core.getAppealProjection(opened.project.id, id))
+                    : workspaceResultValue(opened.core.getDeliberationRoomProjection(opened.project.id, id));
         if (value === undefined) throw new HttpProblem(404, "not_found", "The requested research record was not found.");
         json(response, 200, { ok: true, value }); return;
       }
@@ -662,6 +688,80 @@ export class ResearchRoomHttpApplication {
         const cursor = url.searchParams.get("cursor") ?? undefined;
         if (!/^\d{1,3}$/u.test(rawLimit) || Number(rawLimit) < 1 || Number(rawLimit) > 200 || Buffer.byteLength(query, "utf8") > 512 || (cursor !== undefined && (cursor.length === 0 || cursor.length > 8192))) throw new HttpProblem(400, "invalid_input", "The project search is invalid.");
         json(response, 200, { ok: true, value: workspaceResultValue(opened.core.searchResearchObjects(opened.project.id, { query, limit: Number(rawLimit), ...(cursor ? { cursor } : {}) })) }); return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/project/deliberation-rooms") {
+        const body = await readBody(request);
+        if (!isRecord(body) || !hasExactKeys(body, ["commandId", "commandType", "confirmed", "projectId", "question", "sourceKind", "sourceObjectId", "title"]) || body.commandType !== "create_deliberation_room") throw new HttpProblem(400, "invalid_input", "The Deliberation Room draft is invalid.");
+        if (body.projectId !== opened.project.id) throw new HttpProblem(409, "cross_project_reference", "The Deliberation Room is bound to another project.");
+        if (body.confirmed !== true || text(body.commandId, 128) === undefined) throw new HttpProblem(400, "user_confirmation_required", "Creating a Deliberation Room requires an explicit user action.");
+        const created = resultValue(opened.core.createDeliberationRoom({ commandId: body.commandId as string, projectId: opened.project.id, sourceKind: body.sourceKind as never, sourceObjectId: body.sourceObjectId as string, question: body.question as string, title: body.title as string, actor: USER }));
+        json(response, 200, { ok: true, value: workspaceResultValue(opened.core.getDeliberationRoomProjection(opened.project.id, created.id)) }); return;
+      }
+      const deliberationQuery = /^\/api\/project\/deliberation-rooms\/(rdlr_[0-9A-HJKMNP-TV-Z]{26})\/(assessments|difference)$/u.exec(url.pathname);
+      if (request.method === "GET" && deliberationQuery?.[1] && deliberationQuery[2]) {
+        if ([...url.searchParams.keys()].length > 0) throw new HttpProblem(400, "invalid_input", "The Deliberation Room query is invalid.");
+        const detail = workspaceResultValue(opened.core.getDeliberationRoomProjection(opened.project.id, deliberationQuery[1]));
+        if (detail === undefined) throw new HttpProblem(404, "not_found", "The Deliberation Room was not found.");
+        json(response, 200, { ok: true, value: deliberationQuery[2] === "assessments" ? { schemaVersion: "1.0.0", items: detail.assessments } : { schemaVersion: "1.0.0", differenceSummary: detail.differenceSummary ?? null } }); return;
+      }
+      const deliberationAction = /^\/api\/project\/deliberation-rooms\/(rdlr_[0-9A-HJKMNP-TV-Z]{26})\/(refresh-source|prepare|run|cancel|reveal|prepare-retry|run-retry|prepare-challenge|run-challenge|finish-review|manual-opinion|resolve)$/u.exec(url.pathname);
+      if (request.method === "POST" && deliberationAction?.[1] && deliberationAction[2]) {
+        const roomId = deliberationAction[1]; const action = deliberationAction[2];
+        const body = await readBody(request);
+        if (!isRecord(body) || body.projectId !== opened.project.id) {
+          if (isRecord(body) && typeof body.projectId === "string") throw new HttpProblem(409, "cross_project_reference", "The Deliberation Room command is bound to another project.");
+          throw new HttpProblem(400, "invalid_input", "The Deliberation Room command is invalid.");
+        }
+        if (body.confirmed !== true) throw new HttpProblem(400, "user_confirmation_required", "The Deliberation Room command requires explicit user confirmation.");
+        if (action === "refresh-source") {
+          if (!hasExactKeys(body, ["commandType", "confirmed", "projectId"]) || body.commandType !== "refresh_deliberation_source") throw new HttpProblem(400, "invalid_input", "The source refresh is invalid.");
+          resultValue(opened.core.refreshDeliberationRoomSource(opened.project.id, roomId));
+        } else {
+          if (!Number.isSafeInteger(body.expectedVersion) || Number(body.expectedVersion) < 1 || text(body.commandId, 128) === undefined) throw new HttpProblem(400, "invalid_input", "The Deliberation Room version or command identifier is invalid.");
+          const common = { commandId: body.commandId as string, projectId: opened.project.id, roomId, expectedVersion: Number(body.expectedVersion) as never, actor: USER };
+          if (action === "prepare") {
+            if (!hasExactKeys(body, ["allowedContext", "commandId", "commandType", "confirmed", "expectedVersion", "projectId", "revisionId"]) || body.commandType !== "prepare_deliberation_manifests" || !isRecord(body.allowedContext) || !hasExactKeys(body.allowedContext, ["decisionIds", "evidenceIds", "includeBrief", "issueIds"]) || body.allowedContext.includeBrief !== true || ![body.allowedContext.decisionIds, body.allowedContext.issueIds, body.allowedContext.evidenceIds].every((value) => Array.isArray(value) && value.every((item) => typeof item === "string"))) throw new HttpProblem(400, "invalid_input", "The Deliberation Room Context is invalid.");
+            const prepared = resultValue(opened.core.prepareDeliberationRoom({ ...common, revisionId: body.revisionId as string, includeBrief: true, decisionIds: body.allowedContext.decisionIds as string[], issueIds: body.allowedContext.issueIds as string[], evidenceIds: body.allowedContext.evidenceIds as string[] }));
+            json(response, 200, { ok: true, value: { schemaVersion: "1.0.0", contextManifestsVisible: true, room: workspaceResultValue(opened.core.getDeliberationRoomProjection(opened.project.id, roomId)), manifests: prepared.manifests, providerPreviews: prepared.providerPreviews } }); return;
+          }
+          if (action === "run") {
+            if (!hasExactKeys(body, ["commandId", "commandType", "confirmed", "expectedVersion", "manifestHashes", "projectId"]) || body.commandType !== "run_deliberation_blind_round" || !Array.isArray(body.manifestHashes) || body.manifestHashes.length !== 2 || !body.manifestHashes.every((item) => typeof item === "string")) throw new HttpProblem(400, "invalid_input", "The blind-round confirmation is invalid.");
+            resultValue(await opened.core.runDeliberationRoomBlindRound({ ...common, confirmedManifestHashes: body.manifestHashes as unknown as readonly [string, string] }));
+          } else if (action === "cancel") {
+            if (!hasExactKeys(body, ["commandId", "commandType", "confirmed", "expectedVersion", "projectId"]) || body.commandType !== "cancel_deliberation_run") throw new HttpProblem(400, "invalid_input", "The cancellation is invalid.");
+            const current = resultValue(opened.core.getDeliberationRoom(opened.project.id, roomId));
+            if (current === undefined) throw new HttpProblem(404, "not_found", "The Deliberation Room was not found.");
+            if (current.version !== Number(body.expectedVersion)) throw new HttpProblem(409, "stale_state", "The Deliberation Room changed before cancellation.");
+            resultValue(opened.core.cancelActiveDeliberationRoom(opened.project.id, roomId));
+          } else if (action === "reveal") {
+            if (!hasExactKeys(body, ["commandId", "commandType", "confirmed", "expectedVersion", "mode", "projectId"]) || body.commandType !== "reveal_deliberation_round" || !["complete", "partial", "cancelled"].includes(String(body.mode))) throw new HttpProblem(400, "invalid_input", "The reveal confirmation is invalid.");
+            resultValue(opened.core.revealDeliberationRoom({ ...common, mode: body.mode as never }));
+          } else if (action === "prepare-retry") {
+            if (!hasExactKeys(body, ["commandId", "commandType", "confirmed", "expectedVersion", "projectId"]) || body.commandType !== "prepare_deliberation_participant_retry") throw new HttpProblem(400, "invalid_input", "The failed-participant retry is invalid.");
+            const prepared = resultValue(opened.core.prepareDeliberationParticipantRetry(common));
+            json(response, 200, { ok: true, value: { schemaVersion: "1.0.0", contextManifestVisible: true, room: workspaceResultValue(opened.core.getDeliberationRoomProjection(opened.project.id, roomId)), manifest: prepared.manifest, providerPreview: prepared.providerPreview } }); return;
+          } else if (action === "run-retry") {
+            if (!hasExactKeys(body, ["commandId", "commandType", "confirmed", "expectedVersion", "manifestHash", "projectId", "retryId"]) || body.commandType !== "run_deliberation_participant_retry") throw new HttpProblem(400, "invalid_input", "The failed-participant retry confirmation is invalid.");
+            resultValue(await opened.core.runDeliberationParticipantRetry({ ...common, retryId: body.retryId as string, confirmedManifestHash: body.manifestHash as string }));
+          } else if (action === "prepare-challenge") {
+            if (!hasExactKeys(body, ["commandId", "commandType", "confirmed", "expectedVersion", "projectId", "question"]) || body.commandType !== "prepare_deliberation_challenge") throw new HttpProblem(400, "invalid_input", "The directed challenge is invalid.");
+            const prepared = resultValue(opened.core.prepareDeliberationChallenge({ ...common, question: body.question as string }));
+            json(response, 200, { ok: true, value: { schemaVersion: "1.0.0", contextManifestsVisible: true, sharedContextOnly: true, room: workspaceResultValue(opened.core.getDeliberationRoomProjection(opened.project.id, roomId)), manifests: prepared.manifests, providerPreviews: prepared.providerPreviews } }); return;
+          } else if (action === "run-challenge") {
+            if (!hasExactKeys(body, ["challengeId", "commandId", "commandType", "confirmed", "expectedVersion", "manifestHashes", "projectId"]) || body.commandType !== "run_deliberation_challenge" || !Array.isArray(body.manifestHashes) || body.manifestHashes.length !== 2 || !body.manifestHashes.every((item) => typeof item === "string")) throw new HttpProblem(400, "invalid_input", "The directed challenge confirmation is invalid.");
+            resultValue(await opened.core.runDeliberationChallenge({ ...common, challengeId: body.challengeId as string, confirmedManifestHashes: body.manifestHashes as unknown as readonly [string, string] }));
+          } else if (action === "finish-review") {
+            if (!hasExactKeys(body, ["commandId", "commandType", "confirmed", "expectedVersion", "projectId"]) || body.commandType !== "finish_deliberation_difference_review") throw new HttpProblem(400, "invalid_input", "The review completion is invalid.");
+            resultValue(opened.core.waitForDeliberationRoomResolution(common));
+          } else if (action === "manual-opinion") {
+            if (!hasExactKeys(body, ["capturedAt", "commandId", "commandType", "confirmed", "contextDisclosure", "expectedVersion", "modelClaim", "projectId", "providerClaim", "publicContent", "sawParticipantAOutput", "sawParticipantBOutput", "sourceLabel"]) || body.commandType !== "import_manual_external_opinion") throw new HttpProblem(400, "invalid_input", "The manual external opinion is invalid.");
+            resultValue(opened.core.importManualExternalOpinion({ ...common, sourceLabel: body.sourceLabel as string, providerClaim: body.providerClaim as string, modelClaim: body.modelClaim as string, capturedAt: body.capturedAt as string, contextDisclosure: body.contextDisclosure as string, sawParticipantAOutput: body.sawParticipantAOutput as boolean, sawParticipantBOutput: body.sawParticipantBOutput as boolean, publicContent: body.publicContent as string }));
+          } else {
+            if (!hasExactKeys(body, ["commandId", "commandType", "combinedText", "confirmed", "expectedVersion", "kind", "projectId", "publicReason"]) || body.commandType !== "resolve_deliberation_room") throw new HttpProblem(400, "invalid_input", "The user Resolution is invalid.");
+            resultValue(opened.core.resolveDeliberationRoom({ ...common, kind: body.kind as never, publicReason: body.publicReason as string, ...(typeof body.combinedText === "string" && body.combinedText.trim().length > 0 ? { combinedText: body.combinedText } : {}) }));
+          }
+        }
+        json(response, 200, { ok: true, value: workspaceResultValue(opened.core.getDeliberationRoomProjection(opened.project.id, roomId)) }); return;
       }
       if (request.method === "POST" && url.pathname === "/api/project/appeals") {
         const body = await readBody(request);
@@ -825,8 +925,10 @@ export function createResearchRoomServer(options: ResearchRoomServerOptions = {}
   const application = new ResearchRoomHttpApplication(
     options.provider,
     options.correctionAppealSecondOpinionProvider,
+    options.deliberationParticipantProviders,
     options.providerTimeoutMs,
     options.correctionAppealSecondOpinionProviderTimeoutMs,
+    options.deliberationParticipantProviderTimeoutMs,
     options.directoryPicker,
     options.languagePreferenceStore,
     options.providerConfigurationService,

@@ -162,6 +162,42 @@ defer, or preserve disagreement, with a public reason and append-only Receipt.
 The complete contract is documented in
 `docs/architecture/03-CORRECTION-APPEALS-AND-SECOND-OPINION.md`.
 
+## Mutually blind bounded deliberation rooms
+
+An open Issue or unresolved Appeal can create a project-bound Deliberation
+Room. There is no context-free global chat entry. The owner freezes the source,
+question, current Brief and Decisions, evidence boundaries, comparison
+dimensions, stop conditions, and exactly two participant bindings. The client
+then displays two independently versioned Context Manifests; both exact hashes
+must be confirmed before the blind round can run.
+
+Core freezes both participant requests before either Provider result is
+accepted. A's request excludes B's output, private context, and session; B's
+request applies the symmetric rule. While sealed, the browser receives status
+only. Strict assessments are revealed only after both are terminal or after an
+explicit partial/cancel reveal. Core derives the Difference Summary
+deterministically from normalized positions, evidence, assumptions, scope,
+counterexamples, alternatives, and unknowns—there is no judge, vote, winner,
+score, or synthesis Provider.
+
+The room permits at most four external calls: two initial calls followed by
+either one explicit failed-participant retry or one user-confirmed directed
+challenge to both participants. There is no automatic retry, fallback, fifth
+call, free chat, tool use, or authority write. Only a direct owner command can
+append a Room Resolution; any Decision, Issue, or Brief change remains a
+separate existing Authority Gate action. No Provider, same-runtime, partial,
+failed, cancelled, stale, restart-uncertain, and manual-external-opinion states
+all preserve an operable local path without claiming mutual blindness.
+
+The exact project-bound API exposes list/detail, source refresh, manifest
+prepare/confirm, blind run/cancel/reveal/retry, Difference, challenge,
+manual-opinion, finish/close, and user-resolution commands. Runtime decoders
+reject malformed projections before React consumes them. Overview, Search,
+Attention, Receipt/Trace, direct links, refresh, project switching, and restart
+all reconstruct from schema 18 storage. See
+`docs/architecture/04-MUTUALLY-BLIND-BOUNDED-DELIBERATION-ROOMS.md` and
+`docs/migrations/RI-50-SCHEMA-018.md`.
+
 The development-only Semantic Judge benchmark and its reproducible
 export/run/import/evaluate workflow are documented at
 `researchbench/research-room-semantic-judge/README.md`. It contains 96

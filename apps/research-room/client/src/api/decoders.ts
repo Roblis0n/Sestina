@@ -10,6 +10,8 @@ import type {
   ContextManifestDto,
   DecisionDetailDto,
   DecisionSummaryDto,
+  DeliberationRoomDetailDto,
+  DeliberationRoomSummaryDto,
   EvidenceDetailDto,
   EvidenceSummaryDto,
   EpisodeDetailDto,
@@ -20,6 +22,8 @@ import type {
   ObjectReceiptSummaryDto,
   PreparedReviewDto,
   PreparedAppealSecondOpinionDto,
+  PreparedDeliberationDto,
+  PreparedDeliberationRetryDto,
   ProjectOverviewDto,
   ProjectOpenResultDto,
   ProviderStatusDto,
@@ -487,6 +491,7 @@ function objectReceiptSummaryDecoder(value: unknown, path: string): ObjectReceip
 }
 
 const APPEAL_STATUSES = ["draft", "recorded", "awaiting_send_confirmation", "second_opinion_running", "second_opinion_ready", "appeal_record_only", "waiting_user_resolution", "provider_failed", "cancelled", "stale_conflicted", "resolved"] as const;
+const DELIBERATION_STATUSES = ["draft", "context_prepared", "awaiting_manifest_confirmation", "blind_round_running", "reveal_ready", "difference_review", "challenge_prepared", "challenge_running", "waiting_user_resolution", "partial", "retry_prepared", "retry_running", "failed", "cancelled", "stale_conflicted", "resolved", "closed"] as const;
 
 function appealSummaryDecoder(value: unknown, path: string, detail = false): AppealSummaryDto {
   const item = record(value, path);
@@ -498,13 +503,30 @@ function appealSummaryDecoder(value: unknown, path: string, detail = false): App
   return item as unknown as AppealSummaryDto;
 }
 
-export function decodeWorkspacePage(value: unknown, kind: ResearchObjectKind): WorkspacePage<DecisionSummaryDto | IssueSummaryDto | EvidenceSummaryDto | EpisodeSummaryDto | ObjectReceiptSummaryDto | AppealSummaryDto> {
+function deliberationSummaryDecoder(value: unknown, path: string, detail = false): DeliberationRoomSummaryDto {
+  const item = record(value, path);
+  const summaryKeys = ["challengeStatus", "createdAt", "differenceSummaryAvailable", "id", "kind", "manualOpinionCount", "participantStates", "providerCallCount", "providerCallLimit", "providerReadiness", "resolutionCount", "retryStatus", "source", "status", "title", "updatedAt", "version"] as const;
+  if (!detail) allowedKeys(item, summaryKeys, path);
+  for (const required of ["createdAt", "differenceSummaryAvailable", "id", "kind", "manualOpinionCount", "participantStates", "providerCallCount", "providerCallLimit", "providerReadiness", "resolutionCount", "source", "status", "title", "updatedAt", "version"] as const) if (!(required in item)) fail(`${path}.${required}`);
+  if (item.kind !== "deliberation_room" || !DELIBERATION_STATUSES.includes(item.status as (typeof DELIBERATION_STATUSES)[number]) || !["configured_distinct", "blocked_missing_provider", "same_runtime_not_mutually_independent"].includes(String(item.providerReadiness))) fail(`${path}.kind`);
+  for (const key of ["createdAt", "id", "providerReadiness", "status", "title", "updatedAt"] as const) string(item[key], `${path}.${key}`);
+  for (const key of ["manualOpinionCount", "providerCallCount", "providerCallLimit", "resolutionCount", "version"] as const) number(item[key], `${path}.${key}`); if (item.providerCallLimit !== 4 || Number(item.providerCallCount) > 4) fail(`${path}.providerCallLimit`);
+  boolean(item.differenceSummaryAvailable, `${path}.differenceSummaryAvailable`);
+  if (item.challengeStatus !== undefined) string(item.challengeStatus, `${path}.challengeStatus`);
+  if (item.retryStatus !== undefined) string(item.retryStatus, `${path}.retryStatus`);
+  const source = record(item.source, `${path}.source`); exactKeys(source, ["kind", "objectId", "objectVersion", "projectId", "question", "sourceHash"], `${path}.source`); for (const key of ["kind", "objectId", "projectId", "question", "sourceHash"] as const) string(source[key], `${path}.source.${key}`); number(source.objectVersion, `${path}.source.objectVersion`);
+  const participants = array(item.participantStates, `${path}.participantStates`); if (participants.length !== 2) fail(`${path}.participantStates`);
+  participants.forEach((raw, index) => { const participant = record(raw, `${path}.participantStates[${index}]`); exactKeys(participant, ["model", "providerId", "slot", "status"], `${path}.participantStates[${index}]`); for (const key of ["model", "providerId", "slot", "status"] as const) string(participant[key], `${path}.participantStates[${index}].${key}`); if (participant.slot !== (index === 0 ? "a" : "b")) fail(`${path}.participantStates[${index}].slot`); });
+  return item as unknown as DeliberationRoomSummaryDto;
+}
+
+export function decodeWorkspacePage(value: unknown, kind: ResearchObjectKind): WorkspacePage<DecisionSummaryDto | IssueSummaryDto | EvidenceSummaryDto | EpisodeSummaryDto | ObjectReceiptSummaryDto | AppealSummaryDto | DeliberationRoomSummaryDto> {
   const page = record(value, `${kind} page`);
   allowedKeys(page, ["datasetVersion", "items", "nextCursor", "projectId", "schemaVersion"], `${kind} page`);
   for (const required of ["datasetVersion", "items", "projectId", "schemaVersion"] as const) if (!(required in page)) fail(`${kind} page.${required}`);
   requireSchema(page, `${kind} page`); string(page.projectId, `${kind} page.projectId`); string(page.datasetVersion, `${kind} page.datasetVersion`);
   if (page.nextCursor !== undefined) string(page.nextCursor, `${kind} page.nextCursor`);
-  const items = array(page.items, `${kind} page.items`).map((item, index) => kind === "decision" ? decisionSummaryDecoder(item, `${kind} page.items[${index}]`) : kind === "issue" ? issueSummaryDecoder(item, `${kind} page.items[${index}]`) : kind === "evidence" ? evidenceSummaryDecoder(item, `${kind} page.items[${index}]`) : kind === "episode" ? episodeSummaryDecoder(item, `${kind} page.items[${index}]`) : kind === "receipt" ? objectReceiptSummaryDecoder(item, `${kind} page.items[${index}]`) : appealSummaryDecoder(item, `${kind} page.items[${index}]`));
+  const items = array(page.items, `${kind} page.items`).map((item, index) => kind === "decision" ? decisionSummaryDecoder(item, `${kind} page.items[${index}]`) : kind === "issue" ? issueSummaryDecoder(item, `${kind} page.items[${index}]`) : kind === "evidence" ? evidenceSummaryDecoder(item, `${kind} page.items[${index}]`) : kind === "episode" ? episodeSummaryDecoder(item, `${kind} page.items[${index}]`) : kind === "receipt" ? objectReceiptSummaryDecoder(item, `${kind} page.items[${index}]`) : kind === "appeal" ? appealSummaryDecoder(item, `${kind} page.items[${index}]`) : deliberationSummaryDecoder(item, `${kind} page.items[${index}]`));
   return { schemaVersion: "1.0.0", projectId: page.projectId as string, datasetVersion: page.datasetVersion as string, items, ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor as string }) };
 }
 
@@ -521,8 +543,8 @@ export function decodeProjectOverview(value: unknown): ProjectOverviewDto {
   const project = record(overview.project, "project overview.project"); exactKeys(project, ["id", "title", "updatedAt", "version"], "project overview.project"); string(project.id, "project overview.project.id"); string(project.title, "project overview.project.title"); string(project.updatedAt, "project overview.project.updatedAt"); number(project.version, "project overview.project.version");
   const brief = record(overview.brief, "project overview.brief"); exactKeys(brief, ["id", "question", "stage", "task", "versionId", "versionNumber"], "project overview.brief"); for (const key of ["id", "question", "stage", "task", "versionId"] as const) string(brief[key], `project overview.brief.${key}`); number(brief.versionNumber, "project overview.brief.versionNumber");
   if (overview.providerStatus !== "configured" && overview.providerStatus !== "ledger_only") fail("project overview.providerStatus");
-  const counts = record(overview.counts, "project overview.counts"); exactKeys(counts, ["appeals", "decisions", "episodes", "evidence", "issues", "receipts"], "project overview.counts"); Object.entries(counts).forEach(([key, item]) => number(item, `project overview.counts.${key}`));
-  const statuses = record(overview.statuses, "project overview.statuses"); exactKeys(statuses, ["appeals", "decisions", "episodes", "evidence", "issues", "receipts"], "project overview.statuses"); safeTree(statuses, "project overview.statuses");
+  const counts = record(overview.counts, "project overview.counts"); exactKeys(counts, ["appeals", "decisions", "deliberationRooms", "episodes", "evidence", "issues", "receipts"], "project overview.counts"); Object.entries(counts).forEach(([key, item]) => number(item, `project overview.counts.${key}`));
+  const statuses = record(overview.statuses, "project overview.statuses"); exactKeys(statuses, ["appeals", "decisions", "deliberationRooms", "episodes", "evidence", "issues", "receipts"], "project overview.statuses"); safeTree(statuses, "project overview.statuses");
   const attention = record(overview.attention, "project overview.attention"); exactKeys(attention, ["top", "total"], "project overview.attention"); number(attention.total, "project overview.attention.total"); array(attention.top, "project overview.attention.top").forEach((item, index) => { attentionItem(item, `project overview.attention.top[${index}]`); });
   if (overview.currentEpisode !== undefined) { const item = record(overview.currentEpisode, "project overview.currentEpisode"); exactKeys(item, ["href", "id", "status", "updatedAt"], "project overview.currentEpisode"); for (const key of ["href", "id", "status", "updatedAt"] as const) string(item[key], `project overview.currentEpisode.${key}`); }
   if (overview.latestReceipt !== undefined) { const item = record(overview.latestReceipt, "project overview.latestReceipt"); exactKeys(item, ["disposition", "href", "id", "status", "updatedAt"], "project overview.latestReceipt"); for (const key of ["disposition", "href", "id", "status", "updatedAt"] as const) string(item[key], `project overview.latestReceipt.${key}`); }
@@ -595,7 +617,7 @@ export function decodeResearchObjectSearch(value: unknown): ResearchObjectSearch
   return projection as unknown as ResearchObjectSearchDto;
 }
 
-export function decodeResearchObjectDetail(value: unknown, kind: ResearchObjectKind): DecisionDetailDto | IssueDetailDto | EvidenceDetailDto | EpisodeDetailDto | ObjectReceiptDetailDto | AppealDetailDto {
+export function decodeResearchObjectDetail(value: unknown, kind: ResearchObjectKind): DecisionDetailDto | IssueDetailDto | EvidenceDetailDto | EpisodeDetailDto | ObjectReceiptDetailDto | AppealDetailDto | DeliberationRoomDetailDto {
   const item = record(value, `${kind} detail`); safeTree(item, `${kind} detail`);
   const allowed: Record<ResearchObjectKind, readonly string[]> = {
     decision: ["active", "availableActions", "createdAt", "effectiveBriefVersionId", "id", "kind", "lineage", "lineageTruncated", "provenance", "rationale", "referencedByCurrentBrief", "relatedBriefVersionIds", "relatedEpisodeIds", "relatedIssueIds", "relatedReceiptIds", "relationsTruncated", "reopenConditions", "scope", "statement", "status", "supersededByDecisionId", "supersedesDecisionId", "timeline", "updatedAt", "version"],
@@ -604,6 +626,7 @@ export function decodeResearchObjectDetail(value: unknown, kind: ResearchObjectK
     episode: ["argumentDeltas", "artifactId", "candidateRevisionId", "createdAt", "findingIds", "id", "kind", "lockedBrief", "lockedStart", "lockedStartHash", "outcome", "provenance", "relatedDecisionIds", "relatedIssueIds", "relatedReceiptIds", "relationsTruncated", "reviewRunIds", "status", "timeline", "updatedAt", "version", "waivers"],
     receipt: ["afterStateHash", "alternativeExplanations", "appealableFindings", "argumentDelta", "authority", "beforeStateHash", "contextFields", "correctionAppeals", "countsAsExternalEvidence", "createdAt", "disposition", "evidenceClass", "findings", "id", "kind", "ledgerOnlyReason", "minimalCorrection", "network", "providerStatus", "receiptHash", "relatedBriefVersionIds", "relatedDecisionIds", "relatedIssueIds", "reviewId", "rollback", "sourceEpisodeId", "status", "suggestionHash", "trace", "unknowns", "unproven", "updatedAt", "version"],
     appeal: ["attemptCount", "attempts", "availableActions", "canAutoResolve", "createdAt", "criterionId", "disagreement", "findingId", "id", "kind", "latestComparison", "lineage", "relatedReceiptHref", "resolutionCount", "resolutions", "reviewId", "source", "sourceReceiptId", "statements", "status", "timeline", "updatedAt", "userAuthorityOnly", "version"],
+    deliberation_room: ["assessments", "availableActions", "canAutoResolve", "challenge", "challengeStatus", "createdAt", "differenceSummary", "differenceSummaryAvailable", "id", "kind", "manifests", "manualExternalOpinions", "manualOpinionCount", "participantStates", "participants", "providerCallCount", "providerCallLimit", "providerReadiness", "receiptHrefs", "resolutionCount", "resolutions", "retry", "retryStatus", "reveal", "source", "sourceHref", "status", "title", "trace", "updatedAt", "userAuthorityOnly", "version"],
   };
   allowedKeys(item, allowed[kind], `${kind} detail`);
   if (item.kind !== kind) fail(`${kind} detail.kind`); string(item.id, `${kind} detail.id`); number(item.version, `${kind} detail.version`);
@@ -622,7 +645,7 @@ export function decodeResearchObjectDetail(value: unknown, kind: ResearchObjectK
   } else if (kind === "receipt") {
     requiredKeys(item, ["afterStateHash", "alternativeExplanations", "appealableFindings", "argumentDelta", "authority", "beforeStateHash", "contextFields", "correctionAppeals", "countsAsExternalEvidence", "createdAt", "disposition", "evidenceClass", "findings", "minimalCorrection", "network", "providerStatus", "receiptHash", "relatedBriefVersionIds", "relatedDecisionIds", "relatedIssueIds", "reviewId", "rollback", "status", "suggestionHash", "trace", "unknowns", "unproven", "updatedAt"], "receipt detail");
     if (item.countsAsExternalEvidence !== false) fail("receipt detail.countsAsExternalEvidence"); for (const key of ["afterStateHash", "beforeStateHash", "createdAt", "evidenceClass", "minimalCorrection", "providerStatus", "receiptHash", "reviewId", "status", "suggestionHash", "updatedAt"] as const) string(item[key], `receipt detail.${key}`); if (item.ledgerOnlyReason !== undefined) string(item.ledgerOnlyReason, "receipt detail.ledgerOnlyReason"); if (item.sourceEpisodeId !== undefined) string(item.sourceEpisodeId, "receipt detail.sourceEpisodeId"); for (const key of ["alternativeExplanations", "relatedBriefVersionIds", "relatedDecisionIds", "relatedIssueIds", "unknowns", "unproven"] as const) strings(item[key], `receipt detail.${key}`); for (const key of ["appealableFindings", "argumentDelta", "authority", "contextFields", "correctionAppeals", "disposition", "findings", "network", "rollback", "trace"] as const) safeTree(item[key], `receipt detail.${key}`);
-  } else {
+  } else if (kind === "appeal") {
     appealSummaryDecoder(item, "appeal detail", true);
     requiredKeys(item, ["attempts", "availableActions", "canAutoResolve", "lineage", "relatedReceiptHref", "resolutions", "source", "statements", "timeline", "userAuthorityOnly"], "appeal detail");
     if (item.userAuthorityOnly !== true || item.canAutoResolve !== false) fail("appeal detail.authority");
@@ -631,8 +654,19 @@ export function decodeResearchObjectDetail(value: unknown, kind: ResearchObjectK
     if (actions.some((action) => !["edit", "record", "record_only", "prepare_second_opinion", "confirm_send", "cancel", "resolve", "retry_with_new_manifest"].includes(action))) fail("appeal detail.availableActions");
     for (const key of ["source", "lineage", "statements", "attempts", "resolutions", "timeline"] as const) safeTree(item[key], `appeal detail.${key}`);
     if (item.latestComparison !== undefined) safeTree(item.latestComparison, "appeal detail.latestComparison");
+  } else {
+    deliberationSummaryDecoder(item, "deliberation room detail", true);
+    requiredKeys(item, ["assessments", "availableActions", "canAutoResolve", "manualExternalOpinions", "participants", "receiptHrefs", "resolutions", "sourceHref", "trace", "userAuthorityOnly"], "deliberation room detail");
+    if (item.userAuthorityOnly !== true || item.canAutoResolve !== false) fail("deliberation room detail.authority");
+    string(item.sourceHref, "deliberation room detail.sourceHref"); strings(item.receiptHrefs, "deliberation room detail.receiptHrefs");
+    const actions = strings(item.availableActions, "deliberation room detail.availableActions");
+    if (actions.some((action) => !["prepare_manifests", "confirm_and_start", "cancel", "reveal_complete", "reveal_partial", "prepare_retry", "confirm_retry", "prepare_challenge", "finish_review", "import_manual_opinion", "resolve", "close"].includes(action))) fail("deliberation room detail.availableActions");
+    const participants = array(item.participants, "deliberation room detail.participants"); if (participants.length !== 2) fail("deliberation room detail.participants");
+    for (const key of ["participants", "assessments", "manualExternalOpinions", "resolutions", "trace"] as const) safeTree(item[key], `deliberation room detail.${key}`);
+    if (item.manifests !== undefined) { const manifests = array(item.manifests, "deliberation room detail.manifests"); if (manifests.length !== 2) fail("deliberation room detail.manifests"); safeTree(manifests, "deliberation room detail.manifests"); }
+    for (const key of ["reveal", "differenceSummary", "challenge", "retry"] as const) if (item[key] !== undefined) safeTree(item[key], `deliberation room detail.${key}`);
   }
-  return item as unknown as DecisionDetailDto | IssueDetailDto | EvidenceDetailDto | EpisodeDetailDto | ObjectReceiptDetailDto | AppealDetailDto;
+  return item as unknown as DecisionDetailDto | IssueDetailDto | EvidenceDetailDto | EpisodeDetailDto | ObjectReceiptDetailDto | AppealDetailDto | DeliberationRoomDetailDto;
 }
 
 function decodeAppealManifest(value: unknown, path: string): AppealManifestDto {
@@ -656,6 +690,27 @@ export function decodePreparedAppealSecondOpinion(value: unknown): PreparedAppea
   string(preview.endpoint, "prepared appeal second opinion.providerPreview.endpoint"); number(preview.requestBodyBytes, "prepared appeal second opinion.providerPreview.requestBodyBytes"); number(preview.responseLimitBytes, "prepared appeal second opinion.providerPreview.responseLimitBytes");
   if (preview.retryCount !== 0 || preview.redirectPolicy !== "error") fail("prepared appeal second opinion.providerPreview.safety");
   return { schemaVersion: "1.0.0", contextManifestVisible: true, appeal: decodeResearchObjectDetail(prepared.appeal, "appeal") as AppealDetailDto, attemptId: string(prepared.attemptId, "prepared appeal second opinion.attemptId"), confirmationNonce: string(prepared.confirmationNonce, "prepared appeal second opinion.confirmationNonce"), manifest: decodeAppealManifest(prepared.manifest, "prepared appeal second opinion.manifest"), providerPreview: preview as unknown as PreparedAppealSecondOpinionDto["providerPreview"] };
+}
+
+function decodeDeliberationPreview(value: unknown, path: string): PreparedDeliberationRetryDto["providerPreview"] {
+  const preview = record(value, path); exactKeys(preview, ["endpoint", "redirectPolicy", "requestBodyBytes", "responseLimitBytes", "retryCount"], path);
+  string(preview.endpoint, `${path}.endpoint`); number(preview.requestBodyBytes, `${path}.requestBodyBytes`); number(preview.responseLimitBytes, `${path}.responseLimitBytes`);
+  if (preview.retryCount !== 0 || preview.redirectPolicy !== "error") fail(`${path}.safety`);
+  return preview as unknown as PreparedDeliberationRetryDto["providerPreview"];
+}
+
+export function decodePreparedDeliberation(value: unknown): PreparedDeliberationDto {
+  const prepared = record(value, "prepared deliberation"); allowedKeys(prepared, ["contextManifestsVisible", "manifests", "providerPreviews", "room", "schemaVersion", "sharedContextOnly"], "prepared deliberation"); requiredKeys(prepared, ["contextManifestsVisible", "manifests", "providerPreviews", "room", "schemaVersion"], "prepared deliberation"); requireSchema(prepared, "prepared deliberation");
+  if (prepared.contextManifestsVisible !== true) fail("prepared deliberation.contextManifestsVisible");
+  if (prepared.sharedContextOnly !== undefined && prepared.sharedContextOnly !== true) fail("prepared deliberation.sharedContextOnly");
+  const manifests = array(prepared.manifests, "prepared deliberation.manifests"); const previews = array(prepared.providerPreviews, "prepared deliberation.providerPreviews"); if (manifests.length !== 2 || previews.length !== 2) fail("prepared deliberation.pairs"); safeTree(manifests, "prepared deliberation.manifests");
+  return { schemaVersion: "1.0.0", contextManifestsVisible: true, ...(prepared.sharedContextOnly === true ? { sharedContextOnly: true as const } : {}), room: decodeResearchObjectDetail(prepared.room, "deliberation_room") as DeliberationRoomDetailDto, manifests: manifests as unknown as PreparedDeliberationDto["manifests"], providerPreviews: previews.map((preview, index) => decodeDeliberationPreview(preview, `prepared deliberation.providerPreviews[${index}]`)) as unknown as PreparedDeliberationDto["providerPreviews"] };
+}
+
+export function decodePreparedDeliberationRetry(value: unknown): PreparedDeliberationRetryDto {
+  const prepared = record(value, "prepared deliberation retry"); exactKeys(prepared, ["contextManifestVisible", "manifest", "providerPreview", "room", "schemaVersion"], "prepared deliberation retry"); requireSchema(prepared, "prepared deliberation retry");
+  if (prepared.contextManifestVisible !== true) fail("prepared deliberation retry.contextManifestVisible"); safeTree(prepared.manifest, "prepared deliberation retry.manifest");
+  return { schemaVersion: "1.0.0", contextManifestVisible: true, room: decodeResearchObjectDetail(prepared.room, "deliberation_room") as DeliberationRoomDetailDto, manifest: prepared.manifest as PreparedDeliberationRetryDto["manifest"], providerPreview: decodeDeliberationPreview(prepared.providerPreview, "prepared deliberation retry.providerPreview") };
 }
 
 export function decodeBriefActivation(value: unknown): { readonly schemaVersion: "1.0.0"; readonly workspace: BriefWorkspaceDto; readonly changedFields: readonly string[] } {

@@ -131,6 +131,7 @@ import {
 } from "./research-room.js";
 import type { ResearchRoomReceipt } from "@sestina/research";
 import type { CorrectionAppeal } from "@sestina/research";
+import type { DeliberationRoom } from "@sestina/research";
 import {
   CorrectionAppealService,
   type CancelCorrectionAppealSecondOpinionInput,
@@ -144,6 +145,23 @@ import {
   type UpdateCorrectionAppealInput,
 } from "./correction-appeal.js";
 import {
+  DeliberationRoomService,
+  type CreateDeliberationRoomInput,
+  type DeliberationParticipantProvider,
+  type DeliberationRoomCommandInput,
+  type ImportManualExternalOpinionCoreInput,
+  type PrepareDeliberationChallengeCoreInput,
+  type PreparedDeliberationChallenge,
+  type PrepareDeliberationRoomInput,
+  type PreparedDeliberationRoom,
+  type PreparedDeliberationParticipantRetry,
+  type ResolveDeliberationRoomInput,
+  type RevealDeliberationRoomInput,
+  type RunDeliberationRoomBlindRoundInput,
+  type RunDeliberationChallengeCoreInput,
+  type RunDeliberationParticipantRetryCoreInput,
+} from "./deliberation-room.js";
+import {
   ResearchObjectWorkspaceService,
   type AppealDetailProjection,
   type AppealSummaryProjection,
@@ -151,6 +169,8 @@ import {
   type BriefWorkspaceProjection,
   type DecisionDetailProjection,
   type DecisionSummaryProjection,
+  type DeliberationRoomDetailProjection,
+  type DeliberationRoomSummaryProjection,
   type EvidenceDetailProjection,
   type EvidenceSummaryProjection,
   type EpisodeDetailProjection,
@@ -183,6 +203,8 @@ export interface OpenSestinaOptions {
   readonly researchRoomProviderTimeoutMs?: number;
   readonly correctionAppealSecondOpinionProvider?: CorrectionAppealSecondOpinionProvider;
   readonly correctionAppealSecondOpinionProviderTimeoutMs?: number;
+  readonly deliberationParticipantProviders?: readonly [DeliberationParticipantProvider, DeliberationParticipantProvider];
+  readonly deliberationParticipantProviderTimeoutMs?: number;
 }
 
 export interface DeterministicReviewResult {
@@ -339,9 +361,10 @@ export class SestinaCore {
   readonly #unitOfWork: CoreUnitOfWork;
   readonly #researchRoom: ResearchRoomService;
   readonly #correctionAppeals: CorrectionAppealService;
+  readonly #deliberationRooms: DeliberationRoomService;
   readonly #researchObjects: ResearchObjectWorkspaceService;
 
-  constructor(database: StorageDatabase, clock: Clock, idFactory: IdFactory, researchRoomProvider?: ResearchRoomProvider, researchRoomProviderTimeoutMs = 15_000, correctionAppealSecondOpinionProvider?: CorrectionAppealSecondOpinionProvider, correctionAppealSecondOpinionProviderTimeoutMs = 15_000) {
+  constructor(database: StorageDatabase, clock: Clock, idFactory: IdFactory, researchRoomProvider?: ResearchRoomProvider, researchRoomProviderTimeoutMs = 15_000, correctionAppealSecondOpinionProvider?: CorrectionAppealSecondOpinionProvider, correctionAppealSecondOpinionProviderTimeoutMs = 15_000, deliberationParticipantProviders?: readonly [DeliberationParticipantProvider, DeliberationParticipantProvider], deliberationParticipantProviderTimeoutMs = 15_000) {
     this.#database = database;
     this.#store = createResearchStore(database);
     this.#reviews = createSqliteReviewRunRepository(database);
@@ -350,6 +373,7 @@ export class SestinaCore {
     this.#unitOfWork = new CoreUnitOfWork(database);
     this.#researchRoom = new ResearchRoomService(this.#store, clock, idFactory, researchRoomProvider, researchRoomProviderTimeoutMs);
     this.#correctionAppeals = new CorrectionAppealService(this.#store, clock, idFactory, (projectId) => this.#researchRoom.getState(projectId), correctionAppealSecondOpinionProvider, correctionAppealSecondOpinionProviderTimeoutMs);
+    this.#deliberationRooms = new DeliberationRoomService(this.#store, clock, idFactory, (projectId) => this.#researchRoom.getState(projectId), deliberationParticipantProviders, deliberationParticipantProviderTimeoutMs);
     this.#researchObjects = new ResearchObjectWorkspaceService(this.#store);
   }
 
@@ -1004,6 +1028,23 @@ export class SestinaCore {
   listCorrectionAppeals(projectId: string): CoreResult<readonly CorrectionAppeal[]> { return this.#correctionAppeals.list(projectId); }
   getCorrectionAppeal(projectId: string, appealId: string): CoreResult<CorrectionAppeal | undefined> { return this.#correctionAppeals.get(projectId, appealId); }
 
+  createDeliberationRoom(input: CreateDeliberationRoomInput): CoreResult<DeliberationRoom> { return this.#deliberationRooms.create(input); }
+  prepareDeliberationRoom(input: PrepareDeliberationRoomInput): CoreResult<PreparedDeliberationRoom> { return this.#deliberationRooms.prepare(input); }
+  runDeliberationRoomBlindRound(input: RunDeliberationRoomBlindRoundInput): Promise<CoreResult<DeliberationRoom>> { return this.#deliberationRooms.run(input); }
+  revealDeliberationRoom(input: RevealDeliberationRoomInput): CoreResult<DeliberationRoom> { return this.#deliberationRooms.reveal(input); }
+  prepareDeliberationParticipantRetry(input: DeliberationRoomCommandInput): CoreResult<PreparedDeliberationParticipantRetry> { return this.#deliberationRooms.prepareRetry(input); }
+  runDeliberationParticipantRetry(input: RunDeliberationParticipantRetryCoreInput): Promise<CoreResult<DeliberationRoom>> { return this.#deliberationRooms.runRetry(input); }
+  prepareDeliberationChallenge(input: PrepareDeliberationChallengeCoreInput): CoreResult<PreparedDeliberationChallenge> { return this.#deliberationRooms.prepareChallenge(input); }
+  runDeliberationChallenge(input: RunDeliberationChallengeCoreInput): Promise<CoreResult<DeliberationRoom>> { return this.#deliberationRooms.runChallenge(input); }
+  waitForDeliberationRoomResolution(input: DeliberationRoomCommandInput): CoreResult<DeliberationRoom> { return this.#deliberationRooms.waitForResolution(input); }
+  resolveDeliberationRoom(input: ResolveDeliberationRoomInput): CoreResult<DeliberationRoom> { return this.#deliberationRooms.resolve(input); }
+  importManualExternalOpinion(input: ImportManualExternalOpinionCoreInput): CoreResult<DeliberationRoom> { return this.#deliberationRooms.importManual(input); }
+  cancelActiveDeliberationRoom(projectId: string, roomId: string): CoreResult<{ readonly cancelled: true }> { return this.#deliberationRooms.cancelActive(projectId, roomId); }
+  listDeliberationRooms(projectId: string): CoreResult<readonly DeliberationRoom[]> { return this.#deliberationRooms.list(projectId); }
+  getDeliberationRoom(projectId: string, roomId: string): CoreResult<DeliberationRoom | undefined> { return this.#deliberationRooms.get(projectId, roomId); }
+  refreshDeliberationRoomSource(projectId: string, roomId: string): CoreResult<DeliberationRoom> { return this.#deliberationRooms.refreshSource(projectId, roomId); }
+  recoverInterruptedDeliberationRooms(): CoreResult<number> { return this.#deliberationRooms.recoverInterrupted(); }
+
   getProjectOverviewProjection(projectId: string, input: { readonly providerStatus: WorkspaceProviderStatus }): CoreResult<ProjectOverviewProjection> { return this.#researchObjects.getOverview(projectId, input, this.#researchRoom.getAttentionSignals(projectId)); }
   getBriefWorkspaceProjection(projectId: string, historyLimit?: number): CoreResult<BriefWorkspaceProjection> { return this.#researchObjects.getBriefWorkspace(projectId, historyLimit); }
   listDecisionProjections(projectId: string, request: WorkspaceListRequest): CoreResult<WorkspacePage<DecisionSummaryProjection>> { return this.#researchObjects.listDecisions(projectId, request); }
@@ -1018,6 +1059,8 @@ export class SestinaCore {
   getReceiptProjection(projectId: string, receiptId: string): CoreResult<ReceiptDetailProjection | undefined> { return this.#researchObjects.getReceipt(projectId, receiptId); }
   listAppealProjections(projectId: string, request: WorkspaceListRequest): CoreResult<WorkspacePage<AppealSummaryProjection>> { return this.#researchObjects.listAppeals(projectId, request); }
   getAppealProjection(projectId: string, appealId: string): CoreResult<AppealDetailProjection | undefined> { return this.#researchObjects.getAppeal(projectId, appealId); }
+  listDeliberationRoomProjections(projectId: string, request: WorkspaceListRequest): CoreResult<WorkspacePage<DeliberationRoomSummaryProjection>> { return this.#researchObjects.listDeliberationRooms(projectId, request); }
+  getDeliberationRoomProjection(projectId: string, roomId: string): CoreResult<DeliberationRoomDetailProjection | undefined> { return this.#researchObjects.getDeliberationRoom(projectId, roomId); }
   getAttentionProjection(projectId: string): CoreResult<AttentionProjection> { return this.#researchObjects.getAttention(projectId, this.#researchRoom.getAttentionSignals(projectId)); }
   searchResearchObjects(projectId: string, input: { readonly query: string; readonly limit: number; readonly cursor?: string }): CoreResult<ResearchObjectSearchProjection> { return this.#researchObjects.search(projectId, input); }
 
@@ -1078,13 +1121,19 @@ export async function openSestina(options: OpenSestinaOptions): Promise<CoreResu
   if (options.immutable === true && options.readOnly !== true) return coreErr("invalid_input");
   if (options.researchRoomProviderTimeoutMs !== undefined && (!Number.isSafeInteger(options.researchRoomProviderTimeoutMs) || options.researchRoomProviderTimeoutMs < 10 || options.researchRoomProviderTimeoutMs > 120_000)) return coreErr("invalid_input");
   if (options.correctionAppealSecondOpinionProviderTimeoutMs !== undefined && (!Number.isSafeInteger(options.correctionAppealSecondOpinionProviderTimeoutMs) || options.correctionAppealSecondOpinionProviderTimeoutMs < 10 || options.correctionAppealSecondOpinionProviderTimeoutMs > 120_000)) return coreErr("invalid_input");
+  if (options.deliberationParticipantProviderTimeoutMs !== undefined && (!Number.isSafeInteger(options.deliberationParticipantProviderTimeoutMs) || options.deliberationParticipantProviderTimeoutMs < 10 || options.deliberationParticipantProviderTimeoutMs > 120_000)) return coreErr("invalid_input");
   try {
     const database = await openDatabase({
       path: options.databasePath,
       readOnly: options.readOnly,
       immutable: options.immutable,
     });
-    return coreOk(new SestinaCore(database, options.clock ?? new SystemClock(), options.idFactory ?? new RandomIdFactory(), options.researchRoomProvider, options.researchRoomProviderTimeoutMs, options.correctionAppealSecondOpinionProvider, options.correctionAppealSecondOpinionProviderTimeoutMs));
+    const core = new SestinaCore(database, options.clock ?? new SystemClock(), options.idFactory ?? new RandomIdFactory(), options.researchRoomProvider, options.researchRoomProviderTimeoutMs, options.correctionAppealSecondOpinionProvider, options.correctionAppealSecondOpinionProviderTimeoutMs, options.deliberationParticipantProviders, options.deliberationParticipantProviderTimeoutMs);
+    if (options.readOnly !== true) {
+      const recovery = core.recoverInterruptedDeliberationRooms();
+      if (!recovery.ok) { core.close(); return recovery; }
+    }
+    return coreOk(core);
   } catch (error) {
     return { ok: false, error: mapDomainError(typeof error === "object" && error !== null ? error : {}) };
   }

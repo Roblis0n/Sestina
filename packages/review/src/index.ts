@@ -110,6 +110,24 @@ export type {
   CorrectionAppealSecondOpinionResponse,
   PrepareCorrectionAppealSecondOpinionInput,
 } from "./semantic/correction-appeal-second-opinion.js";
+export {
+  DELIBERATION_PARTICIPANT_PROMPT_VERSION,
+  DELIBERATION_PARTICIPANT_PROTOCOL_VERSION,
+  DELIBERATION_PARTICIPANT_RESPONSE_SCHEMA,
+  DELIBERATION_PARTICIPANT_RUBRIC_VERSION,
+  compileDeliberationParticipantPrompt,
+  createDeliberationContextManifest,
+  prepareDeliberationParticipantRequest,
+  submitDeliberationParticipantAssessment,
+} from "./semantic/deliberation-participant.js";
+export type {
+  CompiledDeliberationParticipantPrompt,
+  DeliberationAllowedContextObject,
+  DeliberationParticipantLimits,
+  DeliberationParticipantRequest,
+  DeliberationParticipantResponse,
+  PrepareDeliberationParticipantRequestInput,
+} from "./semantic/deliberation-participant.js";
 export { EvidenceFreshnessChecker, evaluateEvidenceFreshness } from "./checkers/evidence-freshness-checker.js";
 export type { CurrentEvidenceRevision, EvidenceFreshnessIssue } from "./checkers/evidence-freshness-checker.js";
 export { mergeFindings } from "./findings/merge-findings.js";

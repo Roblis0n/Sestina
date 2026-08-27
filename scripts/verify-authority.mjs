@@ -75,8 +75,10 @@ const GUIDANCE_FILES = [
       "UI-02 Research Object Workspaces and Project Continuity",
       "RI-49 Correction Appeal and One Independent Second Opinion",
       "RI-49（已完成）",
+      "RI-50 Mutually Blind, Bounded Two-Participant Deliberation Room",
+      "RI-50（已完成）",
       "当前没有活动编码任务",
-      "none_active_RI50_not_started",
+      "none_active_RI51_not_started",
       "completed_and_verified_implementation_real_provider_evidence_blocked",
       "Market Gate 0",
     ],
@@ -95,6 +97,36 @@ const GUIDANCE_FILES = [
       "required_before_every_task",
       "Gate A：方向成立",
       "final: ready_to_start | do_not_start",
+    ],
+  },
+  {
+    path: "docs/execution/RI-50-MUTUALLY-BLIND-BOUNDED-DELIBERATION-ROOM-TASK-START-RECORD.md",
+    required: [
+      "task: RI-50",
+      "status: ready_to_start",
+      "activity_status: active_mutually_blind_bounded_deliberation_room",
+      "implementation_authorization: explicit_user_authorization_2026_08_26",
+      "final: ready_to_start",
+      "real_second_opinion_provider_smoke: blocked_missing_user_config",
+      "ri50_real_value_gate: unproven_nonblocking_for_implementation",
+      "ri51_status: not_started",
+    ],
+  },
+  {
+    path: "docs/execution/RI-50-MUTUALLY-BLIND-BOUNDED-DELIBERATION-ROOM-TASK-RESULT.md",
+    required: [
+      "task: RI-50",
+      "status: completed_and_verified",
+      "pnpm_verify: passed",
+      "blind_parallel_protocol: passed_with_loopback_and_fixtures",
+      "bounded_rounds: passed",
+      "user_authority: passed",
+      "production_visual_verification: passed",
+      "real_two_provider_deliberation_smoke: blocked_missing_user_config",
+      "mutual_cognitive_independence: unproven",
+      "repeatable_non_redundant_value_in_real_cases: unproven",
+      "external_user_value: unproven",
+      "next_code_goal: none_active_RI51_not_started",
     ],
   },
   {
@@ -241,31 +273,31 @@ const MARKER_CONTRACT = {
   },
   "sestina-current-status": {
     exact: "completed_and_verified",
-    why: "RI-49 is the most recently completed and verified governed task",
+    why: "RI-50 is the most recently completed and verified governed task",
   },
   "sestina-last-completed-task": {
-    exact: "RI-49",
-    why: "RI-49 is the most recently completed governed task",
+    exact: "RI-50",
+    why: "RI-50 is the most recently completed governed task",
   },
   "sestina-last-completed-status": {
     exact: "completed_and_verified",
     why: "the latest governed task passed its implementation and required host evidence gates",
   },
   "sestina-implementation-base": {
-    exact: "579e50055f9fb7e84bf4aa272eb643d37c228895",
-    why: "RI-49 was implemented from the recorded verified repository baseline",
+    exact: "8335cf2cc50aeab23f561107c40178e2949a6c3a",
+    why: "RI-50 was implemented from the recorded verified repository baseline",
   },
   "sestina-next-code-goal": {
-    exact: "none_active_RI50_not_started",
-    why: "RI-49 is complete and RI-50 has not been authorized",
+    exact: "none_active_RI51_not_started",
+    why: "RI-50 is complete and RI-51 has not been authorized",
   },
   "sestina-next-execution-goal": {
     exact: "await_explicit_user_authorization",
     why: "no subsequent product task is active",
   },
   "sestina-next-code-sequence": {
-    exact: "none_active_RI50_not_started",
-    why: "RI-50 remains not started and cannot be inferred from the route map",
+    exact: "none_active_RI51_not_started",
+    why: "RI-51 remains not started and cannot be inferred from the route map",
   },
   "sestina-ri44-to-ri47-status": {
     exact: "superseded_unstarted",
@@ -430,9 +462,9 @@ for (const entry of ENTRY_FILES) {
 const tasks = [...currentTasks.entries()];
 if (tasks.length > 0) {
   const first = tasks[0][1];
-  if (first !== "RI-49") {
+  if (first !== "RI-50") {
     err(
-      `[AUTH-R003] ${tasks[0][0]}: current task is '${first}' but the latest governed task is 'RI-49'`,
+      `[AUTH-R003] ${tasks[0][0]}: current task is '${first}' but the latest governed task is 'RI-50'`,
     );
   }
   for (const [entry, task] of tasks) {

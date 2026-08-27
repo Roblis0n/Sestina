@@ -57,8 +57,8 @@ export function mapDomainError(error: { readonly code?: unknown }): CoreError {
   if (["research_record_not_found", "review_not_found", "revision_not_found"].includes(code)) return coreError("not_found");
   if (["version_conflict", "review_version_conflict", "stale_episode_brief", "review_input_hash_mismatch", "snapshot_hash_mismatch", "appeal_source_mismatch"].includes(code)) return coreError("stale_state");
   if (code === "stale_capsule_response") return coreError("stale_state");
-  if (["user_confirmation_required", "user_decision_required", "user_issue_action_required", "user_episode_action_required", "user_appeal_action_required"].includes(code)) return coreError("user_confirmation_required");
-  if (["invalid_decision_transition", "invalid_issue_transition", "invalid_episode_transition", "invalid_research_room_transition", "invalid_appeal_transition", "appeal_already_active", "episode_lock_mismatch", "artifact_tombstoned", "scope_rule_conflict"].includes(code)) return coreError("state_conflict");
+  if (["user_confirmation_required", "user_decision_required", "user_issue_action_required", "user_episode_action_required", "user_appeal_action_required", "user_deliberation_action_required"].includes(code)) return coreError("user_confirmation_required");
+  if (["invalid_decision_transition", "invalid_issue_transition", "invalid_episode_transition", "invalid_research_room_transition", "invalid_appeal_transition", "invalid_deliberation_transition", "invalid_deliberation_attempt", "deliberation_round_limit_reached", "deliberation_room_already_active", "deliberation_command_conflict", "appeal_already_active", "episode_lock_mismatch", "artifact_tombstoned", "scope_rule_conflict"].includes(code)) return coreError("state_conflict");
   if (code === "appeal_independence_not_proven") return coreError("review_blocked");
   if (code === "storage_busy") return coreError("storage_busy");
   if (["research_storage_readonly", "database_readonly"].includes(code)) return coreError("storage_readonly");

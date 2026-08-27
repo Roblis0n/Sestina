@@ -5,7 +5,7 @@ import { mapDomainError } from "../src/errors.js";
 describe("@sestina/core public boundary", () => {
   it("exports the application entry without storage or repository internals", () => {
     expect(Object.keys(coreApi).sort()).toEqual([
-      "SestinaCore", "compileCorrectionAppealSecondOpinionPrompt", "compileResearchRoomSemanticJudgePrompt", "coreErr", "coreOk",
+      "SestinaCore", "compileCorrectionAppealSecondOpinionPrompt", "compileDeliberationParticipantPrompt", "compileResearchRoomSemanticJudgePrompt", "coreErr", "coreOk",
       "createCorrectionAppealProviderEndpointIdentityHash", "createProjectStateBackup", "createSecretBackend", "createStableTextSpan",
       "getPrivacyManifest", "getReleaseIdentity", "getResearchRoomSemanticCriterionDefinition", "inspectProjectRecovery", "openSestina",
       "prepareCorrectionAppealSecondOpinionRequest", "prepareResearchRoomSemanticJudge", "previewProjectStateRestore", "RELEASE_IDENTITY",

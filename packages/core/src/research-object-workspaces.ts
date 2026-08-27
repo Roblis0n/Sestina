@@ -4,6 +4,7 @@ import {
   type BriefChangeSet,
   type BriefChangeStatus,
   type CorrectionAppeal,
+  type DeliberationRoom,
   type DecisionScope,
   type DecisionStatus,
   type EpisodeStatus,
@@ -40,7 +41,7 @@ function fromStored<T>(result: ResearchResult<T>): CoreResult<T> {
   return fromDomain(result);
 }
 
-export type ResearchObjectKind = "decision" | "issue" | "evidence" | "episode" | "receipt" | "appeal";
+export type ResearchObjectKind = "decision" | "issue" | "evidence" | "episode" | "receipt" | "appeal" | "deliberation_room";
 export type WorkspaceProviderStatus = "configured" | "ledger_only";
 
 export interface WorkspaceListRequest {
@@ -320,6 +321,51 @@ export interface AppealDetailProjection extends AppealSummaryProjection {
   readonly relatedReceiptHref: string;
 }
 
+export interface DeliberationRoomSummaryProjection {
+  readonly kind: "deliberation_room";
+  readonly id: string;
+  readonly title: string;
+  readonly status: DeliberationRoom["status"];
+  readonly providerReadiness: DeliberationRoom["providerReadiness"];
+  readonly source: DeliberationRoom["source"];
+  readonly participantStates: readonly [
+    { readonly slot: "a"; readonly providerId: string; readonly model: string; readonly status: string },
+    { readonly slot: "b"; readonly providerId: string; readonly model: string; readonly status: string },
+  ];
+  readonly differenceSummaryAvailable: boolean;
+  readonly providerCallCount: number;
+  readonly providerCallLimit: 4;
+  readonly challengeStatus?: NonNullable<DeliberationRoom["challenge"]>["status"];
+  readonly retryStatus?: NonNullable<DeliberationRoom["retry"]>["status"];
+  readonly manualOpinionCount: number;
+  readonly resolutionCount: number;
+  readonly version: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface DeliberationRoomDetailProjection extends DeliberationRoomSummaryProjection {
+  readonly participants: DeliberationRoom["participants"];
+  readonly manifests?: DeliberationRoom["manifests"];
+  readonly assessments: readonly NonNullable<DeliberationRoom["initialRound"]>["attempts"][number][];
+  readonly reveal?: NonNullable<DeliberationRoom["initialRound"]>["reveal"];
+  readonly differenceSummary?: DeliberationRoom["differenceSummary"];
+  readonly challenge?: DeliberationRoom["challenge"];
+  readonly retry?: DeliberationRoom["retry"];
+  readonly manualExternalOpinions: DeliberationRoom["manualExternalOpinions"];
+  readonly resolutions: DeliberationRoom["resolutions"];
+  readonly trace: readonly {
+    readonly step: "source" | "manifests" | "blind_round" | "reveal" | "difference" | "retry" | "challenge" | "manual_opinion" | "user_resolution" | "resolution_receipt";
+    readonly summary: string;
+    readonly at: string;
+  }[];
+  readonly availableActions: readonly ("prepare_manifests" | "confirm_and_start" | "cancel" | "reveal_complete" | "reveal_partial" | "prepare_retry" | "confirm_retry" | "prepare_challenge" | "finish_review" | "import_manual_opinion" | "resolve" | "close")[];
+  readonly userAuthorityOnly: true;
+  readonly canAutoResolve: false;
+  readonly sourceHref: string;
+  readonly receiptHrefs: readonly string[];
+}
+
 export interface BriefWorkspaceProjection {
   readonly schemaVersion: typeof RESEARCH_OBJECT_WORKSPACE_SCHEMA_VERSION;
   readonly projectId: string;
@@ -365,7 +411,7 @@ export interface BriefWorkspaceProjection {
 
 export interface AttentionItemProjection {
   readonly id: string;
-  readonly kind: "brief_candidate" | "decision" | "issue" | "episode" | "appeal" | "review" | "manifest" | "rollback" | "provider";
+  readonly kind: "brief_candidate" | "decision" | "issue" | "episode" | "appeal" | "deliberation_room" | "review" | "manifest" | "rollback" | "provider";
   readonly title: string;
   readonly reason: string;
   readonly severity: "high" | "normal";
@@ -401,7 +447,7 @@ export interface ProjectOverviewProjection {
   readonly project: { readonly id: string; readonly title: string; readonly version: number; readonly updatedAt: string };
   readonly providerStatus: WorkspaceProviderStatus;
   readonly brief: { readonly id: string; readonly versionId: string; readonly versionNumber: number; readonly question: string; readonly stage: string; readonly task: string };
-  readonly counts: { readonly decisions: number; readonly issues: number; readonly evidence: number; readonly episodes: number; readonly receipts: number; readonly appeals: number };
+  readonly counts: { readonly decisions: number; readonly issues: number; readonly evidence: number; readonly episodes: number; readonly receipts: number; readonly appeals: number; readonly deliberationRooms: number };
   readonly statuses: {
     readonly decisions: Readonly<Record<string, number>>;
     readonly issues: Readonly<Record<string, number>>;
@@ -409,6 +455,7 @@ export interface ProjectOverviewProjection {
     readonly episodes: Readonly<Record<string, number>>;
     readonly receipts: Readonly<Record<string, number>>;
     readonly appeals: Readonly<Record<string, number>>;
+    readonly deliberationRooms: Readonly<Record<string, number>>;
   };
   readonly attention: { readonly total: number; readonly top: readonly AttentionItemProjection[] };
   readonly currentEpisode?: { readonly id: string; readonly status: string; readonly updatedAt: string; readonly href: string };
@@ -488,7 +535,7 @@ function decodeCursor(value: string | undefined): WorkspaceCursor | undefined {
     if (Object.keys(item).sort().some((key, index) => key !== expected[index]) || Object.keys(item).length !== expected.length) return undefined;
     if (item.version !== 1 || item.schemaVersion !== RESEARCH_OBJECT_WORKSPACE_SCHEMA_VERSION) return undefined;
     if (typeof item.projectId !== "string" || typeof item.datasetVersion !== "string" || typeof item.filter !== "string" || typeof item.storeCursor !== "string") return undefined;
-    if (!["decision", "issue", "evidence", "episode", "receipt", "appeal"].includes(String(item.kind))) return undefined;
+    if (!["decision", "issue", "evidence", "episode", "receipt", "appeal", "deliberation_room"].includes(String(item.kind))) return undefined;
     return item as unknown as WorkspaceCursor;
   } catch {
     return undefined;
@@ -547,6 +594,67 @@ function receiptSummary(value: ResearchRoomReceipt): ReceiptSummaryProjection {
 
 function appealSummary(value: CorrectionAppeal): AppealSummaryProjection {
   return Object.freeze({ kind: "appeal", id: value.id, reviewId: value.source.reviewId, sourceReceiptId: value.source.receiptId, findingId: value.source.findingId, criterionId: value.source.rubric.criterionId, status: value.status, disagreement: value.statements.at(-1)?.statement.disagreement ?? "Correction appeal", version: value.version, attemptCount: value.attempts.length, resolutionCount: value.resolutions.length, createdAt: value.createdAt, updatedAt: value.updatedAt });
+}
+
+function deliberationParticipantState(value: DeliberationRoom, index: 0 | 1): DeliberationRoomSummaryProjection["participantStates"][number] {
+  const participant = value.participants[index];
+  const initial = value.initialRound?.attempts[index].status;
+  const retry = value.retry?.participantId === participant.id ? value.retry.status : undefined;
+  const challenge = value.challenge?.attempts[index].status;
+  return Object.freeze({ slot: participant.slot, providerId: participant.providerId, model: participant.model, status: challenge ?? retry ?? initial ?? (value.providerReadiness === "configured_distinct" ? "ready" : "unavailable") });
+}
+
+function deliberationSummary(value: DeliberationRoom): DeliberationRoomSummaryProjection {
+  return Object.freeze({
+    kind: "deliberation_room",
+    id: value.id,
+    title: value.title,
+    status: value.status,
+    providerReadiness: value.providerReadiness,
+    source: value.source,
+    participantStates: Object.freeze([deliberationParticipantState(value, 0), deliberationParticipantState(value, 1)]) as DeliberationRoomSummaryProjection["participantStates"],
+    differenceSummaryAvailable: value.differenceSummary !== undefined,
+    providerCallCount: (value.initialRound === undefined ? 0 : 2) + (value.retry?.userConfirmed === true ? 1 : 0) + (value.challenge?.userConfirmed === true ? 2 : 0),
+    providerCallLimit: 4 as const,
+    ...(value.challenge === undefined ? {} : { challengeStatus: value.challenge.status }),
+    ...(value.retry === undefined ? {} : { retryStatus: value.retry.status }),
+    manualOpinionCount: value.manualExternalOpinions.length,
+    resolutionCount: value.resolutions.length,
+    version: value.version,
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+  });
+}
+
+function deliberationSourceHref(source: DeliberationRoom["source"]): string {
+  if (source.kind === "correction_appeal") return `/project/appeals/${source.objectId}`;
+  if (source.kind === "research_issue") return `/project/issues/${source.objectId}`;
+  if (source.kind === "research_decision") return `/project/decisions/${source.objectId}`;
+  if (source.kind === "research_brief") return "/project/brief";
+  const prefix = source.objectId.slice(0, 5);
+  if (prefix === "rapl_") return `/project/appeals/${source.objectId}`;
+  if (prefix === "riss_") return `/project/issues/${source.objectId}`;
+  if (prefix === "rdec_") return `/project/decisions/${source.objectId}`;
+  return "/project/overview";
+}
+
+function deliberationActions(value: DeliberationRoom): DeliberationRoomDetailProjection["availableActions"] {
+  const actions: DeliberationRoomDetailProjection["availableActions"][number][] = [];
+  if (value.status === "draft" && value.providerReadiness === "configured_distinct") actions.push("prepare_manifests");
+  if (value.status === "awaiting_manifest_confirmation") actions.push("confirm_and_start");
+  if (["blind_round_running", "challenge_running", "retry_running"].includes(value.status)) actions.push("cancel");
+  if (value.status === "reveal_ready") {
+    const completed = (value.initialRound?.attempts.filter((item) => item.status === "completed").length ?? 0) + (value.retry?.status === "completed" ? 1 : 0);
+    actions.push(completed === 2 ? "reveal_complete" : "reveal_partial");
+  }
+  if (value.status === "partial" && value.retry === undefined && value.initialRound?.attempts.some((attempt) => ["failed", "cancelled", "unknown"].includes(attempt.status))) actions.push("prepare_retry");
+  if (value.status === "retry_prepared") actions.push("confirm_retry");
+  if (value.status === "difference_review" && value.challenge === undefined && value.retry === undefined) actions.push("prepare_challenge");
+  if (["difference_review", "partial", "failed", "cancelled"].includes(value.status)) actions.push("finish_review");
+  if (value.status !== "closed") actions.push("import_manual_opinion");
+  if (["difference_review", "waiting_user_resolution", "partial", "failed", "cancelled", "stale_conflicted", "resolved"].includes(value.status)) actions.push("resolve");
+  if (value.status !== "closed") actions.push("close");
+  return Object.freeze(actions);
 }
 
 function appealAvailableActions(value: CorrectionAppeal): AppealDetailProjection["availableActions"] {
@@ -1040,6 +1148,60 @@ export class ResearchObjectWorkspaceService {
     return coreOk(Object.freeze({ ...appealSummary(appeal), source: appeal.source, lineage: appeal.lineage, statements: appeal.statements, attempts: appeal.attempts, resolutions: appeal.resolutions, timeline: appeal.transitions, ...(latestComparison ? { latestComparison } : {}), availableActions: appealAvailableActions(appeal), userAuthorityOnly: true as const, canAutoResolve: false as const, relatedReceiptHref: `/project/receipts/${appeal.source.receiptId}` }));
   }
 
+  listDeliberationRooms(projectId: string, request: WorkspaceListRequest): CoreResult<WorkspacePage<DeliberationRoomSummaryProjection>> {
+    if (request.scope !== undefined || request.source !== undefined || request.active !== undefined || request.referencedByCurrentBrief !== undefined || request.issueKind !== undefined || request.relevance !== undefined || request.disposition !== undefined || request.providerStatus !== undefined) return coreErr("invalid_input");
+    return this.list(projectId, "deliberation_room", request,
+      (page) => this.store.deliberationRooms.listByProject(projectId, page),
+      (item) => [item.id, item.version, item.status, item.providerReadiness, item.updatedAt, item.differenceSummary?.canonicalHash, item.challenge?.status, item.manualExternalOpinions.length, item.resolutions.length],
+      (item, query) => (request.status === undefined || item.status === request.status)
+        && (request.unresolved === undefined || request.unresolved === !["resolved", "closed"].includes(item.status))
+        && (contains(item.id, query) || contains(item.title, query) || contains(item.source.question, query) || contains(item.source.objectId, query) || item.manualExternalOpinions.some((opinion) => contains(opinion.publicContent, query)) || item.resolutions.some((resolution) => contains(resolution.publicReason, query))),
+      deliberationSummary);
+  }
+
+  getDeliberationRoom(projectId: string, roomId: string): CoreResult<DeliberationRoomDetailProjection | undefined> {
+    if (!validResearchId(projectId, "rprj_") || !validResearchId(roomId, "rdlr_")) return coreErr("invalid_input");
+    const value = fromStored(this.store.deliberationRooms.getById(projectId, roomId)); if (!value.ok) return value;
+    if (value.value === undefined) return coreOk(undefined);
+    const room = value.value;
+    const trace: DeliberationRoomDetailProjection["trace"][number][] = [
+      Object.freeze({ step: "source" as const, summary: `${room.source.kind}:${room.source.objectId}@${room.source.objectVersion} · ${room.source.sourceHash.slice(0, 12)}`, at: room.createdAt }),
+    ];
+    if (room.manifests !== undefined) trace.push(Object.freeze({ step: "manifests", summary: `Two frozen participant manifests · ${room.manifests[0].canonicalHash.slice(0, 8)} / ${room.manifests[1].canonicalHash.slice(0, 8)}`, at: room.initialRound?.requestsFrozenAt ?? room.updatedAt }));
+    if (room.initialRound !== undefined) trace.push(Object.freeze({ step: "blind_round", summary: room.initialRound.attempts.map((item) => `${item.participantId}:${item.status}`).join(" · "), at: room.initialRound.requestsFrozenAt }));
+    if (room.initialRound?.reveal !== undefined) trace.push(Object.freeze({ step: "reveal", summary: `${room.initialRound.reveal.mode} reveal required an explicit user action`, at: room.initialRound.reveal.revealedAt }));
+    if (room.differenceSummary !== undefined) trace.push(Object.freeze({ step: "difference", summary: `Deterministic Difference Summary · ${room.differenceSummary.canonicalHash.slice(0, 12)} · no winner/rank/score`, at: room.initialRound?.reveal?.revealedAt ?? room.updatedAt }));
+    if (room.retry !== undefined) trace.push(Object.freeze({ step: "retry", summary: `${room.retry.participantId}:${room.retry.status} · fresh Manifest · original successful participant not re-run`, at: room.retry.completedAt ?? room.retry.startedAt ?? room.retry.preparedAt }));
+    if (room.challenge !== undefined) trace.push(Object.freeze({ step: "challenge", summary: `${room.challenge.status} · two bounded participant responses · ${room.challenge.attempts.map((attempt) => attempt.status).join("/")}`, at: room.challenge.completedAt ?? room.challenge.startedAt ?? room.challenge.preparedAt }));
+    for (const opinion of room.manualExternalOpinions) trace.push(Object.freeze({ step: "manual_opinion", summary: `${opinion.sourceLabel} · manual_non_blind · unverified_external_import`, at: opinion.importedAt }));
+    for (const resolution of room.resolutions) {
+      trace.push(Object.freeze({ step: "user_resolution", summary: `${resolution.kind}: ${resolution.publicReason}`, at: resolution.authority.confirmedAt }));
+      trace.push(Object.freeze({ step: "resolution_receipt", summary: `${resolution.receipt.id} · room scope only · separate Authority required`, at: resolution.authority.confirmedAt }));
+    }
+    return coreOk(Object.freeze({
+      ...deliberationSummary(room),
+      participants: room.participants,
+      ...(room.manifests === undefined ? {} : { manifests: room.manifests }),
+      assessments: Object.freeze([
+        ...(room.initialRound?.attempts.filter((attempt) => attempt.assessment !== undefined && !attempt.sealed) ?? []),
+        ...(room.retry?.attempt.assessment === undefined || room.retry.attempt.sealed ? [] : [room.retry.attempt]),
+        ...(room.challenge?.attempts.filter((attempt) => attempt.assessment !== undefined && !attempt.sealed) ?? []),
+      ]),
+      ...(room.initialRound?.reveal === undefined ? {} : { reveal: room.initialRound.reveal }),
+      ...(room.differenceSummary === undefined ? {} : { differenceSummary: room.differenceSummary }),
+      ...(room.challenge === undefined ? {} : { challenge: room.challenge }),
+      ...(room.retry === undefined ? {} : { retry: room.retry }),
+      manualExternalOpinions: room.manualExternalOpinions,
+      resolutions: room.resolutions,
+      trace: Object.freeze(trace),
+      availableActions: deliberationActions(room),
+      userAuthorityOnly: true as const,
+      canAutoResolve: false as const,
+      sourceHref: deliberationSourceHref(room.source),
+      receiptHrefs: Object.freeze(room.resolutions.map((resolution) => `/project/deliberation-rooms/${room.id}?receipt=${encodeURIComponent(resolution.receipt.id)}`)),
+    }));
+  }
+
   private statusCount<T>(reader: PageReader<T>, status: (item: T) => string): CoreResult<{ readonly total: number; readonly statuses: Readonly<Record<string, number>> }> {
     const counts: Record<string, number> = {};
     let total = 0;
@@ -1094,6 +1256,17 @@ export class ResearchObjectWorkspaceService {
                 : "Open the appeal and choose an explicit user resolution";
       add({ id: appeal.id, kind: "appeal", title: `Correction appeal · ${appeal.source.rubric.criterionId}`, reason: `Appeal is ${appeal.status}.`, severity: ["draft", "awaiting_send_confirmation", "second_opinion_ready", "stale_conflicted"].includes(appeal.status) ? "high" : "normal", href: `/project/appeals/${appeal.id}`, primaryAction: action, sourceObject: Object.freeze({ kind: "appeal", id: appeal.id }), createdAt: appeal.updatedAt });
     }); if (!appeals.ok) return appeals;
+    const deliberationRooms = this.forEachPaged(this.store.deliberationRooms.listByProject.bind(this.store.deliberationRooms, projectId), (room) => {
+      if (["resolved", "closed"].includes(room.status)) return;
+      const action = room.status === "draft" && room.providerReadiness !== "configured_distinct" ? "Configure two distinct Provider connections or record a manual external opinion"
+        : room.status === "awaiting_manifest_confirmation" ? "Inspect both exact Context Manifests and explicitly start the blind round"
+          : room.status === "blind_round_running" || room.status === "challenge_running" || room.status === "retry_running" ? "Monitor or cancel the bounded Provider call"
+            : room.status === "reveal_ready" ? "Explicitly reveal the complete or partial terminal results"
+              : room.status === "retry_prepared" ? "Inspect and explicitly confirm the failed participant's fresh retry Manifest"
+              : room.status === "difference_review" ? "Review the deterministic Difference Summary and choose the next user action"
+                : "Open the Room and record the user-owned resolution";
+      add({ id: room.id, kind: "deliberation_room", title: room.title, reason: `Deliberation Room is ${room.status}; Provider readiness is ${room.providerReadiness}.`, severity: ["awaiting_manifest_confirmation", "reveal_ready", "difference_review", "retry_prepared", "challenge_prepared", "waiting_user_resolution", "stale_conflicted"].includes(room.status) ? "high" : "normal", href: `/project/deliberation-rooms/${room.id}`, primaryAction: action, sourceObject: Object.freeze({ kind: "deliberation_room", id: room.id }), createdAt: room.updatedAt });
+    }); if (!deliberationRooms.ok) return deliberationRooms;
     for (const signal of transient) add({ ...signal });
     items.sort((left, right) => (left.severity === right.severity ? right.createdAt.localeCompare(left.createdAt) : left.severity === "high" ? -1 : 1) || left.kind.localeCompare(right.kind) || left.id.localeCompare(right.id));
     return coreOk(Object.freeze({ schemaVersion: RESEARCH_OBJECT_WORKSPACE_SCHEMA_VERSION, projectId, total, items: Object.freeze(items), truncated: total > items.length }));
@@ -1111,23 +1284,25 @@ export class ResearchObjectWorkspaceService {
     const episodes = this.statusCount(this.store.episodes.listByProject.bind(this.store.episodes, projectId), (item) => item.status); if (!episodes.ok) return episodes;
     const receipts = this.statusCount(this.store.roomReceipts.listByProject.bind(this.store.roomReceipts, projectId), (item) => item.status); if (!receipts.ok) return receipts;
     const appeals = this.statusCount(this.store.correctionAppeals.listByProject.bind(this.store.correctionAppeals, projectId), (item) => item.status); if (!appeals.ok) return appeals;
+    const deliberationRooms = this.statusCount(this.store.deliberationRooms.listByProject.bind(this.store.deliberationRooms, projectId), (item) => item.status); if (!deliberationRooms.ok) return deliberationRooms;
     const attention = this.getAttention(projectId, transient); if (!attention.ok) return attention;
     const recentDecisions = this.recent(this.store.decisions.listByScope.bind(this.store.decisions, projectId, undefined), (item) => ({ kind: "decision" as const, id: item.id, label: item.statement, status: item.status, at: item.updatedAt, href: `/project/decisions/${item.id}` }), (item) => item.updatedAt, 10); if (!recentDecisions.ok) return recentDecisions;
     const recentIssues = this.recent(this.store.issues.listByStatus.bind(this.store.issues, projectId, undefined), (item) => ({ kind: "issue" as const, id: item.id, label: item.summary, status: item.status, at: item.updatedAt, href: `/project/issues/${item.id}` }), (item) => item.updatedAt, 10); if (!recentIssues.ok) return recentIssues;
     const recentEpisodes = this.recent(this.store.episodes.listByProject.bind(this.store.episodes, projectId), (item) => ({ kind: "episode" as const, id: item.id, label: `Episode ${item.id}`, status: item.status, at: item.updatedAt, href: `/project/episodes/${item.id}` }), (item) => item.updatedAt, 10); if (!recentEpisodes.ok) return recentEpisodes;
     const recentReceipts = this.recent(this.store.roomReceipts.listByProject.bind(this.store.roomReceipts, projectId), (item) => ({ kind: "receipt" as const, id: item.id, label: item.analysis.argumentDelta.summary, status: item.status, disposition: item.disposition.kind, at: item.updatedAt, href: `/project/receipts/${item.id}` }), (item) => item.updatedAt, 10); if (!recentReceipts.ok) return recentReceipts;
     const recentAppeals = this.recent(this.store.correctionAppeals.listByProject.bind(this.store.correctionAppeals, projectId), (item) => ({ kind: "appeal" as const, id: item.id, label: item.statements.at(-1)?.statement.disagreement ?? `Appeal ${item.id}`, status: item.status, at: item.updatedAt, href: `/project/appeals/${item.id}` }), (item) => item.updatedAt, 10); if (!recentAppeals.ok) return recentAppeals;
+    const recentDeliberationRooms = this.recent(this.store.deliberationRooms.listByProject.bind(this.store.deliberationRooms, projectId), (item) => ({ kind: "deliberation_room" as const, id: item.id, label: item.title, status: item.status, at: item.updatedAt, href: `/project/deliberations/${item.id}` }), (item) => item.updatedAt, 10); if (!recentDeliberationRooms.ok) return recentDeliberationRooms;
     const currentEpisode = recentEpisodes.value.find((item) => !["accepted", "rejected", "abandoned"].includes(item.status)) ?? recentEpisodes.value[0];
     const latestReceipt = recentReceipts.value[0];
     const briefChanges = [brief.value.active, ...brief.value.versions.slice(1)].map((version) => ({ kind: "brief" as const, id: version.id, label: version.currentTask, status: version.id === brief.value.active.id ? "active" : "historical", at: version.createdAt, href: "/project/brief" }));
-    const recentChanges = [...briefChanges, ...recentDecisions.value, ...recentIssues.value, ...recentEpisodes.value, ...recentReceipts.value, ...recentAppeals.value].sort((left, right) => right.at.localeCompare(left.at) || left.id.localeCompare(right.id)).slice(0, 10);
+    const recentChanges = [...briefChanges, ...recentDecisions.value, ...recentIssues.value, ...recentEpisodes.value, ...recentReceipts.value, ...recentAppeals.value, ...recentDeliberationRooms.value].sort((left, right) => right.at.localeCompare(left.at) || left.id.localeCompare(right.id)).slice(0, 10);
     return coreOk(Object.freeze({
       schemaVersion: RESEARCH_OBJECT_WORKSPACE_SCHEMA_VERSION,
       project: Object.freeze({ id: project.value.id, title: project.value.title, version: project.value.version, updatedAt: project.value.updatedAt }),
       providerStatus: input.providerStatus,
       brief: Object.freeze({ id: brief.value.briefId, versionId: brief.value.active.id, versionNumber: brief.value.active.versionNumber, question: brief.value.active.projectQuestion, stage: brief.value.active.currentStage, task: brief.value.active.currentTask }),
-      counts: Object.freeze({ decisions: decisions.value.total, issues: issues.value.total, evidence: evidence.value.total, episodes: episodes.value.total, receipts: receipts.value.total, appeals: appeals.value.total }),
-      statuses: Object.freeze({ decisions: decisions.value.statuses, issues: issues.value.statuses, evidence: evidence.value.statuses, episodes: episodes.value.statuses, receipts: receipts.value.statuses, appeals: appeals.value.statuses }),
+      counts: Object.freeze({ decisions: decisions.value.total, issues: issues.value.total, evidence: evidence.value.total, episodes: episodes.value.total, receipts: receipts.value.total, appeals: appeals.value.total, deliberationRooms: deliberationRooms.value.total }),
+      statuses: Object.freeze({ decisions: decisions.value.statuses, issues: issues.value.statuses, evidence: evidence.value.statuses, episodes: episodes.value.statuses, receipts: receipts.value.statuses, appeals: appeals.value.statuses, deliberationRooms: deliberationRooms.value.statuses }),
       attention: Object.freeze({ total: attention.value.total, top: attention.value.items.slice(0, 5) }),
       ...(currentEpisode ? { currentEpisode: Object.freeze({ id: currentEpisode.id, status: currentEpisode.status, updatedAt: currentEpisode.at, href: currentEpisode.href }) } : {}),
       ...(latestReceipt ? { latestReceipt: Object.freeze({ id: latestReceipt.id, status: latestReceipt.status, disposition: latestReceipt.disposition, updatedAt: latestReceipt.at, href: latestReceipt.href }) } : {}),
@@ -1143,7 +1318,8 @@ export class ResearchObjectWorkspaceService {
     const episodes = this.fingerprint(projectId, "episode", this.store.episodes.listByProject.bind(this.store.episodes, projectId), (item) => [item.id, item.version, item.status, item.updatedAt]); if (!episodes.ok) return episodes;
     const receipts = this.fingerprint(projectId, "receipt", this.store.roomReceipts.listByProject.bind(this.store.roomReceipts, projectId), (item) => [item.id, item.version, item.status, item.updatedAt, item.receiptHash]); if (!receipts.ok) return receipts;
     const appeals = this.fingerprint(projectId, "appeal", this.store.correctionAppeals.listByProject.bind(this.store.correctionAppeals, projectId), (item) => [item.id, item.version, item.status, item.updatedAt, item.source.findingHash, item.attempts.length, item.resolutions.length]); if (!appeals.ok) return appeals;
-    return coreOk(createHash("sha256").update(JSON.stringify({ brief: [brief.value.brief.id, brief.value.brief.version, brief.value.version.id], decisions: decisions.value, issues: issues.value, evidence: evidence.value, episodes: episodes.value, receipts: receipts.value, appeals: appeals.value }), "utf8").digest("hex"));
+    const deliberationRooms = this.fingerprint(projectId, "deliberation_room", this.store.deliberationRooms.listByProject.bind(this.store.deliberationRooms, projectId), (item) => [item.id, item.version, item.status, item.providerReadiness, item.updatedAt, item.differenceSummary?.canonicalHash, item.challenge?.status, item.manualExternalOpinions.length, item.resolutions.length]); if (!deliberationRooms.ok) return deliberationRooms;
+    return coreOk(createHash("sha256").update(JSON.stringify({ brief: [brief.value.brief.id, brief.value.brief.version, brief.value.version.id], decisions: decisions.value, issues: issues.value, evidence: evidence.value, episodes: episodes.value, receipts: receipts.value, appeals: appeals.value, deliberationRooms: deliberationRooms.value }), "utf8").digest("hex"));
   }
 
   search(projectId: string, input: { readonly query: string; readonly limit: number; readonly cursor?: string }): CoreResult<ResearchObjectSearchProjection> {
@@ -1181,6 +1357,9 @@ export class ResearchObjectWorkspaceService {
       const statement = item.statements.at(-1)?.statement;
       if (contains(item.id, query) || contains(item.source.reviewId, query) || contains(item.source.receiptId, query) || contains(item.source.findingId, query) || contains(item.source.rubric.criterionId, query) || statement !== undefined && [statement.disagreement, statement.claimedError, statement.missingOrMisreadContext, statement.secondOpinionQuestion].some((field) => contains(field, query)) || item.resolutions.some((resolution) => contains(resolution.publicReason, query))) add({ kind: "appeal", id: item.id, title: `Correction appeal · ${item.source.rubric.criterionId}`, detail: statement?.disagreement ?? "Correction appeal", status: item.status, source: "user_recorded:user", projectId, href: `/project/appeals/${item.id}` });
     }); if (!appeals.ok) return appeals;
+    const deliberationRooms = this.forEachPaged(this.store.deliberationRooms.listByProject.bind(this.store.deliberationRooms, projectId), (item) => {
+      if (contains(item.id, query) || contains(item.title, query) || contains(item.source.question, query) || contains(item.source.objectId, query) || item.manualExternalOpinions.some((opinion) => contains(opinion.publicContent, query)) || item.resolutions.some((resolution) => contains(resolution.publicReason, query))) add({ kind: "deliberation_room", id: item.id, title: item.title, detail: item.source.question, status: item.status, source: `${item.source.kind}:${item.source.objectId}`, projectId, href: `/project/deliberations/${item.id}` });
+    }); if (!deliberationRooms.ok) return deliberationRooms;
     const nextOffset = offset + found.length;
     const hasMore = matches > nextOffset;
     return coreOk(Object.freeze({ schemaVersion: RESEARCH_OBJECT_WORKSPACE_SCHEMA_VERSION, projectId, datasetVersion: datasetVersion.value, query: input.query.trim(), items: Object.freeze(found), ...(hasMore ? { nextCursor: encodeSearchCursor({ version: 1, schemaVersion: RESEARCH_OBJECT_WORKSPACE_SCHEMA_VERSION, projectId, datasetVersion: datasetVersion.value, query, offset: nextOffset }) } : {}), truncated: hasMore }));

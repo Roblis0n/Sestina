@@ -160,8 +160,8 @@ describe("Research Room typed API boundary", () => {
       project: { id: "rprj_01ARZ3NDEKTSV4RRFFQ69G5FAV", title: "Research", version: 1, updatedAt: "2026-08-25T00:00:00.000Z" },
       providerStatus: "ledger_only",
       brief: { id: "rbrf_01ARZ3NDEKTSV4RRFFQ69G5FAV", versionId: "rbrf_01ARZ3NDEKTSV4RRFFQ69G5FAW", versionNumber: 1, question: "Question", stage: "revision", task: "Task" },
-      counts: { decisions: 1, issues: 0, evidence: 0, episodes: 0, receipts: 0, appeals: 0 },
-      statuses: { decisions: { proposed: 1 }, issues: {}, evidence: {}, episodes: {}, receipts: {}, appeals: {} },
+      counts: { decisions: 1, issues: 0, evidence: 0, episodes: 0, receipts: 0, appeals: 0, deliberationRooms: 0 },
+      statuses: { decisions: { proposed: 1 }, issues: {}, evidence: {}, episodes: {}, receipts: {}, appeals: {}, deliberationRooms: {} },
       attention: { total: 1, top: [{ id: "rdec_01ARZ3NDEKTSV4RRFFQ69G5FAV", kind: "decision", title: "Decision", reason: "Pending", severity: "high", href: "/project/decisions/rdec_01ARZ3NDEKTSV4RRFFQ69G5FAV", primaryAction: "Open Decision", sourceObject: { kind: "decision", id: "rdec_01ARZ3NDEKTSV4RRFFQ69G5FAV" }, valid: true, createdAt: "2026-08-25T00:00:00.000Z" }] },
       recentChanges: [],
     };

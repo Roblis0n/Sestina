@@ -17,6 +17,7 @@
     { "version": 14, "name": "014-review-runs" },
     { "version": 15, "name": "015-argument-graph" },
     { "version": 16, "name": "016-research-room" },
-    { "version": 17, "name": "017-correction-appeals" }
+    { "version": 17, "name": "017-correction-appeals" },
+    { "version": 18, "name": "018-deliberation-rooms" }
   ]
 }

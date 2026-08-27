@@ -8,6 +8,8 @@ import {
   decodeDecisionSupersede,
   decodeDirectoryPickerCancellation,
   decodeLanguage,
+  decodePreparedDeliberation,
+  decodePreparedDeliberationRetry,
   decodePreparedAppealSecondOpinion,
   decodePreparedReview,
   decodeProjectOpenResult,
@@ -35,6 +37,8 @@ import type {
   CommitDispositionInput,
   DecisionDetailDto,
   DecisionSummaryDto,
+  DeliberationRoomDetailDto,
+  DeliberationRoomSummaryDto,
   EvidenceDetailDto,
   EvidenceSummaryDto,
   EpisodeDetailDto,
@@ -43,6 +47,8 @@ import type {
   EvidenceClass,
   PreparedReviewDto,
   PreparedAppealSecondOpinionDto,
+  PreparedDeliberationDto,
+  PreparedDeliberationRetryDto,
   ProjectOverviewDto,
   ProjectOpenResultDto,
   ProviderSaveInput,
@@ -173,8 +179,8 @@ export class ResearchRoomApi {
     return this.request(`/api/project/brief?historyLimit=${encodeURIComponent(String(historyLimit))}`, decodeBriefWorkspace);
   }
 
-  async listResearchObjects(kind: ResearchObjectKind, input: WorkspaceListRequest): Promise<WorkspacePage<DecisionSummaryDto | IssueSummaryDto | EvidenceSummaryDto | EpisodeSummaryDto | ObjectReceiptSummaryDto | AppealSummaryDto>> {
-    const collection = kind === "decision" ? "decisions" : kind === "issue" ? "issues" : kind === "evidence" ? "evidence" : kind === "episode" ? "episodes" : kind === "receipt" ? "receipts" : "appeals";
+  async listResearchObjects(kind: ResearchObjectKind, input: WorkspaceListRequest): Promise<WorkspacePage<DecisionSummaryDto | IssueSummaryDto | EvidenceSummaryDto | EpisodeSummaryDto | ObjectReceiptSummaryDto | AppealSummaryDto | DeliberationRoomSummaryDto>> {
+    const collection = kind === "decision" ? "decisions" : kind === "issue" ? "issues" : kind === "evidence" ? "evidence" : kind === "episode" ? "episodes" : kind === "receipt" ? "receipts" : kind === "appeal" ? "appeals" : "deliberation-rooms";
     const query = new URLSearchParams({ limit: String(input.limit) });
     if (input.cursor) query.set("cursor", input.cursor);
     if (input.status) query.set("status", input.status);
@@ -191,8 +197,8 @@ export class ResearchRoomApi {
     return this.request(`/api/project/${collection}?${query.toString()}`, (value) => decodeWorkspacePage(value, kind));
   }
 
-  async researchObject(kind: ResearchObjectKind, id: string): Promise<DecisionDetailDto | IssueDetailDto | EvidenceDetailDto | EpisodeDetailDto | ObjectReceiptDetailDto | AppealDetailDto> {
-    const collection = kind === "decision" ? "decisions" : kind === "issue" ? "issues" : kind === "evidence" ? "evidence" : kind === "episode" ? "episodes" : kind === "receipt" ? "receipts" : "appeals";
+  async researchObject(kind: ResearchObjectKind, id: string): Promise<DecisionDetailDto | IssueDetailDto | EvidenceDetailDto | EpisodeDetailDto | ObjectReceiptDetailDto | AppealDetailDto | DeliberationRoomDetailDto> {
+    const collection = kind === "decision" ? "decisions" : kind === "issue" ? "issues" : kind === "evidence" ? "evidence" : kind === "episode" ? "episodes" : kind === "receipt" ? "receipts" : kind === "appeal" ? "appeals" : "deliberation-rooms";
     return this.request(`/api/project/${collection}/${encodeURIComponent(id)}`, (value) => decodeResearchObjectDetail(value, kind));
   }
 
@@ -281,6 +287,60 @@ export class ResearchRoomApi {
     return this.request(`/api/project/appeals/${encodeURIComponent(appealId)}/resolve`, (value) => decodeResearchObjectDetail(value, "appeal") as AppealDetailDto, { method: "POST", mutation: true, body: { commandType: "resolve_correction_appeal", projectId, expectedVersion, kind, publicReason, confirmed: true } });
   }
 
+  async createDeliberationRoom(input: { readonly projectId: string; readonly sourceKind: "correction_appeal" | "research_issue" | "research_decision" | "research_brief" | "research_object"; readonly sourceObjectId: string; readonly question: string; readonly title: string }): Promise<DeliberationRoomDetailDto> {
+    return this.request("/api/project/deliberation-rooms", (value) => decodeResearchObjectDetail(value, "deliberation_room") as DeliberationRoomDetailDto, { method: "POST", mutation: true, body: { commandType: "create_deliberation_room", commandId: this.commandId("create-room"), confirmed: true, ...input } });
+  }
+
+  async refreshDeliberationRoomSource(projectId: string, roomId: string): Promise<DeliberationRoomDetailDto> {
+    return this.deliberationMutation(roomId, "refresh-source", { commandType: "refresh_deliberation_source", confirmed: true, projectId });
+  }
+
+  async prepareDeliberationRoom(input: { readonly projectId: string; readonly roomId: string; readonly expectedVersion: number; readonly revisionId: string; readonly decisionIds: readonly string[]; readonly issueIds: readonly string[]; readonly evidenceIds: readonly string[] }): Promise<PreparedDeliberationDto> {
+    return this.request(`/api/project/deliberation-rooms/${encodeURIComponent(input.roomId)}/prepare`, decodePreparedDeliberation, { method: "POST", mutation: true, body: { commandType: "prepare_deliberation_manifests", commandId: this.commandId("prepare-room"), confirmed: true, projectId: input.projectId, expectedVersion: input.expectedVersion, revisionId: input.revisionId, allowedContext: { includeBrief: true, decisionIds: input.decisionIds, issueIds: input.issueIds, evidenceIds: input.evidenceIds } } });
+  }
+
+  async runDeliberationRoom(projectId: string, roomId: string, expectedVersion: number, manifestHashes: readonly [string, string], signal?: AbortSignal): Promise<DeliberationRoomDetailDto> {
+    return this.deliberationMutation(roomId, "run", { commandType: "run_deliberation_blind_round", commandId: this.commandId("run-room"), confirmed: true, projectId, expectedVersion, manifestHashes }, signal);
+  }
+
+  async cancelDeliberationRun(projectId: string, roomId: string, expectedVersion: number): Promise<DeliberationRoomDetailDto> {
+    return this.deliberationMutation(roomId, "cancel", { commandType: "cancel_deliberation_run", commandId: this.commandId("cancel-room"), confirmed: true, projectId, expectedVersion });
+  }
+
+  async revealDeliberationRoom(projectId: string, roomId: string, expectedVersion: number, mode: "complete" | "partial" | "cancelled"): Promise<DeliberationRoomDetailDto> {
+    return this.deliberationMutation(roomId, "reveal", { commandType: "reveal_deliberation_round", commandId: this.commandId("reveal-room"), confirmed: true, projectId, expectedVersion, mode });
+  }
+
+  async prepareDeliberationRetry(projectId: string, roomId: string, expectedVersion: number): Promise<PreparedDeliberationRetryDto> {
+    return this.request(`/api/project/deliberation-rooms/${encodeURIComponent(roomId)}/prepare-retry`, decodePreparedDeliberationRetry, { method: "POST", mutation: true, body: { commandType: "prepare_deliberation_participant_retry", commandId: this.commandId("prepare-retry"), confirmed: true, projectId, expectedVersion } });
+  }
+
+  async runDeliberationRetry(projectId: string, roomId: string, expectedVersion: number, retryId: string, manifestHash: string, signal?: AbortSignal): Promise<DeliberationRoomDetailDto> {
+    return this.deliberationMutation(roomId, "run-retry", { commandType: "run_deliberation_participant_retry", commandId: this.commandId("run-retry"), confirmed: true, projectId, expectedVersion, retryId, manifestHash }, signal);
+  }
+
+  async prepareDeliberationChallenge(projectId: string, roomId: string, expectedVersion: number, question: string): Promise<PreparedDeliberationDto> {
+    return this.request(`/api/project/deliberation-rooms/${encodeURIComponent(roomId)}/prepare-challenge`, decodePreparedDeliberation, { method: "POST", mutation: true, body: { commandType: "prepare_deliberation_challenge", commandId: this.commandId("prepare-challenge"), confirmed: true, projectId, expectedVersion, question } });
+  }
+
+  async runDeliberationChallenge(projectId: string, roomId: string, expectedVersion: number, challengeId: string, manifestHashes: readonly [string, string], signal?: AbortSignal): Promise<DeliberationRoomDetailDto> {
+    return this.deliberationMutation(roomId, "run-challenge", { commandType: "run_deliberation_challenge", commandId: this.commandId("run-challenge"), confirmed: true, projectId, expectedVersion, challengeId, manifestHashes }, signal);
+  }
+
+  async finishDeliberationReview(projectId: string, roomId: string, expectedVersion: number): Promise<DeliberationRoomDetailDto> {
+    return this.deliberationMutation(roomId, "finish-review", { commandType: "finish_deliberation_difference_review", commandId: this.commandId("finish-room"), confirmed: true, projectId, expectedVersion });
+  }
+
+  async importManualDeliberationOpinion(input: { readonly projectId: string; readonly roomId: string; readonly expectedVersion: number; readonly sourceLabel: string; readonly providerClaim: string; readonly modelClaim: string; readonly capturedAt: string; readonly contextDisclosure: string; readonly sawParticipantAOutput: boolean; readonly sawParticipantBOutput: boolean; readonly publicContent: string }): Promise<DeliberationRoomDetailDto> {
+    const { roomId, ...body } = input;
+    return this.deliberationMutation(roomId, "manual-opinion", { commandType: "import_manual_external_opinion", commandId: this.commandId("manual-opinion"), confirmed: true, ...body });
+  }
+
+  async resolveDeliberationRoom(input: { readonly projectId: string; readonly roomId: string; readonly expectedVersion: number; readonly kind: "adopt_a" | "adopt_b" | "combine_edit" | "keep_disputed" | "request_evidence" | "close_without_change"; readonly publicReason: string; readonly combinedText?: string }): Promise<DeliberationRoomDetailDto> {
+    const { roomId, ...body } = input;
+    return this.deliberationMutation(roomId, "resolve", { commandType: "resolve_deliberation_room", commandId: this.commandId("resolve-room"), confirmed: true, ...body, combinedText: input.combinedText ?? "" });
+  }
+
   async downloadReceipt(receiptId: string): Promise<Blob> {
     if (!this.#sessionToken) throw new ResearchRoomApiError("session_unavailable", "The local session is unavailable.");
     try {
@@ -319,6 +379,14 @@ export class ResearchRoomApi {
     } catch (error) {
       throw toApiError(error);
     }
+  }
+
+  private commandId(kind: string): string {
+    return `ui:${kind}:${crypto.randomUUID()}`;
+  }
+
+  private async deliberationMutation(roomId: string, action: string, body: Readonly<Record<string, unknown>>, signal?: AbortSignal): Promise<DeliberationRoomDetailDto> {
+    return this.request(`/api/project/deliberation-rooms/${encodeURIComponent(roomId)}/${action}`, (value) => decodeResearchObjectDetail(value, "deliberation_room") as DeliberationRoomDetailDto, { method: "POST", mutation: true, body, ...(signal ? { signal } : {}) });
   }
 }
 

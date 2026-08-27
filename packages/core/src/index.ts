@@ -26,8 +26,33 @@ export type {
   UpdateCorrectionAppealInput,
 } from "./correction-appeal.js";
 export { createCorrectionAppealProviderEndpointIdentityHash } from "./correction-appeal.js";
+export type {
+  CreateDeliberationRoomInput,
+  DeliberationParticipantProvider,
+  DeliberationParticipantProviderInput,
+  DeliberationRoomCommandInput,
+  ImportManualExternalOpinionCoreInput,
+  PrepareDeliberationChallengeCoreInput,
+  PreparedDeliberationChallenge,
+  PreparedDeliberationRoom,
+  PreparedDeliberationParticipantRetry,
+  PrepareDeliberationRoomInput,
+  ResolveDeliberationRoomInput,
+  RevealDeliberationRoomInput,
+  RunDeliberationRoomBlindRoundInput,
+  RunDeliberationChallengeCoreInput,
+  RunDeliberationParticipantRetryCoreInput,
+} from "./deliberation-room.js";
+export type {
+  DeliberationContextManifest,
+  DeliberationDifferenceSummary,
+  DeliberationParticipantAssessment,
+  DeliberationResolutionKind,
+  DeliberationRoom,
+} from "@sestina/research";
 export {
   compileCorrectionAppealSecondOpinionPrompt,
+  compileDeliberationParticipantPrompt,
   compileResearchRoomSemanticJudgePrompt,
   createStableTextSpan,
   getResearchRoomSemanticCriterionDefinition,
@@ -38,6 +63,7 @@ export {
 export type {
   CorrectionAppealSecondOpinionRequest,
   CorrectionAppealSecondOpinionResponse,
+  DeliberationParticipantRequest,
   ResearchRoomSemanticJudgeRequest,
   ResearchRoomSemanticProviderBinding,
 } from "@sestina/review";
@@ -64,6 +90,8 @@ export type {
   BriefWorkspaceProjection,
   DecisionDetailProjection,
   DecisionSummaryProjection,
+  DeliberationRoomDetailProjection,
+  DeliberationRoomSummaryProjection,
   EvidenceDetailProjection,
   EvidenceSummaryProjection,
   EpisodeDetailProjection,

@@ -4,6 +4,7 @@ import { App } from "./app/App.js";
 import { applyAppearanceToDocument, readAppearancePreferences } from "./preferences/appearance.js";
 import "./styles/tokens.css";
 import "./styles/app.css";
+import "./styles/deliberation.css";
 
 applyAppearanceToDocument(readAppearancePreferences());
 const root = document.getElementById("root");

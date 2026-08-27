@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 import type { AppLanguage, ProviderSaveInput, ProviderStatusDto } from "../../api/dto.js";
 import type { AppearancePreferences } from "../../preferences/appearance.js";
 import { t } from "../../i18n/copy.js";
@@ -32,14 +32,36 @@ interface AppChromeProps {
   readonly onError: (message: string) => void;
 }
 export function AppChrome(props: AppChromeProps) {
+  const chromeRef = useRef<HTMLElement>(null);
   const providerButtonRef = useRef<HTMLButtonElement>(null);
   const secondOpinionProviderButtonRef = useRef<HTMLButtonElement>(null);
   const appearanceButtonRef = useRef<HTMLButtonElement>(null);
   const tone = props.runtime === "ready" || props.runtime === "committed" ? "ready" : props.runtime === "analyzing" || props.runtime === "cancel_requested" ? "working" : props.runtime === "degraded" ? "warning" : "danger";
   const runtimeLabel = t(props.language, props.runtime === "ready" ? "runtime_ready" : props.runtime);
+  useLayoutEffect(() => {
+    const chrome = chromeRef.current;
+    if (!chrome) return undefined;
+    const root = document.documentElement;
+    const syncChromeGeometry = () => {
+      const height = Math.ceil(chrome.getBoundingClientRect().height);
+      root.style.setProperty("--chrome-height", `${height}px`);
+      const tooTallToRemainSticky = height > 192 || height > window.innerHeight * 0.3;
+      root.dataset.chromeLayout = tooTallToRemainSticky ? "flow" : "sticky";
+    };
+    syncChromeGeometry();
+    const resizeObserver = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(syncChromeGeometry);
+    resizeObserver?.observe(chrome);
+    window.addEventListener("resize", syncChromeGeometry);
+    return () => {
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", syncChromeGeometry);
+      root.style.removeProperty("--chrome-height");
+      delete root.dataset.chromeLayout;
+    };
+  }, []);
   return (
     <>
-      <header className="app-chrome">
+      <header ref={chromeRef} className="app-chrome">
         <a className="brand" href="#main-content" aria-label={`${t(props.language, "app_name")} — ${t(props.language, "app_subtitle")}`}>
           <span className="brand__mark" aria-hidden="true">S</span>
           <span><strong>{t(props.language, "app_name")}</strong><small>{t(props.language, "app_subtitle")}</small></span>

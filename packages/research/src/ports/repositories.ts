@@ -21,6 +21,7 @@ import type { MechanismEvidenceLink } from "../argument/mechanism-evidence-link.
 import type { ArgumentDelta } from "../argument/argument-delta.js";
 import type { ResearchRoomReceipt } from "../room/research-room.js";
 import type { CorrectionAppeal } from "../appeal/correction-appeal.js";
+import type { DeliberationRoom, DeliberationSourceKind } from "../deliberation/deliberation-room.js";
 
 export const RESEARCH_PAGE_LIMIT_MAX = 200;
 
@@ -152,6 +153,14 @@ export interface CorrectionAppealRepository {
   compareAndSwap(value: CorrectionAppeal, expectedVersion: EntityVersion): ResearchResult<CorrectionAppeal>;
 }
 
+export interface DeliberationRoomRepository {
+  create(value: DeliberationRoom): ResearchResult<DeliberationRoom>;
+  getById(projectId: string, roomId: string): ResearchResult<DeliberationRoom | undefined>;
+  getActiveBySource(projectId: string, sourceKind: DeliberationSourceKind, sourceObjectId: string): ResearchResult<DeliberationRoom | undefined>;
+  listByProject(projectId: string, page: ResearchPageRequest): ResearchResult<ResearchPage<DeliberationRoom>>;
+  compareAndSwap(value: DeliberationRoom, expectedVersion: EntityVersion): ResearchResult<DeliberationRoom>;
+}
+
 export interface ResearchRepositories extends ArgumentGraphRepositories {
   readonly projects: ResearchProjectRepository;
   readonly artifacts: ResearchArtifactRepository;
@@ -163,6 +172,7 @@ export interface ResearchRepositories extends ArgumentGraphRepositories {
   readonly snapshots: ResearchSnapshotRepository;
   readonly roomReceipts: ResearchRoomReceiptRepository;
   readonly correctionAppeals: CorrectionAppealRepository;
+  readonly deliberationRooms: DeliberationRoomRepository;
 }
 
 export interface ResearchUnitOfWork {

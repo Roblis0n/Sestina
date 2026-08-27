@@ -58,8 +58,10 @@ const GUIDANCE_FIXTURES: Record<string, string> = {
     "UI-02 Research Object Workspaces and Project Continuity",
     "RI-49 Correction Appeal and One Independent Second Opinion",
     "RI-49（已完成）",
+    "RI-50 Mutually Blind, Bounded Two-Participant Deliberation Room",
+    "RI-50（已完成）",
     "当前没有活动编码任务",
-    "none_active_RI50_not_started",
+    "none_active_RI51_not_started",
     "completed_and_verified_implementation_real_provider_evidence_blocked",
     "Market Gate 0",
   ].join("\n"),
@@ -72,6 +74,30 @@ const GUIDANCE_FIXTURES: Record<string, string> = {
     "required_before_every_task",
     "Gate A：方向成立",
     "final: ready_to_start | do_not_start",
+  ].join("\n"),
+  "docs/execution/RI-50-MUTUALLY-BLIND-BOUNDED-DELIBERATION-ROOM-TASK-START-RECORD.md": [
+    "task: RI-50",
+    "status: ready_to_start",
+    "activity_status: active_mutually_blind_bounded_deliberation_room",
+    "implementation_authorization: explicit_user_authorization_2026_08_26",
+    "final: ready_to_start",
+    "real_second_opinion_provider_smoke: blocked_missing_user_config",
+    "ri50_real_value_gate: unproven_nonblocking_for_implementation",
+    "ri51_status: not_started",
+  ].join("\n"),
+  "docs/execution/RI-50-MUTUALLY-BLIND-BOUNDED-DELIBERATION-ROOM-TASK-RESULT.md": [
+    "task: RI-50",
+    "status: completed_and_verified",
+    "pnpm_verify: passed",
+    "blind_parallel_protocol: passed_with_loopback_and_fixtures",
+    "bounded_rounds: passed",
+    "user_authority: passed",
+    "production_visual_verification: passed",
+    "real_two_provider_deliberation_smoke: blocked_missing_user_config",
+    "mutual_cognitive_independence: unproven",
+    "repeatable_non_redundant_value_in_real_cases: unproven",
+    "external_user_value: unproven",
+    "next_code_goal: none_active_RI51_not_started",
   ].join("\n"),
   "docs/execution/RI-49-CORRECTION-APPEAL-AND-INDEPENDENT-SECOND-OPINION-TASK-START-RECORD.md": [
     "task: RI-49",
@@ -154,12 +180,12 @@ function activeBlock(currentTask: string): string {
     "<!-- sestina-prework-direction-gate: required -->",
     `<!-- sestina-current-task: ${currentTask} -->`,
     `<!-- sestina-current-status: ${CURRENT_STATUS} -->`,
-    "<!-- sestina-last-completed-task: RI-49 -->",
+    "<!-- sestina-last-completed-task: RI-50 -->",
     "<!-- sestina-last-completed-status: completed_and_verified -->",
-    "<!-- sestina-implementation-base: 579e50055f9fb7e84bf4aa272eb643d37c228895 -->",
-    "<!-- sestina-next-code-goal: none_active_RI50_not_started -->",
+    "<!-- sestina-implementation-base: 8335cf2cc50aeab23f561107c40178e2949a6c3a -->",
+    "<!-- sestina-next-code-goal: none_active_RI51_not_started -->",
     "<!-- sestina-next-execution-goal: await_explicit_user_authorization -->",
-    "<!-- sestina-next-code-sequence: none_active_RI50_not_started -->",
+    "<!-- sestina-next-code-sequence: none_active_RI51_not_started -->",
     "<!-- sestina-ri44-to-ri47-status: superseded_unstarted -->",
     "<!-- sestina-ri48-status: completed_and_verified_implementation_real_provider_evidence_blocked -->",
     "<!-- sestina-market-gate-0: deferred_by_user_nonblocking -->",
@@ -223,7 +249,7 @@ function writeValidEntries(
   writeGuidanceFiles(root);
   for (const entry of ENTRY_FILES) {
     const isBoard = entry === "docs/execution/WORK-BOARD.md";
-    const task = "RI-49";
+    const task = "RI-50";
     const body = isBoard
       ? workBoardBody(task)
       : "\n\nLegacy prose stays below.\n";

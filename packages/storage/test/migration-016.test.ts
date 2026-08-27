@@ -8,9 +8,9 @@ describe("migration 016 Research Room", () => {
   beforeEach(() => { dir = makeTempDir(); path = join(dir, "sestina.db"); });
   afterEach(() => { db?.close(); removeTempDir(dir); });
 
-  it("retains the migration-016 fail-closed receipt ledger in the current schema 17", async () => {
+  it("retains the migration-016 fail-closed receipt ledger in the current schema 18", async () => {
     db = await openDatabase({ path });
-    expect(SCHEMA_VERSION).toBe(17);
+    expect(SCHEMA_VERSION).toBe(18);
     expect(db.get("SELECT name FROM sqlite_schema WHERE type='table' AND name='research_room_receipts'")).toBeTruthy();
     const sql = db.get<{ sql: string }>("SELECT sql FROM sqlite_schema WHERE type='table' AND name='research_room_receipts'")?.sql ?? "";
     expect(sql).toContain("counts_as_external_evidence = 0");

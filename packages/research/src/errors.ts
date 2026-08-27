@@ -75,7 +75,19 @@ export type ResearchErrorCode =
   | "user_appeal_action_required"
   | "appeal_independence_not_proven"
   | "invalid_second_opinion_manifest"
-  | "invalid_second_opinion_result";
+  | "invalid_second_opinion_result"
+  | "invalid_deliberation_room"
+  | "invalid_deliberation_source"
+  | "invalid_deliberation_participants"
+  | "invalid_deliberation_manifest"
+  | "invalid_deliberation_transition"
+  | "invalid_deliberation_attempt"
+  | "deliberation_round_limit_reached"
+  | "deliberation_room_already_active"
+  | "user_deliberation_action_required"
+  | "invalid_deliberation_result"
+  | "invalid_manual_external_opinion"
+  | "deliberation_command_conflict";
 
 export type ResearchErrorDetails = Readonly<
   Record<string, string | number | boolean>
@@ -165,4 +177,16 @@ const MESSAGES: Readonly<Record<ResearchErrorCode, string>> = {
   appeal_independence_not_proven: "the selected second-opinion runtime is not independently identifiable",
   invalid_second_opinion_manifest: "second-opinion Context Manifest is missing or malformed",
   invalid_second_opinion_result: "second-opinion result is missing, malformed, or not bound to the frozen input",
+  invalid_deliberation_room: "deliberation room is missing or malformed",
+  invalid_deliberation_source: "deliberation room source is not a legal project-scoped research object",
+  invalid_deliberation_participants: "deliberation room requires exactly two identity-isolated participants",
+  invalid_deliberation_manifest: "deliberation Context Manifest is missing, malformed, or not bound to its participant",
+  invalid_deliberation_transition: "deliberation room state transition is not allowed",
+  invalid_deliberation_attempt: "deliberation participant output does not match the active fenced attempt",
+  deliberation_round_limit_reached: "the bounded deliberation challenge round has already been used",
+  deliberation_room_already_active: "an unresolved deliberation room already exists for this project source",
+  user_deliberation_action_required: "an explicit user deliberation action is required",
+  invalid_deliberation_result: "deliberation participant result is missing, malformed, or not bound to the frozen request",
+  invalid_manual_external_opinion: "manual external opinion is missing required disclosure or metadata",
+  deliberation_command_conflict: "the deliberation command id was already used for a different command payload",
 };
