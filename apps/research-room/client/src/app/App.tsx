@@ -109,6 +109,12 @@ export function App() {
     document.documentElement.lang = language;
   }, [language]);
 
+  useEffect(() => {
+    if (!notice || notice.tone === "danger") return undefined;
+    const timeout = window.setTimeout(() => { setNotice((current) => current === notice ? undefined : current); }, notice.tone === "warning" ? 9_000 : 6_000);
+    return () => { window.clearTimeout(timeout); };
+  }, [notice]);
+
   async function chooseLanguage(next: AppLanguage) {
     await runBusy(async () => {
       try {
@@ -228,12 +234,12 @@ export function App() {
   return <div className="app-root" aria-busy={busy}>
       <a className="skip-link" href="#main-content">Skip to main content</a>
       {chrome}
-      <div className="live-region" role="status" aria-live="polite" data-tone={notice?.tone ?? "ready"}>{notice?.message ?? ""}</div>
+      <div className="live-region" role="status" aria-live="polite" data-tone={notice?.tone ?? "ready"}>{notice ? <><span>{notice.message}</span><button type="button" aria-label={language === "en" ? "Dismiss notification" : "关闭通知"} onClick={() => { setNotice(undefined); }}>×</button></> : null}</div>
       {phase === "boot" ? <main className="boot-screen"><div className="boot-mark">S</div><p>Starting the local Research Room…</p></main> : null}
     {phase === "language" ? <LanguageScreen busy={busy} onChoose={(next) => void chooseLanguage(next)} /> : null}
     {phase === "start" && status ? <StartCenter language={language} directoryPickerAvailable={status.directoryPickerAvailable} busy={busy} onPreviewNative={previewNative} onCancelNative={cancelNative} onOpenManual={openManual} onInitializeNative={initializeNative} onOpened={(value) => void opened(value)} onNotice={showNotice} /> : null}
     {phase === "brief" && openedProject ? <BriefSetup language={language} projectTitle={openedProject.title} busy={busy} onActivate={activateBrief} onActivated={activated} onError={(message) => { showNotice(message, "danger"); }} /> : null}
-    {phase === "shell" && state ? <ProjectShell language={language} state={state} busy={busy} prepared={prepared} analyzed={analyzed} inspectorOpen={inspectorOpen} inspectorSelection={inspectorSelection} onInspector={(open, selection) => { setInspectorOpen(open); if (selection) setInspectorSelection(selection); }} onSwitchProject={() => { setPrepared(undefined); setAnalyzed(undefined); setInspectorOpen(false); setInspectorSelection(undefined); setState(undefined); window.history.replaceState({}, "", "/"); setPhase("start"); }} onPrepared={setPrepared} onAnalyzed={setAnalyzed} onPrepare={prepareReview} onAnalyze={analyzeReview} onCancel={cancelReview} onCommit={commitDisposition} onCommitted={committed} onDownload={downloadReceipt} onRollback={rollbackReceipt} onRuntime={setRuntime} onNotice={showNotice} onError={handleFailure} onAuthorityChanged={async () => { await refreshState(); }} /> : null}
+    {phase === "shell" && state ? <ProjectShell language={language} state={state} provider={provider} busy={busy} prepared={prepared} analyzed={analyzed} inspectorOpen={inspectorOpen} inspectorSelection={inspectorSelection} onInspector={(open, selection) => { setInspectorOpen(open); if (selection) setInspectorSelection(selection); }} onSwitchProject={() => { setPrepared(undefined); setAnalyzed(undefined); setInspectorOpen(false); setInspectorSelection(undefined); setState(undefined); window.history.replaceState({}, "", "/"); setPhase("start"); }} onPrepared={setPrepared} onAnalyzed={setAnalyzed} onPrepare={prepareReview} onAnalyze={analyzeReview} onCancel={cancelReview} onCommit={commitDisposition} onCommitted={committed} onDownload={downloadReceipt} onRollback={rollbackReceipt} onRuntime={setRuntime} onNotice={showNotice} onError={handleFailure} onAuthorityChanged={async () => { await refreshState(); }} /> : null}
     {phase === "fatal" ? <main id="main-content" className="fatal-screen"><StatusBadge tone="danger">{t(language, "offline")}</StatusBadge><h1>{t(language, "service_unavailable")}</h1><p>{t(language, "recovery_hint")}</p><button type="button" onClick={() => { window.location.reload(); }}>{t(language, "retry")}</button></main> : null}
     </div>;
 }

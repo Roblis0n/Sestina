@@ -1,4 +1,6 @@
 import { existsSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { defineConfig } from "@playwright/test";
 
 const edge = "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
@@ -19,5 +21,5 @@ export default defineConfig({
     trace: "retain-on-failure",
     launchOptions: existsSync(edge) ? { executablePath: edge } : undefined,
   },
-  outputDir: "../../.tmp/ri49-playwright",
+  outputDir: join(tmpdir(), "sestina-ri49-playwright"),
 });

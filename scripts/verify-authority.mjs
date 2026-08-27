@@ -77,8 +77,11 @@ const GUIDANCE_FILES = [
       "RI-49（已完成）",
       "RI-50 Mutually Blind, Bounded Two-Participant Deliberation Room",
       "RI-50（已完成）",
-      "当前没有活动编码任务",
+      "UI-03 Production Experience Quality Consolidation and Functional Cohesion",
+      "UI-03 已按 Task Start/Result 完成并验证",
       "none_active_RI51_not_started",
+      "await_explicit_user_authorization",
+      "RI-51 为 `not_started`",
       "completed_and_verified_implementation_real_provider_evidence_blocked",
       "Market Gate 0",
     ],
@@ -97,6 +100,59 @@ const GUIDANCE_FILES = [
       "required_before_every_task",
       "Gate A：方向成立",
       "final: ready_to_start | do_not_start",
+    ],
+  },
+  {
+    path: "docs/execution/UI-03-PRODUCTION-EXPERIENCE-QUALITY-CONSOLIDATION-TASK-START-RECORD.md",
+    required: [
+      "task: UI-03",
+      "status: ready_to_start",
+      "activity_status: active_production_experience_quality_consolidation_and_functional_cohesion",
+      "implementation_authorization: explicit_user_authorization_2026_08_27",
+      "production_visual_and_functional_acceptance: required",
+      "next_code_goal: production_experience_quality_consolidation_and_functional_cohesion",
+      "ri51_status: not_started",
+      "final: ready_to_start",
+    ],
+  },
+  {
+    path: "docs/execution/UI-03-PRODUCTION-EXPERIENCE-QUALITY-CONSOLIDATION-TASK-RESULT.md",
+    required: [
+      "task: UI-03",
+      "status: completed_and_verified",
+      "pnpm_verify: passed",
+      "production_browser_e2e: passed",
+      "production_visual_and_functional_acceptance: passed",
+      "screens_opened_and_inspected: 43",
+      "kernel_boundary: unchanged_and_verified",
+      "user_authority: unchanged_and_verified",
+      "manifest_boundary: unchanged_and_verified",
+      "provider_boundary: unchanged_and_verified",
+      "receipt_boundary: unchanged_and_verified",
+      "real_two_provider_smoke: blocked_missing_user_config",
+      "mutual_cognitive_independence: unproven",
+      "repeatable_non_redundant_value_in_real_cases: unproven",
+      "external_user_value: unproven",
+      "ri51_status: not_started",
+      "next_code_goal: none_active_RI51_not_started",
+      "next_execution_goal: await_explicit_user_authorization",
+      "remote_visibility: PRIVATE",
+    ],
+  },
+  {
+    path: "docs/execution/UI-03-PRODUCTION-VISUAL-ACCEPTANCE-RECORD.md",
+    required: [
+      "task: UI-03",
+      "status: passed",
+      "production_route: real_research_room",
+      "browser: microsoft_edge",
+      "typed_api_facade: used",
+      "runtime_decoder: used",
+      "core_projection: used",
+      "screens_opened_and_inspected: 43",
+      "blockers_remaining: 0",
+      "majors_remaining: 0",
+      "in_scope_moderates_remaining: 0",
     ],
   },
   {
@@ -273,31 +329,39 @@ const MARKER_CONTRACT = {
   },
   "sestina-current-status": {
     exact: "completed_and_verified",
-    why: "RI-50 is the most recently completed and verified governed task",
+    why: "UI-03 passed its production implementation, browser, visual, and repository gates",
   },
   "sestina-last-completed-task": {
-    exact: "RI-50",
-    why: "RI-50 is the most recently completed governed task",
+    exact: "UI-03",
+    why: "UI-03 is the most recently completed governed task",
   },
   "sestina-last-completed-status": {
     exact: "completed_and_verified",
     why: "the latest governed task passed its implementation and required host evidence gates",
   },
   "sestina-implementation-base": {
-    exact: "8335cf2cc50aeab23f561107c40178e2949a6c3a",
-    why: "RI-50 was implemented from the recorded verified repository baseline",
+    exact: "0b766a4460d2ae9b0b872cc137fbec29327bc08a",
+    why: "UI-03 starts from the verified RI-50 completion commit",
   },
   "sestina-next-code-goal": {
     exact: "none_active_RI51_not_started",
-    why: "RI-50 is complete and RI-51 has not been authorized",
+    why: "UI-03 is complete and RI-51 has not been authorized",
   },
   "sestina-next-execution-goal": {
     exact: "await_explicit_user_authorization",
-    why: "no subsequent product task is active",
+    why: "no further implementation stage is active after UI-03 completion",
   },
   "sestina-next-code-sequence": {
     exact: "none_active_RI51_not_started",
-    why: "RI-51 remains not started and cannot be inferred from the route map",
+    why: "the governed sequence stops before RI-51 until explicit authorization",
+  },
+  "sestina-production-visual-and-functional-acceptance": {
+    exact: "passed",
+    why: "the final UI-03 production tree passed the real visual and functional gate",
+  },
+  "sestina-ri51-status": {
+    exact: "not_started",
+    why: "UI-03 must not start the governed-memory stage",
   },
   "sestina-ri44-to-ri47-status": {
     exact: "superseded_unstarted",
@@ -462,9 +526,9 @@ for (const entry of ENTRY_FILES) {
 const tasks = [...currentTasks.entries()];
 if (tasks.length > 0) {
   const first = tasks[0][1];
-  if (first !== "RI-50") {
+  if (first !== "UI-03") {
     err(
-      `[AUTH-R003] ${tasks[0][0]}: current task is '${first}' but the latest governed task is 'RI-50'`,
+      `[AUTH-R003] ${tasks[0][0]}: current task is '${first}' but the explicitly authorized task is 'UI-03'`,
     );
   }
   for (const [entry, task] of tasks) {

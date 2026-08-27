@@ -58,7 +58,7 @@ async function openRoom(page: Page, provider: Ri48FixtureProvider) {
   await expect(page.getByRole("status")).toContainText("本地服务已就绪");
   await page.getByRole("button", { name: "选择文件夹并打开" }).click();
   await expect(page.getByRole("heading", { name: "Research Room" })).toBeVisible();
-  await expect(page.getByText("How should a synthetic observational association be reported?", { exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "当前研究线" }).getByText("How should a synthetic observational association be reported?", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "先生成 Context Manifest" })).toBeDisabled();
   await expect(page.locator(".receipt-list")).toContainText("尚无已提交凭证");
   return { fixture, server };
@@ -154,7 +154,7 @@ test.describe("RI-48 real browser vertical slice", () => {
     await page.getByLabel("Current smallest research task").fill("Verify the complete English first-run path.");
     await page.getByRole("button", { name: "Activate Brief and enter Research Room" }).click();
     await expect(page.getByRole("heading", { name: "Research Room" })).toBeVisible();
-    await expect(page.getByText("How should a persistent language preference remain separate from research authority?", { exact: true })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Current research line" }).getByText("How should a persistent language preference remain separate from research authority?", { exact: true })).toBeVisible();
     await expect(page.getByText("Choose text file", { exact: true })).toBeVisible();
     await expect(page.getByText("No file selected", { exact: true })).toBeVisible();
   });
@@ -238,7 +238,7 @@ test.describe("RI-48 real browser vertical slice", () => {
     await page.getByRole("button", { name: "激活 Brief 并进入 Research Room" }).click();
 
     await expect(page.getByRole("heading", { name: "Research Room" })).toBeVisible();
-    await expect(page.getByText("How should first-use browser initialization preserve research authority?", { exact: true })).toBeVisible();
+    await expect(page.getByRole("region", { name: "当前研究线" }).getByText("How should first-use browser initialization preserve research authority?", { exact: true })).toBeVisible();
     expect(await readFile(canary, "utf8")).toBe("must remain unchanged\n");
   });
 
@@ -319,11 +319,11 @@ test.describe("RI-48 real browser vertical slice", () => {
     await page.getByRole("button", { name: "正式改向" }).click();
     await page.getByLabel("新的正式研究问题").fill("How should the synthetic selection mechanism itself be studied?");
     await page.getByRole("button", { name: "正式改向" }).click();
-    await expect(page.getByText("How should the synthetic selection mechanism itself be studied?", { exact: true })).toBeVisible();
+    await expect(page.getByRole("region", { name: "当前研究线" }).getByText("How should the synthetic selection mechanism itself be studied?", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "回滚" }).click();
     await page.getByLabel("回滚理由").fill("Restore the prior research direction.");
     await page.getByRole("button", { name: "确认回滚" }).click();
-    await expect(page.getByText("How should a synthetic observational association be reported?", { exact: true })).toBeVisible();
+    await expect(page.getByRole("region", { name: "当前研究线" }).getByText("How should a synthetic observational association be reported?", { exact: true })).toBeVisible();
     await expect(page.locator(".receipt-list li").first()).toContainText("rolled_back");
     await page.locator(".receipt-list li").first().scrollIntoViewIfNeeded();
     await captureHealthyScreenshot(page, testInfo, "ui01-high-contrast-rollback-1728x1117.png", 1728, 1117);
@@ -372,7 +372,7 @@ test.describe("RI-48 real browser vertical slice", () => {
     await expect(inspector.getByRole("button", { name: "关闭 Inspector" })).toBeFocused();
     await expect(inspector).toHaveCSS("position", "fixed");
     await page.keyboard.press("Escape");
-    await expect(page.locator("[data-inspector-return]").first()).toBeFocused();
+    await expect(page.locator('[data-inspector-return="manifest"]')).toBeFocused();
 
     const analyze = page.getByRole("button", { name: "我已核对，开始分析" });
     await analyze.focus();
@@ -380,7 +380,7 @@ test.describe("RI-48 real browser vertical slice", () => {
     await expect(page.locator("#findings")).toContainText("reasonable_increment");
     await expect(inspector.getByRole("button", { name: "关闭 Inspector" })).toBeFocused();
     await page.keyboard.press("Escape");
-    await expect(page.locator("[data-inspector-return]").first()).toBeFocused();
+    await expect(page.locator('[data-inspector-return="analysis"]')).toBeFocused();
 
     const reason = page.getByLabel("你的处置理由");
     await reason.focus();
@@ -402,6 +402,13 @@ test.describe("RI-48 real browser vertical slice", () => {
     }).map((element) => ({ tag: element.tagName, className: String(element.className), text: element.textContent?.trim().slice(0, 80), right: Math.round(element.getBoundingClientRect().right) })).slice(0, 20)`);
     expect(horizontalOverflows).toEqual([]);
     await page.locator(".receipt-list li").first().scrollIntoViewIfNeeded();
+    const receiptStatusMetrics = await page.evaluate<{ readonly height: number; readonly lineHeight: number }>(`(() => {
+      const element = document.querySelector(".receipt-summary .status-badge");
+      if (!element) throw new Error("receipt status is unavailable");
+      const style = getComputedStyle(element);
+      return { height: element.getBoundingClientRect().height, lineHeight: Number.parseFloat(style.lineHeight) };
+    })()`);
+    expect(receiptStatusMetrics.height).toBeLessThan(receiptStatusMetrics.lineHeight * 2.2);
     await captureHealthyScreenshot(page, testInfo, "ui01-light-keyboard-receipt-200pct-1280x800.png", 1280, 800);
   });
 

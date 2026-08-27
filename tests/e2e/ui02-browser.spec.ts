@@ -41,6 +41,10 @@ async function objectNav(page: Page, name: string): Promise<void> {
   await page.locator(".object-nav-link").filter({ hasText: name }).click();
 }
 
+async function openProjectSearch(page: Page): Promise<void> {
+  if (await page.getByLabel("项目内搜索").count() === 0) await page.getByRole("button", { name: "搜索项目内容" }).click();
+}
+
 async function navigateInApp(page: Page, path: string): Promise<void> {
   await page.evaluate(`window.history.pushState({}, "", ${JSON.stringify(path)}); window.dispatchEvent(new PopStateEvent("popstate"));`);
 }
@@ -130,7 +134,7 @@ test.describe("UI-02 production research object workspaces", () => {
     await page.getByLabel(/我已核对字段 diff 与影响/u).check();
     await page.getByRole("button", { name: "激活 candidate" }).click();
     await expect(page.locator(".brief-main-fields")).toContainText(changedTask);
-    await expect(page.locator(".object-workspace > .status-badge")).toContainText("v2");
+    await expect(page.locator(".object-workspace > .status-badge, .workspace-header .status-badge").first()).toContainText("v2");
     expect(await readFile(join(fixture.root, ".sestina", "research-brief.yaml"), "utf8")).toContain(changedTask);
 
     await objectNav(page, "Decisions");
@@ -167,12 +171,12 @@ test.describe("UI-02 production research object workspaces", () => {
     await resolve.getByLabel("Canonical Evidence ID（规范证据 ID）").fill(fixture.evidenceId);
     await resolve.getByLabel("理由", { exact: true }).fill("Bind the open Issue to current canonical project Evidence.");
     await resolve.getByRole("button", { name: "解决", exact: true }).click();
-    await expect(page.locator(".object-workspace > .status-badge")).toContainText("resolved");
+    await expect(page.locator(".object-workspace > .status-badge, .workspace-header .status-badge").first()).toContainText("resolved");
     const reopen = page.locator(".command-accordions details").filter({ hasText: "重开" });
     await reopen.locator("summary").click();
     await reopen.getByLabel("理由", { exact: true }).fill("New user-reviewed context requires the Issue to be reconsidered.");
     await reopen.getByRole("button", { name: "重开", exact: true }).click();
-    await expect(page.locator(".object-workspace > .status-badge")).toContainText("reopened");
+    await expect(page.locator(".object-workspace > .status-badge, .workspace-header .status-badge").first()).toContainText("reopened");
 
     await page.getByRole("button", { name: "返回列表" }).click();
     await page.getByRole("button", { name: /Waive one bounded repeated audit/u }).click();
@@ -181,7 +185,7 @@ test.describe("UI-02 production research object workspaces", () => {
     await waive.getByLabel("失效条件").fill("The audit becomes relevant if the current Brief or evidence boundary changes.");
     await waive.getByLabel("理由", { exact: true }).fill("Waive only this bounded duplicate audit.");
     await waive.getByRole("button", { name: "豁免", exact: true }).click();
-    await expect(page.locator(".object-workspace > .status-badge")).toContainText("waived");
+    await expect(page.locator(".object-workspace > .status-badge, .workspace-header .status-badge").first()).toContainText("waived");
 
     await page.getByRole("button", { name: "返回列表" }).click();
     await page.getByRole("button", { name: /Dispute an alleged argument leap/u }).click();
@@ -189,7 +193,7 @@ test.describe("UI-02 production research object workspaces", () => {
     await dispute.locator("summary").click();
     await dispute.getByLabel("理由", { exact: true }).fill("The owner disputes this classification and preserves it in history.");
     await dispute.getByRole("button", { name: "提出异议", exact: true }).click();
-    await expect(page.locator(".object-workspace > .status-badge")).toContainText("disputed");
+    await expect(page.locator(".object-workspace > .status-badge, .workspace-header .status-badge").first()).toContainText("disputed");
 
     await objectNav(page, "Evidence");
     await expect(page.locator(".ledger-list li")).toHaveCount(1);
@@ -204,6 +208,7 @@ test.describe("UI-02 production research object workspaces", () => {
     await expect(page.locator(".object-facts")).toContainText(fixture.originalTask);
     await expect(page.getByRole("heading", { name: "ArgumentDelta from related Receipts" })).toBeVisible();
 
+    await openProjectSearch(page);
     await page.getByLabel("项目内搜索").fill("canonical evidence");
     await page.getByRole("button", { name: "搜索", exact: true }).click();
     await expect(page.locator(".search-results")).toContainText("evidence · current · user_recorded:user");
@@ -236,7 +241,7 @@ test.describe("UI-02 production research object workspaces", () => {
     await page.getByLabel("回滚理由").fill("Restore the exact state before this accepted review.");
     await page.getByRole("button", { name: "确认回滚" }).click();
     await closeInspector(page);
-    await expect(page.locator(".object-workspace > .status-badge")).toContainText("rolled_back");
+    await expect(page.locator(".object-workspace > .status-badge, .workspace-header .status-badge").first()).toContainText("rolled_back");
     await page.getByRole("button", { name: "返回列表" }).click();
     await expect(page.locator(".ledger-list li").first()).toContainText("rolled_back");
     expect(await page.locator(".ledger-list li").count()).toBeLessThanOrEqual(50);
@@ -251,15 +256,17 @@ test.describe("UI-02 production research object workspaces", () => {
     await objectNav(page, "Research Brief");
     await page.getByRole("button", { name: "创建 candidate" }).click();
     await page.locator(".structured-editor textarea[name='currentTask']").fill("Unsaved Alpha draft must not cross projects.");
+    await openProjectSearch(page);
     await page.getByLabel("项目内搜索").fill("Alpha");
     await page.getByRole("button", { name: "搜索", exact: true }).click();
-    await expect(page.locator(".search-results")).toContainText(projectA.projectId);
+    await expect(page.locator(".search-results")).toContainText(projectA.question);
+    await expect(page.locator(".search-results")).not.toContainText(projectB.question);
     await page.getByRole("button", { name: "切换研究项目" }).click();
     await expect(page.getByRole("heading", { name: "打开研究项目" })).toBeVisible();
     await page.getByRole("button", { name: "选择文件夹并打开" }).click();
     await expect(page.locator(".project-navigation")).toContainText("Beta Continuity");
     await expect(page.locator("body")).not.toContainText("Unsaved Alpha draft");
-    await expect(page.getByLabel("项目内搜索")).toHaveValue("");
+    await expect(page.getByLabel("项目内搜索")).toHaveCount(0);
 
     await objectNav(page, "Evidence");
     await expect(page.locator(".ledger-list")).toContainText(projectB.evidenceSummary);
@@ -268,6 +275,7 @@ test.describe("UI-02 production research object workspaces", () => {
     await expect(page.locator("body")).not.toContainText(projectA.evidenceSummary);
     await closeInspector(page);
 
+    await openProjectSearch(page);
     await page.getByLabel("项目内搜索").fill("Alpha");
     await page.getByRole("button", { name: "搜索", exact: true }).click();
     await expect(page.locator(".search-results")).toContainText("没有匹配的结构化对象");
@@ -347,17 +355,17 @@ test.describe("UI-02 production research object workspaces", () => {
     await page.goto(`${server.origin}/project/decisions/${fixture.acceptedDecisionId}`);
     await page.getByLabel("理由", { exact: true }).fill("Freeze this Decision after the Receipt to force rollback conflict detection.");
     await page.getByRole("button", { name: "冻结", exact: true }).click();
-    await expect(page.locator(".object-workspace > .status-badge")).toContainText("frozen");
+    await expect(page.locator(".object-workspace > .status-badge, .workspace-header .status-badge").first()).toContainText("frozen");
     await objectNav(page, "Receipts");
     await page.locator(".ledger-list li button").first().click();
-    await expect(page.locator(".object-workspace > .status-badge")).toContainText("committed");
+    await expect(page.locator(".object-workspace > .status-badge, .workspace-header .status-badge").first()).toContainText("committed");
     await page.getByLabel("回滚理由").fill("Attempt rollback after a later canonical Decision mutation.");
     await page.getByRole("button", { name: "确认回滚" }).click();
     await expect(page.locator(".live-region")).toContainText("已停止回滚且没有形成部分写入");
     await closeInspector(page);
-    await expect(page.locator(".object-workspace > .status-badge")).toContainText("committed");
+    await expect(page.locator(".object-workspace > .status-badge, .workspace-header .status-badge").first()).toContainText("committed");
     await page.goto(`${server.origin}/project/decisions/${fixture.acceptedDecisionId}`);
-    await expect(page.locator(".object-workspace > .status-badge")).toContainText("frozen");
+    await expect(page.locator(".object-workspace > .status-badge, .workspace-header .status-badge").first()).toContainText("frozen");
   });
 
   test("keeps the newest object detail when an older request finishes late", async ({ page }) => {

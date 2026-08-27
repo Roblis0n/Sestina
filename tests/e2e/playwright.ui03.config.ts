@@ -7,12 +7,12 @@ const edge = "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"
 
 export default defineConfig({
   testDir: ".",
-  testMatch: "ri48-browser.spec.ts",
+  testMatch: "ui03-browser.spec.ts",
   fullyParallel: false,
   workers: 1,
   retries: 0,
-  timeout: 45_000,
-  expect: { timeout: 8_000 },
+  timeout: 120_000,
+  expect: { timeout: 12_000 },
   reporter: "line",
   use: {
     headless: true,
@@ -21,5 +21,5 @@ export default defineConfig({
     trace: "retain-on-failure",
     launchOptions: existsSync(edge) ? { executablePath: edge } : undefined,
   },
-  outputDir: join(tmpdir(), "sestina-ri48-playwright"),
+  outputDir: join(tmpdir(), "sestina-ui03-playwright"),
 });

@@ -66,10 +66,8 @@ export function AppChrome(props: AppChromeProps) {
           <span className="brand__mark" aria-hidden="true">S</span>
           <span><strong>{t(props.language, "app_name")}</strong><small>{t(props.language, "app_subtitle")}</small></span>
         </a>
-        <div className="app-chrome__status" aria-label="Runtime status">
-          <StatusBadge tone="neutral">{t(props.language, "local_only")}</StatusBadge>
-          <StatusBadge tone={props.provider?.mode === "configured" ? "ready" : "warning"}>{props.provider?.mode === "configured" ? t(props.language, "provider_configured") : t(props.language, "ledger_only")}</StatusBadge>
-          <StatusBadge tone={props.secondOpinionProvider?.mode === "configured" ? "ready" : "neutral"}>{props.language === "en" ? `2nd opinion: ${props.secondOpinionProvider?.mode === "configured" ? "ready" : "off"}` : `第二意见：${props.secondOpinionProvider?.mode === "configured" ? "就绪" : "未配置"}`}</StatusBadge>
+        <div className="app-chrome__status" aria-label={props.language === "en" ? "Runtime status" : "运行状态"} data-provider-mode={props.provider?.mode ?? "offline_ledger"}>
+          <span className="app-chrome__status-copy"><strong>{t(props.language, "local_only")}</strong><small>Provider · {props.provider?.mode === "configured" ? t(props.language, "provider_configured") : t(props.language, "ledger_only")}</small></span>
           <StatusBadge tone={tone}>{runtimeLabel}</StatusBadge>
         </div>
         <div className="app-chrome__actions">

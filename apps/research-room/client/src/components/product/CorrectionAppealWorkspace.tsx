@@ -14,6 +14,8 @@ import type {
 import type { ProjectRoute } from "../../routing/project-route.js";
 import { Button } from "../primitives/Button.js";
 import { StatusBadge } from "../primitives/StatusBadge.js";
+import { WorkspaceHeader } from "./WorkspaceHeader.js";
+import { StateNotice } from "./StateNotice.js";
 
 interface Props {
   readonly language: AppLanguage;
@@ -72,11 +74,9 @@ function AppealProviderState({ language }: { readonly language: AppLanguage }) {
   const configuredDescription = status?.config
     ? `${status.config.providerId} · ${status.config.model} · ${status.config.locality}`
     : c(language, "An independent connection is bound by the current local runtime. Its credentials and private configuration are not exposed to this screen.", "当前本地运行时已绑定独立连接；其凭据与私有配置不会暴露到此界面。");
-  return <aside className="appeal-provider-state" aria-label={c(language, "Independent second-opinion status", "独立第二意见状态")}>
-    <StatusBadge tone={status?.mode === "configured" ? "ready" : "warning"}>{status?.mode === "configured" ? c(language, "Independent connection configured", "独立连接已配置") : c(language, "Appeal record only", "仅记录 Appeal")}</StatusBadge>
-    <p>{status?.mode === "configured" ? configuredDescription : c(language, "No independent Provider is configured. The appeal remains durable and user-resolvable without a model call.", "尚未配置独立 Provider。Appeal 仍会持久保存，并可由用户直接裁决，不会伪造模型调用。")}</p>
-    {status?.projectReopenRequired ? <p className="inline-warning">{c(language, "Reopen this project before requesting a second opinion so the new connection is bound to Core.", "请求第二意见前请重新打开当前项目，使新连接进入 Core 绑定。")}</p> : null}
-  </aside>;
+  const baseDescription = status?.mode === "configured" ? configuredDescription : c(language, "No independent Provider is configured. The appeal remains durable and user-resolvable without a model call.", "尚未配置独立 Provider。Appeal 仍会持久保存，并可由用户直接裁决，不会伪造模型调用。");
+  const description = status?.projectReopenRequired ? `${baseDescription} ${c(language, "Reopen this project before requesting a second opinion so the new connection is bound to Core.", "请求第二意见前请重新打开当前项目，使新连接进入 Core 绑定。")}` : baseDescription;
+  return <StateNotice className="appeal-provider-state" ariaLabel={c(language, "Independent second-opinion status", "独立第二意见状态")} eyebrow={c(language, "Independent boundary", "独立连接边界")} title={status?.mode === "configured" ? c(language, "Independent connection configured", "独立连接已配置") : c(language, "Appeal record only", "仅记录 Appeal")} description={description} status={status?.mode === "configured" ? "configured" : "appeal_record_only"} tone={status?.mode === "configured" ? "ready" : "warning"} />;
 }
 
 function AppealLedger(props: Props) {
@@ -92,7 +92,7 @@ function AppealLedger(props: Props) {
   }
   useEffect(() => { void load(); }, [props.projectId, status]);
   return <section className="object-workspace appeal-workspace" aria-labelledby="appeal-ledger-title">
-    <header className="workspace-section-header appeal-hero"><div><p className="eyebrow">CORRECTION APPEALS</p><h1 id="appeal-ledger-title">{c(props.language, "Correction Appeals", "纠错申诉")}</h1><p>{c(props.language, "Challenge a specific committed Semantic Judge finding without overwriting it. One optional independent opinion may add evidence, but only you can resolve the appeal.", "针对已提交的 Semantic Judge finding 提出申诉，原记录不会被覆盖。可选的一次独立意见只能增加证据，最终裁决始终由你完成。")}</p></div><Button type="button" variant="quiet" disabled={loading} onClick={() => { void load(); }}>{c(props.language, "Refresh", "刷新")}</Button></header>
+      <WorkspaceHeader id="appeal-ledger-title" eyebrow="CORRECTION APPEALS" className="appeal-hero" title={c(props.language, "Correction Appeals", "纠错申诉")} description={c(props.language, "Challenge a specific committed Semantic Judge finding without overwriting it. One optional independent opinion may add evidence, but only you can resolve the appeal.", "针对已提交的 Semantic Judge finding 提出申诉，原记录不会被覆盖。可选的一次独立意见只能增加证据，最终裁决始终由你完成。")} actions={<Button type="button" variant="quiet" disabled={loading} onClick={() => { void load(); }}>{c(props.language, "Refresh", "刷新")}</Button>} />
     <AppealProviderState language={props.language} />
     <form className="ledger-filters appeal-filters" onSubmit={(event) => { event.preventDefault(); void load(); }}>
       <label>{c(props.language, "Status", "状态")}<select value={status} onChange={(event) => { setStatus(event.target.value); }}><option value="">{c(props.language, "All statuses", "全部状态")}</option>{["draft", "recorded", "awaiting_send_confirmation", "second_opinion_running", "second_opinion_ready", "appeal_record_only", "provider_failed", "cancelled", "stale_conflicted", "resolved"].map((value) => <option key={value}>{value}</option>)}</select></label>
@@ -123,7 +123,7 @@ function AppealCreate(props: Props) {
       props.onNavigate(`/project/appeals/${created.id}`);
     } catch (error) { props.onError(error); }
   }
-  return <section className="object-workspace appeal-workspace" aria-labelledby="appeal-create-title"><header className="workspace-section-header appeal-hero"><div><p className="eyebrow">NEW CORRECTION APPEAL</p><h1 id="appeal-create-title">{c(props.language, "Challenge one finding", "申诉一条 finding")}</h1><p>{c(props.language, "Your statement is versioned. The source finding, rubric, input bindings, and research-state binding are frozen when the draft is created.", "你的陈述会被版本化；草稿创建时会冻结来源 finding、rubric、输入绑定和研究状态绑定。")}</p></div><Button type="button" variant="quiet" onClick={() => { props.onNavigate(`/project/receipts/${receiptId}`); }}>{c(props.language, "Back to Receipt", "返回 Receipt")}</Button></header>
+  return <section className="object-workspace appeal-workspace" aria-labelledby="appeal-create-title"><WorkspaceHeader id="appeal-create-title" eyebrow="NEW CORRECTION APPEAL" className="appeal-hero" title={c(props.language, "Challenge one finding", "申诉一条 finding")} description={c(props.language, "Your statement is versioned. The source finding, rubric, input bindings, and research-state binding are frozen when the draft is created.", "你的陈述会被版本化；草稿创建时会冻结来源 finding、rubric、输入绑定和研究状态绑定。")} actions={<Button type="button" variant="quiet" onClick={() => { props.onNavigate(`/project/receipts/${receiptId}`); }}>{c(props.language, "Back to Receipt", "返回 Receipt")}</Button>} />
     {loading ? <p role="status" className="empty-state">{c(props.language, "Verifying the source finding…", "正在核验来源 finding……")}</p> : finding?.action === "open_appeal" && finding.href ? <div className="inline-warning"><p>{c(props.language, "An active appeal already exists for this finding.", "该 finding 已存在未结束 Appeal。")}</p><Button type="button" onClick={() => { props.onNavigate(finding.href ?? "/project/appeals"); }}>{c(props.language, "Open existing appeal", "打开已有 Appeal")}</Button></div> : finding?.action === "create_appeal" && criterionId ? <><section className="appeal-source-card"><StatusBadge tone={finding.severity === "error" ? "danger" : "warning"}>{finding.severity}</StatusBadge><dl><dt>Receipt</dt><dd>{receiptId}</dd><dt>Finding</dt><dd>{findingId}</dd><dt>{c(props.language, "Finding kind", "Finding 类型")}</dt><dd>{finding.kind}</dd><dt>{c(props.language, "Frozen criterion", "冻结 criterion")}</dt><dd>{criterionId}</dd></dl></section><StatementForm language={props.language} criterionId={criterionId} submitLabel={c(props.language, "Create appeal draft", "创建 Appeal 草稿")} onSubmit={create} /></> : <div className="inline-error" role="alert"><strong>{c(props.language, "This source cannot create an appeal.", "该来源无法创建 Appeal。")}</strong><p>{c(props.language, "The Receipt must contain an eligible, committed Semantic Judge finding with a current criterion binding.", "Receipt 必须包含已提交、符合条件且具有当前 criterion 绑定的 Semantic Judge finding。")}</p></div>}
   </section>;
 }
@@ -158,7 +158,7 @@ function AppealDetail(props: Props & { readonly appealId: string }) {
   const latestStatement = detail.statements.at(-1)?.statement;
   const latestAttempt = detail.attempts.at(-1);
   return <section className="object-workspace appeal-workspace" aria-labelledby="appeal-detail-title">
-    <header className="workspace-section-header appeal-hero"><div><p className="eyebrow">CORRECTION APPEAL · v{detail.version}</p><h1 id="appeal-detail-title">{detail.disagreement}</h1><p>{detail.criterionId} · {detail.findingId}</p></div><div className="header-actions"><StatusBadge tone={statusTone(detail.status)}>{detail.status}</StatusBadge><Button type="button" variant="quiet" disabled={loading || busy} onClick={() => { void load(); }}>{c(props.language, "Reload", "重新加载")}</Button></div></header>
+      <WorkspaceHeader id="appeal-detail-title" eyebrow={`CORRECTION APPEAL · v${detail.version}`} className="appeal-hero" title={detail.disagreement} description={`${detail.criterionId} · ${detail.findingId}`} status={<StatusBadge tone={statusTone(detail.status)}>{detail.status}</StatusBadge>} actions={<Button type="button" variant="quiet" disabled={loading || busy} onClick={() => { void load(); }}>{c(props.language, "Reload", "重新加载")}</Button>} />
     <div className="authority-ribbon"><strong>{c(props.language, "User authority is final", "用户权威是最终权威")}</strong><span>{c(props.language, "No model, comparison, hash, or tool success can resolve this appeal.", "任何模型、比较、hash 或工具成功都不能替你裁决 Appeal。")}</span></div>
     <AppealProviderState language={props.language} />
     <section className="appeal-source-card"><h2>{c(props.language, "Frozen source", "冻结来源")}</h2><dl><dt>Appeal</dt><dd>{detail.id}</dd><dt>Receipt</dt><dd><button type="button" className="text-link" onClick={() => { props.onNavigate(detail.relatedReceiptHref); }}>{detail.sourceReceiptId}</button></dd><dt>Review</dt><dd>{detail.reviewId}</dd><dt>Finding</dt><dd>{detail.findingId}</dd><dt>Criterion</dt><dd>{detail.criterionId}</dd><dt>{c(props.language, "Finding hash", "Finding hash")}</dt><dd><code>{displayScalar(detail.source.findingHash, "")}</code></dd></dl></section>

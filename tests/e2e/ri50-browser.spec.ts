@@ -93,37 +93,49 @@ async function expectNoHorizontalOverflow(page: Page): Promise<void> {
 
 async function expectStickyLayersDoNotOverlap(page: Page): Promise<void> {
   const chrome = await page.locator(".app-chrome").boundingBox();
-  const search = await page.locator(".project-search").boundingBox();
+  const context = await page.locator(".project-context-bar").boundingBox();
   expect(chrome).not.toBeNull();
-  expect(search).not.toBeNull();
-  if (chrome === null || search === null) throw new Error("sticky chrome geometry is unavailable");
-  expect(Math.round(search.y)).toBeGreaterThanOrEqual(Math.max(0, Math.round(chrome.y + chrome.height)) - 1);
+  expect(context).not.toBeNull();
+  if (chrome === null || context === null) throw new Error("production shell geometry is unavailable");
+  if (context.y + context.height <= 0) return;
+  expect(Math.round(context.y)).toBeGreaterThanOrEqual(Math.max(0, Math.round(chrome.y + chrome.height)) - 1);
 }
 
 async function expectFocusBelowStickySearch(page: Page, focus: Locator): Promise<void> {
-  const search = await page.locator(".project-search").boundingBox();
+  const chrome = await page.locator(".app-chrome").boundingBox();
   const target = await focus.boundingBox();
   const viewport = page.viewportSize();
-  expect(search).not.toBeNull();
+  expect(chrome).not.toBeNull();
   expect(target).not.toBeNull();
   expect(viewport).not.toBeNull();
-  if (search === null || target === null || viewport === null) throw new Error("visual target geometry is unavailable");
-  expect(Math.round(target.y)).toBeGreaterThanOrEqual(Math.round(search.y + search.height) - 1);
+  if (chrome === null || target === null || viewport === null) throw new Error("visual target geometry is unavailable");
+  const stickyBottom = await getStickyChromeBottom(page);
+  expect(Math.round(target.y)).toBeGreaterThanOrEqual(Math.round(stickyBottom) - 1);
   expect(Math.round(target.y)).toBeLessThan(viewport.height);
 }
 
 async function positionFocusBelowStickySearch(page: Page, focus: Locator): Promise<void> {
   await focus.scrollIntoViewIfNeeded();
   for (let attempt = 0; attempt < 3; attempt += 1) {
-    const search = await page.locator(".project-search").boundingBox();
     const target = await focus.boundingBox();
     const viewport = page.viewportSize();
-    if (search === null || target === null || viewport === null) throw new Error("visual target geometry is unavailable");
-    const desiredY = search.y + search.height + 16;
+    if (target === null || viewport === null) throw new Error("visual target geometry is unavailable");
+    const stickyBottom = await getStickyChromeBottom(page);
+    const desiredY = stickyBottom + 16;
     if (target.y >= desiredY - 1 && target.y < viewport.height) return;
     await page.mouse.wheel(0, target.y - desiredY);
     await page.waitForTimeout(50);
   }
+}
+
+async function getStickyChromeBottom(page: Page): Promise<number> {
+  return page.evaluate<number>(`(() => {
+    const element = document.querySelector(".app-chrome");
+    if (!element) return 0;
+    return getComputedStyle(element).position === "sticky"
+      ? Math.max(0, element.getBoundingClientRect().bottom)
+      : 0;
+  })()`);
 }
 
 async function capture(page: Page, testInfo: TestInfo, name: string, width: number, height: number, focus?: Locator): Promise<void> {

@@ -30,10 +30,13 @@ export function ContextInspector({ language, open, selection, onNavigate, onClos
     closeRef.current?.focus();
     return () => {
       const prior = priorFocusRef.current;
-      if (prior?.isConnected && prior !== document.body && !prior.matches(":disabled")) prior.focus();
+      const preferredKind = selection?.kind;
+      const preferred = preferredKind ? document.querySelector<HTMLElement>(`[data-inspector-return="${preferredKind}"]`) : null;
+      if (prior?.isConnected && prior !== document.body && !prior.matches(":disabled") && prior.matches("[data-inspector-return]")) prior.focus();
+      else if (preferred?.isConnected && !preferred.matches(":disabled")) preferred.focus();
       else document.querySelector<HTMLElement>("[data-inspector-return]")?.focus();
     };
-  }, [open]);
+  }, [open, selection]);
 
   function keyDown(event: React.KeyboardEvent<HTMLElement>) {
     if (event.key === "Escape") { event.preventDefault(); onClose(); return; }

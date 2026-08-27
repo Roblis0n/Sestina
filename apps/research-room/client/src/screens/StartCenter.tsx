@@ -95,12 +95,12 @@ export function StartCenter({ language, directoryPickerAvailable, busy, onPrevie
   }
 
   return (
-    <main className="start-center" id="start-center">
+    <main className="start-center" id="main-content" aria-labelledby="start-center-title">
       <section className="start-center__intro">
         <p className="eyebrow">{t(language, "start_eyebrow")}</p>
-        <h1>{t(language, "start_title")}</h1>
+        <h1 id="start-center-title">{t(language, "start_title")}</h1>
         <p>{t(language, "start_deck")}</p>
-        <div className="boundary-list" aria-label="Local project boundaries">
+        <div className="boundary-list" aria-label={language === "en" ? "Local project boundaries" : "本地项目边界"}>
           <span>✓ {t(language, "local_only")}</span>
           <span>× {language === "en" ? "No disk scan" : "不扫描磁盘"}</span>
           <span>× {language === "en" ? "No path history" : "不保存路径历史"}</span>
@@ -108,7 +108,9 @@ export function StartCenter({ language, directoryPickerAvailable, busy, onPrevie
       </section>
       <section className="start-center__actions" aria-label={t(language, "start_title")}>
         <div className="primary-entry">
-          <p className="section-index">01 / SYSTEM PICKER</p>
+          <p className="section-index">{language === "en" ? "OPEN OR INSPECT ONE LOCAL FOLDER" : "打开或检查一个本地文件夹"}</p>
+          <h2>{language === "en" ? "Open an existing project" : "打开已有项目"}</h2>
+          <p className="muted">{language === "en" ? "If the folder is not initialized, Sestina will show the exact files it would create and ask again before writing." : "如果文件夹尚未初始化，Sestina 会先列出将创建的文件，并在写入前再次征求确认。"}</p>
           <Button ref={chooseButtonRef} type="button" variant="primary" disabled={busy || !directoryPickerAvailable} onClick={() => void chooseFolder()}>
             <strong>{t(language, "choose_folder")}</strong>
             <small>{t(language, "choose_folder_hint")}</small>

@@ -27,7 +27,7 @@ export function ReceiptList({ language, receipts, busy, onInspect, onOpenTrace, 
   return <section className="receipt-list" aria-labelledby="receipts-heading">
     <div className="section-heading"><div><p className="eyebrow">RECEIPTS</p><h2 id="receipts-heading">{t(language, "receipts")}</h2></div><span>{receipts.length}</span></div>
     {receipts.length === 0 ? <p className="empty-state">{t(language, "no_receipts")}</p> : <ol>{receipts.map((receipt) => <li key={receipt.id}>
-      <button data-inspector-return type="button" className="receipt-summary" onClick={() => { onInspect(receipt); }}>
+      <button data-inspector-return="receipt" type="button" className="receipt-summary" onClick={() => { onInspect(receipt); }}>
         <span><strong>{receipt.disposition.kind}</strong><small>{receipt.id}</small></span>
         <StatusBadge tone={receipt.status === "committed" ? "ready" : "warning"}>{receipt.status}</StatusBadge>
       </button>
