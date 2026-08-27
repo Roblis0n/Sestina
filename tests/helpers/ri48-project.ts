@@ -18,6 +18,7 @@ export class Ri48FixtureProvider implements ResearchRoomProvider {
   readonly networkAccess = "none" as const;
   readonly binding = Object.freeze({ id: this.id, family: "openai_compatible" as const, model: "fixture", baseUrlOrigin: "http://127.0.0.1:1", locality: "local" as const, configGeneration: 1 });
   calls = 0;
+  lastRequest?: ResearchRoomSemanticJudgeRequest;
   constructor(private readonly scenario: "reasonable_increment" | "target_substitution" | "repeated_audit" = "reasonable_increment") {}
   prepare(request: ResearchRoomSemanticJudgeRequest) {
     const requestBody = JSON.stringify(request);
@@ -25,6 +26,7 @@ export class Ri48FixtureProvider implements ResearchRoomProvider {
   }
   analyze(request: ResearchRoomSemanticJudgeRequest): Promise<unknown> {
     this.calls += 1;
+    this.lastRequest = request;
     const span = createStableTextSpan(request.context.suggestionDocument, 0, request.context.suggestionDocument.normalizedText.length);
     if (!span.ok) return Promise.reject(new Error(span.error.code));
     return Promise.resolve({

@@ -195,11 +195,15 @@ describe("one-shot OpenAI-compatible Semantic Judge adapter", () => {
 
   it("aborts on the configured timeout and never retries", async () => {
     let calls = 0;
-    const { origin } = await localServer((_request, response) => {
+    const fetchImplementation: typeof fetch = (_input, options) => {
       calls += 1;
-      setTimeout(() => { if (!response.destroyed) response.end("late"); }, 500);
-    });
-    const provider = createOpenAICompatibleProvider(snapshot(origin, { timeoutMs: 100 }), { readCurrentGeneration: () => Promise.resolve(4) });
+      return new Promise<Response>((_resolve, reject) => {
+        const requestSignal = options?.signal;
+        if (requestSignal?.aborted) { reject(new Error("aborted")); return; }
+        requestSignal?.addEventListener("abort", () => { reject(new Error("aborted")); }, { once: true });
+      });
+    };
+    const provider = createOpenAICompatibleProvider(snapshot("http://127.0.0.1:1", { timeoutMs: 100 }), { readCurrentGeneration: () => Promise.resolve(4), fetchImplementation });
     const judgeRequest = request(provider.binding);
     await expect(provider.analyze(judgeRequest, provider.prepare(judgeRequest), { signal: new AbortController().signal }))
       .rejects.toMatchObject({ code: "provider_timeout" });
@@ -208,11 +212,8 @@ describe("one-shot OpenAI-compatible Semantic Judge adapter", () => {
 
   it("rejects an oversized response while keeping its body out of the error", async () => {
     const privateBody = "private-provider-output-".repeat(8_000);
-    const { origin } = await localServer((_request, response) => {
-      response.writeHead(200, { "content-type": "application/json" });
-      response.end(privateBody);
-    });
-    const provider = createOpenAICompatibleProvider(snapshot(origin), { readCurrentGeneration: () => Promise.resolve(4) });
+    const fetchImplementation: typeof fetch = () => Promise.resolve(new Response(privateBody, { status: 200, headers: { "content-type": "application/json" } }));
+    const provider = createOpenAICompatibleProvider(snapshot("http://127.0.0.1:1"), { readCurrentGeneration: () => Promise.resolve(4), fetchImplementation });
     const judgeRequest = request(provider.binding);
     try {
       await provider.analyze(judgeRequest, provider.prepare(judgeRequest), { signal: new AbortController().signal });
@@ -227,11 +228,9 @@ describe("one-shot OpenAI-compatible Semantic Judge adapter", () => {
     ["non-JSON envelope", "text/plain", "provider-secret-body", "provider_invalid_response"],
     ["non-success status", "application/json", "provider-secret-body", "provider_http_error"],
   ])("sanitizes %s failures", async (_name, contentType, body, code) => {
-    const { origin } = await localServer((_request, response) => {
-      response.writeHead(code === "provider_http_error" ? 401 : 200, { "content-type": contentType });
-      response.end(body);
-    });
-    const provider = createOpenAICompatibleProvider(snapshot(origin), { readCurrentGeneration: () => Promise.resolve(4) });
+    const origin = "http://127.0.0.1:1";
+    const fetchImplementation: typeof fetch = () => Promise.resolve(new Response(body, { status: code === "provider_http_error" ? 401 : 200, headers: { "content-type": contentType } }));
+    const provider = createOpenAICompatibleProvider(snapshot(origin), { readCurrentGeneration: () => Promise.resolve(4), fetchImplementation });
     const judgeRequest = request(provider.binding);
     try {
       await provider.analyze(judgeRequest, provider.prepare(judgeRequest), { signal: new AbortController().signal });

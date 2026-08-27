@@ -185,6 +185,23 @@ import {
   type WorkspacePage,
   type WorkspaceProviderStatus,
 } from "./research-object-workspaces.js";
+import {
+  ProjectMemoryService,
+  type ProjectMemoryManifestProjection,
+  type ProjectMemoryProjection,
+  type ProjectMemoryProviderBinding,
+} from "./project-memory.js";
+import type {
+  LiveProjectWorkingMemory,
+  ProjectWorkingMemory,
+  ProjectWorkingMemoryContent,
+  ProjectWorkingMemoryKind,
+  ProjectWorkingMemoryObjectKind,
+  ProjectWorkingMemoryOutboundPolicy,
+  ProjectWorkingMemoryRetention,
+  ProjectWorkingMemorySensitivity,
+  ResumeCheckpoint,
+} from "@sestina/research";
 
 const PAGE = Object.freeze({ limit: 200 });
 const SYSTEM_ACTOR: ResearchActor = Object.freeze({ kind: "system", component: "sestina-core" });
@@ -363,6 +380,14 @@ export class SestinaCore {
   readonly #correctionAppeals: CorrectionAppealService;
   readonly #deliberationRooms: DeliberationRoomService;
   readonly #researchObjects: ResearchObjectWorkspaceService;
+  readonly #projectMemory: ProjectMemoryService;
+  readonly #reviewMemoryManifests = new Map<string, {
+    readonly manifest: ProjectMemoryManifestProjection;
+    readonly provider: ProjectMemoryProviderBinding;
+    readonly actor: ResearchActor;
+    readonly reviewConfirmationNonce: string;
+    readonly reviewManifestHash: string;
+  }>();
 
   constructor(database: StorageDatabase, clock: Clock, idFactory: IdFactory, researchRoomProvider?: ResearchRoomProvider, researchRoomProviderTimeoutMs = 15_000, correctionAppealSecondOpinionProvider?: CorrectionAppealSecondOpinionProvider, correctionAppealSecondOpinionProviderTimeoutMs = 15_000, deliberationParticipantProviders?: readonly [DeliberationParticipantProvider, DeliberationParticipantProvider], deliberationParticipantProviderTimeoutMs = 15_000) {
     this.#database = database;
@@ -375,6 +400,7 @@ export class SestinaCore {
     this.#correctionAppeals = new CorrectionAppealService(this.#store, clock, idFactory, (projectId) => this.#researchRoom.getState(projectId), correctionAppealSecondOpinionProvider, correctionAppealSecondOpinionProviderTimeoutMs);
     this.#deliberationRooms = new DeliberationRoomService(this.#store, clock, idFactory, (projectId) => this.#researchRoom.getState(projectId), deliberationParticipantProviders, deliberationParticipantProviderTimeoutMs);
     this.#researchObjects = new ResearchObjectWorkspaceService(this.#store);
+    this.#projectMemory = new ProjectMemoryService(this.#store, clock, idFactory);
   }
 
   close(): void { this.#database.close(); }
@@ -1010,9 +1036,46 @@ export class SestinaCore {
   getSnapshot(projectId: string, snapshotId: string): CoreResult<ResearchSnapshot | undefined> { return fromDomain(this.#store.snapshots.getById(projectId, snapshotId)); }
 
   getResearchRoomState(projectId: string): CoreResult<ResearchRoomState> { return this.#researchRoom.getState(projectId); }
-  prepareResearchRoomReview(input: PrepareResearchRoomReviewInput): CoreResult<PreparedResearchRoomReview> { return this.#researchRoom.prepare(input); }
-  cancelResearchRoomReview(input: { readonly reviewId: string; readonly confirmationNonce: string; readonly manifestHash: string }): CoreResult<{ readonly cancelled: true }> { return this.#researchRoom.cancel(input); }
-  analyzeResearchRoomSuggestion(input: { readonly reviewId: string; readonly confirmationNonce: string; readonly manifestHash: string }): Promise<CoreResult<AnalyzedResearchRoomReview>> { return this.#researchRoom.analyze(input); }
+  prepareResearchRoomReview(input: PrepareResearchRoomReviewInput): CoreResult<PreparedResearchRoomReview> {
+    let memoryManifest: CoreResult<ProjectMemoryManifestProjection> | undefined;
+    if (input.selectedMemoryItemIds !== undefined) {
+      if (input.memoryProvider === undefined || input.actor === undefined) return coreErr("invalid_input");
+      memoryManifest = this.#projectMemory.prepareManifest({ projectId: input.projectId, selectedItemIds: input.selectedMemoryItemIds, provider: input.memoryProvider, actor: input.actor });
+    }
+    if (memoryManifest !== undefined && !memoryManifest.ok) return memoryManifest;
+    const prepared = this.#researchRoom.prepare(input, memoryManifest?.value);
+    if (!prepared.ok) {
+      if (memoryManifest?.ok) this.#projectMemory.discardManifest(input.projectId, memoryManifest.value.manifestId);
+      return prepared;
+    }
+    if (memoryManifest?.ok && input.memoryProvider !== undefined && input.actor !== undefined) {
+      this.#reviewMemoryManifests.set(prepared.value.reviewId, Object.freeze({ manifest: memoryManifest.value, provider: input.memoryProvider, actor: input.actor, reviewConfirmationNonce: prepared.value.confirmationNonce, reviewManifestHash: prepared.value.manifestHash }));
+    }
+    return prepared;
+  }
+  cancelResearchRoomReview(input: { readonly reviewId: string; readonly confirmationNonce: string; readonly manifestHash: string }): CoreResult<{ readonly cancelled: true }> {
+    const cancelled = this.#researchRoom.cancel(input);
+    if (cancelled.ok) {
+      const memory = this.#reviewMemoryManifests.get(input.reviewId);
+      if (memory) this.#projectMemory.discardManifest(memory.manifest.projectId, memory.manifest.manifestId);
+      this.#reviewMemoryManifests.delete(input.reviewId);
+    }
+    return cancelled;
+  }
+  async analyzeResearchRoomSuggestion(input: { readonly reviewId: string; readonly confirmationNonce: string; readonly manifestHash: string; readonly memoryProvider?: ProjectMemoryProviderBinding }): Promise<CoreResult<AnalyzedResearchRoomReview>> {
+    const memory = this.#reviewMemoryManifests.get(input.reviewId);
+    if (memory !== undefined) {
+      if (memory.reviewConfirmationNonce !== input.confirmationNonce || memory.reviewManifestHash !== input.manifestHash) return coreErr("user_confirmation_required");
+      const provider = input.memoryProvider ?? memory.provider;
+      const confirmed = this.#projectMemory.confirmManifest({ projectId: memory.manifest.projectId, manifestId: memory.manifest.manifestId, expectedVersion: memory.manifest.version, confirmationNonce: memory.manifest.confirmationNonce, manifestHash: memory.manifest.manifestHash, provider, actor: memory.actor });
+      if (!confirmed.ok) return confirmed;
+      const consumed = this.#projectMemory.consumeManifest({ projectId: memory.manifest.projectId, manifestId: memory.manifest.manifestId, expectedVersion: confirmed.value.version, manifestHash: confirmed.value.manifestHash, provider });
+      if (!consumed.ok) return consumed;
+    }
+    const analyzed = await this.#researchRoom.analyze(input);
+    if (analyzed.ok) this.#reviewMemoryManifests.delete(input.reviewId);
+    return analyzed;
+  }
   commitResearchRoomDisposition(input: CommitResearchRoomDispositionInput): CoreResult<ResearchRoomReceipt> { return this.#researchRoom.commit(input); }
   listResearchRoomReceipts(projectId: string): CoreResult<readonly ResearchRoomReceipt[]> { return this.#researchRoom.listReceipts(projectId); }
   rollbackResearchRoomReceipt(input: RollbackResearchRoomReceiptInput): CoreResult<ResearchRoomReceipt> { return this.#researchRoom.rollback(input); }
@@ -1061,8 +1124,35 @@ export class SestinaCore {
   getAppealProjection(projectId: string, appealId: string): CoreResult<AppealDetailProjection | undefined> { return this.#researchObjects.getAppeal(projectId, appealId); }
   listDeliberationRoomProjections(projectId: string, request: WorkspaceListRequest): CoreResult<WorkspacePage<DeliberationRoomSummaryProjection>> { return this.#researchObjects.listDeliberationRooms(projectId, request); }
   getDeliberationRoomProjection(projectId: string, roomId: string): CoreResult<DeliberationRoomDetailProjection | undefined> { return this.#researchObjects.getDeliberationRoom(projectId, roomId); }
-  getAttentionProjection(projectId: string): CoreResult<AttentionProjection> { return this.#researchObjects.getAttention(projectId, this.#researchRoom.getAttentionSignals(projectId)); }
-  searchResearchObjects(projectId: string, input: { readonly query: string; readonly limit: number; readonly cursor?: string }): CoreResult<ResearchObjectSearchProjection> { return this.#researchObjects.search(projectId, input); }
+  getAttentionProjection(projectId: string): CoreResult<AttentionProjection> {
+    const memory = this.#projectMemory.projection(projectId, { limit: 200 }); if (!memory.ok) return memory;
+    const memorySignals = memory.value.attention.map((signal) => {
+      const item = memory.value.workingMemory.items.find((candidate) => candidate.id === signal.id);
+      const primaryAction = signal.kind === "memory_candidate" ? "Review and explicitly confirm or retire"
+        : signal.kind === "memory_stale" ? "Re-pin from the current source or retire"
+          : signal.kind === "memory_expired" ? "Renew, retire, or irreversibly forget"
+            : "Review retention before expiry";
+      return Object.freeze({ id: signal.id, kind: "memory" as const, title: signal.title, reason: signal.reason, severity: signal.severity, href: `/project/memory?item=${encodeURIComponent(signal.id)}`, primaryAction, sourceObject: Object.freeze({ kind: signal.kind, id: signal.id }), createdAt: item?.updatedAt ?? item?.forgottenAt ?? "1970-01-01T00:00:00.000Z" });
+    });
+    return this.#researchObjects.getAttention(projectId, [...this.#researchRoom.getAttentionSignals(projectId), ...memorySignals]);
+  }
+  searchResearchObjects(projectId: string, input: { readonly query: string; readonly limit: number; readonly cursor?: string }): CoreResult<ResearchObjectSearchProjection> {
+    const reconciled = this.#projectMemory.projection(projectId, { limit: 200 }); if (!reconciled.ok) return reconciled;
+    return this.#researchObjects.search(projectId, input);
+  }
+
+  getProjectMemoryProjection(projectId: string, page: { readonly limit: number; readonly cursor?: string }): CoreResult<ProjectMemoryProjection> { return this.#projectMemory.projection(projectId, page); }
+  createProjectMemoryCandidate(input: { readonly projectId: string; readonly kind: ProjectWorkingMemoryKind; readonly content: ProjectWorkingMemoryContent; readonly retention?: ProjectWorkingMemoryRetention; readonly sensitivity: ProjectWorkingMemorySensitivity; readonly outboundPolicy: ProjectWorkingMemoryOutboundPolicy; readonly supersedesItemId?: string; readonly publicReason: string; readonly actor: ResearchActor }): CoreResult<LiveProjectWorkingMemory> { return this.#projectMemory.createCandidate(input); }
+  createPinnedProjectMemoryCandidate(input: { readonly projectId: string; readonly objectKind: ProjectWorkingMemoryObjectKind; readonly objectId: string; readonly kind: ProjectWorkingMemoryKind; readonly content: ProjectWorkingMemoryContent; readonly retention?: ProjectWorkingMemoryRetention; readonly sensitivity: ProjectWorkingMemorySensitivity; readonly outboundPolicy: ProjectWorkingMemoryOutboundPolicy; readonly publicReason: string; readonly actor: ResearchActor }): CoreResult<LiveProjectWorkingMemory> { return this.#projectMemory.createPinnedCandidate(input); }
+  confirmProjectMemory(input: { readonly projectId: string; readonly itemId: string; readonly expectedVersion: number; readonly publicReason: string; readonly actor: ResearchActor }): CoreResult<LiveProjectWorkingMemory> { return this.#projectMemory.confirm(input); }
+  editProjectMemory(input: { readonly projectId: string; readonly itemId: string; readonly expectedVersion: number; readonly content: ProjectWorkingMemoryContent; readonly retention: ProjectWorkingMemoryRetention; readonly sensitivity: ProjectWorkingMemorySensitivity; readonly outboundPolicy: ProjectWorkingMemoryOutboundPolicy; readonly publicReason: string; readonly actor: ResearchActor }): CoreResult<LiveProjectWorkingMemory> { return this.#projectMemory.edit(input); }
+  renewProjectMemory(input: { readonly projectId: string; readonly itemId: string; readonly expectedVersion: number; readonly retention: ProjectWorkingMemoryRetention; readonly publicReason: string; readonly actor: ResearchActor }): CoreResult<LiveProjectWorkingMemory> { return this.#projectMemory.renew(input); }
+  retireProjectMemory(input: { readonly projectId: string; readonly itemId: string; readonly expectedVersion: number; readonly publicReason: string; readonly actor: ResearchActor }): CoreResult<LiveProjectWorkingMemory> { return this.#projectMemory.retire(input); }
+  forgetProjectMemory(input: { readonly projectId: string; readonly itemId: string; readonly expectedVersion: number; readonly confirmation: string; readonly publicReason: "user_requested_irreversible_forget"; readonly actor: ResearchActor }): CoreResult<ProjectWorkingMemory> { return this.#projectMemory.forget(input); }
+  reviewProjectResume(input: { readonly projectId: string; readonly publicReason: string; readonly actor: ResearchActor }): CoreResult<ResumeCheckpoint> { return this.#projectMemory.reviewResume(input); }
+  prepareProjectMemoryManifest(input: { readonly projectId: string; readonly selectedItemIds: readonly string[]; readonly provider: ProjectMemoryProviderBinding; readonly actor: ResearchActor }): CoreResult<ProjectMemoryManifestProjection> { return this.#projectMemory.prepareManifest(input); }
+  confirmProjectMemoryManifest(input: { readonly projectId: string; readonly manifestId: string; readonly expectedVersion: number; readonly confirmationNonce: string; readonly manifestHash: string; readonly provider: ProjectMemoryProviderBinding; readonly actor: ResearchActor }): CoreResult<ProjectMemoryManifestProjection> { return this.#projectMemory.confirmManifest(input); }
+  consumeProjectMemoryManifest(input: { readonly projectId: string; readonly manifestId: string; readonly expectedVersion: number; readonly manifestHash: string; readonly provider: ProjectMemoryProviderBinding }): CoreResult<ProjectMemoryManifestProjection> { return this.#projectMemory.consumeManifest(input); }
 
   private get ports(): { readonly clock: Clock; readonly idFactory: IdFactory } { return { clock: this.#clock, idFactory: this.#idFactory }; }
 

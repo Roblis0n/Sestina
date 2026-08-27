@@ -210,7 +210,7 @@ describe("RI-48 loopback Research Room", () => {
     const fixture = await createRi48Project(); cleanups.push(() => fixture.cleanup());
     const server = await start(undefined, undefined, new MemoryLanguagePreferenceStore("en"), providerSettings); const session = await status(server.origin);
     await request<unknown>(server.origin, session.sessionToken, "/api/project/open", { projectPath: fixture.root });
-    const prepared = apiValue((await request<PreparedResearchRoomReview>(server.origin, session.sessionToken, "/api/reviews/prepare", { suggestion: "Add one bounded synthetic uncertainty statement.", evidenceClass: "synthetic_fixture" })).body);
+    const prepared = apiValue((await request<PreparedResearchRoomReview>(server.origin, session.sessionToken, "/api/reviews/prepare", { suggestion: "Add one bounded synthetic uncertainty statement.", evidenceClass: "synthetic_fixture", selectedMemoryItemIds: [] })).body);
     expect(calls).toBe(0);
     expect(prepared.manifest).toMatchObject({ providerKind: "local", networkRequired: true, networkUsed: false, sendStatus: "not_sent", semanticJudge: { provider: { id: "loopback-judge", locality: "local" }, request: { retryCount: 0, redirectPolicy: "error" } } });
     const analyzed = apiValue((await request<AnalyzedResearchRoomReview>(server.origin, session.sessionToken, "/api/reviews/analyze", { reviewId: prepared.reviewId, confirmationNonce: prepared.confirmationNonce, manifestHash: prepared.manifestHash })).body);
@@ -439,7 +439,7 @@ describe("RI-48 loopback Research Room", () => {
     const fixture = await createRi48Project(); cleanups.push(() => fixture.cleanup());
     const provider = new Ri48FixtureProvider(); const server = await start(provider); const session = await status(server.origin);
     await request<unknown>(server.origin, session.sessionToken, "/api/project/open", { projectPath: fixture.root });
-    const prepared = await request<PreparedResearchRoomReview>(server.origin, session.sessionToken, "/api/reviews/prepare", { suggestion: "Add a bounded synthetic qualification.", evidenceClass: "synthetic_fixture" });
+    const prepared = await request<PreparedResearchRoomReview>(server.origin, session.sessionToken, "/api/reviews/prepare", { suggestion: "Add a bounded synthetic qualification.", evidenceClass: "synthetic_fixture", selectedMemoryItemIds: [] });
     const preparedValue = apiValue(prepared.body);
     expect(provider.calls).toBe(0);
     expect(preparedValue).toMatchObject({ contextManifestVisible: true, manifest: { sendStatus: "not_sent", networkUsed: false, countsAsExternalEvidence: false } });
@@ -457,7 +457,7 @@ describe("RI-48 loopback Research Room", () => {
     const fixture = await createRi48Project(); cleanups.push(() => fixture.cleanup());
     const provider = new CancellableProvider(); const server = await start(provider); const session = await status(server.origin);
     await request<unknown>(server.origin, session.sessionToken, "/api/project/open", { projectPath: fixture.root });
-    const prepared = apiValue((await request<PreparedResearchRoomReview>(server.origin, session.sessionToken, "/api/reviews/prepare", { suggestion: "Cancel this synthetic analysis before it produces a result.", evidenceClass: "synthetic_fixture" })).body);
+    const prepared = apiValue((await request<PreparedResearchRoomReview>(server.origin, session.sessionToken, "/api/reviews/prepare", { suggestion: "Cancel this synthetic analysis before it produces a result.", evidenceClass: "synthetic_fixture", selectedMemoryItemIds: [] })).body);
     const analyzing = request<AnalyzedResearchRoomReview>(server.origin, session.sessionToken, "/api/reviews/analyze", { reviewId: prepared.reviewId, confirmationNonce: prepared.confirmationNonce, manifestHash: prepared.manifestHash });
     await provider.started;
 
@@ -475,7 +475,7 @@ describe("RI-48 loopback Research Room", () => {
     const fixture = await createRi48Project(); cleanups.push(() => fixture.cleanup());
     const server = await start(); const session = await status(server.origin);
     await request<unknown>(server.origin, session.sessionToken, "/api/project/open", { projectPath: fixture.root });
-    const prepared = apiValue((await request<PreparedResearchRoomReview>(server.origin, session.sessionToken, "/api/reviews/prepare", { suggestion: "An unevaluated suggestion.", evidenceClass: "owner_scenario" })).body);
+    const prepared = apiValue((await request<PreparedResearchRoomReview>(server.origin, session.sessionToken, "/api/reviews/prepare", { suggestion: "An unevaluated suggestion.", evidenceClass: "owner_scenario", selectedMemoryItemIds: [] })).body);
     const analysis = await request<AnalyzedResearchRoomReview>(server.origin, session.sessionToken, "/api/reviews/analyze", { reviewId: prepared.reviewId, confirmationNonce: prepared.confirmationNonce, manifestHash: prepared.manifestHash });
     const analysisValue = apiValue(analysis.body);
     expect(analysis.body).toMatchObject({ ok: true, value: { providerStatus: "ledger_only", ledgerOnlyReason: "provider_not_configured", manifest: { networkUsed: false, sendStatus: "not_sent" } } });

@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { existsSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { lstat, mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
@@ -12,6 +12,7 @@ import {
   type CorrectionAppealSecondOpinionProvider,
   type CoreResult,
   type DeliberationParticipantProvider,
+  type ProjectMemoryProviderBinding,
   type ResearchRoomProvider,
   type SestinaCore,
 } from "@sestina/core";
@@ -89,6 +90,14 @@ function text(value: unknown, maxBytes: number): string | undefined {
   const normalized = value.trim();
   return normalized.length > 0 && Buffer.byteLength(normalized, "utf8") <= maxBytes ? normalized : undefined;
 }
+function stableConfigHash(value: unknown): string {
+  const normalize = (input: unknown): unknown => {
+    if (Array.isArray(input)) return input.map(normalize);
+    if (!isRecord(input)) return input;
+    return Object.fromEntries(Object.keys(input).sort().map((key) => [key, normalize(input[key])]));
+  };
+  return createHash("sha256").update(JSON.stringify(normalize(value)), "utf8").digest("hex");
+}
 function resultValue<T>(result: CoreResult<T>): T {
   if (result.ok) return result.value;
   const status = result.error.code === "not_found" ? 404
@@ -133,6 +142,12 @@ function confirmedCommand(input: unknown, commandType: string, keys: readonly st
   if (input.confirmed !== true) throw new HttpProblem(400, "user_confirmation_required", "The command requires explicit user confirmation.");
   if (text(input.reason, 4_096) === undefined) throw new HttpProblem(400, "invalid_input", "The command reason is required.");
   if (!Number.isSafeInteger(input.expectedVersion) || Number(input.expectedVersion) < 1) throw new HttpProblem(400, "invalid_input", "The expected version is invalid.");
+  return input;
+}
+function confirmedProjectCommand(input: unknown, commandType: string, keys: readonly string[], projectId: string): Record<string, unknown> {
+  if (!isRecord(input) || !hasExactKeys(input, keys) || input.commandType !== commandType) throw new HttpProblem(400, "invalid_input", "The explicit project command is invalid.");
+  if (input.projectId !== projectId) throw new HttpProblem(409, "cross_project_reference", "The command is bound to another project.");
+  if (input.confirmed !== true) throw new HttpProblem(400, "user_confirmation_required", "The command requires explicit user confirmation.");
   return input;
 }
 function json(response: ServerResponse, status: number, body: unknown): void {
@@ -306,6 +321,33 @@ export class ResearchRoomHttpApplication {
     if (this.providerConfigurationService === undefined) return { mode: this.provider === undefined ? "offline_ledger" : "configured", injected: this.provider !== undefined };
     try { return await this.providerConfigurationService.status(); }
     catch (error) { return this.providerProblem(error); }
+  }
+
+  private async projectMemoryProviderBinding(): Promise<ProjectMemoryProviderBinding> {
+    if (this.providerConfigurationService !== undefined) {
+      const status = await this.providerStatus();
+      if (isRecord(status) && status.mode === "configured" && isRecord(status.config)) {
+        const providerId = text(status.config.providerId, 128);
+        const locality = status.config.locality;
+        if (providerId !== undefined && (locality === "local" || locality === "external")) {
+          return Object.freeze({
+            id: providerId,
+            kind: locality,
+            configHash: stableConfigHash(status.config),
+            networkRequired: locality === "external",
+          });
+        }
+      }
+    }
+    if (this.provider !== undefined) {
+      return Object.freeze({
+        id: this.provider.id,
+        kind: this.provider.kind,
+        configHash: stableConfigHash({ id: this.provider.id, kind: this.provider.kind, networkAccess: this.provider.networkAccess, binding: this.provider.binding }),
+        networkRequired: this.provider.networkAccess === "external",
+      });
+    }
+    return Object.freeze({ id: "none", kind: "none", configHash: stableConfigHash({ mode: "offline_ledger" }), networkRequired: false });
   }
 
   private async saveProvider(input: unknown): Promise<unknown> {
@@ -640,6 +682,75 @@ export class ResearchRoomHttpApplication {
       if (request.method === "POST" && url.pathname === "/api/project/open") { json(response, 200, { ok: true, value: await this.openProject(await readBody(request)) }); return; }
       if (request.method === "POST" && url.pathname === "/api/project/brief") { json(response, 200, { ok: true, value: await this.activateInitialBrief(await readBody(request)) }); return; }
       const opened = this.requireOpened();
+      if (request.method === "GET" && url.pathname === "/api/project/memory") {
+        if ([...url.searchParams.keys()].some((key) => key !== "limit" && key !== "cursor")) throw new HttpProblem(400, "invalid_input", "The project-memory query is invalid.");
+        const rawLimit = url.searchParams.get("limit") ?? "50";
+        const cursor = url.searchParams.get("cursor") ?? undefined;
+        if (!/^\d{1,3}$/u.test(rawLimit) || Number(rawLimit) < 1 || Number(rawLimit) > 200 || (cursor !== undefined && (cursor.length === 0 || cursor.length > 8192))) throw new HttpProblem(400, "invalid_input", "The project-memory query is invalid.");
+        json(response, 200, { ok: true, value: workspaceResultValue(opened.core.getProjectMemoryProjection(opened.project.id, { limit: Number(rawLimit), ...(cursor ? { cursor } : {}) })) }); return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/project/memory/candidates") {
+        const body = confirmedProjectCommand(await readBody(request), "create_project_memory_candidate", ["commandType", "confirmed", "content", "kind", "outboundPolicy", "projectId", "publicReason", "retention", "sensitivity"], opened.project.id);
+        if (!isRecord(body.content) || !isRecord(body.retention) || text(body.publicReason, 4_096) === undefined) throw new HttpProblem(400, "invalid_input", "The project-memory candidate is invalid.");
+        const value = resultValue(opened.core.createProjectMemoryCandidate({ projectId: opened.project.id, kind: body.kind as never, content: body.content as never, retention: body.retention as never, sensitivity: body.sensitivity as never, outboundPolicy: body.outboundPolicy as never, publicReason: body.publicReason as string, actor: USER }));
+        json(response, 200, { ok: true, value }); return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/project/memory/pin") {
+        const body = confirmedProjectCommand(await readBody(request), "pin_project_object_to_memory", ["commandType", "confirmed", "content", "kind", "objectId", "objectKind", "outboundPolicy", "projectId", "publicReason", "retention", "sensitivity"], opened.project.id);
+        if (!isRecord(body.content) || !isRecord(body.retention) || text(body.objectId, 128) === undefined || text(body.publicReason, 4_096) === undefined) throw new HttpProblem(400, "invalid_input", "The project-object memory pin is invalid.");
+        const value = resultValue(opened.core.createPinnedProjectMemoryCandidate({ projectId: opened.project.id, objectKind: body.objectKind as never, objectId: body.objectId as string, kind: body.kind as never, content: body.content as never, retention: body.retention as never, sensitivity: body.sensitivity as never, outboundPolicy: body.outboundPolicy as never, publicReason: body.publicReason as string, actor: USER }));
+        json(response, 200, { ok: true, value }); return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/project/memory/checkpoint") {
+        const body = confirmedProjectCommand(await readBody(request), "review_project_resume", ["commandType", "confirmed", "projectId", "publicReason"], opened.project.id);
+        const publicReason = text(body.publicReason, 4_096); if (publicReason === undefined) throw new HttpProblem(400, "invalid_input", "The Resume Checkpoint reason is required.");
+        json(response, 200, { ok: true, value: resultValue(opened.core.reviewProjectResume({ projectId: opened.project.id, publicReason, actor: USER })) }); return;
+      }
+      if (request.method === "POST" && url.pathname === "/api/project/memory/manifests/prepare") {
+        const body = confirmedProjectCommand(await readBody(request), "prepare_project_memory_manifest", ["commandType", "confirmed", "projectId", "selectedItemIds"], opened.project.id);
+        if (!Array.isArray(body.selectedItemIds) || body.selectedItemIds.some((item) => typeof item !== "string")) throw new HttpProblem(400, "invalid_input", "The Context Manifest selection is invalid.");
+        const provider = await this.projectMemoryProviderBinding();
+        json(response, 200, { ok: true, value: resultValue(opened.core.prepareProjectMemoryManifest({ projectId: opened.project.id, selectedItemIds: body.selectedItemIds as string[], provider, actor: USER })) }); return;
+      }
+      const memoryManifestAction = /^\/api\/project\/memory\/manifests\/(rman_[0-9A-HJKMNP-TV-Z]{26})\/(confirm|consume)$/u.exec(url.pathname);
+      if (request.method === "POST" && memoryManifestAction?.[1] && memoryManifestAction[2]) {
+        const manifestId = memoryManifestAction[1];
+        const action = memoryManifestAction[2];
+        const body = confirmedProjectCommand(await readBody(request), action === "confirm" ? "confirm_project_memory_manifest" : "consume_project_memory_manifest", action === "confirm" ? ["commandType", "confirmationNonce", "confirmed", "expectedVersion", "manifestHash", "projectId"] : ["commandType", "confirmed", "expectedVersion", "manifestHash", "projectId"], opened.project.id);
+        if (!Number.isSafeInteger(body.expectedVersion) || Number(body.expectedVersion) < 1 || text(body.manifestHash, 64) === undefined) throw new HttpProblem(400, "invalid_input", "The Context Manifest confirmation is invalid.");
+        const provider = await this.projectMemoryProviderBinding();
+        const value = action === "confirm"
+          ? resultValue(opened.core.confirmProjectMemoryManifest({ projectId: opened.project.id, manifestId, expectedVersion: Number(body.expectedVersion), confirmationNonce: String(body.confirmationNonce), manifestHash: String(body.manifestHash), provider, actor: USER }))
+          : resultValue(opened.core.consumeProjectMemoryManifest({ projectId: opened.project.id, manifestId, expectedVersion: Number(body.expectedVersion), manifestHash: String(body.manifestHash), provider }));
+        json(response, 200, { ok: true, value }); return;
+      }
+      const memoryAction = /^\/api\/project\/memory\/(rmem_[0-9A-HJKMNP-TV-Z]{26})\/(confirm|edit|renew|retire|forget)$/u.exec(url.pathname);
+      if (request.method === "POST" && memoryAction?.[1] && memoryAction[2]) {
+        const itemId = memoryAction[1]; const action = memoryAction[2]; const raw = await readBody(request);
+        if (action === "confirm") {
+          const body = confirmedProjectCommand(raw, "confirm_project_memory", ["commandType", "confirmed", "expectedVersion", "projectId", "publicReason"], opened.project.id);
+          if (!Number.isSafeInteger(body.expectedVersion) || text(body.publicReason, 4_096) === undefined) throw new HttpProblem(400, "invalid_input", "The project-memory confirmation is invalid.");
+          json(response, 200, { ok: true, value: resultValue(opened.core.confirmProjectMemory({ projectId: opened.project.id, itemId, expectedVersion: Number(body.expectedVersion), publicReason: body.publicReason as string, actor: USER })) }); return;
+        }
+        if (action === "edit") {
+          const body = confirmedProjectCommand(raw, "edit_project_memory", ["commandType", "confirmed", "content", "expectedVersion", "outboundPolicy", "projectId", "publicReason", "retention", "sensitivity"], opened.project.id);
+          if (!Number.isSafeInteger(body.expectedVersion) || !isRecord(body.content) || !isRecord(body.retention) || text(body.publicReason, 4_096) === undefined) throw new HttpProblem(400, "invalid_input", "The project-memory edit is invalid.");
+          json(response, 200, { ok: true, value: resultValue(opened.core.editProjectMemory({ projectId: opened.project.id, itemId, expectedVersion: Number(body.expectedVersion), content: body.content as never, retention: body.retention as never, sensitivity: body.sensitivity as never, outboundPolicy: body.outboundPolicy as never, publicReason: body.publicReason as string, actor: USER })) }); return;
+        }
+        if (action === "renew") {
+          const body = confirmedProjectCommand(raw, "renew_project_memory", ["commandType", "confirmed", "expectedVersion", "projectId", "publicReason", "retention"], opened.project.id);
+          if (!Number.isSafeInteger(body.expectedVersion) || !isRecord(body.retention) || text(body.publicReason, 4_096) === undefined) throw new HttpProblem(400, "invalid_input", "The project-memory renewal is invalid.");
+          json(response, 200, { ok: true, value: resultValue(opened.core.renewProjectMemory({ projectId: opened.project.id, itemId, expectedVersion: Number(body.expectedVersion), retention: body.retention as never, publicReason: body.publicReason as string, actor: USER })) }); return;
+        }
+        if (action === "retire") {
+          const body = confirmedProjectCommand(raw, "retire_project_memory", ["commandType", "confirmed", "expectedVersion", "projectId", "publicReason"], opened.project.id);
+          if (!Number.isSafeInteger(body.expectedVersion) || text(body.publicReason, 4_096) === undefined) throw new HttpProblem(400, "invalid_input", "The project-memory retire command is invalid.");
+          json(response, 200, { ok: true, value: resultValue(opened.core.retireProjectMemory({ projectId: opened.project.id, itemId, expectedVersion: Number(body.expectedVersion), publicReason: body.publicReason as string, actor: USER })) }); return;
+        }
+        const body = confirmedProjectCommand(raw, "forget_project_memory", ["commandType", "confirmation", "confirmed", "expectedVersion", "projectId", "publicReason"], opened.project.id);
+        if (!Number.isSafeInteger(body.expectedVersion) || body.confirmation !== "FORGET" || body.publicReason !== "user_requested_irreversible_forget") throw new HttpProblem(400, "invalid_input", "The irreversible forget confirmation is invalid.");
+        json(response, 200, { ok: true, value: resultValue(opened.core.forgetProjectMemory({ projectId: opened.project.id, itemId, expectedVersion: Number(body.expectedVersion), confirmation: "FORGET", publicReason: "user_requested_irreversible_forget", actor: USER })) }); return;
+      }
       if (request.method === "GET" && url.pathname === "/api/project/overview") {
         const provider = await this.providerStatus();
         const providerStatus = isRecord(provider) && provider.mode === "configured" ? "configured" as const : "ledger_only" as const;
@@ -880,12 +991,13 @@ export class ResearchRoomHttpApplication {
         json(response, 200, { ok: true, value: workspaceResultValue(opened.core.getReceiptProjection(opened.project.id, receiptId)) }); return;
       }
       if (request.method === "POST" && url.pathname === "/api/reviews/prepare") {
-        const body = await readBody(request); if (!isRecord(body)) throw new HttpProblem(400, "invalid_input", "The review request is invalid.");
-        json(response, 200, { ok: true, value: resultValue(opened.core.prepareResearchRoomReview({ projectId: opened.project.id, suggestion: body.suggestion as string, evidenceClass: body.evidenceClass as never, countsAsExternalEvidence: false })) }); return;
+        const body = await readBody(request); if (!isRecord(body) || !hasExactKeys(body, ["evidenceClass", "selectedMemoryItemIds", "suggestion"]) || !Array.isArray(body.selectedMemoryItemIds) || body.selectedMemoryItemIds.length > 64 || body.selectedMemoryItemIds.some((item) => typeof item !== "string") || new Set(body.selectedMemoryItemIds).size !== body.selectedMemoryItemIds.length) throw new HttpProblem(400, "invalid_input", "The review request is invalid.");
+        const memoryProvider = await this.projectMemoryProviderBinding();
+        json(response, 200, { ok: true, value: resultValue(opened.core.prepareResearchRoomReview({ projectId: opened.project.id, suggestion: body.suggestion as string, evidenceClass: body.evidenceClass as never, countsAsExternalEvidence: false, selectedMemoryItemIds: body.selectedMemoryItemIds as string[], memoryProvider, actor: USER })) }); return;
       }
       if (request.method === "POST" && url.pathname === "/api/reviews/analyze") {
         const body = await readBody(request); if (!isRecord(body)) throw new HttpProblem(400, "invalid_input", "The analysis confirmation is invalid.");
-        const value = await opened.core.analyzeResearchRoomSuggestion({ reviewId: body.reviewId as string, confirmationNonce: body.confirmationNonce as string, manifestHash: body.manifestHash as string });
+        const value = await opened.core.analyzeResearchRoomSuggestion({ reviewId: body.reviewId as string, confirmationNonce: body.confirmationNonce as string, manifestHash: body.manifestHash as string, memoryProvider: await this.projectMemoryProviderBinding() });
         json(response, 200, { ok: true, value: resultValue(value) }); return;
       }
       if (request.method === "POST" && url.pathname === "/api/reviews/cancel") {

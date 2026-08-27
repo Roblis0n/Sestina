@@ -54,6 +54,7 @@ export { migration015 } from "./migrations/015-argument-graph.js";
 export { migration016 } from "./migrations/016-research-room.js";
 export { migration017 } from "./migrations/017-correction-appeals.js";
 export { migration018 } from "./migrations/018-deliberation-rooms.js";
+export { migration019 } from "./migrations/019-project-working-memory.js";
 
 // Leases
 export {

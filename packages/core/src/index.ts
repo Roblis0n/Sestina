@@ -109,3 +109,11 @@ export type {
   WorkspacePage,
   WorkspaceProviderStatus,
 } from "./research-object-workspaces.js";
+export type {
+  ProjectMemoryItemProjection,
+  ProjectMemoryManifestExclusionReason,
+  ProjectMemoryManifestPayloadItem,
+  ProjectMemoryManifestProjection,
+  ProjectMemoryProjection,
+  ProjectMemoryProviderBinding,
+} from "./project-memory.js";

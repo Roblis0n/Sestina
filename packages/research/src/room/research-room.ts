@@ -59,9 +59,9 @@ export interface ResearchRoomContextManifest {
   readonly sendStatus: "not_sent" | "sent_to_provider";
   readonly networkUsed: boolean;
   readonly fields: readonly {
-    readonly category: "research_question" | "current_stage" | "current_task" | "fixed_decisions" | "expected_deltas" | "evidence_boundaries" | "explicit_non_goals" | "accepted_decisions" | "open_issues" | "issue_history" | "receipt_summary" | "current_episode" | "single_suggestion" | "semantic_criteria";
-    readonly source: "active_research_brief" | "versioned_research_state" | "explicit_user_input";
-    readonly sensitivity: "research_state" | "user_supplied_text";
+    readonly category: "research_question" | "current_stage" | "current_task" | "fixed_decisions" | "expected_deltas" | "evidence_boundaries" | "explicit_non_goals" | "accepted_decisions" | "open_issues" | "issue_history" | "receipt_summary" | "current_episode" | "single_suggestion" | "semantic_criteria" | "project_working_memory";
+    readonly source: "active_research_brief" | "versioned_research_state" | "explicit_user_input" | "explicit_project_working_memory_manifest";
+    readonly sensitivity: "research_state" | "user_supplied_text" | "governed_project_memory";
     readonly included: true;
     readonly truncated: boolean;
   }[];
@@ -70,6 +70,14 @@ export interface ResearchRoomContextManifest {
   readonly stateBindingHash: string;
   readonly evidenceClass: ResearchRoomEvidenceClass;
   readonly countsAsExternalEvidence: false;
+  readonly workingMemory?: {
+    readonly authority: "working_memory_context_only_non_authoritative";
+    readonly manifestId: string;
+    readonly manifestHash: string;
+    readonly payloadHash: string;
+    readonly included: readonly { readonly itemId: string; readonly version: number; readonly contentHash: string }[];
+    readonly excluded: readonly { readonly itemId: string; readonly state: "candidate" | "active" | "stale" | "expired" | "retired" | "forgotten"; readonly reason: "not_selected" | "candidate_not_confirmed" | "stale_source" | "expired" | "retired" | "forgotten" | "never_send" | "sensitivity_forbids_send" }[];
+  };
   readonly semanticJudge?: {
     readonly protocol: { readonly version: string; readonly hash: string };
     readonly prompt: { readonly version: string; readonly hash: string };
@@ -297,10 +305,21 @@ export function parseResearchRoomContextManifest(input: unknown): ResearchResult
   if (!isRecord(input) || input.schemaVersion !== "1.0.0" || !isNonBlankString(input.providerId) || !["none", "deterministic_fixture", "local", "external"].includes(String(input.providerKind)) || typeof input.networkRequired !== "boolean" || !["not_sent", "sent_to_provider"].includes(String(input.sendStatus)) || typeof input.networkUsed !== "boolean" || !Array.isArray(input.fields) || !sha(input.contextHash) || !sha(input.suggestionHash) || !sha(input.stateBindingHash) || input.countsAsExternalEvidence !== false) return err(researchError("invalid_research_room_receipt"));
   const review = parseResearchIdFor(input.reviewId, "rrvw_"); const evidence = parseResearchRoomEvidenceClass(input.evidenceClass); if (!review.ok || !evidence.ok) return err(researchError("invalid_research_room_receipt"));
   const fields: ResearchRoomContextManifest["fields"][number][] = [];
-  for (const raw of input.fields) { if (!isRecord(raw) || !hasExactKeys(raw, ["category", "source", "sensitivity", "included", "truncated"]) || !["research_question", "current_stage", "current_task", "fixed_decisions", "expected_deltas", "evidence_boundaries", "explicit_non_goals", "accepted_decisions", "open_issues", "issue_history", "receipt_summary", "current_episode", "single_suggestion", "semantic_criteria"].includes(String(raw.category)) || !["active_research_brief", "versioned_research_state", "explicit_user_input"].includes(String(raw.source)) || !["research_state", "user_supplied_text"].includes(String(raw.sensitivity)) || raw.included !== true || typeof raw.truncated !== "boolean") return err(researchError("invalid_research_room_receipt")); fields.push(raw as unknown as ResearchRoomContextManifest["fields"][number]); }
+  for (const raw of input.fields) { if (!isRecord(raw) || !hasExactKeys(raw, ["category", "source", "sensitivity", "included", "truncated"]) || !["research_question", "current_stage", "current_task", "fixed_decisions", "expected_deltas", "evidence_boundaries", "explicit_non_goals", "accepted_decisions", "open_issues", "issue_history", "receipt_summary", "current_episode", "single_suggestion", "semantic_criteria", "project_working_memory"].includes(String(raw.category)) || !["active_research_brief", "versioned_research_state", "explicit_user_input", "explicit_project_working_memory_manifest"].includes(String(raw.source)) || !["research_state", "user_supplied_text", "governed_project_memory"].includes(String(raw.sensitivity)) || raw.included !== true || typeof raw.truncated !== "boolean") return err(researchError("invalid_research_room_receipt")); fields.push(raw as unknown as ResearchRoomContextManifest["fields"][number]); }
+  let workingMemory: ResearchRoomContextManifest["workingMemory"];
+  if (input.workingMemory !== undefined) {
+    const memory = input.workingMemory;
+    if (!isRecord(memory) || !hasExactKeys(memory, ["authority", "manifestId", "manifestHash", "payloadHash", "included", "excluded"]) || memory.authority !== "working_memory_context_only_non_authoritative" || !sha(memory.manifestHash) || !sha(memory.payloadHash) || !Array.isArray(memory.included) || !Array.isArray(memory.excluded) || memory.included.length > 64 || memory.excluded.length > 400) return err(researchError("invalid_research_room_receipt"));
+    const manifestId = parseResearchIdFor(memory.manifestId, "rman_"); if (!manifestId.ok) return err(researchError("invalid_research_room_receipt"));
+    const included: NonNullable<ResearchRoomContextManifest["workingMemory"]>["included"][number][] = [];
+    for (const raw of memory.included) { if (!isRecord(raw) || !hasExactKeys(raw, ["itemId", "version", "contentHash"]) || !Number.isSafeInteger(raw.version) || Number(raw.version) < 1 || !sha(raw.contentHash)) return err(researchError("invalid_research_room_receipt")); const id = parseResearchIdFor(raw.itemId, "rmem_"); if (!id.ok) return err(researchError("invalid_research_room_receipt")); included.push({ itemId: id.value.id, version: Number(raw.version), contentHash: raw.contentHash }); }
+    const excluded: NonNullable<ResearchRoomContextManifest["workingMemory"]>["excluded"][number][] = [];
+    for (const raw of memory.excluded) { if (!isRecord(raw) || !hasExactKeys(raw, ["itemId", "state", "reason"]) || !["candidate", "active", "stale", "expired", "retired", "forgotten"].includes(String(raw.state)) || !["not_selected", "candidate_not_confirmed", "stale_source", "expired", "retired", "forgotten", "never_send", "sensitivity_forbids_send"].includes(String(raw.reason))) return err(researchError("invalid_research_room_receipt")); const id = parseResearchIdFor(raw.itemId, "rmem_"); if (!id.ok) return err(researchError("invalid_research_room_receipt")); excluded.push({ itemId: id.value.id, state: raw.state as typeof excluded[number]["state"], reason: raw.reason as typeof excluded[number]["reason"] }); }
+    workingMemory = cloneFrozen({ authority: memory.authority, manifestId: manifestId.value.id, manifestHash: memory.manifestHash, payloadHash: memory.payloadHash, included, excluded });
+  }
   const semanticJudge = input.semanticJudge === undefined ? undefined : parseSemanticManifest(input.semanticJudge);
   if (input.semanticJudge !== undefined && semanticJudge === undefined) return err(researchError("invalid_research_room_receipt"));
-  return ok(cloneFrozen({ ...input, reviewId: review.value.id, evidenceClass: evidence.value, countsAsExternalEvidence: false, fields, ...(semanticJudge ? { semanticJudge } : {}) } as unknown as ResearchRoomContextManifest));
+  return ok(cloneFrozen({ ...input, reviewId: review.value.id, evidenceClass: evidence.value, countsAsExternalEvidence: false, fields, ...(workingMemory ? { workingMemory } : {}), ...(semanticJudge ? { semanticJudge } : {}) } as unknown as ResearchRoomContextManifest));
 }
 
 function receiptPayload(value: Omit<ResearchRoomReceipt, "receiptHash">): Omit<ResearchRoomReceipt, "receiptHash"> { return value; }

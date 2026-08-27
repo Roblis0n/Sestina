@@ -82,6 +82,9 @@ describe("@sestina/core research lifecycle", () => {
     expect(reviewed.run.context.relevantIssues).toContainEqual(expect.objectContaining({ id: issue.id }));
 
     const accepted = valueOf(core.recordUserDisposition({ projectId: project.id, episodeId: episode.id, disposition: "accepted", reason: "The causal overclaim is removed", actor: USER }));
+    const memoryCanary = "ri51-project-working-memory-must-not-enter-ordinary-export";
+    const memoryCandidate = valueOf(core.createProjectMemoryCandidate({ projectId: project.id, kind: "resume_note", content: { text: memoryCanary }, retention: { policy: "until_unpinned" }, sensitivity: "project_private", outboundPolicy: "never_send", publicReason: "Exercise ordinary export exclusion.", actor: USER }));
+    valueOf(core.confirmProjectMemory({ projectId: project.id, itemId: memoryCandidate.id, expectedVersion: memoryCandidate.version, publicReason: "Keep this note local to governed project memory.", actor: USER }));
     const snapshot = valueOf(core.createResearchSnapshot({ projectId: project.id, episodeId: accepted.id, buildVersion: "sestina-core-test", limitations: ["Content integrity is not semantic proof"] }));
     const beforeReport = valueOf(core.getEpisode(project.id, accepted.id));
     const report = valueOf(core.renderReviewReport({ projectId: project.id, episodeId: accepted.id, format: "markdown" }));
@@ -89,6 +92,8 @@ describe("@sestina/core research lifecycle", () => {
     expect(valueOf(core.getEpisode(project.id, accepted.id))).toEqual(beforeReport);
     expect(report).toContain("Unchecked or uncertain");
     expect(capsule.capsule.hashMeaning).toBe("content_integrity_only_not_signature_or_proof");
+    expect(report).not.toContain(memoryCanary);
+    expect(capsule.json).not.toContain(memoryCanary);
 
     const responseFor = (capsuleHash: string, snapshotHash: string, reviewInputHash: string) => JSON.stringify({
       schemaVersion: "1.0.0",

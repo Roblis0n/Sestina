@@ -86,6 +86,23 @@ export interface ResearchRoomSemanticProviderBinding {
   readonly configGeneration: number;
 }
 
+export interface ResearchRoomWorkingMemoryContext {
+  readonly schemaVersion: "1.0.0";
+  readonly manifestId: string;
+  readonly manifestHash: string;
+  readonly projectId: string;
+  readonly authority: "working_memory_context_only_non_authoritative";
+  readonly items: readonly {
+    readonly itemId: string;
+    readonly kind: "term" | "working_hint" | "resume_note" | "workset";
+    readonly version: number;
+    readonly contentHash: string;
+    readonly content: unknown;
+    readonly source: unknown;
+    readonly sensitivity: "public" | "project_private";
+  }[];
+}
+
 export interface PrepareResearchRoomSemanticJudgeInput {
   readonly reviewId: string;
   readonly projectId: string;
@@ -130,6 +147,7 @@ export interface PrepareResearchRoomSemanticJudgeInput {
     readonly baselineRevisionId: string;
     readonly candidateRevisionId?: string;
   };
+  readonly workingMemory?: ResearchRoomWorkingMemoryContext;
   readonly suggestionDocument: StableTextDocumentInput;
   readonly evidenceClass: string;
 }
@@ -171,6 +189,7 @@ export interface ResearchRoomSemanticJudgeRequest {
     readonly issues: PrepareResearchRoomSemanticJudgeInput["issues"];
     readonly receiptSummary: PrepareResearchRoomSemanticJudgeInput["receiptSummary"];
     readonly currentEpisode?: PrepareResearchRoomSemanticJudgeInput["currentEpisode"];
+    readonly workingMemory?: ResearchRoomWorkingMemoryContext;
     readonly suggestionDocument: StableTextDocument;
     readonly evidenceClass: string;
   };
@@ -457,6 +476,15 @@ function validPrepareInput(input: PrepareResearchRoomSemanticJudgeInput): boolea
     const episode = input.currentEpisode;
     if (!record(episode) || !parseResearchIdFor(episode.id, "repi_").ok || !parseResearchIdFor(episode.artifactId, "rart_").ok || !parseResearchIdFor(episode.baselineRevisionId, "rrev_").ok || (episode.candidateRevisionId !== undefined && !parseResearchIdFor(episode.candidateRevisionId, "rrev_").ok) || !boundedText(episode.status, 128) || !validInteger(episode.version)) return false;
   }
+  if (input.workingMemory !== undefined) {
+    const memory = input.workingMemory;
+    if (!record(memory) || !exact(memory, ["schemaVersion", "manifestId", "manifestHash", "projectId", "authority", "items"]) || memory.projectId !== input.projectId || !parseResearchIdFor(memory.manifestId, "rman_").ok || !sha(memory.manifestHash) || !Array.isArray(memory.items) || memory.items.length > 64) return false;
+    const ids = new Set<string>();
+    for (const raw of memory.items) {
+      if (!record(raw) || !exact(raw, ["itemId", "kind", "version", "contentHash", "content", "source", "sensitivity"]) || !parseResearchIdFor(raw.itemId, "rmem_").ok || ids.has(String(raw.itemId)) || !["term", "working_hint", "resume_note", "workset"].includes(String(raw.kind)) || !validInteger(raw.version) || !sha(raw.contentHash) || !record(raw.content) || !record(raw.source) || !["public", "project_private"].includes(String(raw.sensitivity))) return false;
+      ids.add(String(raw.itemId));
+    }
+  }
   return boundedText(input.evidenceClass, 128);
 }
 
@@ -486,6 +514,7 @@ export function prepareResearchRoomSemanticJudge(
       issues: input.issues,
       receiptSummary: input.receiptSummary,
       ...(input.currentEpisode ? { currentEpisode: input.currentEpisode } : {}),
+      ...(input.workingMemory ? { workingMemory: input.workingMemory } : {}),
       suggestionDocument: document.value,
       evidenceClass: input.evidenceClass,
     },

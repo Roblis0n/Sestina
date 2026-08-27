@@ -79,9 +79,11 @@ const GUIDANCE_FILES = [
       "RI-50（已完成）",
       "UI-03 Production Experience Quality Consolidation and Functional Cohesion",
       "UI-03 已按 Task Start/Result 完成并验证",
-      "none_active_RI51_not_started",
+      "RI-51 Project-level Minimal Governed Working Memory and Recovery Continuity",
+      "RI-51 已完成并验证",
+      "none_active_RI52_not_started",
       "await_explicit_user_authorization",
-      "RI-51 为 `not_started`",
+      "RI-52 为 `not_started`",
       "completed_and_verified_implementation_real_provider_evidence_blocked",
       "Market Gate 0",
     ],
@@ -153,6 +155,82 @@ const GUIDANCE_FILES = [
       "blockers_remaining: 0",
       "majors_remaining: 0",
       "in_scope_moderates_remaining: 0",
+    ],
+  },
+  {
+    path: "docs/execution/RI-51-PROJECT-LEVEL-MINIMAL-GOVERNED-MEMORY-AND-RECOVERY-CONTINUITY-TASK-START-RECORD.md",
+    required: [
+      "task: RI-51",
+      "status: ready_to_start",
+      "gate_conclusion: ready_to_start_user_authorized_development",
+      "activity_status: active_project_level_minimum_governed_memory_and_recovery_continuity",
+      "implementation_authorization: explicit_user_authorization_2026_08_27",
+      "next_code_goal: project_level_minimum_governed_memory_and_recovery_continuity",
+      "real_second_use_value: unproven",
+      "cross_project_memory: prohibited",
+      "automatic_memory_promotion: prohibited",
+      "default_external_memory_send: prohibited",
+      "production_visual_and_functional_acceptance: required",
+      "ri52_status: not_started",
+      "final: ready_to_start",
+    ],
+  },
+  {
+    path: "docs/execution/RI-51-PROJECT-LEVEL-MINIMAL-GOVERNED-MEMORY-AND-RECOVERY-CONTINUITY-TASK-RESULT.md",
+    required: [
+      "task: RI-51",
+      "status: completed_and_verified",
+      "pnpm_verify: passed",
+      "production_browser_e2e: passed",
+      "production_visual_and_functional_acceptance: passed",
+      "screens_opened_and_inspected: 12",
+      "governed_project_memory_implementation: passed",
+      "cross_project_memory_leakage: zero_verified",
+      "automatic_memory_promotion: zero_verified",
+      "default_external_memory_send: zero_verified",
+      "real_provider_smoke: blocked_missing_user_config",
+      "real_second_use_recovery_value: unproven",
+      "next_code_task: none_active_RI52_not_started",
+      "next_execution_goal: await_explicit_user_authorization",
+      "ri52_status: not_started",
+      "remote_visibility: PRIVATE",
+    ],
+  },
+  {
+    path: "docs/execution/RI-51-PRODUCTION-VISUAL-AND-FUNCTIONAL-ACCEPTANCE.md",
+    required: [
+      "task: RI-51",
+      "status: passed",
+      "production_route: real_research_room",
+      "browser: microsoft_edge",
+      "typed_api_facade: used",
+      "runtime_decoder: used",
+      "core_projection: used",
+      "screens_opened_and_inspected: 12",
+      "blockers_remaining: 0",
+      "majors_remaining: 0",
+      "in_scope_moderates_remaining: 0",
+      "production_visual_and_functional_acceptance: passed",
+    ],
+  },
+  {
+    path: "docs/architecture/05-PROJECT-LEVEL-GOVERNED-WORKING-MEMORY.md",
+    required: [
+      "Status: `implemented_and_verified`",
+      "working_memory_non_authoritative",
+      "Project Authority State != Project Working Memory",
+      "Default zero",
+      "real Provider smoke remains `blocked_missing_user_config`",
+    ],
+  },
+  {
+    path: "docs/migrations/RI-51-SCHEMA-019.md",
+    required: [
+      "Status: `implemented_and_verified`",
+      "019-project-working-memory",
+      "project_working_memory",
+      "resume_checkpoints",
+      "does not persist request-scoped Context Manifests",
     ],
   },
   {
@@ -329,39 +407,63 @@ const MARKER_CONTRACT = {
   },
   "sestina-current-status": {
     exact: "completed_and_verified",
-    why: "UI-03 passed its production implementation, browser, visual, and repository gates",
+    why: "RI-51 passed implementation, production browser, visual, and repository gates",
   },
   "sestina-last-completed-task": {
-    exact: "UI-03",
-    why: "UI-03 is the most recently completed governed task",
+    exact: "RI-51",
+    why: "RI-51 is the most recently completed governed task",
   },
   "sestina-last-completed-status": {
     exact: "completed_and_verified",
     why: "the latest governed task passed its implementation and required host evidence gates",
   },
   "sestina-implementation-base": {
-    exact: "0b766a4460d2ae9b0b872cc137fbec29327bc08a",
-    why: "UI-03 starts from the verified RI-50 completion commit",
+    exact: "b6862451f4db95f8d12458008e31c80ff1b40511",
+    why: "RI-51 starts from the verified UI-03 completion commit",
   },
   "sestina-next-code-goal": {
-    exact: "none_active_RI51_not_started",
-    why: "UI-03 is complete and RI-51 has not been authorized",
+    exact: "none_active_RI52_not_started",
+    why: "RI-51 is complete and RI-52 has not been authorized",
   },
   "sestina-next-execution-goal": {
     exact: "await_explicit_user_authorization",
-    why: "no further implementation stage is active after UI-03 completion",
+    why: "no further implementation stage is active after RI-51 completion",
   },
   "sestina-next-code-sequence": {
-    exact: "none_active_RI51_not_started",
-    why: "the governed sequence stops before RI-51 until explicit authorization",
+    exact: "none_active_RI52_not_started",
+    why: "the governed sequence stops before RI-52 until explicit authorization",
   },
   "sestina-production-visual-and-functional-acceptance": {
     exact: "passed",
-    why: "the final UI-03 production tree passed the real visual and functional gate",
+    why: "the final RI-51 production tree passed the real visual and functional gate",
   },
   "sestina-ri51-status": {
+    exact: "completed_and_verified",
+    why: "RI-51 passed its full implementation and delivery contract",
+  },
+  "sestina-ri52-status": {
     exact: "not_started",
-    why: "UI-03 must not start the governed-memory stage",
+    why: "RI-51 completion does not start the external pilot stage",
+  },
+  "sestina-governed-project-memory-implementation": {
+    exact: "passed",
+    why: "the project-bound governed memory and deterministic resume implementation is verified",
+  },
+  "sestina-cross-project-memory-leakage": {
+    exact: "zero_verified",
+    why: "all RI-51 memory reads, writes, manifests, and recovery are project-bound",
+  },
+  "sestina-automatic-memory-promotion": {
+    exact: "zero_verified",
+    why: "only direct user confirmation can activate working memory",
+  },
+  "sestina-default-external-memory-send": {
+    exact: "zero_verified",
+    why: "every request starts with zero selected working-memory items",
+  },
+  "sestina-real-second-use-recovery-value": {
+    exact: "unproven",
+    why: "implementation and owner fixtures do not establish real independent second-use value",
   },
   "sestina-ri44-to-ri47-status": {
     exact: "superseded_unstarted",
@@ -526,9 +628,9 @@ for (const entry of ENTRY_FILES) {
 const tasks = [...currentTasks.entries()];
 if (tasks.length > 0) {
   const first = tasks[0][1];
-  if (first !== "UI-03") {
+  if (first !== "RI-51") {
     err(
-      `[AUTH-R003] ${tasks[0][0]}: current task is '${first}' but the explicitly authorized task is 'UI-03'`,
+      `[AUTH-R003] ${tasks[0][0]}: current task is '${first}' but the explicitly authorized task is 'RI-51'`,
     );
   }
   for (const [entry, task] of tasks) {

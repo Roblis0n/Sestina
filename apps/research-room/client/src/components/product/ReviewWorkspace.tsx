@@ -1,12 +1,14 @@
-import { useRef, useState, type ChangeEvent, type SyntheticEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type SyntheticEvent } from "react";
 import type {
   AnalyzedReviewDto,
   AppLanguage,
   DispositionKind,
   EvidenceClass,
+  ProjectMemoryItemDto,
   PreparedReviewDto,
   ResearchRoomReceiptDto,
 } from "../../api/dto.js";
+import { researchRoomApi } from "../../api/client.js";
 import { Button } from "../primitives/Button.js";
 import { StatusBadge } from "../primitives/StatusBadge.js";
 import { localizedError, t } from "../../i18n/copy.js";
@@ -23,7 +25,7 @@ interface ReviewWorkspaceProps {
   readonly analyzed?: AnalyzedReviewDto;
   readonly onPrepared: (prepared?: PreparedReviewDto) => void;
   readonly onAnalyzed: (analyzed?: AnalyzedReviewDto) => void;
-  readonly onPrepare: (suggestion: string, evidenceClass: EvidenceClass) => Promise<PreparedReviewDto>;
+  readonly onPrepare: (suggestion: string, evidenceClass: EvidenceClass, selectedMemoryItemIds: readonly string[]) => Promise<PreparedReviewDto>;
   readonly onAnalyze: (prepared: PreparedReviewDto, signal: AbortSignal) => Promise<AnalyzedReviewDto>;
   readonly onCancel: (prepared: PreparedReviewDto) => Promise<void>;
   readonly onCommit: (input: {
@@ -50,6 +52,12 @@ const DISPOSITIONS: readonly { readonly kind: DispositionKind; readonly key: "ac
   { kind: "direction_changed", key: "direction_change", variant: "danger" },
 ];
 
+function memoryLabel(item: ProjectMemoryItemDto): string {
+  if (!item.content) return item.id;
+  const value = "term" in item.content ? `${item.content.term} — ${item.content.definition}` : "purpose" in item.content ? item.content.purpose : item.content.text;
+  return value.length > 240 ? `${value.slice(0, 239)}…` : value;
+}
+
 export function ReviewWorkspace(props: ReviewWorkspaceProps) {
   const [suggestion, setSuggestion] = useState("");
   const [evidenceClass, setEvidenceClass] = useState<EvidenceClass>("owner_scenario");
@@ -58,12 +66,35 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
   const [modified, setModified] = useState("");
   const [redirect, setRedirect] = useState("");
   const [selectedDisposition, setSelectedDisposition] = useState<DispositionKind>();
+  const [memoryItems, setMemoryItems] = useState<readonly ProjectMemoryItemDto[]>([]);
+  const [selectedMemoryItemIds, setSelectedMemoryItemIds] = useState<readonly string[]>([]);
   const analysisAbort = useRef<AbortController | undefined>(undefined);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const items: ProjectMemoryItemDto[] = [];
+        let cursor: string | undefined;
+        do {
+          const page = await researchRoomApi.projectMemory(200, cursor);
+          items.push(...page.workingMemory.items);
+          cursor = page.workingMemory.nextCursor;
+        } while (cursor !== undefined && items.length < 400);
+        if (!controller.signal.aborted) {
+          setMemoryItems(items);
+          const requested = new URLSearchParams(window.location.search).getAll("memory").slice(0, 64);
+          setSelectedMemoryItemIds((current) => [...new Set([...current, ...requested])].filter((id) => items.some((item) => item.id === id && item.manifestEligible)).slice(0, 64));
+        }
+      } catch (error) { if (!controller.signal.aborted) handleError(error); }
+    })();
+    return () => { controller.abort(); };
+  }, [props.projectId]);
 
   async function prepare(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
     try {
-      const value = await props.onPrepare(suggestion, evidenceClass);
+      const value = await props.onPrepare(suggestion, evidenceClass, selectedMemoryItemIds);
       props.onPrepared(value);
       props.onAnalyzed(undefined);
       props.onInspect({ kind: "manifest", value });
@@ -153,11 +184,12 @@ export function ReviewWorkspace(props: ReviewWorkspaceProps) {
           <label htmlFor="suggestion">{t(props.language, "suggestion")}</label>
           <textarea id="suggestion" maxLength={16384} required value={suggestion} placeholder={t(props.language, "suggestion_placeholder")} onChange={(event) => { setSuggestion(event.target.value); }} />
           <div className="review-fields"><div><label htmlFor="evidence-class">{t(props.language, "evidence_class")}</label><select id="evidence-class" value={evidenceClass} onChange={(event) => { setEvidenceClass(event.target.value as EvidenceClass); }}><option value="owner_scenario">owner_scenario</option><option value="synthetic_fixture">synthetic_fixture</option><option value="synthetic_adversarial_fixture">synthetic_adversarial_fixture</option></select></div><div className="file-field"><label htmlFor="suggestion-file">{t(props.language, "text_file")}</label><input id="suggestion-file" type="file" accept=".txt,.md,text/plain,text/markdown" onChange={(event) => void fileChanged(event)} /><span>{fileName || t(props.language, "no_file")}</span></div></div>
+          <fieldset className="review-memory-selection"><legend>{props.language === "en" ? "Project Working Memory for this request" : "本次请求的 Project Working Memory"}</legend><p>{props.language === "en" ? "Zero items are selected by default. Only active, explicitly permitted items survive the Context Manifest rules; the full preview remains unsent until you confirm analysis." : "默认选择为零。只有 active 且显式允许的项目能通过 Context Manifest 规则；完整预览在你确认分析前不会发送。"}</p>{memoryItems.filter((item) => item.manifestEligible).length ? <div className="review-memory-options">{memoryItems.filter((item) => item.manifestEligible).map((item) => <label key={item.id}><input type="checkbox" checked={selectedMemoryItemIds.includes(item.id)} disabled={props.busy || selectedMemoryItemIds.length >= 64 && !selectedMemoryItemIds.includes(item.id)} onChange={(event) => { setSelectedMemoryItemIds((current) => event.target.checked ? [...current, item.id] : current.filter((id) => id !== item.id)); }} /><span><strong>{memoryLabel(item)}</strong><small>{item.kind} · {item.sensitivity} · {item.outboundPolicy} · v{item.version}</small></span></label>)}</div> : <p className="muted">{props.language === "en" ? "No active item is eligible. Manage candidates, stale sources and retention in Resume / Project Memory." : "当前没有可进入 Manifest 的 active 项；请在“恢复 / 项目记忆”中处理候选、陈旧来源和保留期。"}</p>}</fieldset>
           <p className="muted">{t(props.language, "file_hint")}</p>
           <Button type="submit" variant="primary" disabled={props.busy || !suggestion.trim()}>{t(props.language, "prepare_manifest")}</Button>
         </form>
       </div></article>
-      {prepared ? <article className="thread-event thread-event--manifest"><span className="thread-event__index">03</span><div className="thread-event__body"><div className="event-title"><h2>{t(props.language, "manifest_title")}</h2><StatusBadge tone="warning">{t(props.language, "manifest_unsent")}</StatusBadge></div><p>{prepared.manifest.semanticJudge ? `${prepared.manifest.semanticJudge.provider.id} / ${prepared.manifest.semanticJudge.provider.model} · ${prepared.manifest.semanticJudge.request.requestBodyBytes} bytes` : t(props.language, "ledger_only")}</p><div className="button-row"><Button data-inspector-return="manifest" aria-label={props.language === "en" ? "Inspect Context Manifest" : "检查 Context Manifest"} type="button" variant="quiet" onClick={() => { props.onInspect({ kind: "manifest", value: prepared }); }}>{t(props.language, "open_inspector")}</Button>{!analyzed ? <Button type="button" variant="primary" disabled={props.busy} onClick={() => void analyze()}>{t(props.language, "confirm_analyze")}</Button> : null}<Button type="button" variant="secondary" disabled={props.busy && analysisAbort.current === undefined} onClick={() => void cancelReview()}>{analysisAbort.current ? t(props.language, "cancel_analysis") : t(props.language, "cancel_review")}</Button></div></div></article> : null}
+      {prepared ? <article className="thread-event thread-event--manifest"><span className="thread-event__index">03</span><div className="thread-event__body"><div className="event-title"><h2>{t(props.language, "manifest_title")}</h2><StatusBadge tone="warning">{t(props.language, "manifest_unsent")}</StatusBadge></div><p>{prepared.manifest.semanticJudge ? `${prepared.manifest.semanticJudge.provider.id} / ${prepared.manifest.semanticJudge.provider.model} · ${prepared.manifest.semanticJudge.request.requestBodyBytes} bytes` : t(props.language, "ledger_only")}</p>{prepared.manifest.workingMemory ? <p><strong>{props.language === "en" ? "Working Memory" : "工作记忆"}:</strong> {prepared.manifest.workingMemory.included.length} {props.language === "en" ? "included" : "项包含"} · {prepared.manifest.workingMemory.excluded.length} {props.language === "en" ? "excluded" : "项排除"} · <code>{prepared.manifest.workingMemory.payloadHash}</code></p> : null}<div className="button-row"><Button data-inspector-return="manifest" aria-label={props.language === "en" ? "Inspect Context Manifest" : "检查 Context Manifest"} type="button" variant="quiet" onClick={() => { props.onInspect({ kind: "manifest", value: prepared }); }}>{t(props.language, "open_inspector")}</Button>{!analyzed ? <Button type="button" variant="primary" disabled={props.busy} onClick={() => void analyze()}>{t(props.language, "confirm_analyze")}</Button> : null}<Button type="button" variant="secondary" disabled={props.busy && analysisAbort.current === undefined} onClick={() => void cancelReview()}>{analysisAbort.current ? t(props.language, "cancel_analysis") : t(props.language, "cancel_review")}</Button></div></div></article> : null}
       {analyzed ? <article className="thread-event thread-event--analysis"><span className="thread-event__index">04</span><div className="thread-event__body"><div className="event-title"><h2>{t(props.language, "analysis_title")}</h2><StatusBadge tone={analyzed.providerStatus === "semantic_ready" ? "ready" : "warning"}>{analyzed.providerStatus}</StatusBadge></div><div id="findings" className="finding-summary">{analyzed.analysis.findings.map((finding, index) => <p key={`${finding.kind}-${index}`}><strong>{finding.kind}</strong> — {finding.summary}</p>)}</div><p id="delta"><strong>{t(props.language, "argument_delta")}:</strong> {analyzed.analysis.argumentDelta.genuineAdditions.length > 0 ? analyzed.analysis.argumentDelta.genuineAdditions.join(" · ") : analyzed.analysis.argumentDelta.summary}</p><Button data-inspector-return="analysis" type="button" variant="quiet" onClick={() => { props.onInspect({ kind: "analysis", value: analyzed }); }}>{t(props.language, "open_inspector")}</Button>
         <section className="authority-gate" aria-labelledby="authority-heading"><h2 id="authority-heading">{t(props.language, "authority_title")}</h2><p>{t(props.language, "authority_deck")}</p>{!canSemanticDisposition ? <aside className="action-availability" role="note" aria-label={t(props.language, "disabled_reason")}><strong>{t(props.language, "disabled_reason")}</strong><p>{t(props.language, "semantic_disposition_required")}</p></aside> : null}<label htmlFor="reason">{t(props.language, "disposition_reason")}</label><textarea id="reason" maxLength={4096} required value={reason} onChange={(event) => { setReason(event.target.value); }} />{selectedDisposition === "modified_accepted" ? <><label htmlFor="modified">{t(props.language, "modified_proposal")}</label><textarea id="modified" maxLength={16384} required value={modified} onChange={(event) => { setModified(event.target.value); }} /></> : null}{selectedDisposition === "direction_changed" ? <><label htmlFor="redirect">{t(props.language, "redirect_question")}</label><textarea id="redirect" maxLength={4096} required value={redirect} onChange={(event) => { setRedirect(event.target.value); }} /></> : null}<div className="disposition-grid">{DISPOSITIONS.map((item) => <Button key={item.kind} type="button" variant={item.variant} disabled={props.busy || (!canSemanticDisposition && !["rejected", "deferred"].includes(item.kind))} aria-pressed={selectedDisposition === item.kind} onClick={() => void disposition(item.kind)}>{t(props.language, item.key)}</Button>)}</div></section>
       </div></article> : null}

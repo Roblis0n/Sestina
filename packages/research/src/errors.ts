@@ -87,7 +87,14 @@ export type ResearchErrorCode =
   | "user_deliberation_action_required"
   | "invalid_deliberation_result"
   | "invalid_manual_external_opinion"
-  | "deliberation_command_conflict";
+  | "deliberation_command_conflict"
+  | "invalid_project_working_memory"
+  | "invalid_resume_checkpoint"
+  | "invalid_working_memory_transition"
+  | "user_working_memory_action_required"
+  | "working_memory_source_mismatch"
+  | "working_memory_limit_reached"
+  | "working_memory_command_conflict";
 
 export type ResearchErrorDetails = Readonly<
   Record<string, string | number | boolean>
@@ -189,4 +196,11 @@ const MESSAGES: Readonly<Record<ResearchErrorCode, string>> = {
   invalid_deliberation_result: "deliberation participant result is missing, malformed, or not bound to the frozen request",
   invalid_manual_external_opinion: "manual external opinion is missing required disclosure or metadata",
   deliberation_command_conflict: "the deliberation command id was already used for a different command payload",
+  invalid_project_working_memory: "project working memory is missing, malformed, or outside its project boundary",
+  invalid_resume_checkpoint: "resume checkpoint is missing, malformed, or outside its project boundary",
+  invalid_working_memory_transition: "project working memory lifecycle transition is not allowed",
+  user_working_memory_action_required: "an explicit user working-memory action is required",
+  working_memory_source_mismatch: "project working memory source no longer matches its frozen project object",
+  working_memory_limit_reached: "the bounded project working-memory limit has been reached",
+  working_memory_command_conflict: "the working-memory command was already used with a different payload",
 };

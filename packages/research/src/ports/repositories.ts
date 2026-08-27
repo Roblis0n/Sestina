@@ -22,6 +22,7 @@ import type { ArgumentDelta } from "../argument/argument-delta.js";
 import type { ResearchRoomReceipt } from "../room/research-room.js";
 import type { CorrectionAppeal } from "../appeal/correction-appeal.js";
 import type { DeliberationRoom, DeliberationSourceKind } from "../deliberation/deliberation-room.js";
+import type { ProjectWorkingMemory, ProjectWorkingMemoryState, ResumeCheckpoint } from "../memory/project-working-memory.js";
 
 export const RESEARCH_PAGE_LIMIT_MAX = 200;
 
@@ -161,6 +162,19 @@ export interface DeliberationRoomRepository {
   compareAndSwap(value: DeliberationRoom, expectedVersion: EntityVersion): ResearchResult<DeliberationRoom>;
 }
 
+export interface ProjectWorkingMemoryRepository {
+  create(value: ProjectWorkingMemory): ResearchResult<ProjectWorkingMemory>;
+  getById(projectId: string, itemId: string): ResearchResult<ProjectWorkingMemory | undefined>;
+  listByProject(projectId: string, page: ResearchPageRequest, states?: readonly ProjectWorkingMemoryState[]): ResearchResult<ResearchPage<ProjectWorkingMemory>>;
+  compareAndSwap(value: ProjectWorkingMemory, expectedVersion: EntityVersion): ResearchResult<ProjectWorkingMemory>;
+}
+
+export interface ResumeCheckpointRepository {
+  append(value: ResumeCheckpoint): ResearchResult<ResumeCheckpoint>;
+  getLatest(projectId: string): ResearchResult<ResumeCheckpoint | undefined>;
+  listByProject(projectId: string, page: ResearchPageRequest): ResearchResult<ResearchPage<ResumeCheckpoint>>;
+}
+
 export interface ResearchRepositories extends ArgumentGraphRepositories {
   readonly projects: ResearchProjectRepository;
   readonly artifacts: ResearchArtifactRepository;
@@ -173,6 +187,8 @@ export interface ResearchRepositories extends ArgumentGraphRepositories {
   readonly roomReceipts: ResearchRoomReceiptRepository;
   readonly correctionAppeals: CorrectionAppealRepository;
   readonly deliberationRooms: DeliberationRoomRepository;
+  readonly workingMemory: ProjectWorkingMemoryRepository;
+  readonly resumeCheckpoints: ResumeCheckpointRepository;
 }
 
 export interface ResearchUnitOfWork {

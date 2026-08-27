@@ -381,6 +381,55 @@ export type {
   ManualExternalOpinion,
 } from "./deliberation/deliberation-room.js";
 
+export {
+  PROJECT_WORKING_MEMORY_KINDS,
+  PROJECT_WORKING_MEMORY_STATES,
+  PROJECT_WORKING_MEMORY_SENSITIVITIES,
+  PROJECT_WORKING_MEMORY_OUTBOUND_POLICIES,
+  PROJECT_WORKING_MEMORY_OBJECT_KINDS,
+  PROJECT_WORKING_MEMORY_MAX_CONTENT_BYTES,
+  PROJECT_WORKING_MEMORY_MAX_REFS,
+  PROJECT_WORKING_MEMORY_MAX_ACTIVE_ITEMS,
+  RESUME_CHECKPOINT_MAX_BINDINGS,
+  RESUME_AUTHORITY_BINDING_KINDS,
+  createProjectWorkingMemoryCandidate,
+  confirmProjectWorkingMemory,
+  editProjectWorkingMemory,
+  markProjectWorkingMemorySourceStale,
+  expireProjectWorkingMemory,
+  renewProjectWorkingMemory,
+  retireProjectWorkingMemory,
+  forgetProjectWorkingMemory,
+  isProjectWorkingMemoryRecallEligible,
+  parseProjectWorkingMemory,
+  createResumeCheckpoint,
+  parseResumeCheckpoint,
+  computeResumeChanges,
+} from "./memory/project-working-memory.js";
+export type {
+  ProjectWorkingMemoryKind,
+  ProjectWorkingMemoryState,
+  ProjectWorkingMemorySensitivity,
+  ProjectWorkingMemoryOutboundPolicy,
+  ProjectWorkingMemoryContent,
+  ProjectWorkingMemoryObjectRef,
+  ProjectWorkingMemoryObjectKind,
+  ProjectWorkingMemorySource,
+  ProjectWorkingMemoryRetention,
+  ProjectWorkingMemoryStaleReason,
+  ProjectWorkingMemoryTransition,
+  LiveProjectWorkingMemory,
+  ForgottenProjectWorkingMemory,
+  ProjectWorkingMemory,
+  CreateProjectWorkingMemoryCandidateInput,
+  ResumeAuthorityBindingKind,
+  ResumeAuthorityBinding,
+  ResumeMemoryBinding,
+  ResumeCheckpoint,
+  ResumeCurrentSnapshot,
+  ResumeChanges,
+} from "./memory/project-working-memory.js";
+
 export { CLAIM_KINDS, parseArgumentClaim, parseClaim } from "./argument/claim.js";
 export type { ArgumentClaim, Claim, ClaimKind } from "./argument/claim.js";
 export { parseMechanismLink } from "./argument/mechanism-link.js";
@@ -420,6 +469,8 @@ export type {
   ResearchRoomReceiptRepository,
   CorrectionAppealRepository,
   DeliberationRoomRepository,
+  ProjectWorkingMemoryRepository,
+  ResumeCheckpointRepository,
   ResearchRepositories,
   ResearchUnitOfWork,
 } from "./ports/repositories.js";

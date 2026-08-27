@@ -16,6 +16,10 @@ import {
   decodeProviderConnectionTest,
   decodeProviderStatus,
   decodeProjectOverview,
+  decodeProjectMemoryManifest,
+  decodeProjectMemoryProjection,
+  decodeProjectMemoryRecord,
+  decodeResumeCheckpoint,
   decodeReceiptResult,
   decodeResearchRoomState,
   decodeResearchObjectDetail,
@@ -50,6 +54,13 @@ import type {
   PreparedDeliberationDto,
   PreparedDeliberationRetryDto,
   ProjectOverviewDto,
+  ProjectMemoryContentDto,
+  ProjectMemoryKindDto,
+  ProjectMemoryManifestDto,
+  ProjectMemoryOutboundPolicyDto,
+  ProjectMemoryProjectionDto,
+  ProjectMemoryRetentionDto,
+  ProjectMemorySensitivityDto,
   ProjectOpenResultDto,
   ProviderSaveInput,
   ProviderConnectionTestDto,
@@ -204,6 +215,55 @@ export class ResearchRoomApi {
 
   async attention(): Promise<AttentionDto> { return this.request("/api/project/attention", decodeAttention); }
 
+  async projectMemory(limit = 100, cursor?: string): Promise<ProjectMemoryProjectionDto> {
+    const query = new URLSearchParams({ limit: String(limit) }); if (cursor) query.set("cursor", cursor);
+    return this.request(`/api/project/memory?${query.toString()}`, decodeProjectMemoryProjection);
+  }
+
+  async createProjectMemoryCandidate(input: { readonly projectId: string; readonly kind: ProjectMemoryKindDto; readonly content: ProjectMemoryContentDto; readonly retention: ProjectMemoryRetentionDto; readonly sensitivity: ProjectMemorySensitivityDto; readonly outboundPolicy: ProjectMemoryOutboundPolicyDto; readonly publicReason: string }): Promise<Readonly<Record<string, unknown>>> {
+    return this.request("/api/project/memory/candidates", decodeProjectMemoryRecord, { method: "POST", mutation: true, body: { commandType: "create_project_memory_candidate", confirmed: true, ...input } });
+  }
+
+  async pinProjectObjectToMemory(input: { readonly projectId: string; readonly objectKind: string; readonly objectId: string; readonly kind: ProjectMemoryKindDto; readonly content: ProjectMemoryContentDto; readonly retention: ProjectMemoryRetentionDto; readonly sensitivity: ProjectMemorySensitivityDto; readonly outboundPolicy: ProjectMemoryOutboundPolicyDto; readonly publicReason: string }): Promise<Readonly<Record<string, unknown>>> {
+    return this.request("/api/project/memory/pin", decodeProjectMemoryRecord, { method: "POST", mutation: true, body: { commandType: "pin_project_object_to_memory", confirmed: true, ...input } });
+  }
+
+  async confirmProjectMemory(projectId: string, itemId: string, expectedVersion: number, publicReason: string): Promise<Readonly<Record<string, unknown>>> {
+    return this.memoryMutation(itemId, "confirm", decodeProjectMemoryRecord, { commandType: "confirm_project_memory", projectId, expectedVersion, publicReason, confirmed: true });
+  }
+
+  async editProjectMemory(input: { readonly projectId: string; readonly itemId: string; readonly expectedVersion: number; readonly content: ProjectMemoryContentDto; readonly retention: ProjectMemoryRetentionDto; readonly sensitivity: ProjectMemorySensitivityDto; readonly outboundPolicy: ProjectMemoryOutboundPolicyDto; readonly publicReason: string }): Promise<Readonly<Record<string, unknown>>> {
+    const { itemId, ...body } = input; return this.memoryMutation(itemId, "edit", decodeProjectMemoryRecord, { commandType: "edit_project_memory", confirmed: true, ...body });
+  }
+
+  async renewProjectMemory(projectId: string, itemId: string, expectedVersion: number, retention: ProjectMemoryRetentionDto, publicReason: string): Promise<Readonly<Record<string, unknown>>> {
+    return this.memoryMutation(itemId, "renew", decodeProjectMemoryRecord, { commandType: "renew_project_memory", projectId, expectedVersion, retention, publicReason, confirmed: true });
+  }
+
+  async retireProjectMemory(projectId: string, itemId: string, expectedVersion: number, publicReason: string): Promise<Readonly<Record<string, unknown>>> {
+    return this.memoryMutation(itemId, "retire", decodeProjectMemoryRecord, { commandType: "retire_project_memory", projectId, expectedVersion, publicReason, confirmed: true });
+  }
+
+  async forgetProjectMemory(projectId: string, itemId: string, expectedVersion: number, confirmation: string): Promise<Readonly<Record<string, unknown>>> {
+    return this.memoryMutation(itemId, "forget", decodeProjectMemoryRecord, { commandType: "forget_project_memory", projectId, expectedVersion, confirmation, publicReason: "user_requested_irreversible_forget", confirmed: true });
+  }
+
+  async reviewProjectResume(projectId: string, publicReason: string): Promise<Readonly<Record<string, unknown>>> {
+    return this.request("/api/project/memory/checkpoint", decodeResumeCheckpoint, { method: "POST", mutation: true, body: { commandType: "review_project_resume", projectId, publicReason, confirmed: true } });
+  }
+
+  async prepareProjectMemoryManifest(projectId: string, selectedItemIds: readonly string[]): Promise<ProjectMemoryManifestDto> {
+    return this.request("/api/project/memory/manifests/prepare", decodeProjectMemoryManifest, { method: "POST", mutation: true, body: { commandType: "prepare_project_memory_manifest", projectId, selectedItemIds, confirmed: true } });
+  }
+
+  async confirmProjectMemoryManifest(projectId: string, manifest: ProjectMemoryManifestDto): Promise<ProjectMemoryManifestDto> {
+    return this.request(`/api/project/memory/manifests/${encodeURIComponent(manifest.manifestId)}/confirm`, decodeProjectMemoryManifest, { method: "POST", mutation: true, body: { commandType: "confirm_project_memory_manifest", projectId, expectedVersion: manifest.version, confirmationNonce: manifest.confirmationNonce, manifestHash: manifest.manifestHash, confirmed: true } });
+  }
+
+  async consumeProjectMemoryManifest(projectId: string, manifest: ProjectMemoryManifestDto): Promise<ProjectMemoryManifestDto> {
+    return this.request(`/api/project/memory/manifests/${encodeURIComponent(manifest.manifestId)}/consume`, decodeProjectMemoryManifest, { method: "POST", mutation: true, body: { commandType: "consume_project_memory_manifest", projectId, expectedVersion: manifest.version, manifestHash: manifest.manifestHash, confirmed: true } });
+  }
+
   async searchResearchObjects(query: string, limit = 50, cursor?: string): Promise<ResearchObjectSearchDto> {
     const parameters = new URLSearchParams({ q: query, limit: String(limit) });
     if (cursor) parameters.set("cursor", cursor);
@@ -235,8 +295,8 @@ export class ResearchRoomApi {
     return this.request(`/api/commands/issues/${action}`, (value) => decodeResearchObjectDetail(value, "issue") as IssueDetailDto, { method: "POST", mutation: true, body: { commandType, ...input, confirmed: true } });
   }
 
-  async prepareReview(suggestion: string, evidenceClass: EvidenceClass): Promise<PreparedReviewDto> {
-    return this.request("/api/reviews/prepare", decodePreparedReview, { method: "POST", mutation: true, body: { suggestion, evidenceClass } });
+  async prepareReview(suggestion: string, evidenceClass: EvidenceClass, selectedMemoryItemIds: readonly string[] = []): Promise<PreparedReviewDto> {
+    return this.request("/api/reviews/prepare", decodePreparedReview, { method: "POST", mutation: true, body: { suggestion, evidenceClass, selectedMemoryItemIds } });
   }
 
   async analyzeReview(prepared: PreparedReviewDto, signal?: AbortSignal): Promise<AnalyzedReviewDto> {
@@ -383,6 +443,10 @@ export class ResearchRoomApi {
 
   private commandId(kind: string): string {
     return `ui:${kind}:${crypto.randomUUID()}`;
+  }
+
+  private async memoryMutation<T>(itemId: string, action: string, decode: (value: unknown) => T, body: Readonly<Record<string, unknown>>): Promise<T> {
+    return this.request(`/api/project/memory/${encodeURIComponent(itemId)}/${action}`, decode, { method: "POST", mutation: true, body });
   }
 
   private async deliberationMutation(roomId: string, action: string, body: Readonly<Record<string, unknown>>, signal?: AbortSignal): Promise<DeliberationRoomDetailDto> {

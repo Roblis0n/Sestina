@@ -42,6 +42,7 @@ function fromStored<T>(result: ResearchResult<T>): CoreResult<T> {
 }
 
 export type ResearchObjectKind = "decision" | "issue" | "evidence" | "episode" | "receipt" | "appeal" | "deliberation_room";
+export type ProjectSearchObjectKind = ResearchObjectKind | "brief" | "memory";
 export type WorkspaceProviderStatus = "configured" | "ledger_only";
 
 export interface WorkspaceListRequest {
@@ -411,7 +412,7 @@ export interface BriefWorkspaceProjection {
 
 export interface AttentionItemProjection {
   readonly id: string;
-  readonly kind: "brief_candidate" | "decision" | "issue" | "episode" | "appeal" | "deliberation_room" | "review" | "manifest" | "rollback" | "provider";
+  readonly kind: "brief_candidate" | "decision" | "issue" | "episode" | "appeal" | "deliberation_room" | "memory" | "review" | "manifest" | "rollback" | "provider";
   readonly title: string;
   readonly reason: string;
   readonly severity: "high" | "normal";
@@ -424,7 +425,7 @@ export interface AttentionItemProjection {
 
 export interface TransientAttentionSignal {
   readonly id: string;
-  readonly kind: "review" | "manifest" | "rollback" | "provider";
+  readonly kind: "memory" | "review" | "manifest" | "rollback" | "provider";
   readonly title: string;
   readonly reason: string;
   readonly severity: "high" | "normal";
@@ -464,7 +465,7 @@ export interface ProjectOverviewProjection {
 }
 
 export interface ResearchObjectSearchResult {
-  readonly kind: ResearchObjectKind | "brief";
+  readonly kind: ProjectSearchObjectKind;
   readonly id: string;
   readonly title: string;
   readonly detail: string;
@@ -756,7 +757,7 @@ export class ResearchObjectWorkspaceService {
     return selected !== undefined && selectedVersion !== undefined ? coreOk(Object.freeze({ brief: selected, version: selectedVersion })) : coreErr("not_found");
   }
 
-  private fingerprint<T>(projectId: string, kind: ResearchObjectKind, reader: PageReader<T>, token: (item: T) => unknown): CoreResult<string> {
+  private fingerprint<T>(projectId: string, kind: ProjectSearchObjectKind, reader: PageReader<T>, token: (item: T) => unknown): CoreResult<string> {
     const digest = createHash("sha256");
     digest.update(`${RESEARCH_OBJECT_WORKSPACE_SCHEMA_VERSION}\u0000${projectId}\u0000${kind}\u0000`, "utf8");
     let cursor: string | undefined;
@@ -1319,7 +1320,8 @@ export class ResearchObjectWorkspaceService {
     const receipts = this.fingerprint(projectId, "receipt", this.store.roomReceipts.listByProject.bind(this.store.roomReceipts, projectId), (item) => [item.id, item.version, item.status, item.updatedAt, item.receiptHash]); if (!receipts.ok) return receipts;
     const appeals = this.fingerprint(projectId, "appeal", this.store.correctionAppeals.listByProject.bind(this.store.correctionAppeals, projectId), (item) => [item.id, item.version, item.status, item.updatedAt, item.source.findingHash, item.attempts.length, item.resolutions.length]); if (!appeals.ok) return appeals;
     const deliberationRooms = this.fingerprint(projectId, "deliberation_room", this.store.deliberationRooms.listByProject.bind(this.store.deliberationRooms, projectId), (item) => [item.id, item.version, item.status, item.providerReadiness, item.updatedAt, item.differenceSummary?.canonicalHash, item.challenge?.status, item.manualExternalOpinions.length, item.resolutions.length]); if (!deliberationRooms.ok) return deliberationRooms;
-    return coreOk(createHash("sha256").update(JSON.stringify({ brief: [brief.value.brief.id, brief.value.brief.version, brief.value.version.id], decisions: decisions.value, issues: issues.value, evidence: evidence.value, episodes: episodes.value, receipts: receipts.value, appeals: appeals.value, deliberationRooms: deliberationRooms.value }), "utf8").digest("hex"));
+    const memory = this.fingerprint(projectId, "memory", this.store.workingMemory.listByProject.bind(this.store.workingMemory, projectId), (item) => [item.id, item.version, item.state, item.state === "forgotten" ? item.forgottenAt : item.updatedAt]); if (!memory.ok) return memory;
+    return coreOk(createHash("sha256").update(JSON.stringify({ brief: [brief.value.brief.id, brief.value.brief.version, brief.value.version.id], decisions: decisions.value, issues: issues.value, evidence: evidence.value, episodes: episodes.value, receipts: receipts.value, appeals: appeals.value, deliberationRooms: deliberationRooms.value, memory: memory.value }), "utf8").digest("hex"));
   }
 
   search(projectId: string, input: { readonly query: string; readonly limit: number; readonly cursor?: string }): CoreResult<ResearchObjectSearchProjection> {
@@ -1360,6 +1362,16 @@ export class ResearchObjectWorkspaceService {
     const deliberationRooms = this.forEachPaged(this.store.deliberationRooms.listByProject.bind(this.store.deliberationRooms, projectId), (item) => {
       if (contains(item.id, query) || contains(item.title, query) || contains(item.source.question, query) || contains(item.source.objectId, query) || item.manualExternalOpinions.some((opinion) => contains(opinion.publicContent, query)) || item.resolutions.some((resolution) => contains(resolution.publicReason, query))) add({ kind: "deliberation_room", id: item.id, title: item.title, detail: item.source.question, status: item.status, source: `${item.source.kind}:${item.source.objectId}`, projectId, href: `/project/deliberations/${item.id}` });
     }); if (!deliberationRooms.ok) return deliberationRooms;
+    const memory = this.forEachPaged(this.store.workingMemory.listByProject.bind(this.store.workingMemory, projectId), (item) => {
+      if (item.state === "forgotten") {
+        if (contains(item.id, query) || contains("forgotten memory tombstone", query)) add({ kind: "memory", id: item.id, title: "Forgotten memory record", detail: "Irreversible minimal tombstone; original content is not recoverable.", status: item.state, source: "local_tombstone", projectId, href: `/project/memory?item=${encodeURIComponent(item.id)}` });
+        return;
+      }
+      const content = "term" in item.content ? `${item.content.term} ${item.content.definition}` : "purpose" in item.content ? `${item.content.purpose} ${item.content.refs.map((ref) => `${ref.kind} ${ref.id}`).join(" ")}` : item.content.text;
+      const source = item.source.kind === "direct_user" ? "direct_user" : `${item.source.objectKind}:${item.source.objectId}`;
+      const title = "term" in item.content ? item.content.term : "purpose" in item.content ? item.content.purpose : item.content.text;
+      if (contains(item.id, query) || contains(item.kind, query) || contains(item.state, query) || contains(content, query) || contains(source, query)) add({ kind: "memory", id: item.id, title, detail: `${item.kind} · ${source}`, status: item.state, source, projectId, href: `/project/memory?item=${encodeURIComponent(item.id)}` });
+    }); if (!memory.ok) return memory;
     const nextOffset = offset + found.length;
     const hasMore = matches > nextOffset;
     return coreOk(Object.freeze({ schemaVersion: RESEARCH_OBJECT_WORKSPACE_SCHEMA_VERSION, projectId, datasetVersion: datasetVersion.value, query: input.query.trim(), items: Object.freeze(found), ...(hasMore ? { nextCursor: encodeSearchCursor({ version: 1, schemaVersion: RESEARCH_OBJECT_WORKSPACE_SCHEMA_VERSION, projectId, datasetVersion: datasetVersion.value, query, offset: nextOffset }) } : {}), truncated: hasMore }));

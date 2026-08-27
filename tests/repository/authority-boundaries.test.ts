@@ -62,9 +62,11 @@ const GUIDANCE_FIXTURES: Record<string, string> = {
     "RI-50（已完成）",
     "UI-03 Production Experience Quality Consolidation and Functional Cohesion",
     "UI-03 已按 Task Start/Result 完成并验证",
-    "none_active_RI51_not_started",
+    "RI-51 Project-level Minimal Governed Working Memory and Recovery Continuity",
+    "RI-51 已完成并验证",
+    "none_active_RI52_not_started",
     "await_explicit_user_authorization",
-    "RI-51 为 `not_started`",
+    "RI-52 为 `not_started`",
     "completed_and_verified_implementation_real_provider_evidence_blocked",
     "Market Gate 0",
   ].join("\n"),
@@ -121,6 +123,67 @@ const GUIDANCE_FIXTURES: Record<string, string> = {
     "blockers_remaining: 0",
     "majors_remaining: 0",
     "in_scope_moderates_remaining: 0",
+  ].join("\n"),
+  "docs/execution/RI-51-PROJECT-LEVEL-MINIMAL-GOVERNED-MEMORY-AND-RECOVERY-CONTINUITY-TASK-START-RECORD.md": [
+    "task: RI-51",
+    "status: ready_to_start",
+    "gate_conclusion: ready_to_start_user_authorized_development",
+    "activity_status: active_project_level_minimum_governed_memory_and_recovery_continuity",
+    "implementation_authorization: explicit_user_authorization_2026_08_27",
+    "next_code_goal: project_level_minimum_governed_memory_and_recovery_continuity",
+    "real_second_use_value: unproven",
+    "cross_project_memory: prohibited",
+    "automatic_memory_promotion: prohibited",
+    "default_external_memory_send: prohibited",
+    "production_visual_and_functional_acceptance: required",
+    "ri52_status: not_started",
+    "final: ready_to_start",
+  ].join("\n"),
+  "docs/execution/RI-51-PROJECT-LEVEL-MINIMAL-GOVERNED-MEMORY-AND-RECOVERY-CONTINUITY-TASK-RESULT.md": [
+    "task: RI-51",
+    "status: completed_and_verified",
+    "pnpm_verify: passed",
+    "production_browser_e2e: passed",
+    "production_visual_and_functional_acceptance: passed",
+    "screens_opened_and_inspected: 12",
+    "governed_project_memory_implementation: passed",
+    "cross_project_memory_leakage: zero_verified",
+    "automatic_memory_promotion: zero_verified",
+    "default_external_memory_send: zero_verified",
+    "real_provider_smoke: blocked_missing_user_config",
+    "real_second_use_recovery_value: unproven",
+    "next_code_task: none_active_RI52_not_started",
+    "next_execution_goal: await_explicit_user_authorization",
+    "ri52_status: not_started",
+    "remote_visibility: PRIVATE",
+  ].join("\n"),
+  "docs/execution/RI-51-PRODUCTION-VISUAL-AND-FUNCTIONAL-ACCEPTANCE.md": [
+    "task: RI-51",
+    "status: passed",
+    "production_route: real_research_room",
+    "browser: microsoft_edge",
+    "typed_api_facade: used",
+    "runtime_decoder: used",
+    "core_projection: used",
+    "screens_opened_and_inspected: 12",
+    "blockers_remaining: 0",
+    "majors_remaining: 0",
+    "in_scope_moderates_remaining: 0",
+    "production_visual_and_functional_acceptance: passed",
+  ].join("\n"),
+  "docs/architecture/05-PROJECT-LEVEL-GOVERNED-WORKING-MEMORY.md": [
+    "Status: `implemented_and_verified`",
+    "working_memory_non_authoritative",
+    "Project Authority State != Project Working Memory",
+    "Default zero",
+    "real Provider smoke remains `blocked_missing_user_config`",
+  ].join("\n"),
+  "docs/migrations/RI-51-SCHEMA-019.md": [
+    "Status: `implemented_and_verified`",
+    "019-project-working-memory",
+    "project_working_memory",
+    "resume_checkpoints",
+    "does not persist request-scoped Context Manifests",
   ].join("\n"),
   "docs/execution/RI-50-MUTUALLY-BLIND-BOUNDED-DELIBERATION-ROOM-TASK-START-RECORD.md": [
     "task: RI-50",
@@ -227,14 +290,20 @@ function activeBlock(currentTask: string): string {
     "<!-- sestina-prework-direction-gate: required -->",
     `<!-- sestina-current-task: ${currentTask} -->`,
     `<!-- sestina-current-status: ${CURRENT_STATUS} -->`,
-    "<!-- sestina-last-completed-task: UI-03 -->",
+    "<!-- sestina-last-completed-task: RI-51 -->",
     "<!-- sestina-last-completed-status: completed_and_verified -->",
-    "<!-- sestina-implementation-base: 0b766a4460d2ae9b0b872cc137fbec29327bc08a -->",
-    "<!-- sestina-next-code-goal: none_active_RI51_not_started -->",
+    "<!-- sestina-implementation-base: b6862451f4db95f8d12458008e31c80ff1b40511 -->",
+    "<!-- sestina-next-code-goal: none_active_RI52_not_started -->",
     "<!-- sestina-next-execution-goal: await_explicit_user_authorization -->",
-    "<!-- sestina-next-code-sequence: none_active_RI51_not_started -->",
+    "<!-- sestina-next-code-sequence: none_active_RI52_not_started -->",
     "<!-- sestina-production-visual-and-functional-acceptance: passed -->",
-    "<!-- sestina-ri51-status: not_started -->",
+    "<!-- sestina-ri51-status: completed_and_verified -->",
+    "<!-- sestina-ri52-status: not_started -->",
+    "<!-- sestina-governed-project-memory-implementation: passed -->",
+    "<!-- sestina-cross-project-memory-leakage: zero_verified -->",
+    "<!-- sestina-automatic-memory-promotion: zero_verified -->",
+    "<!-- sestina-default-external-memory-send: zero_verified -->",
+    "<!-- sestina-real-second-use-recovery-value: unproven -->",
     "<!-- sestina-ri44-to-ri47-status: superseded_unstarted -->",
     "<!-- sestina-ri48-status: completed_and_verified_implementation_real_provider_evidence_blocked -->",
     "<!-- sestina-market-gate-0: deferred_by_user_nonblocking -->",
@@ -251,7 +320,7 @@ function activeBlock(currentTask: string): string {
 
 /** WORK-BOARD body with a yaml current_task that must agree with markers. */
 function workBoardBody(currentTask: string): string {
-  return `\n\n\`\`\`yaml\ncurrent_task: ${currentTask}\nstatus: completed_and_verified\n\`\`\`\n`;
+  return `\n\n\`\`\`yaml\ncurrent_task: ${currentTask}\nstatus: ${CURRENT_STATUS}\n\`\`\`\n`;
 }
 
 function writeEntry(root: string, relFile: string, content: string): void {
@@ -298,7 +367,7 @@ function writeValidEntries(
   writeGuidanceFiles(root);
   for (const entry of ENTRY_FILES) {
     const isBoard = entry === "docs/execution/WORK-BOARD.md";
-    const task = "UI-03";
+    const task = "RI-51";
     const body = isBoard
       ? workBoardBody(task)
       : "\n\nLegacy prose stays below.\n";

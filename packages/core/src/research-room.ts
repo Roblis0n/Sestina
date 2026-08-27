@@ -40,6 +40,7 @@ import {
 import type { ResearchStore } from "@sestina/research-store";
 import { coreErr, coreOk, fromDomain, type CoreResult } from "./errors.js";
 import type { TransientAttentionSignal } from "./research-object-workspaces.js";
+import type { ProjectMemoryManifestProjection, ProjectMemoryProviderBinding } from "./project-memory.js";
 
 const PAGE = Object.freeze({ limit: 200 });
 const MAX_SUGGESTION_BYTES = 16_384;
@@ -91,6 +92,9 @@ export interface PrepareResearchRoomReviewInput {
   readonly suggestion: string;
   readonly evidenceClass: ResearchRoomEvidenceClass;
   readonly countsAsExternalEvidence: boolean;
+  readonly selectedMemoryItemIds?: readonly string[];
+  readonly memoryProvider?: ProjectMemoryProviderBinding;
+  readonly actor?: ResearchActor;
 }
 
 export interface PreparedResearchRoomReview {
@@ -331,10 +335,12 @@ export class ResearchRoomService {
     return Object.freeze(signals);
   }
 
-  prepare(input: PrepareResearchRoomReviewInput): CoreResult<PreparedResearchRoomReview> {
+  prepare(input: PrepareResearchRoomReviewInput, memoryManifest?: ProjectMemoryManifestProjection): CoreResult<PreparedResearchRoomReview> {
     const evidence = parseResearchRoomEvidenceClass(input.evidenceClass);
     if (!evidence.ok || input.countsAsExternalEvidence || !isText(input.suggestion, MAX_SUGGESTION_BYTES)) return coreErr("invalid_input");
     const bundle = this.readState(input.projectId); if (!bundle.ok) return bundle;
+    const workingMemoryItems = memoryManifest?.providerPayload.items.flatMap((item) => item.sensitivity === "public" || item.sensitivity === "project_private" ? [Object.freeze({ ...item, sensitivity: item.sensitivity })] : []);
+    if (memoryManifest !== undefined && workingMemoryItems?.length !== memoryManifest.providerPayload.items.length) return coreErr("infrastructure_failure");
     const reviewId = this.idFactory.create("rrvw_");
     const parsedReviewId = /^rrvw_[0-9A-HJKMNP-TV-Z]{26}$/u.test(reviewId); if (!parsedReviewId) return coreErr("infrastructure_failure");
     const bindingHash = hash(bundle.value.state.stateBinding); const suggestionHash = hash(input.suggestion.trim());
@@ -369,6 +375,14 @@ export class ResearchRoomService {
           baselineRevisionId: bundle.value.episode.lockedStart.baselineRevisionId,
           ...(bundle.value.episode.candidateRevisionId ? { candidateRevisionId: bundle.value.episode.candidateRevisionId } : {}),
         } } : {}),
+        ...(memoryManifest ? { workingMemory: {
+          schemaVersion: "1.0.0" as const,
+          manifestId: memoryManifest.manifestId,
+          manifestHash: memoryManifest.manifestHash,
+          projectId: memoryManifest.projectId,
+          authority: memoryManifest.providerPayload.authority,
+          items: workingMemoryItems ?? [],
+        } } : {}),
         suggestionDocument: { projectId: input.projectId, artifactId: this.idFactory.create("rart_"), revisionId: this.idFactory.create("rrev_"), text: input.suggestion.trim() },
         evidenceClass: evidence.value,
       });
@@ -391,6 +405,7 @@ export class ResearchRoomService {
       issues: bundle.value.allIssues,
       receiptSummary: bundle.value.state.receipts,
       ...(bundle.value.episode ? { currentEpisode: bundle.value.episode } : {}),
+      ...(memoryManifest ? { workingMemory: memoryManifest.providerPayload } : {}),
       suggestion: input.suggestion.trim(),
     };
     const contextHash = hash(context);
@@ -409,12 +424,23 @@ export class ResearchRoomService {
       { category: "current_episode", source: "versioned_research_state", sensitivity: "research_state", included: true, truncated: false },
       { category: "single_suggestion", source: "explicit_user_input", sensitivity: "user_supplied_text", included: true, truncated: false },
       { category: "semantic_criteria", source: "versioned_research_state", sensitivity: "research_state", included: true, truncated: false },
+      ...(memoryManifest ? [{ category: "project_working_memory" as const, source: "explicit_project_working_memory_manifest" as const, sensitivity: "governed_project_memory" as const, included: true as const, truncated: false }] : []),
     ]);
+    const memoryPayloadHash = memoryManifest ? hash(memoryManifest.providerPayload) : undefined;
+    if (memoryPayloadHash !== undefined && !memoryPayloadHash.ok) return memoryPayloadHash;
     const manifest: ResearchRoomContextManifest = Object.freeze({
       schemaVersion: "1.0.0", reviewId, providerId: this.provider?.id ?? "none", providerKind: this.provider?.kind ?? "none",
       networkRequired: this.provider?.networkAccess !== undefined && this.provider.networkAccess !== "none", sendStatus: "not_sent", networkUsed: false,
       fields, contextHash: contextHash.value, suggestionHash: suggestionHash.value, stateBindingHash: bindingHash.value,
       evidenceClass: evidence.value, countsAsExternalEvidence: false,
+      ...(memoryManifest && memoryPayloadHash?.ok ? { workingMemory: Object.freeze({
+        authority: memoryManifest.providerPayload.authority,
+        manifestId: memoryManifest.manifestId,
+        manifestHash: memoryManifest.manifestHash,
+        payloadHash: memoryPayloadHash.value,
+        included: Object.freeze(memoryManifest.included.map((item) => Object.freeze({ itemId: item.itemId, version: item.version, contentHash: item.contentHash }))),
+        excluded: memoryManifest.excluded,
+      }) } : {}),
       ...(judgeRequest && providerInput ? { semanticJudge: {
         protocol: judgeRequest.protocol,
         prompt: judgeRequest.prompt,

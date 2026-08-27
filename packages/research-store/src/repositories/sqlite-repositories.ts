@@ -9,6 +9,8 @@ import {
   parseResearchBrief,
   parseCorrectionAppeal,
   parseDeliberationRoom,
+  parseProjectWorkingMemory,
+  parseResumeCheckpoint,
   parseResearchDecision,
   parseResearchId,
   parseResearchIdFor,
@@ -26,6 +28,8 @@ import {
   type ResearchBrief,
   type CorrectionAppeal,
   type DeliberationRoom,
+  type ProjectWorkingMemory,
+  type ResumeCheckpoint,
   type ResearchDecision,
   type ResearchIdPrefix,
   type ResearchIssue,
@@ -37,6 +41,8 @@ import {
   type ResearchResult,
   type ResearchSnapshot,
   type RevisionEpisode,
+  PROJECT_WORKING_MEMORY_MAX_ACTIVE_ITEMS,
+  PROJECT_WORKING_MEMORY_STATES,
 } from "@sestina/research";
 import type { StorageDatabase } from "@sestina/storage";
 import { decodeDomainJson, encodeDomainJson } from "../mappers/domain-json.js";
@@ -1173,5 +1179,248 @@ export function createResearchRepositories(db: StorageDatabase): ResearchReposit
     },
   };
 
-  return Object.freeze({ projects, artifacts, revisions, briefs, decisions, issues, episodes, snapshots, roomReceipts, correctionAppeals, deliberationRooms, ...createArgumentGraphRepositories(db) });
+  const workingMemory: ResearchRepositories["workingMemory"] = {
+    create(value) {
+      return writeResult(db, () => {
+        const parsed = parseProjectWorkingMemory(value);
+        if (!parsed.ok) return parsed;
+        if (parsed.value.state === "forgotten") {
+          return { ok: false, error: researchError("invalid_working_memory_transition") };
+        }
+        const project = requireProject(db, parsed.value.projectId);
+        if (!project.ok) return project;
+        if (db.get("SELECT item_id FROM project_working_memory WHERE item_id = ?", parsed.value.id)) {
+          return { ok: false, error: researchError("version_conflict") };
+        }
+        const liveCount = db.get<{ count: number }>(
+          "SELECT COUNT(*) AS count FROM project_working_memory WHERE project_id = ? AND status NOT IN ('retired','forgotten')",
+          parsed.value.projectId,
+        )?.count ?? 0;
+        if (liveCount >= PROJECT_WORKING_MEMORY_MAX_ACTIVE_ITEMS) {
+          return { ok: false, error: researchError("working_memory_limit_reached") };
+        }
+        const data = encodeDomainJson(parsed.value, parseProjectWorkingMemory);
+        if (!data.ok) return data;
+        const sourceObjectId = parsed.value.source.kind === "project_object" ? parsed.value.source.objectId : null;
+        const sourceObjectVersion = parsed.value.source.kind === "project_object" ? parsed.value.source.objectVersion : null;
+        const expiresAt = parsed.value.retention.policy === "until_date" ? parsed.value.retention.expiresAt : null;
+        db.run(
+          `INSERT INTO project_working_memory
+             (item_id, project_id, kind, status, version, outbound_policy, expires_at, source_object_id, source_object_version, created_at, updated_at, data)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          parsed.value.id, parsed.value.projectId, parsed.value.kind, parsed.value.state,
+          parsed.value.version, parsed.value.outboundPolicy, expiresAt, sourceObjectId,
+          sourceObjectVersion, parsed.value.createdAt, parsed.value.updatedAt, data.value,
+        );
+        return parsed;
+      });
+    },
+    getById(projectId, itemId) {
+      return readResult<ProjectWorkingMemory | undefined>(() => {
+        const project = validId(projectId, "rprj_");
+        const id = validId(itemId, "rmem_");
+        if (!project.ok || !id.ok) {
+          return { ok: false, error: researchError("invalid_project_working_memory") };
+        }
+        const row = db.get<{ data: string }>(
+          "SELECT data FROM project_working_memory WHERE project_id = ? AND item_id = ?",
+          project.value,
+          id.value,
+        );
+        return row === undefined ? { ok: true, value: undefined } : decodeStoredWorkingMemory(row.data);
+      });
+    },
+    listByProject(projectId, page, states) {
+      return readResult(() => {
+        const selected = states === undefined ? [...PROJECT_WORKING_MEMORY_STATES] : [...states];
+        if (
+          selected.length === 0 ||
+          selected.length > PROJECT_WORKING_MEMORY_STATES.length ||
+          new Set(selected).size !== selected.length ||
+          selected.some((state) => !PROJECT_WORKING_MEMORY_STATES.includes(state))
+        ) {
+          return { ok: false, error: researchError("invalid_project_working_memory") };
+        }
+        const placeholders = selected.map(() => "?").join(",");
+        return pageRows(db, {
+          table: "project_working_memory",
+          idColumn: "item_id",
+          idPrefix: "rmem_",
+          projectId,
+          where: `project_id = ? AND status IN (${placeholders})`,
+          params: [projectId, ...selected],
+          page,
+          parser: (input) => {
+            const parsed = parseProjectWorkingMemory(input);
+            return parsed.ok ? parsed : { ok: false, error: researchError("research_storage_unavailable") };
+          },
+        });
+      });
+    },
+    compareAndSwap(value, expectedVersion) {
+      return writeResult(db, () => {
+        const next = parseProjectWorkingMemory(value);
+        const expected = parseEntityVersion(expectedVersion);
+        if (!next.ok || !expected.ok) {
+          return { ok: false, error: researchError("invalid_project_working_memory") };
+        }
+        const row = db.get<{ data: string }>(
+          "SELECT data FROM project_working_memory WHERE project_id = ? AND item_id = ? AND version = ?",
+          next.value.projectId,
+          next.value.id,
+          expected.value,
+        );
+        if (row === undefined) return { ok: false, error: researchError("version_conflict") };
+        const current = decodeStoredWorkingMemory(row.data);
+        if (!current.ok) return current;
+        if (current.value.state === "forgotten") {
+          return { ok: false, error: researchError("invalid_working_memory_transition") };
+        }
+        const versions = requireExpectedNext(current.value.version, expected.value, next.value.version);
+        if (!versions.ok) return versions;
+        if (next.value.state !== "forgotten") {
+          const prefix = next.value.transitions.slice(0, current.value.transitions.length);
+          if (
+            current.value.projectId !== next.value.projectId ||
+            current.value.id !== next.value.id ||
+            current.value.kind !== next.value.kind ||
+            current.value.createdByUserId !== next.value.createdByUserId ||
+            current.value.createdAt !== next.value.createdAt ||
+            !sameValue(prefix, current.value.transitions) ||
+            next.value.transitions.length !== current.value.transitions.length + 1
+          ) {
+            return { ok: false, error: researchError("invalid_working_memory_transition") };
+          }
+        }
+        const data = encodeDomainJson(next.value, parseProjectWorkingMemory);
+        if (!data.ok) return data;
+        const live = next.value.state === "forgotten" ? undefined : next.value;
+        const sourceObjectId = live?.source.kind === "project_object" ? live.source.objectId : null;
+        const sourceObjectVersion = live?.source.kind === "project_object" ? live.source.objectVersion : null;
+        const expiresAt = live?.retention.policy === "until_date" ? live.retention.expiresAt : null;
+        const updatedAt = next.value.state === "forgotten" ? next.value.forgottenAt : next.value.updatedAt;
+        const update = db.run(
+          `UPDATE project_working_memory
+           SET kind = ?, status = ?, version = ?, outbound_policy = ?, expires_at = ?,
+               source_object_id = ?, source_object_version = ?, updated_at = ?, data = ?
+           WHERE project_id = ? AND item_id = ? AND version = ?`,
+          live?.kind ?? null, next.value.state, next.value.version, live?.outboundPolicy ?? null,
+          expiresAt, sourceObjectId, sourceObjectVersion, updatedAt, data.value,
+          next.value.projectId, next.value.id, expected.value,
+        );
+        return Number(update.changes) === 1 ? next : { ok: false, error: researchError("version_conflict") };
+      });
+    },
+  };
+
+  const resumeCheckpoints: ResearchRepositories["resumeCheckpoints"] = {
+    append(value) {
+      return writeResult(db, () => {
+        const parsed = parseResumeCheckpoint(value);
+        if (!parsed.ok) return parsed;
+        const project = requireProject(db, parsed.value.projectId);
+        if (!project.ok) return project;
+        if (db.get("SELECT checkpoint_id FROM resume_checkpoints WHERE checkpoint_id = ?", parsed.value.id)) {
+          return { ok: false, error: researchError("version_conflict") };
+        }
+        const data = encodeDomainJson(parsed.value, parseResumeCheckpoint);
+        if (!data.ok) return data;
+        db.run(
+          `INSERT INTO resume_checkpoints
+             (checkpoint_id, project_id, project_version, version, reviewed_at, data)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          parsed.value.id, parsed.value.projectId, parsed.value.projectVersion,
+          parsed.value.version, parsed.value.reviewedAt, data.value,
+        );
+        return parsed;
+      });
+    },
+    getLatest(projectId) {
+      return readResult<ResumeCheckpoint | undefined>(() => {
+        const project = validId(projectId, "rprj_");
+        if (!project.ok) return { ok: false, error: researchError("invalid_resume_checkpoint") };
+        const row = db.get<{ data: string }>(
+          `SELECT data FROM resume_checkpoints
+           WHERE project_id = ?
+           ORDER BY reviewed_at DESC, checkpoint_id DESC LIMIT 1`,
+          project.value,
+        );
+        return row === undefined ? { ok: true, value: undefined } : decodeStoredResumeCheckpoint(row.data);
+      });
+    },
+    listByProject(projectId, page) {
+      return readResult<ResearchPage<ResumeCheckpoint>>(() => {
+        const project = validId(projectId, "rprj_");
+        const parsedPage = parseResearchPageRequest(page);
+        if (!project.ok || !parsedPage.ok) return { ok: false, error: researchError("invalid_resume_checkpoint") };
+        const cursor = decodeCursor(parsedPage.value, project.value);
+        if (!cursor.ok) return cursor;
+        if (cursor.value !== undefined && !validId(cursor.value.id, "rmcp_").ok) {
+          return { ok: false, error: researchError("invalid_pagination") };
+        }
+        const boundary = cursor.value === undefined
+          ? { where: "", params: [] as unknown[] }
+          : { where: " AND (reviewed_at < ? OR (reviewed_at = ? AND checkpoint_id < ?))", params: [cursor.value.sortKey, cursor.value.sortKey, cursor.value.id] as unknown[] };
+        const rows = db.all<{ project_id: string; entity_id: string; reviewed_at: string; data: string }>(
+          `SELECT project_id, checkpoint_id AS entity_id, reviewed_at, data
+           FROM resume_checkpoints
+           WHERE project_id = ?${boundary.where}
+           ORDER BY reviewed_at DESC, checkpoint_id DESC
+           LIMIT ?`,
+          project.value,
+          ...boundary.params,
+          parsedPage.value.limit + 1,
+        );
+        const hasMore = rows.length > parsedPage.value.limit;
+        const selected = hasMore ? rows.slice(0, parsedPage.value.limit) : rows;
+        const items: ResumeCheckpoint[] = [];
+        for (const row of selected) {
+          const decoded = decodeStoredResumeCheckpoint(row.data);
+          if (!decoded.ok) return decoded;
+          items.push(decoded.value);
+        }
+        const last = selected.at(-1);
+        return {
+          ok: true,
+          value: immutablePage(
+            items,
+            hasMore && last !== undefined
+              ? encodeCursor(last.project_id, last.reviewed_at, last.entity_id)
+              : undefined,
+          ),
+        };
+      });
+    },
+  };
+
+  return Object.freeze({
+    projects,
+    artifacts,
+    revisions,
+    briefs,
+    decisions,
+    issues,
+    episodes,
+    snapshots,
+    roomReceipts,
+    correctionAppeals,
+    deliberationRooms,
+    workingMemory,
+    resumeCheckpoints,
+    ...createArgumentGraphRepositories(db),
+  });
+}
+
+function decodeStoredWorkingMemory(data: string): ResearchResult<ProjectWorkingMemory> {
+  const decoded = decodeDomainJson(data, parseProjectWorkingMemory);
+  return decoded.ok
+    ? decoded
+    : { ok: false, error: researchError("research_storage_unavailable") };
+}
+
+function decodeStoredResumeCheckpoint(data: string): ResearchResult<ResumeCheckpoint> {
+  const decoded = decodeDomainJson(data, parseResumeCheckpoint);
+  return decoded.ok
+    ? decoded
+    : { ok: false, error: researchError("research_storage_unavailable") };
 }

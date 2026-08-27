@@ -214,7 +214,7 @@ export function App() {
     await runBusy(async () => { const result = await researchRoomApi.testSecondOpinionProvider(); showNotice(language === "en" ? `Independent metadata connection reached ${result.providerId} (${result.httpStatus}); no research context was sent.` : `独立元数据连接已到达 ${result.providerId}（${result.httpStatus}）；未发送研究上下文。`, "ready"); });
   }
 
-  async function prepareReview(suggestion: string, evidenceClass: EvidenceClass) { return runBusy(() => researchRoomApi.prepareReview(suggestion, evidenceClass)); }
+  async function prepareReview(suggestion: string, evidenceClass: EvidenceClass, selectedMemoryItemIds: readonly string[]) { return runBusy(() => researchRoomApi.prepareReview(suggestion, evidenceClass, selectedMemoryItemIds)); }
   async function analyzeReview(value: PreparedReviewDto, signal: AbortSignal) { return runBusy(() => researchRoomApi.analyzeReview(value, signal)); }
   async function cancelReview(value: PreparedReviewDto) { await runBusy(() => researchRoomApi.cancelReview(value).then(() => undefined)); }
   async function commitDisposition(input: CommitDispositionInput) { return runBusy(() => researchRoomApi.commitDisposition(input)); }

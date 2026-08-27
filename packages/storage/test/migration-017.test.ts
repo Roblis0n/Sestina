@@ -20,7 +20,7 @@ describe("migration 017 correction appeals", () => {
 
   it("creates a strict project-bound appeal ledger with one unresolved appeal per Finding", async () => {
     db = await openDatabase({ path });
-    expect(SCHEMA_VERSION).toBe(18);
+    expect(SCHEMA_VERSION).toBe(19);
     const sql = db.get<{ sql: string }>("SELECT sql FROM sqlite_schema WHERE type='table' AND name='correction_appeals'")?.sql ?? "";
     expect(sql.trim().toUpperCase().endsWith("STRICT")).toBe(true);
     expect(sql).toContain("CHECK (status IN ('draft','recorded','awaiting_send_confirmation','second_opinion_running','second_opinion_ready','appeal_record_only','waiting_user_resolution','provider_failed','cancelled','stale_conflicted','resolved'))");

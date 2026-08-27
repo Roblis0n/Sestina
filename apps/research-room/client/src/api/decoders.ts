@@ -25,6 +25,8 @@ import type {
   PreparedDeliberationDto,
   PreparedDeliberationRetryDto,
   ProjectOverviewDto,
+  ProjectMemoryManifestDto,
+  ProjectMemoryProjectionDto,
   ProjectOpenResultDto,
   ProviderStatusDto,
   ProviderConnectionTestDto,
@@ -278,12 +280,22 @@ function decodeManifest(value: unknown, path: string): ContextManifestDto {
   const manifest = record(value, path);
   const fields = array(manifest.fields, `${path}.fields`).map((item, index) => { const field = record(item, `${path}.fields[${index}]`); return { category: string(field.category, `${path}.fields[${index}].category`), source: string(field.source, `${path}.fields[${index}].source`), sensitivity: string(field.sensitivity, `${path}.fields[${index}].sensitivity`) }; });
   const judge = manifest.semanticJudge === undefined ? undefined : record(manifest.semanticJudge, `${path}.semanticJudge`);
+  const memory = manifest.workingMemory === undefined ? undefined : record(manifest.workingMemory, `${path}.workingMemory`);
+  let workingMemory: ContextManifestDto["workingMemory"];
+  if (memory) {
+    exactKeys(memory, ["authority", "excluded", "included", "manifestHash", "manifestId", "payloadHash"], `${path}.workingMemory`);
+    if (memory.authority !== "working_memory_context_only_non_authoritative") fail(`${path}.workingMemory.authority`);
+    const included = array(memory.included, `${path}.workingMemory.included`).map((raw, index) => { const item = record(raw, `${path}.workingMemory.included[${index}]`); exactKeys(item, ["contentHash", "itemId", "version"], `${path}.workingMemory.included[${index}]`); return { itemId: string(item.itemId, `${path}.workingMemory.included[${index}].itemId`), version: number(item.version, `${path}.workingMemory.included[${index}].version`), contentHash: string(item.contentHash, `${path}.workingMemory.included[${index}].contentHash`) }; });
+    const excluded = array(memory.excluded, `${path}.workingMemory.excluded`).map((raw, index) => { const item = record(raw, `${path}.workingMemory.excluded[${index}]`); exactKeys(item, ["itemId", "reason", "state"], `${path}.workingMemory.excluded[${index}]`); const state = string(item.state, `${path}.workingMemory.excluded[${index}].state`); const reason = string(item.reason, `${path}.workingMemory.excluded[${index}].reason`); if (!["candidate", "active", "stale", "expired", "retired", "forgotten"].includes(state) || !["not_selected", "candidate_not_confirmed", "stale_source", "expired", "retired", "forgotten", "never_send", "sensitivity_forbids_send"].includes(reason)) fail(`${path}.workingMemory.excluded[${index}]`); return { itemId: string(item.itemId, `${path}.workingMemory.excluded[${index}].itemId`), state: state as NonNullable<ContextManifestDto["workingMemory"]>["excluded"][number]["state"], reason: reason as NonNullable<ContextManifestDto["workingMemory"]>["excluded"][number]["reason"] }; });
+    workingMemory = { authority: "working_memory_context_only_non_authoritative", manifestId: string(memory.manifestId, `${path}.workingMemory.manifestId`), manifestHash: string(memory.manifestHash, `${path}.workingMemory.manifestHash`), payloadHash: string(memory.payloadHash, `${path}.workingMemory.payloadHash`), included, excluded };
+  }
   return {
     fields,
     networkRequired: boolean(manifest.networkRequired, `${path}.networkRequired`),
     networkUsed: boolean(manifest.networkUsed, `${path}.networkUsed`),
     sendStatus: string(manifest.sendStatus, `${path}.sendStatus`),
     countsAsExternalEvidence: manifest.countsAsExternalEvidence === false ? false : fail(`${path}.countsAsExternalEvidence`),
+    ...(workingMemory ? { workingMemory } : {}),
     ...(judge ? { semanticJudge: decodeSemanticJudgeManifest(judge, `${path}.semanticJudge`) } : {}),
   };
 }
@@ -615,6 +627,157 @@ export function decodeResearchObjectSearch(value: unknown): ResearchObjectSearch
   const projection = record(value, "project search"); allowedKeys(projection, ["datasetVersion", "items", "nextCursor", "projectId", "query", "schemaVersion", "truncated"], "project search"); for (const required of ["datasetVersion", "items", "projectId", "query", "schemaVersion", "truncated"] as const) if (!(required in projection)) fail(`project search.${required}`); requireSchema(projection, "project search"); string(projection.projectId, "project search.projectId"); string(projection.datasetVersion, "project search.datasetVersion"); if (typeof projection.query !== "string") fail("project search.query"); if (projection.nextCursor !== undefined) string(projection.nextCursor, "project search.nextCursor"); boolean(projection.truncated, "project search.truncated");
   array(projection.items, "project search.items").forEach((raw, index) => { const path = `project search.items[${index}]`; const item = record(raw, path); exactKeys(item, ["detail", "href", "id", "kind", "projectId", "source", "status", "title"], path); for (const key of ["detail", "href", "id", "kind", "projectId", "source", "status", "title"] as const) string(item[key], `${path}.${key}`); if (!(item.href as string).startsWith("/project/")) fail(`${path}.href`); if (item.projectId !== projection.projectId) fail(`${path}.projectId`); });
   return projection as unknown as ResearchObjectSearchDto;
+}
+
+const MEMORY_KINDS = ["term", "working_hint", "resume_note", "workset"] as const;
+const MEMORY_STATES = ["candidate", "active", "stale", "expired", "retired", "forgotten"] as const;
+const MEMORY_OBJECT_KINDS = ["brief", "decision", "issue", "evidence", "episode", "appeal", "deliberation_room", "receipt", "artifact", "revision"] as const;
+const MEMORY_SENSITIVITIES = ["public", "project_private", "sensitive", "secret_never_send"] as const;
+const MEMORY_POLICIES = ["never_send", "explicit_manifest_only"] as const;
+
+function oneOf<T extends string>(value: unknown, values: readonly T[], path: string): T {
+  if (typeof value !== "string" || !values.includes(value as T)) fail(path);
+  return value as T;
+}
+
+function sha256(value: unknown, path: string): string {
+  const parsed = string(value, path);
+  if (!/^[0-9a-f]{64}$/u.test(parsed)) fail(path);
+  return parsed;
+}
+
+function memoryContent(value: unknown, kind: (typeof MEMORY_KINDS)[number], path: string): void {
+  const content = record(value, path);
+  if (kind === "term") {
+    exactKeys(content, ["definition", "term"], path);
+    string(content.term, `${path}.term`); string(content.definition, `${path}.definition`);
+    return;
+  }
+  if (kind === "working_hint" || kind === "resume_note") {
+    exactKeys(content, ["text"], path); string(content.text, `${path}.text`); return;
+  }
+  exactKeys(content, ["purpose", "refs"], path); string(content.purpose, `${path}.purpose`);
+  array(content.refs, `${path}.refs`).forEach((raw, index) => {
+    const refPath = `${path}.refs[${index}]`; const ref = record(raw, refPath); exactKeys(ref, ["id", "kind", "version"], refPath);
+    oneOf(ref.kind, MEMORY_OBJECT_KINDS, `${refPath}.kind`); string(ref.id, `${refPath}.id`); number(ref.version, `${refPath}.version`);
+  });
+}
+
+function memorySource(value: unknown, path: string): void {
+  const source = record(value, path);
+  if (source.kind === "direct_user") {
+    exactKeys(source, ["actorId", "kind"], path); string(source.actorId, `${path}.actorId`); return;
+  }
+  exactKeys(source, ["contentFingerprint", "kind", "objectId", "objectKind", "objectVersion"], path);
+  if (source.kind !== "project_object") fail(`${path}.kind`);
+  oneOf(source.objectKind, MEMORY_OBJECT_KINDS, `${path}.objectKind`); string(source.objectId, `${path}.objectId`); number(source.objectVersion, `${path}.objectVersion`); sha256(source.contentFingerprint, `${path}.contentFingerprint`);
+}
+
+function memoryRetention(value: unknown, path: string): void {
+  const retention = record(value, path);
+  if (retention.policy === "until_unpinned") { exactKeys(retention, ["policy"], path); return; }
+  if (retention.policy === "until_date") { exactKeys(retention, ["expiresAt", "policy"], path); string(retention.expiresAt, `${path}.expiresAt`); return; }
+  if (retention.policy === "current_episode") { exactKeys(retention, ["episodeId", "policy"], path); string(retention.episodeId, `${path}.episodeId`); return; }
+  fail(`${path}.policy`);
+}
+
+function memoryTransition(value: unknown, path: string): void {
+  const transition = record(value, path);
+  allowedKeys(transition, ["action", "actor", "at", "from", "publicReason", "to"], path);
+  requiredKeys(transition, ["action", "actor", "at", "publicReason", "to"], path);
+  oneOf(transition.action, ["created", "confirmed", "edited", "source_stale", "expired", "renewed", "retired"] as const, `${path}.action`);
+  oneOf(transition.actor, ["user", "kernel"] as const, `${path}.actor`);
+  oneOf(transition.to, MEMORY_STATES.filter((state) => state !== "forgotten"), `${path}.to`);
+  if (transition.from !== undefined) oneOf(transition.from, MEMORY_STATES.filter((state) => state !== "forgotten"), `${path}.from`);
+  string(transition.at, `${path}.at`); string(transition.publicReason, `${path}.publicReason`);
+}
+
+function memoryItem(value: unknown, projectId: string, path: string): void {
+  const item = record(value, path);
+  const common = ["authorityClass", "id", "manifestEligible", "projectId", "recallEligible", "state", "version"] as const;
+  if (item.state === "forgotten") {
+    exactKeys(item, [...common, "forgottenAt", "tombstone"], path);
+    if (item.authorityClass !== "working_memory_non_authoritative" || item.projectId !== projectId || item.recallEligible !== false || item.manifestEligible !== false || item.tombstone !== "irreversible_forget_recorded") fail(path);
+    string(item.id, `${path}.id`); string(item.forgottenAt, `${path}.forgottenAt`); number(item.version, `${path}.version`); return;
+  }
+  const optional = ["confirmedAt", "expiredAt", "retiredAt", "staleReason"] as const;
+  allowedKeys(item, [...common, "content", "contentHash", "kind", "source", "retention", "sensitivity", "outboundPolicy", "semanticConflict", "createdAt", "updatedAt", "transitions", ...optional], path);
+  requiredKeys(item, [...common, "content", "contentHash", "kind", "source", "retention", "sensitivity", "outboundPolicy", "semanticConflict", "createdAt", "updatedAt", "transitions"], path);
+  if (item.authorityClass !== "working_memory_non_authoritative" || item.projectId !== projectId || item.semanticConflict !== "semantic_conflict_unchecked") fail(path);
+  const state = oneOf(item.state, MEMORY_STATES.filter((candidate) => candidate !== "forgotten"), `${path}.state`);
+  const kind = oneOf(item.kind, MEMORY_KINDS, `${path}.kind`);
+  string(item.id, `${path}.id`); number(item.version, `${path}.version`); boolean(item.recallEligible, `${path}.recallEligible`); boolean(item.manifestEligible, `${path}.manifestEligible`);
+  memoryContent(item.content, kind, `${path}.content`); sha256(item.contentHash, `${path}.contentHash`); memorySource(item.source, `${path}.source`); memoryRetention(item.retention, `${path}.retention`);
+  oneOf(item.sensitivity, MEMORY_SENSITIVITIES, `${path}.sensitivity`); const outbound = oneOf(item.outboundPolicy, MEMORY_POLICIES, `${path}.outboundPolicy`);
+  if (item.sensitivity === "secret_never_send" && outbound !== "never_send") fail(`${path}.outboundPolicy`);
+  string(item.createdAt, `${path}.createdAt`); string(item.updatedAt, `${path}.updatedAt`);
+  for (const key of optional) if (item[key] !== undefined) string(item[key], `${path}.${key}`);
+  if (item.staleReason !== undefined) oneOf(item.staleReason, ["source_version_changed", "source_content_changed", "source_unavailable"] as const, `${path}.staleReason`);
+  const transitions = array(item.transitions, `${path}.transitions`); if (transitions.length === 0) fail(`${path}.transitions`); transitions.forEach((raw, index) => { memoryTransition(raw, `${path}.transitions[${index}]`); });
+  if (state === "candidate" && item.recallEligible === true) fail(`${path}.recallEligible`);
+}
+
+function resumeCheckpoint(value: unknown, projectId: string, path: string): void {
+  const checkpoint = record(value, path);
+  exactKeys(checkpoint, ["authorityBindings", "authorityClass", "id", "memoryBindings", "projectId", "projectVersion", "publicReason", "reviewedAt", "reviewedByUserId", "schemaVersion", "version"], path);
+  if (checkpoint.schemaVersion !== "1.0.0" || checkpoint.authorityClass !== "resume_checkpoint_non_authoritative" || checkpoint.projectId !== projectId) fail(path);
+  for (const key of ["id", "publicReason", "reviewedAt", "reviewedByUserId"] as const) string(checkpoint[key], `${path}.${key}`); number(checkpoint.projectVersion, `${path}.projectVersion`); number(checkpoint.version, `${path}.version`);
+  array(checkpoint.authorityBindings, `${path}.authorityBindings`).forEach((raw, index) => { const bindingPath = `${path}.authorityBindings[${index}]`; const binding = record(raw, bindingPath); exactKeys(binding, ["id", "kind", "version"], bindingPath); string(binding.id, `${bindingPath}.id`); string(binding.kind, `${bindingPath}.kind`); number(binding.version, `${bindingPath}.version`); });
+  array(checkpoint.memoryBindings, `${path}.memoryBindings`).forEach((raw, index) => { const bindingPath = `${path}.memoryBindings[${index}]`; const binding = record(raw, bindingPath); exactKeys(binding, ["id", "state", "version"], bindingPath); string(binding.id, `${bindingPath}.id`); oneOf(binding.state, MEMORY_STATES, `${bindingPath}.state`); number(binding.version, `${bindingPath}.version`); });
+}
+
+export function decodeProjectMemoryRecord(value: unknown): Readonly<Record<string, unknown>> {
+  const item = record(value, "project memory record");
+  if (item.state === "forgotten") {
+    exactKeys(item, ["authorityClass", "forgottenAt", "id", "projectId", "schemaVersion", "state", "tombstone", "version"], "project memory record");
+    if (item.schemaVersion !== "1.0.0" || item.authorityClass !== "working_memory_non_authoritative" || item.tombstone !== "irreversible_forget_recorded") fail("project memory record");
+    for (const key of ["forgottenAt", "id", "projectId"] as const) string(item[key], `project memory record.${key}`); number(item.version, "project memory record.version"); return item;
+  }
+  const required = ["authorityClass", "content", "contentHash", "createdAt", "createdByUserId", "id", "kind", "outboundPolicy", "projectId", "retention", "schemaVersion", "semanticConflict", "sensitivity", "source", "state", "transitions", "updatedAt", "version"] as const;
+  allowedKeys(item, [...required, "confirmedAt", "expiredAt", "retiredAt", "staleReason", "supersedesItemId"], "project memory record"); requiredKeys(item, required, "project memory record");
+  if (item.schemaVersion !== "1.0.0" || item.authorityClass !== "working_memory_non_authoritative" || item.semanticConflict !== "semantic_conflict_unchecked") fail("project memory record");
+  const kind = oneOf(item.kind, MEMORY_KINDS, "project memory record.kind"); oneOf(item.state, MEMORY_STATES.filter((state) => state !== "forgotten"), "project memory record.state"); memoryContent(item.content, kind, "project memory record.content"); sha256(item.contentHash, "project memory record.contentHash"); memorySource(item.source, "project memory record.source"); memoryRetention(item.retention, "project memory record.retention"); oneOf(item.sensitivity, MEMORY_SENSITIVITIES, "project memory record.sensitivity"); oneOf(item.outboundPolicy, MEMORY_POLICIES, "project memory record.outboundPolicy");
+  for (const key of ["createdAt", "createdByUserId", "id", "projectId", "updatedAt"] as const) string(item[key], `project memory record.${key}`); number(item.version, "project memory record.version");
+  for (const key of ["confirmedAt", "expiredAt", "retiredAt", "supersedesItemId"] as const) if (item[key] !== undefined) string(item[key], `project memory record.${key}`); if (item.staleReason !== undefined) oneOf(item.staleReason, ["source_version_changed", "source_content_changed", "source_unavailable"] as const, "project memory record.staleReason"); array(item.transitions, "project memory record.transitions").forEach((raw, index) => { memoryTransition(raw, `project memory record.transitions[${index}]`); }); return item;
+}
+
+export function decodeResumeCheckpoint(value: unknown): Readonly<Record<string, unknown>> {
+  const checkpoint = record(value, "Resume Checkpoint"); const projectId = string(checkpoint.projectId, "Resume Checkpoint.projectId"); resumeCheckpoint(checkpoint, projectId, "Resume Checkpoint"); return checkpoint;
+}
+
+export function decodeProjectMemoryProjection(value: unknown): ProjectMemoryProjectionDto {
+  const projection = record(value, "project memory"); exactKeys(projection, ["attention", "projectId", "projectState", "resume", "schemaVersion", "workingMemory"], "project memory"); requireSchema(projection, "project memory"); const projectId = string(projection.projectId, "project memory.projectId");
+  const state = record(projection.projectState, "project memory.projectState"); allowedKeys(state, ["activeAppeals", "activeDecisions", "activeDeliberations", "authorityClass", "currentBrief", "currentEpisode", "currentTask", "openIssues", "projectQuestion", "projectVersion", "recentReceipt", "stateHash", "unproven"], "project memory.projectState"); requiredKeys(state, ["activeAppeals", "activeDecisions", "activeDeliberations", "authorityClass", "openIssues", "projectVersion", "stateHash", "unproven"], "project memory.projectState"); if (state.authorityClass !== "kernel_authoritative_projection") fail("project memory.projectState.authorityClass"); number(state.projectVersion, "project memory.projectState.projectVersion"); sha256(state.stateHash, "project memory.projectState.stateHash"); strings(state.unproven, "project memory.projectState.unproven"); for (const key of ["projectQuestion", "currentTask"] as const) if (state[key] !== undefined) string(state[key], `project memory.projectState.${key}`);
+  if (state.currentBrief !== undefined) { const current = record(state.currentBrief, "project memory.projectState.currentBrief"); exactKeys(current, ["id", "version"], "project memory.projectState.currentBrief"); string(current.id, "project memory.projectState.currentBrief.id"); number(current.version, "project memory.projectState.currentBrief.version"); }
+  if (state.currentEpisode !== undefined) { const current = record(state.currentEpisode, "project memory.projectState.currentEpisode"); exactKeys(current, ["id", "status", "version"], "project memory.projectState.currentEpisode"); string(current.id, "project memory.projectState.currentEpisode.id"); string(current.status, "project memory.projectState.currentEpisode.status"); number(current.version, "project memory.projectState.currentEpisode.version"); }
+  if (state.recentReceipt !== undefined) { const current = record(state.recentReceipt, "project memory.projectState.recentReceipt"); exactKeys(current, ["id", "status", "version"], "project memory.projectState.recentReceipt"); string(current.id, "project memory.projectState.recentReceipt.id"); string(current.status, "project memory.projectState.recentReceipt.status"); number(current.version, "project memory.projectState.recentReceipt.version"); }
+  for (const key of ["activeDecisions", "openIssues", "activeAppeals", "activeDeliberations"] as const) array(state[key], `project memory.projectState.${key}`).forEach((raw, index) => { const rowPath = `project memory.projectState.${key}[${index}]`; const row = record(raw, rowPath); const keys = key === "activeDecisions" ? ["id", "statement", "status", "version"] : key === "openIssues" ? ["id", "status", "summary", "version"] : ["id", "status", "version"]; exactKeys(row, keys, rowPath); string(row.id, `${rowPath}.id`); string(row.status, `${rowPath}.status`); if (row.statement !== undefined) string(row.statement, `${rowPath}.statement`); if (row.summary !== undefined) string(row.summary, `${rowPath}.summary`); number(row.version, `${rowPath}.version`); });
+  const working = record(projection.workingMemory, "project memory.workingMemory"); allowedKeys(working, ["activeCount", "authorityClass", "defaultOutboundPolicy", "items", "nextCursor", "semanticConflict"], "project memory.workingMemory"); requiredKeys(working, ["activeCount", "authorityClass", "defaultOutboundPolicy", "items", "semanticConflict"], "project memory.workingMemory"); if (working.authorityClass !== "working_memory_non_authoritative" || working.defaultOutboundPolicy !== "never_send" || working.semanticConflict !== "semantic_conflict_unchecked") fail("project memory.workingMemory"); number(working.activeCount, "project memory.workingMemory.activeCount"); if (working.nextCursor !== undefined) string(working.nextCursor, "project memory.workingMemory.nextCursor"); array(working.items, "project memory.workingMemory.items").forEach((raw, index) => { memoryItem(raw, projectId, `project memory.workingMemory.items[${index}]`); });
+  const resume = record(projection.resume, "project memory.resume"); allowedKeys(resume, ["authorityClass", "changes", "checkpoint", "reviewed"], "project memory.resume"); requiredKeys(resume, ["authorityClass", "reviewed"], "project memory.resume"); if (resume.authorityClass !== "resume_checkpoint_non_authoritative") fail("project memory.resume.authorityClass"); boolean(resume.reviewed, "project memory.resume.reviewed"); if (resume.checkpoint !== undefined) resumeCheckpoint(resume.checkpoint, projectId, "project memory.resume.checkpoint");
+  if (resume.changes !== undefined) {
+    const changes = record(resume.changes, "project memory.resume.changes"); exactKeys(changes, ["authority", "projectChanged", "summaryAuthority", "workingMemory"], "project memory.resume.changes"); if (changes.summaryAuthority !== "system_derived_deterministic_non_authoritative") fail("project memory.resume.changes.summaryAuthority"); boolean(changes.projectChanged, "project memory.resume.changes.projectChanged");
+    array(changes.authority, "project memory.resume.changes.authority").forEach((raw, index) => {
+      const path = `project memory.resume.changes.authority[${index}]`; const change = record(raw, path); const kind = oneOf(change.change, ["added", "updated", "removed"] as const, `${path}.change`);
+      const keys = kind === "added" ? ["afterVersion", "change", "id", "kind"] : kind === "updated" ? ["afterVersion", "beforeVersion", "change", "id", "kind"] : ["beforeVersion", "change", "id", "kind"];
+      exactKeys(change, keys, path); oneOf(change.kind, ["project", "brief", "decision", "issue", "evidence", "episode", "appeal", "deliberation_room", "receipt"] as const, `${path}.kind`); string(change.id, `${path}.id`); if (change.beforeVersion !== undefined) number(change.beforeVersion, `${path}.beforeVersion`); if (change.afterVersion !== undefined) number(change.afterVersion, `${path}.afterVersion`);
+    });
+    array(changes.workingMemory, "project memory.resume.changes.workingMemory").forEach((raw, index) => {
+      const path = `project memory.resume.changes.workingMemory[${index}]`; const change = record(raw, path); const kind = oneOf(change.change, ["added", "updated", "removed"] as const, `${path}.change`);
+      const keys = kind === "added" ? ["afterState", "afterVersion", "change", "id"] : kind === "updated" ? ["afterState", "afterVersion", "beforeState", "beforeVersion", "change", "id"] : ["beforeState", "beforeVersion", "change", "id"];
+      exactKeys(change, keys, path); string(change.id, `${path}.id`); if (change.beforeVersion !== undefined) number(change.beforeVersion, `${path}.beforeVersion`); if (change.afterVersion !== undefined) number(change.afterVersion, `${path}.afterVersion`); if (change.beforeState !== undefined) oneOf(change.beforeState, MEMORY_STATES, `${path}.beforeState`); if (change.afterState !== undefined) oneOf(change.afterState, MEMORY_STATES, `${path}.afterState`);
+    });
+  }
+  array(projection.attention, "project memory.attention").forEach((raw, index) => { const path = `project memory.attention[${index}]`; const item = record(raw, path); exactKeys(item, ["href", "id", "kind", "reason", "severity", "title"], path); if (item.href !== "/project/memory") fail(`${path}.href`); string(item.id, `${path}.id`); oneOf(item.kind, ["memory_candidate", "memory_stale", "memory_expired", "memory_expiring"] as const, `${path}.kind`); string(item.reason, `${path}.reason`); oneOf(item.severity, ["normal", "high"] as const, `${path}.severity`); string(item.title, `${path}.title`); });
+  return projection as unknown as ProjectMemoryProjectionDto;
+}
+
+export function decodeProjectMemoryManifest(value: unknown): ProjectMemoryManifestDto {
+  const manifest = record(value, "project memory manifest"); exactKeys(manifest, ["authorityClass", "confirmationNonce", "createdAt", "excluded", "expiresAt", "included", "manifestHash", "manifestId", "projectId", "projectStateHash", "provider", "providerPayload", "schemaVersion", "status", "version"], "project memory manifest"); requireSchema(manifest, "project memory manifest"); if (manifest.authorityClass !== "explicit_context_manifest_non_authoritative") fail("project memory manifest.authorityClass"); const projectId = string(manifest.projectId, "project memory manifest.projectId"); string(manifest.manifestId, "project memory manifest.manifestId"); oneOf(manifest.status, ["previewed", "confirmed", "consumed"] as const, "project memory manifest.status"); sha256(manifest.projectStateHash, "project memory manifest.projectStateHash"); sha256(manifest.manifestHash, "project memory manifest.manifestHash"); string(manifest.confirmationNonce, "project memory manifest.confirmationNonce"); string(manifest.createdAt, "project memory manifest.createdAt"); string(manifest.expiresAt, "project memory manifest.expiresAt"); number(manifest.version, "project memory manifest.version");
+  const provider = record(manifest.provider, "project memory manifest.provider"); exactKeys(provider, ["configHash", "id", "kind", "networkRequired"], "project memory manifest.provider"); string(provider.id, "project memory manifest.provider.id"); oneOf(provider.kind, ["none", "deterministic_fixture", "local", "external"] as const, "project memory manifest.provider.kind"); sha256(provider.configHash, "project memory manifest.provider.configHash"); boolean(provider.networkRequired, "project memory manifest.provider.networkRequired"); if (provider.kind === "none" && provider.networkRequired !== false) fail("project memory manifest.provider.networkRequired");
+  array(manifest.included, "project memory manifest.included").forEach((raw, index) => { const path = `project memory manifest.included[${index}]`; const item = record(raw, path); exactKeys(item, ["contentBytes", "contentHash", "itemId", "kind", "outboundPolicy", "sensitivity", "source", "stale", "state", "version", "willLeaveDevice"], path); string(item.itemId, `${path}.itemId`); oneOf(item.kind, MEMORY_KINDS, `${path}.kind`); number(item.version, `${path}.version`); sha256(item.contentHash, `${path}.contentHash`); memorySource(item.source, `${path}.source`); if (item.state !== "active" || item.outboundPolicy !== "explicit_manifest_only" || item.stale !== false) fail(path); oneOf(item.sensitivity, MEMORY_SENSITIVITIES, `${path}.sensitivity`); number(item.contentBytes, `${path}.contentBytes`); boolean(item.willLeaveDevice, `${path}.willLeaveDevice`); });
+  array(manifest.excluded, "project memory manifest.excluded").forEach((raw, index) => { const path = `project memory manifest.excluded[${index}]`; const item = record(raw, path); exactKeys(item, ["itemId", "reason", "state"], path); string(item.itemId, `${path}.itemId`); oneOf(item.state, MEMORY_STATES, `${path}.state`); oneOf(item.reason, ["not_selected", "candidate_not_confirmed", "stale_source", "expired", "retired", "forgotten", "never_send", "sensitivity_forbids_send"] as const, `${path}.reason`); });
+  const payload = record(manifest.providerPayload, "project memory manifest.providerPayload"); exactKeys(payload, ["authority", "items", "projectId", "schemaVersion"], "project memory manifest.providerPayload"); if (payload.schemaVersion !== "1.0.0" || payload.projectId !== projectId || payload.authority !== "working_memory_context_only_non_authoritative") fail("project memory manifest.providerPayload"); array(payload.items, "project memory manifest.providerPayload.items").forEach((raw, index) => { const path = `project memory manifest.providerPayload.items[${index}]`; const item = record(raw, path); exactKeys(item, ["content", "contentHash", "itemId", "kind", "sensitivity", "source", "version"], path); string(item.itemId, `${path}.itemId`); const kind = oneOf(item.kind, MEMORY_KINDS, `${path}.kind`); number(item.version, `${path}.version`); sha256(item.contentHash, `${path}.contentHash`); memoryContent(item.content, kind, `${path}.content`); memorySource(item.source, `${path}.source`); oneOf(item.sensitivity, MEMORY_SENSITIVITIES, `${path}.sensitivity`); });
+  return manifest as unknown as ProjectMemoryManifestDto;
 }
 
 export function decodeResearchObjectDetail(value: unknown, kind: ResearchObjectKind): DecisionDetailDto | IssueDetailDto | EvidenceDetailDto | EpisodeDetailDto | ObjectReceiptDetailDto | AppealDetailDto | DeliberationRoomDetailDto {

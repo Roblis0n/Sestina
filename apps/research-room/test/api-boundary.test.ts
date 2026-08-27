@@ -8,6 +8,8 @@ import {
   decodeDirectoryPickerCancellation,
   decodeProjectOpenResult,
   decodeProjectOverview,
+  decodeProjectMemoryManifest,
+  decodeProjectMemoryProjection,
   decodeResearchObjectDetail,
   decodeResearchObjectSearch,
   decodeResearchRoomState,
@@ -184,6 +186,81 @@ describe("Research Room typed API boundary", () => {
     const search = { schemaVersion: "1.0.0", projectId: overview.project.id, datasetVersion: "b".repeat(64), query: "Decision", truncated: false, items: [{ kind: "decision", id: page.items[0]?.id, title: "Decision", detail: "Reason", status: "proposed", source: "user_recorded:user", projectId: overview.project.id, href: `/project/decisions/${page.items[0]?.id}` }] };
     expect(decodeResearchObjectSearch(search).items).toHaveLength(1);
     expect(() => decodeResearchObjectSearch({ ...search, items: [{ ...search.items[0], projectId: "rprj_01ARZ3NDEKTSV4RRFFQ69G5FAX" }] })).toThrow(ApiPayloadError);
+  });
+
+  it("decodes the exact RI-51 project-memory boundary and fails closed on forgotten content or unknown fields", () => {
+    const projectId = "rprj_01ARZ3NDEKTSV4RRFFQ69G5FAV";
+    const itemId = "rmem_01ARZ3NDEKTSV4RRFFQ69G5FAV";
+    const projection = {
+      schemaVersion: "1.0.0",
+      projectId,
+      projectState: {
+        authorityClass: "kernel_authoritative_projection",
+        projectVersion: 1,
+        projectQuestion: "How should the argument change?",
+        currentTask: "Review the evidence boundary",
+        activeDecisions: [],
+        openIssues: [],
+        activeAppeals: [],
+        activeDeliberations: [],
+        unproven: ["external_user_value"],
+        stateHash: "a".repeat(64),
+      },
+      workingMemory: {
+        authorityClass: "working_memory_non_authoritative",
+        items: [{
+          id: itemId,
+          projectId,
+          authorityClass: "working_memory_non_authoritative",
+          state: "candidate",
+          version: 1,
+          recallEligible: false,
+          manifestEligible: false,
+          content: { text: "Compare the competing mechanism claims." },
+          contentHash: "b".repeat(64),
+          kind: "working_hint",
+          source: { kind: "direct_user", actorId: "local-user" },
+          retention: { policy: "until_unpinned" },
+          sensitivity: "project_private",
+          outboundPolicy: "never_send",
+          semanticConflict: "semantic_conflict_unchecked",
+          createdAt: "2026-08-27T00:00:00.000Z",
+          updatedAt: "2026-08-27T00:00:00.000Z",
+          transitions: [{ action: "created", to: "candidate", actor: "user", at: "2026-08-27T00:00:00.000Z", publicReason: "User-created candidate" }],
+        }],
+        activeCount: 0,
+        semanticConflict: "semantic_conflict_unchecked",
+        defaultOutboundPolicy: "never_send",
+      },
+      resume: { authorityClass: "resume_checkpoint_non_authoritative", reviewed: false },
+      attention: [{ id: itemId, kind: "memory_candidate", title: "Memory candidate", reason: "Awaiting confirmation", href: "/project/memory", severity: "normal" }],
+    };
+    expect(decodeProjectMemoryProjection(projection).workingMemory.items[0]?.state).toBe("candidate");
+    expect(() => decodeProjectMemoryProjection({ ...projection, rootPath: "H:\\AI" })).toThrow(ApiPayloadError);
+    expect(() => decodeProjectMemoryProjection({
+      ...projection,
+      workingMemory: { ...projection.workingMemory, items: [{ id: itemId, projectId, authorityClass: "working_memory_non_authoritative", state: "forgotten", version: 2, recallEligible: false, manifestEligible: false, forgottenAt: "2026-08-27T00:01:00.000Z", tombstone: "irreversible_forget_recorded", content: { text: "must not survive" } }] },
+    })).toThrow(ApiPayloadError);
+
+    const manifest = {
+      schemaVersion: "1.0.0",
+      manifestId: "rman_01ARZ3NDEKTSV4RRFFQ69G5FAV",
+      projectId,
+      authorityClass: "explicit_context_manifest_non_authoritative",
+      status: "previewed",
+      provider: { id: "none", kind: "none", configHash: "c".repeat(64), networkRequired: false },
+      projectStateHash: "a".repeat(64),
+      included: [],
+      excluded: [{ itemId, state: "candidate", reason: "candidate_not_confirmed" }],
+      providerPayload: { schemaVersion: "1.0.0", projectId, authority: "working_memory_context_only_non_authoritative", items: [] },
+      manifestHash: "d".repeat(64),
+      confirmationNonce: "confirm-memory-context-123456",
+      createdAt: "2026-08-27T00:00:00.000Z",
+      expiresAt: "2026-08-27T00:15:00.000Z",
+      version: 1,
+    };
+    expect(decodeProjectMemoryManifest(manifest).providerPayload.items).toEqual([]);
+    expect(() => decodeProjectMemoryManifest({ ...manifest, alwaysSend: true })).toThrow(ApiPayloadError);
   });
 
   it("gives high contrast an opaque dark base with vivid accent, status, and focus colors", async () => {
