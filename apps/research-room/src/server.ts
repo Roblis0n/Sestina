@@ -5,7 +5,11 @@ import { lstat, mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  createProjectStateBackup,
+  createPreUpgradeProjectStateBackup,
+  inspectProjectRecovery,
   openSestina,
+  ProjectRecoveryConfirmationService,
   coreErr,
   coreOk,
   type BriefProjectionPublisher,
@@ -34,8 +38,14 @@ const BODY_LIMIT = 65_536;
 const BROWSER_BLOCKED_PORTS = new Set([1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79, 87, 95, 101, 102, 103, 104, 109, 110, 111, 113, 115, 117, 119, 123, 135, 137, 139, 143, 161, 179, 389, 427, 465, 512, 513, 514, 515, 526, 530, 531, 532, 540, 548, 554, 556, 563, 587, 601, 636, 989, 990, 993, 995, 1719, 1720, 1723, 2049, 3659, 4045, 4190, 5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668, 6669, 6697, 10080]);
 const USER = Object.freeze({ kind: "user" as const, actorId: "local-research-owner" });
 const CSP = "default-src 'self'; base-uri 'none'; connect-src 'self'; font-src 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self' blob:; manifest-src 'self'; object-src 'none'; script-src 'self'; style-src 'self'";
-const DEFAULT_CLIENT_ASSET_ROOT = resolve(fileURLToPath(new URL("../dist/client", import.meta.url)));
-const DEFAULT_MCP_RUNTIME = resolve(fileURLToPath(new URL("../dist/mcp/main.js", import.meta.url)));
+function firstExistingRuntimePath(candidates: readonly URL[]): string {
+  const resolved = candidates.map((candidate) => resolve(fileURLToPath(candidate)));
+  const fallback = resolved[0];
+  if (fallback === undefined) throw new Error("At least one runtime path candidate is required.");
+  return resolved.find((candidate) => existsSync(candidate)) ?? fallback;
+}
+const DEFAULT_CLIENT_ASSET_ROOT = firstExistingRuntimePath([new URL("./client", import.meta.url), new URL("../dist/client", import.meta.url)]);
+const DEFAULT_MCP_RUNTIME = firstExistingRuntimePath([new URL("./mcp/main.js", import.meta.url), new URL("../dist/mcp/main.js", import.meta.url)]);
 
 export interface ClosedExternalAppHostRuntime {
   readonly evidenceClass: "synthetic_fixture" | "owner_operated_closed_host_observation";
@@ -90,6 +100,7 @@ interface ProjectOpenResult {
   readonly project: { readonly id: string; readonly title: string };
   readonly initialized: boolean;
   readonly setupRequired: boolean;
+  readonly recoveryRequired: boolean;
   readonly localOnly: true;
   readonly pathPersisted: false;
   readonly directoryScanPerformed: false;
@@ -126,7 +137,7 @@ function stableConfigHash(value: unknown): string {
 function resultValue<T>(result: CoreResult<T>): T {
   if (result.ok) return result.value;
   const status = result.error.code === "not_found" ? 404
-    : result.error.code === "stale_state" || result.error.code === "state_conflict" || result.error.code === "storage_corrupt" ? 409
+    : ["stale_state", "state_conflict", "storage_corrupt", "confirmation_expired", "confirmation_replayed", "confirmation_binding_mismatch"].includes(result.error.code) ? 409
       : result.error.code === "storage_readonly" ? 403
         : ["infrastructure_failure", "projection_write_failure", "storage_busy", "storage_unavailable"].includes(result.error.code) ? 503
           : 400;
@@ -262,6 +273,9 @@ export function createProductionClosedExternalAppHostRuntime(): ClosedExternalAp
 export class ResearchRoomHttpApplication {
   readonly sessionToken = randomBytes(32).toString("hex");
   #opened: OpenedProject | undefined;
+  #recoveryRoot: string | undefined;
+  readonly #recoveryConfirmations = new ProjectRecoveryConfirmationService();
+  #recoveryBusy = false;
   #pickerAbort: AbortController | undefined;
   #pendingInitialization: PendingProjectInitialization | undefined;
   readonly #pilotAbort = new Map<string, AbortController>();
@@ -284,7 +298,7 @@ export class ResearchRoomHttpApplication {
   close(): void {
     this.#pickerAbort?.abort(); this.#pickerAbort = undefined;
     for (const controller of this.#pilotAbort.values()) controller.abort();
-    this.#pilotAbort.clear(); this.#pendingInitialization = undefined; this.#opened?.core.close(); this.#opened = undefined;
+    this.#pilotAbort.clear(); this.#pendingInitialization = undefined; this.#opened?.core.close(); this.#opened = undefined; this.#recoveryRoot = undefined;
   }
 
   private requireOpened(): OpenedProject {
@@ -294,6 +308,75 @@ export class ResearchRoomHttpApplication {
 
   private authorize(request: IncomingMessage): void {
     if (request.headers["x-sestina-session"] !== this.sessionToken) throw new HttpProblem(403, "explicit_action_required", "This action requires the active local session.");
+  }
+
+  private requireRecoveryRoot(): string {
+    const root = this.#opened?.root ?? this.#recoveryRoot;
+    if (root === undefined) throw new HttpProblem(409, "project_not_open", "Open or select a Sestina project before using recovery.");
+    return root;
+  }
+
+  private async closeRunAndReopenRecovery<T>(operation: (root: string) => Promise<CoreResult<T>>): Promise<{ readonly outcome: CoreResult<T>; readonly reopened: ProjectOpenResult }> {
+    const root = this.requireRecoveryRoot();
+    if (this.#recoveryBusy) throw new HttpProblem(409, "storage_busy", "Another recovery operation is still in progress.");
+    this.#recoveryBusy = true;
+    this.#opened?.core.close();
+    this.#opened = undefined;
+    this.#recoveryRoot = root;
+    let outcome: CoreResult<T> | undefined;
+    let operationError: unknown;
+    try { outcome = await operation(root); }
+    catch (error) { operationError = error; }
+    let reopened: ProjectOpenResult;
+    try { reopened = await this.openProject({ projectPath: root, initializeIfNeeded: false }); }
+    catch {
+      this.#recoveryRoot = root;
+      this.#recoveryBusy = false;
+      throw new HttpProblem(503, "project_reopen_failed", "Recovery finished, but the project could not be reopened safely. Retry opening the same local project.");
+    }
+    this.#recoveryBusy = false;
+    if (operationError !== undefined) throw operationError instanceof Error ? operationError : new Error("The recovery operation failed.");
+    if (outcome === undefined) throw new HttpProblem(500, "internal_error", "The recovery operation produced no result.");
+    return { outcome, reopened };
+  }
+
+  private async recoveryStatus(): Promise<unknown> {
+    return resultValue(await inspectProjectRecovery({ projectRoot: this.requireRecoveryRoot() }));
+  }
+
+  private async createRecoveryBackup(): Promise<unknown> {
+    const status = resultValue(await inspectProjectRecovery({ projectRoot: this.requireRecoveryRoot() }));
+    if (status.currentState !== "healthy") throw new HttpProblem(409, "state_conflict", "A new backup can be created only from a healthy, matched project state.");
+    return resultValue(await createProjectStateBackup({ projectRoot: this.requireRecoveryRoot() }));
+  }
+
+  private async prepareRecoveryRestore(input: unknown): Promise<unknown> {
+    if (!isRecord(input) || !hasExactKeys(input, ["backupId"]) || text(input.backupId, 256) === undefined) throw new HttpProblem(400, "invalid_input", "Choose one verified managed backup.");
+    const backupId = String(input.backupId);
+    const run = await this.closeRunAndReopenRecovery((root) => this.#recoveryConfirmations.prepare({ projectRoot: root, backupId, sessionBinding: this.sessionToken }));
+    return resultValue(run.outcome);
+  }
+
+  private async executeRecoveryRestore(input: unknown): Promise<unknown> {
+    if (!isRecord(input)
+      || !hasExactKeys(input, ["backupId", "confirmationNonce", "confirmed", "expectedStateBinding"])
+      || input.confirmed !== true
+      || text(input.backupId, 256) === undefined
+      || text(input.confirmationNonce, 256) === undefined
+      || text(input.expectedStateBinding, 256) === undefined) {
+      throw new HttpProblem(400, "user_confirmation_required", "Restoring requires the exact preview binding and explicit confirmation.");
+    }
+    const run = await this.closeRunAndReopenRecovery((root) => this.#recoveryConfirmations.execute({
+      projectRoot: root,
+      backupId: String(input.backupId),
+      sessionBinding: this.sessionToken,
+      confirmed: true,
+      confirmationNonce: String(input.confirmationNonce),
+      expectedStateBinding: String(input.expectedStateBinding),
+    }));
+    const restored = resultValue(run.outcome);
+    if (run.reopened.recoveryRequired) throw new HttpProblem(503, "project_reopen_failed", "The restored project did not reopen into a healthy Research Room.");
+    return Object.freeze({ ...restored, reopened: true as const, project: run.reopened.project });
   }
 
   private async readLanguagePreference(): Promise<"zh-CN" | "en" | undefined> {
@@ -495,10 +578,24 @@ export class ResearchRoomHttpApplication {
     let next: OpenedProject;
     let initialized = false;
     if (stateKind === "directory" && databaseKind === "file" && briefKind === "file") {
+      const upgradePreflight = await inspectProjectRecovery({ projectRoot: root });
+      if (upgradePreflight.ok) {
+        const schema = upgradePreflight.value.schema;
+        const unsupported = schema.status === "too_new" || schema.status === "too_old" || schema.status === "migration_failed";
+        const supportedUpgrade = schema.status === "recognized" && schema.version !== undefined && schema.version < schema.supportedVersion;
+        if (unsupported || (supportedUpgrade && upgradePreflight.value.currentState !== "healthy")) {
+          this.#opened?.core.close(); this.#opened = undefined; this.#recoveryRoot = root;
+          return { project: { id: upgradePreflight.value.projectId ?? "recovery_required", title: basename(root) }, initialized: false, setupRequired: false, recoveryRequired: true, localOnly: true, pathPersisted: false, directoryScanPerformed: false };
+        }
+        if (supportedUpgrade) {
+          const safetyBundle = resultValue(await createPreUpgradeProjectStateBackup({ projectRoot: root }));
+          if (safetyBundle.databaseSchemaVersion !== schema.version || safetyBundle.kind !== "pre_upgrade") throw new HttpProblem(503, "pre_upgrade_backup_failed", "The complete pre-upgrade safety bundle could not be verified.");
+        }
+      }
       const provider = await this.configuredProvider();
       const secondOpinionProvider = await this.configuredSecondOpinionProvider();
       const deliberationProviders = await this.configuredDeliberationParticipants();
-      const core = resultValue(await openSestina({
+      const openedCore = await openSestina({
         databasePath,
         ...(provider ? { researchRoomProvider: provider } : {}),
         ...(secondOpinionProvider ? { correctionAppealSecondOpinionProvider: secondOpinionProvider } : {}),
@@ -506,7 +603,27 @@ export class ResearchRoomHttpApplication {
         researchRoomProviderTimeoutMs: this.providerTimeoutMs,
         correctionAppealSecondOpinionProviderTimeoutMs: this.correctionAppealSecondOpinionProviderTimeoutMs,
         deliberationParticipantProviderTimeoutMs: this.deliberationParticipantProviderTimeoutMs,
-      }));
+      });
+      if (!openedCore.ok) {
+        const recovery = await inspectProjectRecovery({ projectRoot: root });
+        if (recovery.ok) {
+          this.#opened?.core.close();
+          this.#opened = undefined;
+          this.#recoveryRoot = root;
+          return {
+            project: { id: recovery.value.projectId ?? "recovery_required", title: basename(root) },
+            initialized: false,
+            setupRequired: false,
+            recoveryRequired: true,
+            localOnly: true,
+            pathPersisted: false,
+            directoryScanPerformed: false,
+          };
+        }
+        resultValue(openedCore);
+        throw new HttpProblem(409, "state_conflict", "The selected project cannot be opened safely.");
+      }
+      const core = openedCore.value;
       const projects = resultValue(core.listProjects());
       if (projects.length !== 1 || projects[0] === undefined) { core.close(); throw new HttpProblem(409, "state_conflict", "The selected project binding is inconsistent."); }
       next = { root, project: { id: projects[0].id, title: projects[0].title }, core, createdBySession: false };
@@ -521,7 +638,8 @@ export class ResearchRoomHttpApplication {
     const brief = resultValue(next.core.getBriefState(next.project.id));
     this.#opened?.core.close();
     this.#opened = next;
-    return { project: next.project, initialized, setupRequired: brief === undefined, localOnly: true, pathPersisted: false, directoryScanPerformed: false };
+    this.#recoveryRoot = undefined;
+    return { project: next.project, initialized, setupRequired: brief === undefined, recoveryRequired: false, localOnly: true, pathPersisted: false, directoryScanPerformed: false };
   }
 
   private async pickDirectory(): Promise<string | undefined> {
@@ -596,7 +714,8 @@ export class ResearchRoomHttpApplication {
     const brief = resultValue(next.core.getBriefState(next.project.id));
     this.#opened?.core.close();
     this.#opened = next;
-    return { project: next.project, initialized: true, setupRequired: brief === undefined, localOnly: true, pathPersisted: false, directoryScanPerformed: false };
+    this.#recoveryRoot = undefined;
+    return { project: next.project, initialized: true, setupRequired: brief === undefined, recoveryRequired: false, localOnly: true, pathPersisted: false, directoryScanPerformed: false };
   }
 
   private async activateInitialBrief(input: unknown): Promise<unknown> {
@@ -744,10 +863,10 @@ export class ResearchRoomHttpApplication {
     if (before.status !== "context_confirmed") throw new HttpProblem(400, "user_confirmation_required", "Confirm the exact Context Manifest before launching Codex.");
     const run = this.pilotRunBinding(before, input.attemptId);
     if (run.manifest.payloadHash !== input.manifestHash) throw new HttpProblem(409, "context_binding_mismatch", "The confirmed Manifest hash no longer matches this attempt.");
-    let pilot = resultValue(opened.core.startClosedExternalAppPilotAttempt({ projectId: opened.project.id, pilotId, expectedVersion: Number(input.expectedVersion), attemptId: input.attemptId, manifestHash: input.manifestHash }));
+    const pilot = resultValue(opened.core.startClosedExternalAppPilotAttempt({ projectId: opened.project.id, pilotId, expectedVersion: Number(input.expectedVersion), attemptId: input.attemptId, manifestHash: input.manifestHash }));
     const invocationId = pilot.attempts.find((item) => item.id === input.attemptId)?.invocationId;
     if (invocationId === undefined) throw new HttpProblem(500, "infrastructure_failure", "The bounded Codex invocation identity was not created.");
-    pilot = resultValue(opened.core.markClosedExternalAppPilotAttemptRunning({ projectId: opened.project.id, pilotId, expectedVersion: pilot.version, attemptId: input.attemptId, invocationId }));
+    resultValue(opened.core.markClosedExternalAppPilotAttemptRunning({ projectId: opened.project.id, pilotId, expectedVersion: pilot.version, attemptId: input.attemptId, invocationId }));
     const controller = new AbortController();
     if (this.#pilotAbort.has(pilotId)) throw new HttpProblem(409, "state_conflict", "This Pilot already has an active invocation.");
     this.#pilotAbort.set(pilotId, controller);
@@ -806,7 +925,7 @@ export class ResearchRoomHttpApplication {
       if (request.method === "GET" && url.pathname === "/api/status") {
         const languagePreference = await this.readLanguagePreference();
         const brief = this.#opened === undefined ? undefined : resultValue(this.#opened.core.getBriefState(this.#opened.project.id));
-        json(response, 200, { ok: true, value: { localOnly: true, telemetry: false, projectOpen: this.#opened !== undefined, projectSetupRequired: this.#opened !== undefined && brief === undefined, ...(this.#opened ? { project: this.#opened.project } : {}), directoryPickerAvailable: this.directoryPicker !== undefined, languagePreference: languagePreference ?? null, sessionToken: this.sessionToken } }); return;
+        json(response, 200, { ok: true, value: { localOnly: true, telemetry: false, projectOpen: this.#opened !== undefined, recoveryRequired: this.#recoveryRoot !== undefined, projectSetupRequired: this.#opened !== undefined && brief === undefined, ...(this.#opened ? { project: this.#opened.project } : {}), directoryPickerAvailable: this.directoryPicker !== undefined, languagePreference: languagePreference ?? null, sessionToken: this.sessionToken } }); return;
       }
 
       if (request.method === "POST" || request.method === "DELETE") this.authorize(request);
@@ -828,6 +947,10 @@ export class ResearchRoomHttpApplication {
       if (request.method === "DELETE" && url.pathname === "/api/project/select-directory") { json(response, 200, { ok: true, value: this.cancelDirectoryPicker() }); return; }
       if (request.method === "POST" && url.pathname === "/api/project/open") { json(response, 200, { ok: true, value: await this.openProject(await readBody(request)) }); return; }
       if (request.method === "POST" && url.pathname === "/api/project/brief") { json(response, 200, { ok: true, value: await this.activateInitialBrief(await readBody(request)) }); return; }
+      if (request.method === "GET" && url.pathname === "/api/project/recovery") { json(response, 200, { ok: true, value: await this.recoveryStatus() }); return; }
+      if (request.method === "POST" && url.pathname === "/api/project/recovery/backup") { json(response, 201, { ok: true, value: await this.createRecoveryBackup() }); return; }
+      if (request.method === "POST" && url.pathname === "/api/project/recovery/restore/preview") { json(response, 200, { ok: true, value: await this.prepareRecoveryRestore(await readBody(request)) }); return; }
+      if (request.method === "POST" && url.pathname === "/api/project/recovery/restore") { json(response, 200, { ok: true, value: await this.executeRecoveryRestore(await readBody(request)) }); return; }
       const opened = this.requireOpened();
       if (request.method === "POST" && url.pathname === "/api/project/external-app-pilots") { json(response, 201, { ok: true, value: await this.createClosedExternalAppPilot(await readBody(request)) }); return; }
       if (request.method === "GET" && url.pathname === "/api/project/external-app-pilots") {

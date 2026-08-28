@@ -83,7 +83,8 @@ const GUIDANCE_FILES = [
       "RI-51 已完成并验证",
       "RI-52 Closed External App Pilot",
       "RI-52（已完成）",
-      "none_active_RI53_not_started",
+      "RI-53 Research Room Release Resilience",
+      "research_room_release_resilience",
       "completed_and_verified_implementation_real_provider_evidence_blocked",
       "Market Gate 0",
     ],
@@ -153,6 +154,21 @@ const GUIDANCE_FILES = [
       "major_remaining: 0",
       "in_scope_moderate_remaining: 0",
       "real_codex_continuity_evidence: passed_by_separate_continuity_only_host_observation",
+    ],
+  },
+  {
+    path: "docs/execution/RI-53-RELEASE-RESILIENCE-SECURITY-RECOVERY-UPGRADE-COMPATIBILITY-TASK-START-RECORD.md",
+    required: [
+      "task: RI-53",
+      "status: ready_to_start",
+      "gate_conclusion: ready_to_start_user_authorized_development",
+      "activity_status: active_release_resilience_security_recovery_upgrade_compatibility",
+      "implementation_authorization: explicit_user_authorization_2026_08_28",
+      "next_code_goal: research_room_release_resilience",
+      "production_visual_and_functional_acceptance: required",
+      "ri52_status: completed_and_verified",
+      "ri54_status: not_started",
+      "final: ready_to_start",
     ],
   },
   {
@@ -457,8 +473,8 @@ const MARKER_CONTRACT = {
     why: "the current task id must be well formed and consistent across entries",
   },
   "sestina-current-status": {
-    exact: "completed_and_verified",
-    why: "RI-52 implementation and both bounded real Codex host observations passed",
+    exact: "ready_to_start",
+    why: "the user authorized RI-53 and its Task Start Gate passed",
   },
   "sestina-last-completed-task": {
     exact: "RI-52",
@@ -469,24 +485,24 @@ const MARKER_CONTRACT = {
     why: "the latest governed task passed its implementation and required host evidence gates",
   },
   "sestina-implementation-base": {
-    exact: "cf8c2a761f7c0088934b75ef195f99188c26b19b",
-    why: "RI-52 starts from the verified RI-51 completion commit",
+    exact: "d92fa8c196e00b8adfe3cbd4791ed4032dfad85c",
+    why: "RI-53 starts from the verified RI-52 completion commit",
   },
   "sestina-next-code-goal": {
-    exact: "none_active_RI53_not_started",
-    why: "RI-52 is complete and RI-53 requires new explicit authorization",
+    exact: "research_room_release_resilience",
+    why: "RI-53 is the sole user-authorized implementation goal",
   },
   "sestina-next-execution-goal": {
-    exact: "await_explicit_user_authorization",
-    why: "no next stage is active",
+    exact: "implement_RI53_release_resilience",
+    why: "the current task must proceed through implementation and verification",
   },
   "sestina-next-code-sequence": {
-    exact: "none_active_RI53_not_started",
-    why: "the governed sequence cannot start RI-53 without user authorization",
+    exact: "research_room_release_resilience",
+    why: "RI-54 remains excluded while RI-53 is active",
   },
   "sestina-production-visual-and-functional-acceptance": {
-    exact: "passed",
-    why: "RI-52 production UI passed the required real-route visual and functional matrix",
+    exact: "required",
+    why: "RI-53 changes production recovery UI and requires real artifact visual acceptance",
   },
   "sestina-ri51-status": {
     exact: "completed_and_verified",
@@ -497,8 +513,12 @@ const MARKER_CONTRACT = {
     why: "the prior candidate and new fresh continuity observations jointly close RI-52",
   },
   "sestina-ri53-status": {
+    exact: "ready_to_start",
+    why: "the user explicitly authorized RI-53 and its gate passed",
+  },
+  "sestina-ri54-status": {
     exact: "not_started",
-    why: "RI-52 authorization cannot start RI-53",
+    why: "RI-53 authorization cannot start publication work",
   },
   "sestina-ri52-target-host": {
     exact: "codex",
@@ -727,9 +747,9 @@ for (const entry of ENTRY_FILES) {
 const tasks = [...currentTasks.entries()];
 if (tasks.length > 0) {
   const first = tasks[0][1];
-  if (first !== "RI-52") {
+  if (first !== "RI-53") {
     err(
-      `[AUTH-R003] ${tasks[0][0]}: current task is '${first}' but the explicitly authorized task is 'RI-52'`,
+      `[AUTH-R003] ${tasks[0][0]}: current task is '${first}' but the explicitly authorized task is 'RI-53'`,
     );
   }
   for (const [entry, task] of tasks) {

@@ -1,6 +1,6 @@
 {
   "name": "@sestina/research-room",
-  "version": "0.1.0",
+  "version": "0.2.0-rc.1",
   "private": true,
   "description": "Loopback-only local Research Room for Sestina",
   "license": "UNLICENSED",
@@ -32,6 +32,7 @@
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@sestina/storage": "workspace:*",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.1.0",

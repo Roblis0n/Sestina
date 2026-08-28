@@ -8,6 +8,7 @@ import {
   createProjectStateBackup,
   inspectProjectRecovery,
   openSestina,
+  ProjectRecoveryConfirmationService,
   previewProjectStateRestore,
   restoreProjectState,
   type CoreResult,
@@ -66,6 +67,77 @@ async function fixture(): Promise<{ root: string; projectId: string; briefId: st
 afterEach(async () => {
   for (const core of cores.splice(0)) core.close();
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
+});
+
+describe("RI-53 session-bound restore confirmation", () => {
+  it("previews exact backup/state bindings, consumes once, restores, and reports verifiable preservation", async () => {
+    const source = await fixture();
+    const created = valueOf(await createProjectStateBackup({ projectRoot: source.root }));
+    for (const core of cores.splice(0)) core.close();
+    const service = new ProjectRecoveryConfirmationService();
+    const prepared = valueOf(await service.prepare({ projectRoot: source.root, backupId: created.backupId, sessionBinding: "session-a-0123456789" }));
+    expect(prepared).toMatchObject({
+      backupId: created.backupId,
+      confirmationRequired: true,
+      compatibility: "supported",
+      currentStatePreservation: "complete_bundle_or_forensic_copy",
+      currentState: { currentState: "healthy", databaseIntegrity: "ok", currentBriefBinding: "matched" },
+      networkUsed: false,
+    });
+    expect(prepared.confirmationNonce).toMatch(/^[0-9a-f]{64}$/);
+    expect(prepared.stateBinding).toMatch(/^[0-9a-f]{64}$/);
+    expect(prepared.manifestHash).toMatch(/^[0-9a-f]{64}$/);
+    const restored = valueOf(await service.execute({
+      projectRoot: source.root,
+      backupId: created.backupId,
+      sessionBinding: "session-a-0123456789",
+      confirmed: true,
+      confirmationNonce: prepared.confirmationNonce,
+      expectedStateBinding: prepared.stateBinding,
+    }));
+    expect(restored).toMatchObject({
+      restored: true,
+      confirmationConsumed: true,
+      sourceManifestHash: prepared.manifestHash,
+      rollback: { performed: false, currentStatePreserved: true },
+      databaseIntegrity: "ok",
+      briefBinding: "matched",
+      networkUsed: false,
+    });
+    expect(restored.postRestoreStateBinding).toMatch(/^[0-9a-f]{64}$/);
+    expect(await service.execute({
+      projectRoot: source.root,
+      backupId: created.backupId,
+      sessionBinding: "session-a-0123456789",
+      confirmed: true,
+      confirmationNonce: prepared.confirmationNonce,
+      expectedStateBinding: prepared.stateBinding,
+    })).toMatchObject({ ok: false, error: { code: "confirmation_replayed" } });
+  });
+
+  it("rejects expiry, another session, another backup binding, and current-state drift", async () => {
+    const source = await fixture();
+    const created = valueOf(await createProjectStateBackup({ projectRoot: source.root }));
+    for (const core of cores.splice(0)) core.close();
+    let now = Date.now();
+    const service = new ProjectRecoveryConfirmationService({ ttlMs: 1_000, now: () => now });
+    const prepare = async () => valueOf(await service.prepare({ projectRoot: source.root, backupId: created.backupId, sessionBinding: "session-a-0123456789" }));
+
+    const wrongSession = await prepare();
+    expect(await service.execute({ projectRoot: source.root, backupId: created.backupId, sessionBinding: "session-b-0123456789", confirmed: true, confirmationNonce: wrongSession.confirmationNonce, expectedStateBinding: wrongSession.stateBinding })).toMatchObject({ ok: false, error: { code: "confirmation_binding_mismatch" } });
+
+    const wrongBackup = await prepare();
+    expect(await service.execute({ projectRoot: source.root, backupId: "bkp_20260828T000000000Z_aaaaaaaaaaaa", sessionBinding: "session-a-0123456789", confirmed: true, confirmationNonce: wrongBackup.confirmationNonce, expectedStateBinding: wrongBackup.stateBinding })).toMatchObject({ ok: false, error: { code: "confirmation_binding_mismatch" } });
+
+    const drifted = await prepare();
+    await writeFile(join(source.root, ".sestina", "research-brief.yaml"), `${source.yaml}# drift\n`, "utf8");
+    expect(await service.execute({ projectRoot: source.root, backupId: created.backupId, sessionBinding: "session-a-0123456789", confirmed: true, confirmationNonce: drifted.confirmationNonce, expectedStateBinding: drifted.stateBinding })).toMatchObject({ ok: false, error: { code: "confirmation_binding_mismatch" } });
+    await writeFile(join(source.root, ".sestina", "research-brief.yaml"), source.yaml, "utf8");
+
+    const expired = await prepare();
+    now += 1_001;
+    expect(await service.execute({ projectRoot: source.root, backupId: created.backupId, sessionBinding: "session-a-0123456789", confirmed: true, confirmationNonce: expired.confirmationNonce, expectedStateBinding: expired.stateBinding })).toMatchObject({ ok: false, error: { code: "confirmation_expired" } });
+  });
 });
 
 describe("RI-41 complete local recovery bundles", () => {

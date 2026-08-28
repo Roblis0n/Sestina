@@ -91,7 +91,8 @@ const NEW_PACKAGE_RULES = {
   "apps/research-room": {
     id: "ARCH-R012",
     allow: ["core", "mcp"],
-    fix: "apps/research-room is a loopback presentation adapter; business capabilities go through @sestina/core and the bounded Codex process/MCP adapter goes through @sestina/mcp",
+    testAllow: ["storage"],
+    fix: "apps/research-room is a loopback presentation adapter; business capabilities go through @sestina/core and the bounded Codex process/MCP adapter goes through @sestina/mcp; direct storage access is limited to destructive migration fixtures under test/",
   },
   "packages/pilot": {
     id: "ARCH-R011",
@@ -242,16 +243,19 @@ for (const [pkgDir, rule] of Object.entries(NEW_PACKAGE_RULES)) {
       const dep = sestinaPackageName(spec);
       if (dep === null) continue;
       const relFile = relative(ROOT, file).split(sep).join("/");
+      const allowed = relFile.startsWith(`${pkgDir}/test/`)
+        ? [...rule.allow, ...(rule.testAllow ?? [])]
+        : rule.allow;
 
-      if (LEGACY_BANNED.includes(dep) && !rule.allow.includes(dep)) {
+      if (LEGACY_BANNED.includes(dep) && !allowed.includes(dep)) {
         err(
           `[${rule.id === "ARCH-R008" ? rule.id : "ARCH-R009"}] ${relFile} imports ${spec}; new product packages must not import legacy package @sestina/${dep} (only integrations/legacy-import may read legacy data)`,
         );
         continue;
       }
-      if (!rule.allow.includes(dep)) {
+      if (!allowed.includes(dep)) {
         err(
-          `[${rule.id}] ${relFile} imports ${spec}; ${rule.fix} (allowed: ${rule.allow
+          `[${rule.id}] ${relFile} imports ${spec}; ${rule.fix} (allowed here: ${allowed
             .map((a) => `@sestina/${a}`)
             .join(", ")})`,
         );

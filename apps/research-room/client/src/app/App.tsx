@@ -50,6 +50,8 @@ export function App() {
   const [providerOpen, setProviderOpen] = useState(false);
   const [secondOpinionProviderOpen, setSecondOpinionProviderOpen] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
+  const [recoveryAvailable, setRecoveryAvailable] = useState(false);
   const [appearance, setAppearance] = useState<AppearancePreferences>(() => readAppearancePreferences());
   const pickerRequest = useRef<AbortController | undefined>(undefined);
   const busy = busyCount > 0;
@@ -78,7 +80,13 @@ export function App() {
     const [providerStatus, secondOpinionProviderStatus] = await Promise.all([researchRoomApi.provider(), researchRoomApi.secondOpinionProvider()]);
     setProvider(providerStatus);
     setSecondOpinionProvider(secondOpinionProviderStatus);
-    if (!initialStatus.projectOpen) { setPhase("start"); setRuntime("ready"); showNotice(activeLanguage === "en" ? "Local service is ready." : "本地服务已就绪。", "ready"); return; }
+    if (!initialStatus.projectOpen) {
+      setPhase("start"); setRuntime("ready"); setRecoveryAvailable(initialStatus.recoveryRequired);
+      if (initialStatus.recoveryRequired) { setRecoveryOpen(true); showNotice(activeLanguage === "en" ? "The selected project requires recovery before it can open." : "所选项目需要先完成恢复才能打开。", "warning"); }
+      else showNotice(activeLanguage === "en" ? "Local service is ready." : "本地服务已就绪。", "ready");
+      return;
+    }
+    setRecoveryAvailable(true);
     if (initialStatus.projectSetupRequired) {
       setOpenedProject(initialStatus.project);
       setPhase("brief");
@@ -149,6 +157,12 @@ export function App() {
   async function opened(openedValue: ProjectOpenResultDto) {
     setOpenedProject(openedValue.project);
     setPrepared(undefined); setAnalyzed(undefined); setInspectorOpen(false);
+    setRecoveryAvailable(true);
+    if (openedValue.recoveryRequired) {
+      setState(undefined); setPhase("start"); setRuntime("degraded"); setRecoveryOpen(true);
+      showNotice(language === "en" ? "The project was preserved and moved into fail-closed recovery." : "项目已原样保留，并进入 fail-closed 恢复状态。", "warning");
+      return;
+    }
     if (openedValue.setupRequired) { setPhase("brief"); showNotice(t(language, "initialized"), "ready"); return; }
     await runBusy(async () => {
       try { await refreshState(); setPhase("shell"); setRuntime("ready"); showNotice(t(language, "opened"), "ready"); }
@@ -229,7 +243,16 @@ export function App() {
     await runBusy(async () => { const result = await researchRoomApi.rollbackReceipt(state?.project.id ?? "", receipt.id, receipt.version, reason); await refreshState(); setInspectorSelection({ kind: "research_object", title: `Receipt ${result.id}`, status: result.status, fields: [{ label: "ID", value: result.id }, { label: "Version", value: String(result.version) }, { label: "Hash", value: result.receiptHash }] }); setInspectorOpen(true); setRuntime("ready"); showNotice(t(language, "rolled_back"), "ready"); });
   }
 
-  const chrome = phase !== "language" && phase !== "boot" ? <AppChrome language={language} provider={provider} secondOpinionProvider={secondOpinionProvider} runtime={runtime} busy={busy} providerOpen={providerOpen} secondOpinionProviderOpen={secondOpinionProviderOpen} appearanceOpen={appearanceOpen} appearance={appearance} onLanguage={(next) => void changeLanguage(next)} onProviderOpen={setProviderOpen} onSecondOpinionProviderOpen={setSecondOpinionProviderOpen} onAppearanceOpen={setAppearanceOpen} onAppearance={applyAppearance} onSaveProvider={saveProvider} onDeleteProviderConfig={deleteProviderConfig} onDeleteProviderSecret={deleteProviderSecret} onSaveSecondOpinionProvider={saveSecondOpinionProvider} onDeleteSecondOpinionProviderConfig={deleteSecondOpinionProviderConfig} onDeleteSecondOpinionProviderSecret={deleteSecondOpinionProviderSecret} onTestSecondOpinionProvider={testSecondOpinionProvider} onError={(message) => { showNotice(message, "danger"); }} /> : null;
+  async function recoveryRestored() {
+    await runBusy(async () => {
+      try {
+        await refreshState(); setPhase("shell"); setRecoveryAvailable(true); setRuntime("ready");
+        showNotice(language === "en" ? "The verified backup was restored and the project reopened." : "已恢复经验证的备份，并重新打开项目。", "ready");
+      } catch (error) { handleFailure(error); }
+    });
+  }
+
+  const chrome = phase !== "language" && phase !== "boot" ? <AppChrome language={language} provider={provider} secondOpinionProvider={secondOpinionProvider} runtime={runtime} busy={busy} providerOpen={providerOpen} secondOpinionProviderOpen={secondOpinionProviderOpen} appearanceOpen={appearanceOpen} recoveryOpen={recoveryOpen} recoveryAvailable={recoveryAvailable} appearance={appearance} onLanguage={(next) => void changeLanguage(next)} onProviderOpen={setProviderOpen} onSecondOpinionProviderOpen={setSecondOpinionProviderOpen} onAppearanceOpen={setAppearanceOpen} onRecoveryOpen={setRecoveryOpen} onAppearance={applyAppearance} onSaveProvider={saveProvider} onDeleteProviderConfig={deleteProviderConfig} onDeleteProviderSecret={deleteProviderSecret} onSaveSecondOpinionProvider={saveSecondOpinionProvider} onDeleteSecondOpinionProviderConfig={deleteSecondOpinionProviderConfig} onDeleteSecondOpinionProviderSecret={deleteSecondOpinionProviderSecret} onTestSecondOpinionProvider={testSecondOpinionProvider} onRecoveryRestored={recoveryRestored} onNotice={showNotice} onError={(message) => { showNotice(message, "danger"); }} /> : null;
 
   return <div className="app-root" aria-busy={busy}>
       <a className="skip-link" href="#main-content">Skip to main content</a>
@@ -239,7 +262,7 @@ export function App() {
     {phase === "language" ? <LanguageScreen busy={busy} onChoose={(next) => void chooseLanguage(next)} /> : null}
     {phase === "start" && status ? <StartCenter language={language} directoryPickerAvailable={status.directoryPickerAvailable} busy={busy} onPreviewNative={previewNative} onCancelNative={cancelNative} onOpenManual={openManual} onInitializeNative={initializeNative} onOpened={(value) => void opened(value)} onNotice={showNotice} /> : null}
     {phase === "brief" && openedProject ? <BriefSetup language={language} projectTitle={openedProject.title} busy={busy} onActivate={activateBrief} onActivated={activated} onError={(message) => { showNotice(message, "danger"); }} /> : null}
-    {phase === "shell" && state ? <ProjectShell language={language} state={state} provider={provider} busy={busy} prepared={prepared} analyzed={analyzed} inspectorOpen={inspectorOpen} inspectorSelection={inspectorSelection} onInspector={(open, selection) => { setInspectorOpen(open); if (selection) setInspectorSelection(selection); }} onSwitchProject={() => { setPrepared(undefined); setAnalyzed(undefined); setInspectorOpen(false); setInspectorSelection(undefined); setState(undefined); window.history.replaceState({}, "", "/"); setPhase("start"); }} onPrepared={setPrepared} onAnalyzed={setAnalyzed} onPrepare={prepareReview} onAnalyze={analyzeReview} onCancel={cancelReview} onCommit={commitDisposition} onCommitted={committed} onDownload={downloadReceipt} onRollback={rollbackReceipt} onRuntime={setRuntime} onNotice={showNotice} onError={handleFailure} onAuthorityChanged={async () => { await refreshState(); }} /> : null}
+    {phase === "shell" && state ? <ProjectShell language={language} state={state} provider={provider} busy={busy} prepared={prepared} analyzed={analyzed} inspectorOpen={inspectorOpen} inspectorSelection={inspectorSelection} onInspector={(open, selection) => { setInspectorOpen(open); if (selection) setInspectorSelection(selection); }} onSwitchProject={() => { setPrepared(undefined); setAnalyzed(undefined); setInspectorOpen(false); setInspectorSelection(undefined); setRecoveryOpen(false); setRecoveryAvailable(false); setState(undefined); window.history.replaceState({}, "", "/"); setPhase("start"); }} onPrepared={setPrepared} onAnalyzed={setAnalyzed} onPrepare={prepareReview} onAnalyze={analyzeReview} onCancel={cancelReview} onCommit={commitDisposition} onCommitted={committed} onDownload={downloadReceipt} onRollback={rollbackReceipt} onRuntime={setRuntime} onNotice={showNotice} onError={handleFailure} onAuthorityChanged={async () => { await refreshState(); }} /> : null}
     {phase === "fatal" ? <main id="main-content" className="fatal-screen"><StatusBadge tone="danger">{t(language, "offline")}</StatusBadge><h1>{t(language, "service_unavailable")}</h1><p>{t(language, "recovery_hint")}</p><button type="button" onClick={() => { window.location.reload(); }}>{t(language, "retry")}</button></main> : null}
     </div>;
 }

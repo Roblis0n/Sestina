@@ -2,6 +2,9 @@ export type CoreErrorCode =
   | "invalid_input"
   | "not_found"
   | "stale_state"
+  | "confirmation_expired"
+  | "confirmation_replayed"
+  | "confirmation_binding_mismatch"
   | "state_conflict"
   | "user_confirmation_required"
   | "review_blocked"
@@ -27,6 +30,9 @@ const MESSAGES: Readonly<Record<CoreErrorCode, string>> = {
   invalid_input: "The request is invalid.",
   not_found: "The requested research record was not found.",
   stale_state: "The request is stale for the current research state.",
+  confirmation_expired: "The explicit confirmation has expired.",
+  confirmation_replayed: "The explicit confirmation was already used.",
+  confirmation_binding_mismatch: "The explicit confirmation no longer matches this session, backup, or project state.",
   state_conflict: "The requested lifecycle transition is not allowed.",
   user_confirmation_required: "An explicit user action is required.",
   review_blocked: "The review could not establish a usable result.",

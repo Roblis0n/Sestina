@@ -17,9 +17,9 @@ describe("Migration 019 (project working memory and resume continuity)", () => {
     removeTempDir(dir);
   });
 
-  it("publishes schema 19 with strict project-scoped memory and checkpoint tables while keeping request Manifests transient", () => {
-    expect(SCHEMA_VERSION).toBe(19);
-    expect(MIGRATIONS.at(-1)).toMatchObject({ version: 19, name: "019-project-working-memory" });
+  it("retains schema 19's strict project-scoped memory and checkpoint tables in schema 20 while keeping request Manifests transient", () => {
+    expect(SCHEMA_VERSION).toBe(20);
+    expect(MIGRATIONS.find((migration) => migration.version === 19)).toMatchObject({ version: 19, name: "019-project-working-memory" });
     expect(db.get<{ status: string }>("SELECT status FROM migrations WHERE version = 19")?.status).toBe("completed");
     for (const table of ["project_working_memory", "resume_checkpoints"]) {
       const sql = db.get<{ sql: string }>("SELECT sql FROM sqlite_schema WHERE type = 'table' AND name = ?", table)?.sql ?? "";
@@ -42,7 +42,7 @@ describe("Migration 019 (project working memory and resume continuity)", () => {
   it("upgrades a schema-18 database once and preserves existing project data", async () => {
     db.close();
     const path = join(dir, "upgrade.db");
-    const prior = await openDatabase({ path, migrate: { migrations: MIGRATIONS.slice(0, -1) } });
+    const prior = await openDatabase({ path, migrate: { migrations: MIGRATIONS.slice(0, 18) } });
     prior.run(
       "INSERT INTO research_projects (project_id, title, root_path, version, created_at, updated_at, data) VALUES (?, 'before-019', '.', 1, ?, ?, ?)",
       "rprj_00000000000000000000000001",

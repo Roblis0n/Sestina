@@ -62,7 +62,7 @@ export async function runCli(args: readonly string[], io: CliIo, dependencies: C
   if (parsed.options.version === true) {
     if (parsed.positionals.length !== 0 || !onlyOptions(parsed, new Set(["version", "json"]))) return failure(io, json, EXIT_CODES.invalidInput, "invalid_input", "Version arguments are invalid.");
     const identity = getReleaseIdentity();
-    success(io, json, { command: "version", ...identity }, `${identity.package} ${identity.version} (${identity.releaseBuildId})`);
+    success(io, json, { command: "version", ...identity }, `${identity.cliPackage} ${identity.version} (${identity.releaseBuildId})`);
     return EXIT_CODES.success;
   }
   if (parsed.options.help === true || command === "help") {

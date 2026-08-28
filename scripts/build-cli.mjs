@@ -37,7 +37,7 @@ if (args.length >= 1 && args[0] === "--version" && args.every((value) => value =
   } else if (args.includes("--json")) {
     process.stdout.write(JSON.stringify({ ok: true, command: "version", ...identity }) + "\\n");
   } else {
-    process.stdout.write(identity.package + " " + identity.version + " (" + identity.releaseBuildId + ")\\n");
+    process.stdout.write(identity.cliPackage + " " + identity.version + " (" + identity.releaseBuildId + ")\\n");
   }
 } else {
   const { runProcessCli } = await import("./cli.js");

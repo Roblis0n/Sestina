@@ -31,6 +31,10 @@ import type {
   PreparedAppealSecondOpinionDto,
   PreparedDeliberationDto,
   PreparedDeliberationRetryDto,
+  PreparedProjectStateRestoreDto,
+  ProjectRecoveryStatusDto,
+  ProjectStateBackupDto,
+  ExecutedProjectStateRestoreDto,
   ProjectOverviewDto,
   ProjectMemoryManifestDto,
   ProjectMemoryProjectionDto,
@@ -134,12 +138,13 @@ export function decodeApiEnvelope<T>(value: unknown, decode: (input: unknown) =>
 
 export function decodeStatus(value: unknown): StatusDto {
   const status = record(value, "status");
-  allowedKeys(status, ["directoryPickerAvailable", "languagePreference", "localOnly", "project", "projectOpen", "projectSetupRequired", "sessionToken", "telemetry"], "status");
+  allowedKeys(status, ["directoryPickerAvailable", "languagePreference", "localOnly", "project", "projectOpen", "projectSetupRequired", "recoveryRequired", "sessionToken", "telemetry"], "status");
   if (status.localOnly !== true || status.telemetry !== false) fail("status locality");
   return {
     localOnly: true,
     telemetry: false,
     projectOpen: boolean(status.projectOpen, "status.projectOpen"),
+    recoveryRequired: boolean(status.recoveryRequired, "status.recoveryRequired"),
     ...(typeof status.projectSetupRequired === "boolean" ? { projectSetupRequired: status.projectSetupRequired } : {}),
     ...(status.project === undefined ? {} : { project: decodeProject(status.project, "status.project") }),
     directoryPickerAvailable: boolean(status.directoryPickerAvailable, "status.directoryPickerAvailable"),
@@ -165,15 +170,121 @@ function decodeProject(value: unknown, path: string): { readonly id: string; rea
 
 export function decodeProjectOpenResult(value: unknown): ProjectOpenResultDto {
   const opened = record(value, "project open result");
-  exactKeys(opened, ["directoryScanPerformed", "initialized", "localOnly", "pathPersisted", "project", "setupRequired"], "project open result");
+  exactKeys(opened, ["directoryScanPerformed", "initialized", "localOnly", "pathPersisted", "project", "recoveryRequired", "setupRequired"], "project open result");
   if (opened.localOnly !== true || opened.pathPersisted !== false || opened.directoryScanPerformed !== false) fail("project open safety contract");
   return {
     project: decodeProject(opened.project, "project open result.project"),
     initialized: boolean(opened.initialized, "project open result.initialized"),
     setupRequired: boolean(opened.setupRequired, "project open result.setupRequired"),
+    recoveryRequired: boolean(opened.recoveryRequired, "project open result.recoveryRequired"),
     localOnly: true,
     pathPersisted: false,
     directoryScanPerformed: false,
+  };
+}
+
+function hash64(value: unknown, path: string): string {
+  const decoded = string(value, path);
+  if (!/^[0-9a-f]{64}$/u.test(decoded)) fail(path);
+  return decoded;
+}
+
+function decodeRecoverySchema(value: unknown, path: string): ProjectRecoveryStatusDto["schema"] {
+  const schema = record(value, path);
+  allowedKeys(schema, ["failedVersion", "status", "supportedMinimum", "supportedVersion", "version"], path);
+  requiredKeys(schema, ["status", "supportedMinimum", "supportedVersion"], path);
+  if (!["recognized", "too_old", "too_new", "migration_failed", "unavailable"].includes(String(schema.status))) fail(`${path}.status`);
+  const supportedVersion = number(schema.supportedVersion, `${path}.supportedVersion`);
+  const supportedMinimum = number(schema.supportedMinimum, `${path}.supportedMinimum`);
+  const version = schema.version === undefined ? undefined : number(schema.version, `${path}.version`);
+  const failedVersion = schema.failedVersion === undefined ? undefined : number(schema.failedVersion, `${path}.failedVersion`);
+  return { status: schema.status as ProjectRecoveryStatusDto["schema"]["status"], supportedVersion, supportedMinimum, ...(version === undefined ? {} : { version }), ...(failedVersion === undefined ? {} : { failedVersion }) };
+}
+
+function decodeRecoveryCurrentState(value: unknown, path: string): PreparedProjectStateRestoreDto["currentState"] {
+  const state = record(value, path);
+  allowedKeys(state, ["currentBriefBinding", "currentState", "databaseIntegrity", "projectId", "schema"], path);
+  requiredKeys(state, ["currentBriefBinding", "currentState", "databaseIntegrity", "schema"], path);
+  if (!["healthy", "recovery_required"].includes(String(state.currentState))) fail(`${path}.currentState`);
+  if (!["ok", "failed", "missing"].includes(String(state.databaseIntegrity))) fail(`${path}.databaseIntegrity`);
+  if (!["matched", "mismatched", "unavailable"].includes(String(state.currentBriefBinding))) fail(`${path}.currentBriefBinding`);
+  return {
+    currentState: state.currentState as ProjectRecoveryStatusDto["currentState"],
+    databaseIntegrity: state.databaseIntegrity as ProjectRecoveryStatusDto["databaseIntegrity"],
+    currentBriefBinding: state.currentBriefBinding as ProjectRecoveryStatusDto["currentBriefBinding"],
+    schema: decodeRecoverySchema(state.schema, `${path}.schema`),
+    ...(state.projectId === undefined ? {} : { projectId: string(state.projectId, `${path}.projectId`) }),
+  };
+}
+
+export function decodeProjectRecoveryStatus(value: unknown): ProjectRecoveryStatusDto {
+  const status = record(value, "project recovery status");
+  allowedKeys(status, ["backups", "currentBriefBinding", "currentState", "databaseIntegrity", "networkUsed", "projectId", "restoreAvailable", "schema"], "project recovery status");
+  requiredKeys(status, ["backups", "currentBriefBinding", "currentState", "databaseIntegrity", "networkUsed", "restoreAvailable", "schema"], "project recovery status");
+  const current = decodeRecoveryCurrentState({
+    currentState: status.currentState,
+    databaseIntegrity: status.databaseIntegrity,
+    currentBriefBinding: status.currentBriefBinding,
+    schema: status.schema,
+    ...(status.projectId === undefined ? {} : { projectId: status.projectId }),
+  }, "project recovery current state");
+  if (status.networkUsed !== false) fail("project recovery status.networkUsed");
+  if (!Array.isArray(status.backups)) fail("project recovery status.backups");
+  const backups = status.backups.map((value, index) => {
+    const backup = record(value, `project recovery backup ${index}`);
+    allowedKeys(backup, ["backupId", "briefSizeBytes", "createdAt", "databaseSchemaVersion", "databaseSizeBytes", "kind", "projectId", "valid", "verification"], `project recovery backup ${index}`);
+    requiredKeys(backup, ["backupId", "kind", "valid", "verification"], `project recovery backup ${index}`);
+    if (!["manual", "pre_restore", "pre_upgrade"].includes(String(backup.kind)) || !["verified", "failed"].includes(String(backup.verification))) fail(`project recovery backup ${index}`);
+    return {
+      backupId: string(backup.backupId, `project recovery backup ${index}.backupId`),
+      kind: backup.kind as "manual" | "pre_restore" | "pre_upgrade",
+      verification: backup.verification as "verified" | "failed",
+      valid: boolean(backup.valid, `project recovery backup ${index}.valid`),
+      ...(backup.createdAt === undefined ? {} : { createdAt: string(backup.createdAt, `project recovery backup ${index}.createdAt`) }),
+      ...(backup.projectId === undefined ? {} : { projectId: string(backup.projectId, `project recovery backup ${index}.projectId`) }),
+      ...(backup.databaseSchemaVersion === undefined ? {} : { databaseSchemaVersion: number(backup.databaseSchemaVersion, `project recovery backup ${index}.databaseSchemaVersion`) }),
+      ...(backup.databaseSizeBytes === undefined ? {} : { databaseSizeBytes: number(backup.databaseSizeBytes, `project recovery backup ${index}.databaseSizeBytes`) }),
+      ...(backup.briefSizeBytes === undefined ? {} : { briefSizeBytes: number(backup.briefSizeBytes, `project recovery backup ${index}.briefSizeBytes`) }),
+    };
+  });
+  return { ...current, restoreAvailable: boolean(status.restoreAvailable, "project recovery status.restoreAvailable"), backups, networkUsed: false };
+}
+
+export function decodeProjectStateBackup(value: unknown): ProjectStateBackupDto {
+  const backup = record(value, "project state backup");
+  exactKeys(backup, ["backupId", "bindingHash", "briefBinding", "briefHash", "briefSizeBytes", "databaseHash", "databaseSchemaVersion", "databaseSizeBytes", "integrity", "kind", "networkUsed", "projectId"], "project state backup");
+  if (backup.kind !== "manual" || backup.integrity !== "ok" || backup.briefBinding !== "matched" || backup.networkUsed !== false) fail("project state backup contract");
+  return {
+    backupId: string(backup.backupId, "project state backup.backupId"), kind: "manual", projectId: string(backup.projectId, "project state backup.projectId"),
+    integrity: "ok", briefBinding: "matched", databaseHash: hash64(backup.databaseHash, "project state backup.databaseHash"),
+    briefHash: hash64(backup.briefHash, "project state backup.briefHash"), bindingHash: hash64(backup.bindingHash, "project state backup.bindingHash"),
+    databaseSchemaVersion: number(backup.databaseSchemaVersion, "project state backup.databaseSchemaVersion"),
+    databaseSizeBytes: number(backup.databaseSizeBytes, "project state backup.databaseSizeBytes"), briefSizeBytes: number(backup.briefSizeBytes, "project state backup.briefSizeBytes"), networkUsed: false,
+  };
+}
+
+export function decodePreparedProjectStateRestore(value: unknown): PreparedProjectStateRestoreDto {
+  const prepared = record(value, "prepared project restore");
+  exactKeys(prepared, ["backupId", "bindingHash", "briefBinding", "briefSizeBytes", "compatibility", "confirmationNonce", "confirmationRequired", "createdAt", "currentState", "currentStatePreservation", "databaseIntegrity", "databaseSchemaVersion", "databaseSizeBytes", "expiresAt", "kind", "manifestHash", "networkUsed", "projectId", "runtimeVersion", "stateBinding"], "prepared project restore");
+  if (!["manual", "pre_restore", "pre_upgrade"].includes(String(prepared.kind)) || prepared.databaseIntegrity !== "ok" || prepared.briefBinding !== "matched" || prepared.compatibility !== "supported" || prepared.currentStatePreservation !== "complete_bundle_or_forensic_copy" || prepared.confirmationRequired !== true || prepared.networkUsed !== false) fail("prepared project restore contract");
+  return {
+    backupId: string(prepared.backupId, "prepared project restore.backupId"), kind: prepared.kind as "manual" | "pre_restore" | "pre_upgrade", projectId: string(prepared.projectId, "prepared project restore.projectId"), createdAt: string(prepared.createdAt, "prepared project restore.createdAt"),
+    databaseIntegrity: "ok", briefBinding: "matched", databaseSchemaVersion: number(prepared.databaseSchemaVersion, "prepared project restore.databaseSchemaVersion"), databaseSizeBytes: number(prepared.databaseSizeBytes, "prepared project restore.databaseSizeBytes"), briefSizeBytes: number(prepared.briefSizeBytes, "prepared project restore.briefSizeBytes"),
+    runtimeVersion: string(prepared.runtimeVersion, "prepared project restore.runtimeVersion"), manifestHash: hash64(prepared.manifestHash, "prepared project restore.manifestHash"), bindingHash: hash64(prepared.bindingHash, "prepared project restore.bindingHash"), compatibility: "supported", currentStatePreservation: "complete_bundle_or_forensic_copy", confirmationRequired: true,
+    confirmationNonce: hash64(prepared.confirmationNonce, "prepared project restore.confirmationNonce"), stateBinding: hash64(prepared.stateBinding, "prepared project restore.stateBinding"), expiresAt: string(prepared.expiresAt, "prepared project restore.expiresAt"), currentState: decodeRecoveryCurrentState(prepared.currentState, "prepared project restore.currentState"), networkUsed: false,
+  };
+}
+
+export function decodeExecutedProjectStateRestore(value: unknown): ExecutedProjectStateRestoreDto {
+  const restored = record(value, "executed project restore");
+  exactKeys(restored, ["backupId", "briefBinding", "confirmationConsumed", "databaseIntegrity", "forensicCopyPreserved", "networkUsed", "postRestoreStateBinding", "preRestoreBackupId", "project", "projectId", "reopened", "restored", "rollback", "sourceBindingHash", "sourceManifestHash"], "executed project restore");
+  const rollback = record(restored.rollback, "executed project restore.rollback");
+  exactKeys(rollback, ["currentStatePreserved", "performed"], "executed project restore.rollback");
+  if (restored.restored !== true || restored.confirmationConsumed !== true || restored.reopened !== true || restored.databaseIntegrity !== "ok" || restored.briefBinding !== "matched" || restored.networkUsed !== false || rollback.performed !== false || rollback.currentStatePreserved !== true) fail("executed project restore contract");
+  return {
+    restored: true, backupId: string(restored.backupId, "executed project restore.backupId"), projectId: string(restored.projectId, "executed project restore.projectId"), preRestoreBackupId: string(restored.preRestoreBackupId, "executed project restore.preRestoreBackupId"), forensicCopyPreserved: boolean(restored.forensicCopyPreserved, "executed project restore.forensicCopyPreserved"), databaseIntegrity: "ok", briefBinding: "matched",
+    sourceManifestHash: hash64(restored.sourceManifestHash, "executed project restore.sourceManifestHash"), sourceBindingHash: hash64(restored.sourceBindingHash, "executed project restore.sourceBindingHash"), rollback: { performed: false, currentStatePreserved: true }, networkUsed: false, confirmationConsumed: true,
+    postRestoreStateBinding: hash64(restored.postRestoreStateBinding, "executed project restore.postRestoreStateBinding"), reopened: true, project: decodeProject(restored.project, "executed project restore.project"),
   };
 }
 
@@ -190,6 +301,7 @@ export function decodeSelectedDirectory(value: unknown): SelectedDirectoryDto {
     localOnly: selected.localOnly,
     pathPersisted: selected.pathPersisted,
     project: selected.project,
+    recoveryRequired: selected.recoveryRequired,
     setupRequired: selected.setupRequired,
   };
   return { selected: true, ...decodeProjectOpenResult(opened) };
@@ -216,6 +328,7 @@ export function decodeSelectedDirectoryPreview(value: unknown): SelectedDirector
       localOnly: preview.localOnly,
       pathPersisted: preview.pathPersisted,
       project: preview.project,
+      recoveryRequired: preview.recoveryRequired,
       setupRequired: preview.setupRequired,
     };
     return { selected: true, initializationRequired: false, ...decodeProjectOpenResult(opened) };

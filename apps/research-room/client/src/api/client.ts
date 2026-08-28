@@ -19,6 +19,10 @@ import {
   decodePreparedDeliberationRetry,
   decodePreparedAppealSecondOpinion,
   decodePreparedReview,
+  decodePreparedProjectStateRestore,
+  decodeProjectRecoveryStatus,
+  decodeProjectStateBackup,
+  decodeExecutedProjectStateRestore,
   decodeProjectOpenResult,
   decodeProviderConnectionTest,
   decodeProviderStatus,
@@ -63,6 +67,10 @@ import type {
   DirectoryPickerCancellationDto,
   EvidenceClass,
   PreparedReviewDto,
+  PreparedProjectStateRestoreDto,
+  ProjectRecoveryStatusDto,
+  ProjectStateBackupDto,
+  ExecutedProjectStateRestoreDto,
   PreparedAppealSecondOpinionDto,
   PreparedDeliberationDto,
   PreparedDeliberationRetryDto,
@@ -158,13 +166,13 @@ export class ResearchRoomApi {
 
   async confirmClosedExternalAppPilotContext(pilot: ClosedExternalAppPilotDto): Promise<ClosedExternalAppPilotDto> {
     const attempt = pilot.attempts.at(-1); const manifest = pilot.manifests.at(-1);
-    if (!attempt || !manifest || attempt.id !== manifest.attemptId) throw new ResearchRoomApiError("invalid_payload", "The exact Pilot Manifest binding is unavailable.", false);
+    if (attempt === undefined || attempt.id !== manifest?.attemptId) throw new ResearchRoomApiError("invalid_payload", "The exact Pilot Manifest binding is unavailable.", false);
     return this.request(`/api/project/external-app-pilots/${encodeURIComponent(pilot.id)}/confirm`, decodeClosedExternalAppPilot, { method: "POST", mutation: true, body: { expectedVersion: pilot.version, attemptId: attempt.id, manifestId: manifest.id, manifestHash: manifest.payloadHash, confirmationNonce: attempt.confirmationNonce, confirmed: true } });
   }
 
   async launchClosedExternalAppPilot(pilot: ClosedExternalAppPilotDto, signal?: AbortSignal): Promise<ClosedExternalAppPilotDto> {
     const attempt = pilot.attempts.at(-1); const manifest = pilot.manifests.at(-1);
-    if (!attempt || !manifest || attempt.id !== manifest.attemptId) throw new ResearchRoomApiError("invalid_payload", "The exact Pilot attempt is unavailable.", false);
+    if (attempt === undefined || attempt.id !== manifest?.attemptId) throw new ResearchRoomApiError("invalid_payload", "The exact Pilot attempt is unavailable.", false);
     return this.request(`/api/project/external-app-pilots/${encodeURIComponent(pilot.id)}/launch`, decodeClosedExternalAppPilot, { method: "POST", mutation: true, ...(signal ? { signal } : {}), body: { expectedVersion: pilot.version, attemptId: attempt.id, manifestHash: manifest.payloadHash, confirmed: true } });
   }
 
@@ -256,6 +264,26 @@ export class ResearchRoomApi {
 
   async openProject(projectPath: string, initializeIfNeeded: boolean): Promise<ProjectOpenResultDto> {
     return this.request("/api/project/open", decodeProjectOpenResult, { method: "POST", mutation: true, body: { projectPath, initializeIfNeeded } });
+  }
+
+  async projectRecovery(): Promise<ProjectRecoveryStatusDto> {
+    return this.request("/api/project/recovery", decodeProjectRecoveryStatus);
+  }
+
+  async createProjectBackup(): Promise<ProjectStateBackupDto> {
+    return this.request("/api/project/recovery/backup", decodeProjectStateBackup, { method: "POST", mutation: true, body: {} });
+  }
+
+  async prepareProjectRestore(backupId: string): Promise<PreparedProjectStateRestoreDto> {
+    return this.request("/api/project/recovery/restore/preview", decodePreparedProjectStateRestore, { method: "POST", mutation: true, body: { backupId } });
+  }
+
+  async executeProjectRestore(prepared: PreparedProjectStateRestoreDto): Promise<ExecutedProjectStateRestoreDto> {
+    return this.request("/api/project/recovery/restore", decodeExecutedProjectStateRestore, {
+      method: "POST",
+      mutation: true,
+      body: { backupId: prepared.backupId, confirmationNonce: prepared.confirmationNonce, expectedStateBinding: prepared.stateBinding, confirmed: true },
+    });
   }
 
   async activateBrief(projectQuestion: string, currentTask: string): Promise<ResearchRoomStateDto> {

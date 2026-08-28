@@ -2,18 +2,27 @@ import { describe, expect, it } from "vitest";
 import { createReleaseIdentity, SESTINA_RELEASE_CONTRACT } from "../src/index.js";
 
 describe("Sestina release contract", () => {
-  it("keeps one stable private-preview product identity", () => {
+  it("keeps one canonical Research Room release-candidate identity", () => {
     expect(SESTINA_RELEASE_CONTRACT).toEqual({
-      schemaVersion: "1.0.0",
-      package: "@sestina/cli",
-      version: "0.1.0",
+      schemaVersion: "2.0.0",
+      product: "Sestina Research Room",
+      productId: "local-interactive-research-app",
+      package: "@sestina/research-room",
+      cliPackage: "@sestina/cli",
+      primaryInterface: "research-room",
+      businessKernel: "research-deliberation-kernel",
+      releaseChannel: "private_release_candidate",
+      version: "0.2.0-rc.1",
       nodeRange: ">=24 <25",
-      runtimeVersion: "0.1.0",
+      runtimeVersion: "0.2.0-rc.1",
       reportSchemaVersion: "1.0.0",
       capsuleResponseSchemaVersion: "1.0.0",
-      mcpServerVersion: "0.1.0",
+      mcpServerVersion: "0.2.0-rc.1",
       mcpResearchContextSchemaVersion: "1.1",
       checkerBuildContract: "deterministic-review-v1",
+      supportedSchemaMinimum: 16,
+      futureSchemaPolicy: "fail_closed",
+      downgradeSupported: false,
     });
     expect(Object.isFrozen(SESTINA_RELEASE_CONTRACT)).toBe(true);
   });
@@ -24,6 +33,7 @@ describe("Sestina release contract", () => {
     const second = createReleaseIdentity(input);
     expect(first).toEqual(second);
     expect(first.releaseBuildId).toMatch(/^[0-9a-f]{64}$/);
+    expect(first.migrationManifestHash).toMatch(/^[0-9a-f]{64}$/);
     expect(first.databaseSchemaVersion).toBe(15);
     expect(first.migrationCount).toBe(15);
     expect(createReleaseIdentity({ ...input, migrationCount: 16 }).releaseBuildId).not.toBe(first.releaseBuildId);

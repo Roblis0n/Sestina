@@ -1,11 +1,12 @@
 import { useLayoutEffect, useRef } from "react";
-import type { AppLanguage, ProviderSaveInput, ProviderStatusDto } from "../../api/dto.js";
+import type { AppLanguage, ExecutedProjectStateRestoreDto, ProviderSaveInput, ProviderStatusDto } from "../../api/dto.js";
 import type { AppearancePreferences } from "../../preferences/appearance.js";
 import { t } from "../../i18n/copy.js";
 import { Button } from "../primitives/Button.js";
 import { StatusBadge } from "../primitives/StatusBadge.js";
 import { AppearanceDialog } from "./AppearanceDialog.js";
 import { ProviderDialog } from "./ProviderDialog.js";
+import { RecoveryDialog } from "./RecoveryDialog.js";
 
 interface AppChromeProps {
   readonly language: AppLanguage;
@@ -16,11 +17,14 @@ interface AppChromeProps {
   readonly providerOpen: boolean;
   readonly secondOpinionProviderOpen: boolean;
   readonly appearanceOpen: boolean;
+  readonly recoveryOpen: boolean;
+  readonly recoveryAvailable: boolean;
   readonly appearance: AppearancePreferences;
   readonly onLanguage: (language: AppLanguage) => void;
   readonly onProviderOpen: (open: boolean) => void;
   readonly onSecondOpinionProviderOpen: (open: boolean) => void;
   readonly onAppearanceOpen: (open: boolean) => void;
+  readonly onRecoveryOpen: (open: boolean) => void;
   readonly onAppearance: (preferences: AppearancePreferences) => void;
   readonly onSaveProvider: (input: ProviderSaveInput) => Promise<void>;
   readonly onDeleteProviderConfig: () => Promise<void>;
@@ -29,6 +33,8 @@ interface AppChromeProps {
   readonly onDeleteSecondOpinionProviderConfig: () => Promise<void>;
   readonly onDeleteSecondOpinionProviderSecret: () => Promise<void>;
   readonly onTestSecondOpinionProvider: () => Promise<void>;
+  readonly onRecoveryRestored: (result: ExecutedProjectStateRestoreDto) => Promise<void>;
+  readonly onNotice: (message: string, tone?: "ready" | "warning" | "danger") => void;
   readonly onError: (message: string) => void;
 }
 export function AppChrome(props: AppChromeProps) {
@@ -36,6 +42,7 @@ export function AppChrome(props: AppChromeProps) {
   const providerButtonRef = useRef<HTMLButtonElement>(null);
   const secondOpinionProviderButtonRef = useRef<HTMLButtonElement>(null);
   const appearanceButtonRef = useRef<HTMLButtonElement>(null);
+  const recoveryButtonRef = useRef<HTMLButtonElement>(null);
   const tone = props.runtime === "ready" || props.runtime === "committed" ? "ready" : props.runtime === "analyzing" || props.runtime === "cancel_requested" ? "working" : props.runtime === "degraded" ? "warning" : "danger";
   const runtimeLabel = t(props.language, props.runtime === "ready" ? "runtime_ready" : props.runtime);
   useLayoutEffect(() => {
@@ -77,6 +84,7 @@ export function AppChrome(props: AppChromeProps) {
             <button type="button" aria-pressed={props.language === "en"} onClick={() => { props.onLanguage("en"); }}>EN</button>
           </div>
           <Button ref={appearanceButtonRef} type="button" variant="quiet" onClick={() => { props.onAppearanceOpen(true); }}>{t(props.language, "appearance")}</Button>
+          <Button ref={recoveryButtonRef} type="button" variant="quiet" disabled={!props.recoveryAvailable} onClick={() => { props.onRecoveryOpen(true); }}>{props.language === "en" ? "Backup & recovery" : "备份与恢复"}</Button>
           <Button ref={providerButtonRef} type="button" variant="quiet" onClick={() => { props.onProviderOpen(true); }}>{t(props.language, "provider_settings")}</Button>
           <Button ref={secondOpinionProviderButtonRef} type="button" variant="quiet" onClick={() => { props.onSecondOpinionProviderOpen(true); }}>{props.language === "en" ? "Second opinion" : "第二意见"}</Button>
         </div>
@@ -84,6 +92,7 @@ export function AppChrome(props: AppChromeProps) {
       <ProviderDialog open={props.providerOpen} language={props.language} status={props.provider} busy={props.busy} returnFocusRef={providerButtonRef} onClose={() => { props.onProviderOpen(false); }} onSave={props.onSaveProvider} onDeleteConfig={props.onDeleteProviderConfig} onDeleteSecret={props.onDeleteProviderSecret} onError={props.onError} />
       <ProviderDialog idPrefix="second-opinion-provider" title={props.language === "en" ? "Independent second-opinion Provider" : "独立第二意见 Provider"} description={props.language === "en" ? "This separate connection is used only after an appeal Manifest is shown and you explicitly confirm sending it. It cannot reuse the original judge runtime." : "这条独立连接只会在 Appeal Manifest 已展示且你明确确认后使用；它不能复用原主审运行时。"} open={props.secondOpinionProviderOpen} language={props.language} status={props.secondOpinionProvider} busy={props.busy} returnFocusRef={secondOpinionProviderButtonRef} onClose={() => { props.onSecondOpinionProviderOpen(false); }} onSave={props.onSaveSecondOpinionProvider} onDeleteConfig={props.onDeleteSecondOpinionProviderConfig} onDeleteSecret={props.onDeleteSecondOpinionProviderSecret} onTest={props.onTestSecondOpinionProvider} onError={props.onError} />
       <AppearanceDialog open={props.appearanceOpen} language={props.language} preferences={props.appearance} returnFocusRef={appearanceButtonRef} onClose={() => { props.onAppearanceOpen(false); }} onApply={props.onAppearance} />
+      <RecoveryDialog open={props.recoveryOpen} language={props.language} busy={props.busy} returnFocusRef={recoveryButtonRef} onClose={() => { props.onRecoveryOpen(false); }} onRestored={props.onRecoveryRestored} onNotice={props.onNotice} />
     </>
   );
 }

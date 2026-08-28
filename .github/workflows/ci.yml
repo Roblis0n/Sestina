@@ -1,4 +1,4 @@
-name: Sestina CI
+name: Sestina RI-53 CI
 
 on:
   push:
@@ -6,23 +6,49 @@ on:
   pull_request:
     branches: [main]
 
-jobs:
-  ci:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+permissions:
+  contents: read
 
+jobs:
+  shared-deterministic-gates:
+    name: Shared deterministic gates
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: pnpm/action-setup@v4
-
+        with:
+          version: 11.16.0
+          run_install: false
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: pnpm
-
       - run: pnpm install --frozen-lockfile
+      - run: pnpm verify:ri53:shared
 
-      - run: pnpm verify
+  platform-release-resilience:
+    name: Research Room lifecycle · ${{ matrix.os }}
+    needs: shared-deterministic-gates
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.16.0
+          run_install: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm verify:ri53
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sestina-research-room-${{ matrix.os }}-${{ github.sha }}
+          path: release/*
+          if-no-files-found: error
+          retention-days: 14

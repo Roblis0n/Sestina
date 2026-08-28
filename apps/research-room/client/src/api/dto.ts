@@ -16,6 +16,7 @@ export interface StatusDto {
   readonly localOnly: true;
   readonly telemetry: false;
   readonly projectOpen: boolean;
+  readonly recoveryRequired: boolean;
   readonly projectSetupRequired?: boolean;
   readonly project?: { readonly id: string; readonly title: string };
   readonly directoryPickerAvailable: boolean;
@@ -89,9 +90,89 @@ export interface ProjectOpenResultDto {
   readonly project: { readonly id: string; readonly title: string };
   readonly initialized: boolean;
   readonly setupRequired: boolean;
+  readonly recoveryRequired: boolean;
   readonly localOnly: true;
   readonly pathPersisted: false;
   readonly directoryScanPerformed: false;
+}
+
+export interface RecoveryBackupSummaryDto {
+  readonly backupId: string;
+  readonly kind: "manual" | "pre_restore" | "pre_upgrade";
+  readonly createdAt?: string;
+  readonly projectId?: string;
+  readonly databaseSchemaVersion?: number;
+  readonly databaseSizeBytes?: number;
+  readonly briefSizeBytes?: number;
+  readonly verification: "verified" | "failed";
+  readonly valid: boolean;
+}
+
+export interface ProjectRecoveryStatusDto {
+  readonly currentState: "healthy" | "recovery_required";
+  readonly databaseIntegrity: "ok" | "failed" | "missing";
+  readonly currentBriefBinding: "matched" | "mismatched" | "unavailable";
+  readonly schema: { readonly status: "recognized" | "too_old" | "too_new" | "migration_failed" | "unavailable"; readonly version?: number; readonly failedVersion?: number; readonly supportedVersion: number; readonly supportedMinimum: number };
+  readonly projectId?: string;
+  readonly restoreAvailable: boolean;
+  readonly backups: readonly RecoveryBackupSummaryDto[];
+  readonly networkUsed: false;
+}
+
+export interface ProjectStateBackupDto {
+  readonly backupId: string;
+  readonly kind: "manual" | "pre_restore" | "pre_upgrade";
+  readonly projectId: string;
+  readonly integrity: "ok";
+  readonly briefBinding: "matched";
+  readonly databaseHash: string;
+  readonly briefHash: string;
+  readonly bindingHash: string;
+  readonly databaseSchemaVersion: number;
+  readonly databaseSizeBytes: number;
+  readonly briefSizeBytes: number;
+  readonly networkUsed: false;
+}
+
+export interface PreparedProjectStateRestoreDto {
+  readonly backupId: string;
+  readonly kind: "manual" | "pre_restore" | "pre_upgrade";
+  readonly projectId: string;
+  readonly createdAt: string;
+  readonly databaseIntegrity: "ok";
+  readonly briefBinding: "matched";
+  readonly databaseSchemaVersion: number;
+  readonly databaseSizeBytes: number;
+  readonly briefSizeBytes: number;
+  readonly runtimeVersion: string;
+  readonly manifestHash: string;
+  readonly bindingHash: string;
+  readonly compatibility: "supported";
+  readonly currentStatePreservation: "complete_bundle_or_forensic_copy";
+  readonly confirmationRequired: true;
+  readonly confirmationNonce: string;
+  readonly stateBinding: string;
+  readonly expiresAt: string;
+  readonly currentState: Pick<ProjectRecoveryStatusDto, "currentState" | "databaseIntegrity" | "currentBriefBinding" | "schema" | "projectId">;
+  readonly networkUsed: false;
+}
+
+export interface ExecutedProjectStateRestoreDto {
+  readonly restored: true;
+  readonly backupId: string;
+  readonly projectId: string;
+  readonly preRestoreBackupId: string;
+  readonly forensicCopyPreserved: boolean;
+  readonly databaseIntegrity: "ok";
+  readonly briefBinding: "matched";
+  readonly sourceManifestHash: string;
+  readonly sourceBindingHash: string;
+  readonly rollback: { readonly performed: false; readonly currentStatePreserved: true };
+  readonly networkUsed: false;
+  readonly confirmationConsumed: true;
+  readonly postRestoreStateBinding: string;
+  readonly reopened: true;
+  readonly project: { readonly id: string; readonly title: string };
 }
 
 export interface SelectedDirectoryDto extends Partial<ProjectOpenResultDto> {

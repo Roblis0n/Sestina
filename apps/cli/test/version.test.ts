@@ -28,7 +28,7 @@ describe("sestina release version output", () => {
     const cwd = await mkdtemp(join(tmpdir(), "sestina-version-human-")); roots.push(cwd);
     const output = capture(cwd);
     expect(await runCli(["--version"], output.io)).toBe(0);
-    expect(output.stdout.join("")).toBe(`@sestina/cli 0.1.0 (${getReleaseIdentity().releaseBuildId})\n`);
+    expect(output.stdout.join("")).toBe(`@sestina/cli 0.2.0-rc.1 (${getReleaseIdentity().releaseBuildId})\n`);
     expect(output.stdout.join("")).not.toContain(cwd);
     expect(output.stderr).toEqual([]);
 

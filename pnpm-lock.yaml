@@ -76,6 +76,9 @@ importers:
         specifier: ^19.2.8
         version: 19.2.8(react@19.2.8)
     devDependencies:
+      '@sestina/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
       '@types/react':
         specifier: ^19.2.18
         version: 19.2.18

@@ -1,16 +1,14 @@
-name: Private preview release artifacts
+name: Sestina Research Room private release-candidate verification
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - "v*"
 
 permissions:
   contents: read
 
 jobs:
-  build-release-artifact:
+  shared-deterministic-gates:
+    name: Shared deterministic gates
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,30 +21,11 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Run RI-42 focused gates
-        run: >-
-          pnpm exec vitest run
-          packages/schema/test/release-contract.test.ts
-          packages/core/test/release-identity.test.ts
-          packages/core/test/recovery.test.ts
-          packages/storage/test/backup.test.ts
-          apps/cli/test/version.test.ts
-          apps/cli/test/runtime-locator-release.test.ts
-          tests/repository/release-archive.test.ts
-          tests/repository/release-verifier-negative.test.ts
-          tests/repository/release-artifact-contract.test.ts
-          --maxWorkers=1 --no-file-parallelism
-      - run: pnpm release:build
-      - run: pnpm release:verify
-      - uses: actions/upload-artifact@v4
-        with:
-          name: sestina-private-preview-${{ github.sha }}
-          path: release/*
-          if-no-files-found: error
-          retention-days: 14
+      - run: pnpm verify:ri53:shared
 
-  fresh-install:
-    needs: build-release-artifact
+  platform-release-resilience:
+    name: Research Room lifecycle · ${{ matrix.os }}
+    needs: shared-deterministic-gates
     strategy:
       fail-fast: false
       matrix:
@@ -54,43 +33,19 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.16.0
+          run_install: false
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-      - uses: actions/download-artifact@v4
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm verify:ri53
+      - uses: actions/upload-artifact@v4
         with:
-          name: sestina-private-preview-${{ github.sha }}
-          path: release
-      - run: node scripts/verify-release-artifact.mjs release
-      - run: node scripts/run-fresh-install.mjs --release-dir release
-
-  draft-private-release:
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: [build-release-artifact, fresh-install]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - uses: actions/download-artifact@v4
-        with:
-          name: sestina-private-preview-${{ github.sha }}
-          path: release
-      - run: node scripts/verify-release-artifact.mjs release
-      - run: node scripts/verify-release-tag.mjs "$GITHUB_REF_NAME" release
-      - name: Create draft release from the verified tag artifacts
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: >-
-          gh release create "$GITHUB_REF_NAME"
-          release/sestina-cli-*.tgz
-          release/sestina-*.tar.gz
-          release/sestina-*.zip
-          release/release-manifest.json
-          release/SHA256SUMS
-          --draft --verify-tag
-          --title "Sestina ${GITHUB_REF_NAME} private preview"
-          --notes "Offline private-preview artifacts. Verify SHA256SUMS before installation. No npm publication is performed."
+          name: sestina-research-room-${{ matrix.os }}-${{ github.sha }}
+          path: release/*
+          if-no-files-found: error
+          retention-days: 14

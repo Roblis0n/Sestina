@@ -50,6 +50,7 @@ describe("Research Room typed API boundary", () => {
           localOnly: true,
           telemetry: false,
           projectOpen: false,
+          recoveryRequired: false,
           directoryPickerAvailable: true,
           languagePreference: "zh-CN",
           sessionToken: "a".repeat(64),

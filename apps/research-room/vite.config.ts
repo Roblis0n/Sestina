@@ -9,7 +9,7 @@ export default defineConfig({
     outDir: resolve(import.meta.dirname, "dist/client"),
     emptyOutDir: true,
     assetsDir: "assets",
-    sourcemap: true,
+    sourcemap: false,
     rollupOptions: {
       output: {
         entryFileNames: "assets/app-[hash].js",

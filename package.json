@@ -45,6 +45,8 @@
     "release:build": "node scripts/build-release.mjs",
     "release:verify": "node scripts/verify-release-artifact.mjs",
     "release:fresh-install": "node scripts/run-fresh-install.mjs",
+    "verify:ri53:shared": "node scripts/run-ri53-shared-gates.mjs",
+    "verify:ri53": "node scripts/run-ri53-platform-gates.mjs",
     "pilot:build": "pnpm --filter @sestina/pilot build",
     "pilot:kit:build": "pnpm --filter @sestina/pilot build && node scripts/build-pilot-kit.mjs",
     "pilot:kit:verify": "pnpm --filter @sestina/pilot build && node scripts/verify-pilot-kit.mjs pilot-dist/sestina-pilot-kit",

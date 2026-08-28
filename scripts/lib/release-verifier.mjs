@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
-import { execFileSync } from "node:child_process";
-import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
-import { extractTarGzip, inspectTarGzip, inspectZip } from "./archive.mjs";
+import { readFile, readdir, stat } from "node:fs/promises";
+import { join } from "node:path";
+import { SESTINA_RELEASE_IDENTITY } from "../../packages/schema/src/release-contract.mjs";
+import { inspectTarGzip, inspectZip } from "./archive.mjs";
 
+const TEXT_EXTENSIONS = new Set(["", ".css", ".html", ".js", ".json", ".md", ".mjs", ".txt"]);
 const FORBIDDEN_CONTENT = Object.freeze([
   /SESTINA_SYNTHETIC_SECRET_DO_NOT_SHIP/u,
   /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/u,
@@ -13,18 +13,31 @@ const FORBIDDEN_CONTENT = Object.freeze([
   /[A-Za-z]:\\Users\\/u,
   /D:\\Codex work/u,
 ]);
-const FORBIDDEN_PATH = /(?:^|\/)(?:\.sestina(?:\/|$)|\.env(?:\.|$)|credentials?(?:\.|$)|secrets?(?:\.|$)|[^/]+\.(?:db|sqlite3?|log|pem|key|p12))$/iu;
+const FORBIDDEN_SEGMENTS = new Set([".git", ".sestina", "src", "test", "tests", "fixtures"]);
 
-function exactKeys(value, expected, label) {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error(`${label}_must_be_object`);
-  const actual = Object.keys(value).sort(); const wanted = [...expected].sort();
-  if (JSON.stringify(actual) !== JSON.stringify(wanted)) throw new Error(`${label}_keys_invalid:${actual.join(",")}`);
+function invariant(condition, message) {
+  if (!condition) throw new Error(message);
 }
 
-function sha256(buffer) { return createHash("sha256").update(buffer).digest("hex"); }
+function exactKeys(value, expected, label) {
+  invariant(typeof value === "object" && value !== null && !Array.isArray(value), `${label}_must_be_object`);
+  const actual = Object.keys(value).sort();
+  const wanted = [...expected].sort();
+  invariant(JSON.stringify(actual) === JSON.stringify(wanted), `${label}_keys_invalid:${actual.join(",")}`);
+}
+
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
 
 function positiveInteger(value, label) {
-  if (!Number.isSafeInteger(value) || value < 1) throw new Error(`${label}_invalid`);
+  invariant(Number.isSafeInteger(value) && value >= 1, `${label}_invalid`);
+}
+
+function sortedUniqueStrings(values, label) {
+  invariant(Array.isArray(values) && values.length > 0 && values.every((value) => typeof value === "string" && value.length > 0), `${label}_invalid`);
+  const sorted = [...values].sort((left, right) => Buffer.from(left).compare(Buffer.from(right)));
+  invariant(JSON.stringify(values) === JSON.stringify(sorted) && new Set(values).size === values.length, `${label}_not_unique_sorted`);
 }
 
 function safeArtifactName(value) {
@@ -33,121 +46,195 @@ function safeArtifactName(value) {
 
 function validateIdentity(identity) {
   exactKeys(identity, [
-    "schemaVersion", "package", "version", "nodeRange", "runtimeVersion", "reportSchemaVersion",
-    "capsuleResponseSchemaVersion", "mcpServerVersion", "mcpResearchContextSchemaVersion",
-    "checkerBuildContract", "databaseSchemaVersion", "migrationManifestVersion", "migrationCount", "releaseBuildId",
+    "schemaVersion", "product", "productId", "package", "cliPackage", "primaryInterface", "businessKernel",
+    "releaseChannel", "version", "nodeRange", "runtimeVersion", "reportSchemaVersion", "capsuleResponseSchemaVersion",
+    "mcpServerVersion", "mcpResearchContextSchemaVersion", "checkerBuildContract", "supportedSchemaMinimum",
+    "futureSchemaPolicy", "downgradeSupported", "databaseSchemaVersion", "migrationManifestVersion", "migrationCount",
+    "migrationManifestHash", "releaseBuildId",
   ], "release_identity");
-  for (const key of ["schemaVersion", "package", "version", "nodeRange", "runtimeVersion", "reportSchemaVersion", "capsuleResponseSchemaVersion", "mcpServerVersion", "mcpResearchContextSchemaVersion", "checkerBuildContract", "migrationManifestVersion"]) {
-    if (typeof identity[key] !== "string" || identity[key].length === 0) throw new Error(`release_identity_${key}_invalid`);
-  }
-  positiveInteger(identity.databaseSchemaVersion, "database_schema_version"); positiveInteger(identity.migrationCount, "migration_count");
-  if (!/^[a-f0-9]{64}$/u.test(identity.releaseBuildId)) throw new Error("release_build_id_invalid");
-  if (identity.package !== "@sestina/cli" || identity.nodeRange !== ">=24 <25") throw new Error("release_identity_package_or_node_invalid");
-  if (identity.version !== identity.runtimeVersion || identity.version !== identity.mcpServerVersion) throw new Error("release_runtime_version_drift");
+  invariant(JSON.stringify(identity) === JSON.stringify(SESTINA_RELEASE_IDENTITY), "release_identity_not_canonical");
+  positiveInteger(identity.databaseSchemaVersion, "database_schema_version");
+  positiveInteger(identity.migrationCount, "migration_count");
+  invariant(/^[a-f0-9]{64}$/u.test(identity.migrationManifestHash), "migration_manifest_hash_invalid");
+  invariant(/^[a-f0-9]{64}$/u.test(identity.releaseBuildId), "release_build_id_invalid");
 }
 
 export function validateReleaseManifest(manifest) {
-  exactKeys(manifest, ["schemaVersion", "identity", "source", "contents", "security", "artifacts"], "release_manifest");
-  if (manifest.schemaVersion !== "1.0.0") throw new Error("release_manifest_version_invalid");
+  exactKeys(manifest, ["schemaVersion", "identity", "platform", "source", "compatibility", "contents", "security", "artifacts"], "release_manifest");
+  invariant(manifest.schemaVersion === "2.0.0", "release_manifest_version_invalid");
   validateIdentity(manifest.identity);
+
+  exactKeys(manifest.platform, ["os", "architecture", "nativeSecretBackend"], "release_platform");
+  invariant(["win32", "darwin", "linux"].includes(manifest.platform.os), "release_platform_os_invalid");
+  invariant(["x64", "arm64"].includes(manifest.platform.architecture), "release_platform_architecture_invalid");
+  const backend = manifest.platform.os === "win32" ? "windows-dpapi-current-user"
+    : manifest.platform.os === "darwin" ? "macos-keychain-current-user" : "linux-secret-service-current-user";
+  invariant(manifest.platform.nativeSecretBackend === backend, "release_native_secret_backend_invalid");
+
   exactKeys(manifest.source, ["gitCommit"], "release_source");
-  if (!/^[a-f0-9]{40}$/u.test(manifest.source.gitCommit)) throw new Error("release_source_commit_invalid");
-  exactKeys(manifest.contents, ["npmPackagePaths", "releaseBundlePaths"], "release_contents");
-  for (const key of ["npmPackagePaths", "releaseBundlePaths"]) {
-    const paths = manifest.contents[key];
-    if (!Array.isArray(paths) || paths.length === 0 || paths.some((path) => typeof path !== "string")) throw new Error(`release_${key}_invalid`);
-    const sorted = [...paths].sort(); if (JSON.stringify(paths) !== JSON.stringify(sorted) || new Set(paths).size !== paths.length) throw new Error(`release_${key}_not_unique_sorted`);
-  }
-  exactKeys(manifest.security, ["localOnly", "offlineCapable", "telemetry", "crashUpload", "backgroundLogging", "networkUpload", "postinstall", "containsResearchData", "containsCredentials", "uninstallDeletesProjectData", "npmPublished"], "release_security");
-  const expectedSecurity = { localOnly: true, offlineCapable: true, telemetry: false, crashUpload: false, backgroundLogging: false, networkUpload: false, postinstall: false, containsResearchData: false, containsCredentials: false, uninstallDeletesProjectData: false, npmPublished: false };
-  if (JSON.stringify(manifest.security) !== JSON.stringify(expectedSecurity)) throw new Error("release_security_contract_invalid");
-  if (!Array.isArray(manifest.artifacts) || manifest.artifacts.length !== 3) throw new Error("release_artifacts_invalid");
-  const files = new Set();
+  invariant(/^[a-f0-9]{40}$/u.test(manifest.source.gitCommit), "release_source_commit_invalid");
+  exactKeys(manifest.compatibility, ["nodeRange", "supportedSchemaMinimum", "supportedSchemaMaximum", "futureSchemaPolicy", "downgradeSupported"], "release_compatibility");
+  invariant(manifest.compatibility.nodeRange === manifest.identity.nodeRange
+    && manifest.compatibility.supportedSchemaMinimum === manifest.identity.supportedSchemaMinimum
+    && manifest.compatibility.supportedSchemaMaximum === manifest.identity.databaseSchemaVersion
+    && manifest.compatibility.futureSchemaPolicy === "fail_closed"
+    && manifest.compatibility.downgradeSupported === false, "release_compatibility_invalid");
+
+  exactKeys(manifest.contents, ["releaseBundleRoot", "releaseBundlePaths", "executablePaths"], "release_contents");
+  const expectedRoot = `sestina-research-room-${manifest.identity.version}-${manifest.platform.os}-${manifest.platform.architecture}`;
+  invariant(manifest.contents.releaseBundleRoot === expectedRoot, "release_bundle_root_invalid");
+  sortedUniqueStrings(manifest.contents.releaseBundlePaths, "release_bundle_paths");
+  sortedUniqueStrings(manifest.contents.executablePaths, "release_executable_paths");
+  invariant(manifest.contents.releaseBundlePaths.every((path) => path.startsWith(`${expectedRoot}/`)), "release_bundle_path_outside_root");
+  invariant(JSON.stringify(manifest.contents.executablePaths) === JSON.stringify([
+    `${expectedRoot}/app/main.js`, `${expectedRoot}/app/mcp/main.js`, `${expectedRoot}/start.mjs`,
+  ].sort((left, right) => left.localeCompare(right, "en"))), "release_executable_paths_invalid");
+
+  exactKeys(manifest.security, [
+    "bindAddress", "localOnly", "offlineCapable", "telemetry", "crashUpload", "backgroundLogging", "networkUpload",
+    "updateCheck", "postinstall", "containsSourceMaps", "containsResearchData", "containsCredentials",
+    "uninstallDeletesProjectData", "npmPublished",
+  ], "release_security");
+  const expectedSecurity = {
+    bindAddress: "127.0.0.1", localOnly: true, offlineCapable: true, telemetry: false, crashUpload: false,
+    backgroundLogging: false, networkUpload: false, updateCheck: false, postinstall: false, containsSourceMaps: false,
+    containsResearchData: false, containsCredentials: false, uninstallDeletesProjectData: false, npmPublished: false,
+  };
+  invariant(JSON.stringify(manifest.security) === JSON.stringify(expectedSecurity), "release_security_contract_invalid");
+
+  invariant(Array.isArray(manifest.artifacts) && manifest.artifacts.length === 2, "release_artifacts_invalid");
+  const expectedArtifacts = new Map([
+    [`${expectedRoot}.tar.gz`, "platform-tar-gzip"],
+    [`${expectedRoot}.zip`, "platform-zip"],
+  ]);
   for (const artifact of manifest.artifacts) {
     exactKeys(artifact, ["file", "kind", "sha256", "size"], "release_artifact");
-    if (!safeArtifactName(artifact.file) || files.has(artifact.file)) throw new Error("release_artifact_name_invalid");
-    if (!["npm-tarball", "portable-tar-gzip", "portable-zip"].includes(artifact.kind)) throw new Error("release_artifact_kind_invalid");
-    if (!/^[a-f0-9]{64}$/u.test(artifact.sha256)) throw new Error("release_artifact_hash_invalid");
-    positiveInteger(artifact.size, "release_artifact_size"); files.add(artifact.file);
+    invariant(safeArtifactName(artifact.file) && expectedArtifacts.get(artifact.file) === artifact.kind, "release_artifact_name_or_kind_invalid");
+    invariant(/^[a-f0-9]{64}$/u.test(artifact.sha256), "release_artifact_hash_invalid");
+    positiveInteger(artifact.size, "release_artifact_size");
+    expectedArtifacts.delete(artifact.file);
   }
-  const version = manifest.identity.version;
-  const expectedNames = [`sestina-${version}.tar.gz`, `sestina-${version}.zip`, `sestina-cli-${version}.tgz`].sort();
-  if (JSON.stringify([...files].sort()) !== JSON.stringify(expectedNames)) throw new Error("release_artifact_version_drift");
+  invariant(expectedArtifacts.size === 0, "release_artifact_missing");
+}
+
+function extension(path) {
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  const dot = name.lastIndexOf(".");
+  return dot === -1 ? "" : name.slice(dot).toLocaleLowerCase("en-US");
 }
 
 export function scanReleaseEntries(entries) {
   for (const entry of entries) {
-    if (entry.path.split("/").includes(".sestina") || FORBIDDEN_PATH.test(entry.path)) throw new Error(`forbidden_release_path:${entry.path}`);
-    const content = entry.data.toString("utf8");
-    if (FORBIDDEN_CONTENT.some((pattern) => pattern.test(content))) throw new Error(`forbidden_release_content:${entry.path}`);
+    const normalized = entry.path.replaceAll("\\", "/");
+    const segments = normalized.split("/");
+    invariant(!segments.some((segment) => FORBIDDEN_SEGMENTS.has(segment.toLocaleLowerCase("en-US"))), `forbidden_release_path:${normalized}`);
+    invariant(!/\.(?:db|sqlite3?|log|pem|key|p12|map)$/iu.test(normalized), `forbidden_release_path:${normalized}`);
+    invariant(!/(?:^|\/)\.env(?:\.|$)/iu.test(normalized), `forbidden_release_path:${normalized}`);
+    invariant(!/(?:^|\/)(?:credentials?|secrets?)(?:\.|$)/iu.test(normalized), `forbidden_release_path:${normalized}`);
+    if (TEXT_EXTENSIONS.has(extension(normalized))) {
+      const text = entry.data.toString("utf8");
+      for (const pattern of FORBIDDEN_CONTENT) invariant(!pattern.test(text), `forbidden_release_content:${normalized}`);
+    }
   }
 }
 
-function entryMap(entries) { return new Map(entries.map((entry) => [entry.path, entry])); }
-
-function expectPaths(entries, expected, label) {
-  const paths = entries.map((entry) => entry.path).sort();
-  if (JSON.stringify(paths) !== JSON.stringify(expected)) throw new Error(`${label}_allowlist_mismatch`);
+function entryMap(entries) {
+  return new Map(entries.map((entry) => [entry.path, entry]));
 }
 
-export function verifyNpmPackageEntries(entries, manifest) {
-  expectPaths(entries, manifest.contents.npmPackagePaths, "npm_package"); scanReleaseEntries(entries);
-  if (entries.some((entry) => /\.(?:ts|tsx|map)$/iu.test(entry.path) || entry.path.includes("/src/") || entry.path.includes("node_modules"))) throw new Error("npm_package_contains_development_files");
-  const byPath = entryMap(entries); const packageEntry = byPath.get("package/package.json");
-  if (!packageEntry) throw new Error("npm_package_manifest_missing");
-  const packageJson = JSON.parse(packageEntry.data.toString("utf8"));
-  exactKeys(packageJson, ["name", "version", "private", "description", "license", "type", "bin", "main", "exports", "engines", "files"], "npm_package_manifest");
-  if (packageJson.name !== manifest.identity.package || packageJson.version !== manifest.identity.version || packageJson.private !== true || packageJson.type !== "module" || packageJson.license !== "UNLICENSED") throw new Error("npm_package_identity_invalid");
-  if (packageJson.main !== "./dist/cli.js" || packageJson.bin?.sestina !== "./dist/main.js" || packageJson.engines?.node !== manifest.identity.nodeRange) throw new Error("npm_package_runtime_paths_invalid");
-  const serialized = JSON.stringify(packageJson); if (serialized.includes("workspace:") || serialized.includes("postinstall")) throw new Error("npm_package_workspace_or_install_script");
-  for (const required of ["package/dist/main.js", "package/dist/cli.js", "package/dist/mcp/main.js", "package/dist/mcp/runtime.js", "package/dist/mcp/index.js"]) if (!byPath.has(required)) throw new Error(`npm_package_runtime_missing:${required}`);
+function assertRequiredPath(paths, path, label = "release_bundle_runtime_missing") {
+  invariant(paths.has(path), `${label}:${path}`);
 }
 
-function compareBundles(left, right) {
-  const a = entryMap(left); const b = entryMap(right);
-  if (a.size !== b.size) throw new Error("portable_bundle_count_mismatch");
-  for (const [path, entry] of a) {
-    const other = b.get(path); if (!other || entry.mode !== other.mode || !entry.data.equals(other.data)) throw new Error(`portable_bundle_content_mismatch:${path}`);
+export function verifyReleaseBundleEntries(entries, manifest) {
+  const expectedPaths = manifest.contents.releaseBundlePaths;
+  invariant(JSON.stringify(entries.map((entry) => entry.path)) === JSON.stringify(expectedPaths), "release_bundle_paths_mismatch");
+  scanReleaseEntries(entries);
+  const files = entryMap(entries);
+  const root = manifest.contents.releaseBundleRoot;
+  for (const path of [
+    `${root}/package.json`, `${root}/start.mjs`, `${root}/RELEASE-IDENTITY.json`, `${root}/README.md`,
+    `${root}/docs/INSTALL-WINDOWS.md`, `${root}/docs/INSTALL-MACOS.md`, `${root}/docs/INSTALL-LINUX.md`,
+    `${root}/docs/RECOVERY-AND-UPGRADE.md`, `${root}/docs/SECURITY.md`,
+    `${root}/app/main.js`, `${root}/app/server.js`, `${root}/app/mcp/main.js`, `${root}/app/mcp/runtime.js`, `${root}/app/client/index.html`,
+  ]) assertRequiredPath(files, path);
+  invariant([...files.keys()].some((path) => path.startsWith(`${root}/app/client/assets/`) && path.endsWith(".js")), "release_client_javascript_missing");
+  invariant([...files.keys()].some((path) => path.startsWith(`${root}/app/client/assets/`) && path.endsWith(".css")), "release_client_styles_missing");
+
+  const packageJson = JSON.parse(files.get(`${root}/package.json`).data.toString("utf8"));
+  exactKeys(packageJson, ["name", "version", "private", "description", "license", "type", "engines", "scripts"], "release_package_manifest");
+  invariant(packageJson.name === manifest.identity.package && packageJson.version === manifest.identity.version
+    && packageJson.private === true && packageJson.license === "UNLICENSED" && packageJson.type === "module"
+    && JSON.stringify(packageJson.engines) === JSON.stringify({ node: manifest.identity.nodeRange })
+    && JSON.stringify(packageJson.scripts) === JSON.stringify({ start: "node start.mjs" }), "release_package_identity_invalid");
+  const releaseIdentity = JSON.parse(files.get(`${root}/RELEASE-IDENTITY.json`).data.toString("utf8"));
+  invariant(JSON.stringify(releaseIdentity) === JSON.stringify({
+    ...manifest.identity,
+    platform: manifest.platform.os,
+    architecture: manifest.platform.architecture,
+    nativeSecretBackend: manifest.platform.nativeSecretBackend,
+  }), "release_embedded_identity_invalid");
+
+  for (const path of manifest.contents.executablePaths) invariant(files.get(path)?.mode === 0o755, `release_executable_mode_invalid:${path}`);
+  if (manifest.platform.os === "win32") {
+    assertRequiredPath(files, `${root}/node_modules/@primno/dpapi/package.json`, "release_dpapi_runtime_missing");
+    assertRequiredPath(files, `${root}/node_modules/@primno/dpapi/prebuilds/win32-${manifest.platform.architecture}/@primno+dpapi.node`, "release_dpapi_runtime_missing");
+    assertRequiredPath(files, `${root}/node_modules/node-gyp-build/node-gyp-build.js`, "release_dpapi_runtime_missing");
+  } else {
+    const nativePackage = manifest.platform.os === "darwin"
+      ? `keyring-darwin-${manifest.platform.architecture}`
+      : `keyring-linux-${manifest.platform.architecture}-gnu`;
+    assertRequiredPath(files, `${root}/node_modules/@napi-rs/keyring/package.json`, "release_keyring_runtime_missing");
+    invariant([...files.keys()].some((path) => path.startsWith(`${root}/node_modules/@napi-rs/${nativePackage}/`) && path.endsWith(".node")), "release_keyring_native_binary_missing");
   }
 }
 
 export function parseChecksums(content) {
+  const lines = content.split(/\r?\n/u).filter(Boolean);
+  invariant(lines.length > 0, "sha256sums_empty");
   const result = new Map();
-  for (const line of content.trimEnd().split("\n")) {
+  for (const line of lines) {
     const match = /^([a-f0-9]{64})  ([a-z0-9][a-z0-9.-]+)$/u.exec(line);
-    if (!match || result.has(match[2])) throw new Error("sha256sums_format_invalid"); result.set(match[2], match[1]);
+    invariant(match !== null && !result.has(match[2]), "sha256sums_format_invalid");
+    result.set(match[2], match[1]);
   }
   return result;
 }
 
+function sameEntries(left, right) {
+  invariant(left.length === right.length, "release_archive_entry_count_drift");
+  for (let index = 0; index < left.length; index += 1) {
+    invariant(left[index].path === right[index].path && left[index].mode === right[index].mode
+      && left[index].data.equals(right[index].data), `release_archive_content_drift:${left[index]?.path ?? index}`);
+  }
+}
+
 export async function verifyReleaseDirectory(releaseDirectory) {
   const manifestBytes = await readFile(join(releaseDirectory, "release-manifest.json"));
-  const manifest = JSON.parse(manifestBytes.toString("utf8")); validateReleaseManifest(manifest);
-  const expectedTop = [...manifest.artifacts.map((artifact) => artifact.file), "SHA256SUMS", "release-manifest.json"].sort();
-  const actualTop = (await readdir(releaseDirectory, { withFileTypes: true }));
-  if (actualTop.some((entry) => !entry.isFile()) || JSON.stringify(actualTop.map((entry) => entry.name).sort()) !== JSON.stringify(expectedTop)) throw new Error("release_directory_allowlist_mismatch");
+  const manifest = JSON.parse(manifestBytes.toString("utf8"));
+  validateReleaseManifest(manifest);
+  const actualTopLevel = (await readdir(releaseDirectory, { withFileTypes: true }))
+    .filter((entry) => entry.isFile())
+    .map((entry) => entry.name)
+    .sort((left, right) => left.localeCompare(right, "en"));
+  const expectedTopLevel = ["SHA256SUMS", "release-manifest.json", ...manifest.artifacts.map((artifact) => artifact.file)]
+    .sort((left, right) => left.localeCompare(right, "en"));
+  invariant(JSON.stringify(actualTopLevel) === JSON.stringify(expectedTopLevel), "release_directory_files_invalid");
   const checksums = parseChecksums(await readFile(join(releaseDirectory, "SHA256SUMS"), "utf8"));
-  const checksumNames = [...manifest.artifacts.map((artifact) => artifact.file), "release-manifest.json"].sort();
-  if (JSON.stringify([...checksums.keys()].sort()) !== JSON.stringify(checksumNames)) throw new Error("sha256sums_allowlist_mismatch");
-  if (checksums.get("release-manifest.json") !== sha256(manifestBytes)) throw new Error("release_manifest_checksum_mismatch");
+  invariant(checksums.size === manifest.artifacts.length + 1, "sha256sums_file_count_invalid");
+  invariant(checksums.get("release-manifest.json") === sha256(manifestBytes), "release_manifest_checksum_mismatch");
   for (const artifact of manifest.artifacts) {
-    const bytes = await readFile(join(releaseDirectory, artifact.file)); const metadata = await stat(join(releaseDirectory, artifact.file));
-    if (metadata.size !== artifact.size || sha256(bytes) !== artifact.sha256 || checksums.get(artifact.file) !== artifact.sha256) throw new Error(`release_artifact_checksum_mismatch:${artifact.file}`);
+    const path = join(releaseDirectory, artifact.file);
+    const bytes = await readFile(path);
+    invariant((await stat(path)).isFile() && bytes.length === artifact.size, `release_artifact_size_mismatch:${artifact.file}`);
+    invariant(sha256(bytes) === artifact.sha256 && checksums.get(artifact.file) === artifact.sha256, `release_artifact_checksum_mismatch:${artifact.file}`);
   }
-  const version = manifest.identity.version; const npmPath = join(releaseDirectory, `sestina-cli-${version}.tgz`);
-  const npmEntries = await inspectTarGzip(npmPath); verifyNpmPackageEntries(npmEntries, manifest);
-  const tarEntries = await inspectTarGzip(join(releaseDirectory, `sestina-${version}.tar.gz`));
-  const zipEntries = await inspectZip(join(releaseDirectory, `sestina-${version}.zip`));
-  expectPaths(tarEntries, manifest.contents.releaseBundlePaths, "portable_tar"); expectPaths(zipEntries, manifest.contents.releaseBundlePaths, "portable_zip");
-  scanReleaseEntries(tarEntries); scanReleaseEntries(zipEntries); compareBundles(tarEntries, zipEntries);
-  const bundleNpmPath = `sestina-${version}/sestina-cli-${version}.tgz`; const embedded = entryMap(tarEntries).get(bundleNpmPath);
-  if (!embedded || sha256(embedded.data) !== manifest.artifacts.find((item) => item.kind === "npm-tarball")?.sha256) throw new Error("portable_bundle_npm_tarball_mismatch");
-  const temporary = await mkdtemp(join(tmpdir(), "sestina-release-verify-"));
-  try {
-    await extractTarGzip(npmPath, temporary);
-    const output = execFileSync(process.execPath, [join(temporary, "package", "dist", "main.js"), "--version", "--json"], { encoding: "utf8", windowsHide: true, env: { PATH: process.env.PATH ?? "", SystemRoot: process.env.SystemRoot ?? "" } });
-    const reported = JSON.parse(output.trim());
-    if (JSON.stringify(reported) !== JSON.stringify({ ok: true, command: "version", ...manifest.identity })) throw new Error("installed_version_identity_mismatch");
-  } finally { await rm(temporary, { recursive: true, force: true }); }
-  return Object.freeze({ manifest, verifiedFiles: Object.freeze(expectedTop) });
+  const tar = manifest.artifacts.find((artifact) => artifact.kind === "platform-tar-gzip");
+  const zip = manifest.artifacts.find((artifact) => artifact.kind === "platform-zip");
+  const tarEntries = await inspectTarGzip(join(releaseDirectory, tar.file));
+  const zipEntries = await inspectZip(join(releaseDirectory, zip.file));
+  verifyReleaseBundleEntries(tarEntries, manifest);
+  verifyReleaseBundleEntries(zipEntries, manifest);
+  sameEntries(tarEntries, zipEntries);
+  return Object.freeze({ manifest, verifiedFiles: Object.freeze(expectedTopLevel) });
 }

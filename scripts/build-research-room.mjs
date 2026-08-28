@@ -46,7 +46,7 @@ await build({
   // JavaScript shims makes esbuild traverse platform-specific `.node` files
   // and either fail the build or produce a non-portable artifact.
   external: ["@napi-rs/keyring", "@napi-rs/keyring/*", "@primno/dpapi", "@primno/dpapi/*"],
-  sourcemap: true,
+  sourcemap: false,
   banner: { js: "#!/usr/bin/env node" },
 });
 await mkdir(resolve(outdir, "mcp"), { recursive: true });

@@ -11,5 +11,5 @@ export interface VerifiedRelease {
 export function validateReleaseManifest(manifest: unknown): void;
 export function scanReleaseEntries(entries: readonly Pick<ArchiveEntry, "path" | "data">[]): void;
 export function parseChecksums(content: string): Map<string, string>;
-export function verifyNpmPackageEntries(entries: readonly ArchiveEntry[], manifest: unknown): void;
+export function verifyReleaseBundleEntries(entries: readonly ArchiveEntry[], manifest: unknown): void;
 export function verifyReleaseDirectory(releaseDirectory: string): Promise<VerifiedRelease>;

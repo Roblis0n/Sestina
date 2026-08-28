@@ -1,4 +1,5 @@
 export { openSestina, SestinaCore } from "./sestina-core.js";
+export { RandomIdFactory, SystemClock } from "./id-factory.js";
 export type { BriefProjectionPublication, BriefProjectionPublisher, CoreBriefMutation, CoreBriefState, CoreDatabaseDiagnostics, CoreReviewSummary, DeterministicReviewResult, EpisodeIntegritySummary, OpenSestinaOptions } from "./sestina-core.js";
 export type {
   AnalyzedResearchRoomReview,
@@ -75,10 +76,12 @@ export { getPrivacyManifest } from "./privacy.js";
 export type { PrivacyDataFlow, PrivacyManifest } from "./privacy.js";
 export { getReleaseIdentity, RELEASE_IDENTITY } from "./release-identity.js";
 export type { ReleaseIdentity } from "@sestina/schema";
-export { createProjectStateBackup, inspectProjectRecovery, previewProjectStateRestore, restoreProjectState } from "./recovery.js";
+export { createPreUpgradeProjectStateBackup, createProjectStateBackup, inspectProjectRecovery, previewProjectStateRestore, ProjectRecoveryConfirmationService, restoreProjectState } from "./recovery.js";
 export type {
-  PreviewProjectStateRestoreOptions, ProjectRecoveryOptions, ProjectRecoveryStatus, ProjectStateBackupResult,
-  ProjectStateRestorePreview, ProjectStateRestoreResult, RecoveryBackupSummary, RecoveryFaultInjection, RestoreProjectStateOptions,
+  ExecuteProjectStateRestoreInput, ExecutedProjectStateRestore, PrepareProjectStateRestoreInput, PreparedProjectStateRestore,
+  PreviewProjectStateRestoreOptions, ProjectRecoveryConfirmationServiceOptions, ProjectRecoveryOptions, ProjectRecoveryStatus,
+  ProjectStateBackupResult, ProjectStateRestorePreview, ProjectStateRestoreResult, RecoveryBackupSummary,
+  RecoveryFaultInjection, RestoreProjectStateOptions,
 } from "./recovery.js";
 export type * from "./commands/index.js";
 export type * from "./queries/index.js";

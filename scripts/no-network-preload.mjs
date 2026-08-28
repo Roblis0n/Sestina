@@ -31,7 +31,18 @@ https.request = blocked("https.request");
 https.get = blocked("https.get");
 http2.connect = blocked("http2.connect");
 dgram.createSocket = blocked("dgram.createSocket");
-for (const name of ["lookup", "resolve", "resolve4", "resolve6", "resolveAny", "resolveCaa", "resolveCname", "resolveMx", "resolveNaptr", "resolveNs", "resolvePtr", "resolveSoa", "resolveSrv", "resolveTxt", "reverse"]) {
+const originalLookup = dns.lookup.bind(dns);
+const originalPromiseLookup = dns.promises.lookup.bind(dns.promises);
+const loopbackName = (value) => value === "127.0.0.1" || value === "::1" || value === "localhost";
+dns.lookup = function sestinaLoopbackOnlyLookup(hostname, ...args) {
+  if (loopbackName(hostname)) return originalLookup(hostname, ...args);
+  return blocked("dns.lookup")();
+};
+dns.promises.lookup = function sestinaLoopbackOnlyPromiseLookup(hostname, ...args) {
+  if (loopbackName(hostname)) return originalPromiseLookup(hostname, ...args);
+  return blocked("dns.promises.lookup")();
+};
+for (const name of ["resolve", "resolve4", "resolve6", "resolveAny", "resolveCaa", "resolveCname", "resolveMx", "resolveNaptr", "resolveNs", "resolvePtr", "resolveSoa", "resolveSrv", "resolveTxt", "reverse"]) {
   if (typeof dns[name] === "function") dns[name] = blocked(`dns.${name}`);
   if (dns.promises && typeof dns.promises[name] === "function") dns.promises[name] = blocked(`dns.promises.${name}`);
 }

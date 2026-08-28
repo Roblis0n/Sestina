@@ -42,7 +42,7 @@ const ENTRY_FILES = [
 
 const PRODUCT_DEFINITION =
   "Sestina 最终应当是一个本地交互式科研 App。其内部本体是 Research Deliberation Kernel，主要交互面是 Research Room；MCP、Skill、Hooks、CLI 只是外部宿主接入、自动化和恢复接口。Sestina 作为本地科研过程调试器，让 AI 始终围绕当前研究问题工作，记住已经作出的研究决定，识别目标替换、重复审计、论证跳跃和伪深度，并要求每一轮修改说明真正增加了什么。";
-const CURRENT_STATUS = "completed_and_verified";
+const CURRENT_STATUS = "ready_to_start";
 
 const GUIDANCE_FIXTURES: Record<string, string> = {
   "docs/product/CURRENT-PRODUCT-DEFINITION.md": [
@@ -66,7 +66,8 @@ const GUIDANCE_FIXTURES: Record<string, string> = {
     "RI-51 已完成并验证",
     "RI-52 Closed External App Pilot",
     "RI-52（已完成）",
-    "none_active_RI53_not_started",
+    "RI-53 Research Room Release Resilience",
+    "research_room_release_resilience",
     "completed_and_verified_implementation_real_provider_evidence_blocked",
     "Market Gate 0",
   ].join("\n"),
@@ -116,6 +117,18 @@ const GUIDANCE_FIXTURES: Record<string, string> = {
     "major_remaining: 0",
     "in_scope_moderate_remaining: 0",
     "real_codex_continuity_evidence: passed_by_separate_continuity_only_host_observation",
+  ].join("\n"),
+  "docs/execution/RI-53-RELEASE-RESILIENCE-SECURITY-RECOVERY-UPGRADE-COMPATIBILITY-TASK-START-RECORD.md": [
+    "task: RI-53",
+    "status: ready_to_start",
+    "gate_conclusion: ready_to_start_user_authorized_development",
+    "activity_status: active_release_resilience_security_recovery_upgrade_compatibility",
+    "implementation_authorization: explicit_user_authorization_2026_08_28",
+    "next_code_goal: research_room_release_resilience",
+    "production_visual_and_functional_acceptance: required",
+    "ri52_status: completed_and_verified",
+    "ri54_status: not_started",
+    "final: ready_to_start",
   ].join("\n"),
   "docs/execution/TASK-START-GATE.md": [
     "required_before_every_task",
@@ -334,14 +347,15 @@ function activeBlock(currentTask: string): string {
     `<!-- sestina-current-status: ${CURRENT_STATUS} -->`,
     "<!-- sestina-last-completed-task: RI-52 -->",
     "<!-- sestina-last-completed-status: completed_and_verified -->",
-    "<!-- sestina-implementation-base: cf8c2a761f7c0088934b75ef195f99188c26b19b -->",
-    "<!-- sestina-next-code-goal: none_active_RI53_not_started -->",
-    "<!-- sestina-next-execution-goal: await_explicit_user_authorization -->",
-    "<!-- sestina-next-code-sequence: none_active_RI53_not_started -->",
-    "<!-- sestina-production-visual-and-functional-acceptance: passed -->",
+    "<!-- sestina-implementation-base: d92fa8c196e00b8adfe3cbd4791ed4032dfad85c -->",
+    "<!-- sestina-next-code-goal: research_room_release_resilience -->",
+    "<!-- sestina-next-execution-goal: implement_RI53_release_resilience -->",
+    "<!-- sestina-next-code-sequence: research_room_release_resilience -->",
+    "<!-- sestina-production-visual-and-functional-acceptance: required -->",
     "<!-- sestina-ri51-status: completed_and_verified -->",
     "<!-- sestina-ri52-status: completed_and_verified -->",
-    "<!-- sestina-ri53-status: not_started -->",
+    "<!-- sestina-ri53-status: ready_to_start -->",
+    "<!-- sestina-ri54-status: not_started -->",
     "<!-- sestina-ri52-target-host: codex -->",
     "<!-- sestina-ri52-closed-host-pilot: passed -->",
     "<!-- sestina-ri52-public-mcp-write-capability: absent -->",
@@ -421,7 +435,7 @@ function writeValidEntries(
   writeGuidanceFiles(root);
   for (const entry of ENTRY_FILES) {
     const isBoard = entry === "docs/execution/WORK-BOARD.md";
-    const task = "RI-52";
+    const task = "RI-53";
     const body = isBoard
       ? workBoardBody(task)
       : "\n\nLegacy prose stays below.\n";
@@ -457,19 +471,20 @@ describe("verify-authority positive fixtures", () => {
     expect(r.exitCode).toBe(0);
   });
 
-  it("P3. the checked-in authority records the completed RI-52 real-continuity evidence boundary", () => {
+  it("P3. the checked-in authority activates the user-authorized RI-53 release-resilience boundary", () => {
     const expected = [
-      "<!-- sestina-current-task: RI-52 -->",
-      "<!-- sestina-current-status: completed_and_verified -->",
+      "<!-- sestina-current-task: RI-53 -->",
+      "<!-- sestina-current-status: ready_to_start -->",
       "<!-- sestina-last-completed-task: RI-52 -->",
-      "<!-- sestina-next-code-goal: none_active_RI53_not_started -->",
-      "<!-- sestina-next-execution-goal: await_explicit_user_authorization -->",
-      "<!-- sestina-production-visual-and-functional-acceptance: passed -->",
+      "<!-- sestina-next-code-goal: research_room_release_resilience -->",
+      "<!-- sestina-next-execution-goal: implement_RI53_release_resilience -->",
+      "<!-- sestina-production-visual-and-functional-acceptance: required -->",
       "<!-- sestina-ri51-status: completed_and_verified -->",
       "<!-- sestina-ri52-status: completed_and_verified -->",
       "<!-- sestina-ri52-real-codex-candidate-session: passed -->",
       "<!-- sestina-ri52-real-codex-continuity-new-host-session: passed -->",
-      "<!-- sestina-ri53-status: not_started -->",
+      "<!-- sestina-ri53-status: ready_to_start -->",
+      "<!-- sestina-ri54-status: not_started -->",
     ];
 
     for (const entry of ENTRY_FILES) {
@@ -482,29 +497,17 @@ describe("verify-authority positive fixtures", () => {
     const taskStart = readFileSync(
       resolve(
         SCRIPT_DIR,
-        "docs/execution/RI-52-CLOSED-EXTERNAL-APP-PILOT-TASK-START-RECORD.md",
+        "docs/execution/RI-53-RELEASE-RESILIENCE-SECURITY-RECOVERY-UPGRADE-COMPATIBILITY-TASK-START-RECORD.md",
       ),
       "utf8",
     );
-    expect(taskStart).toContain("task: RI-52");
+    expect(taskStart).toContain("task: RI-53");
     expect(taskStart).toContain("status: ready_to_start");
     expect(taskStart).toContain(
       "gate_conclusion: ready_to_start_user_authorized_development",
     );
-
-    const taskResult = readFileSync(
-      resolve(
-        SCRIPT_DIR,
-        "docs/execution/RI-52-CLOSED-EXTERNAL-APP-PILOT-TASK-RESULT.md",
-      ),
-      "utf8",
-    );
-    expect(taskResult).toContain(
-      "status: completed_and_verified",
-    );
-    expect(taskResult).toContain(
-      "real_codex_continuity_new_host_session: passed",
-    );
+    expect(taskStart).toContain("activity_status: active_release_resilience_security_recovery_upgrade_compatibility");
+    expect(taskStart).toContain("ri54_status: not_started");
   });
 });
 

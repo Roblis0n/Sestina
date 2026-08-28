@@ -293,6 +293,16 @@ const pkgMap = buildPackageMap(allPkgs);
 
 const CROSS_CATEGORY_IMPORT_ALLOWLIST = new Map([
   ["@sestina/cli", new Set(["@sestina/mcp", "@sestina/skills"])],
+  ["@sestina/research-room", new Set(["@sestina/mcp"])],
+]);
+
+// These shared RI-51/RI-52 fixtures predate package-local visual servers. Keep
+// each test-only escape explicit; production source remains subject to the
+// normal package boundary and new tests must use public package entry points.
+const TEST_FIXTURE_RELATIVE_IMPORT_ALLOWLIST = new Set([
+  "apps/research-room/test/ri52-api.test.ts::../../../tests/helpers/ri52-runtime.js",
+  "apps/research-room/test/ri52-visual-server.ts::../../../tests/helpers/ri51-project.js",
+  "apps/research-room/test/ri52-visual-server.ts::../../../tests/helpers/ri52-runtime.js",
 ]);
 
 function checkCategoryCrossImports(catDir, catLabel, otherNames) {
@@ -495,7 +505,8 @@ for (const pkg of allPkgDirs) {
 
       // ── Relative imports that cross package roots ──
       if (imp.startsWith(".")) {
-        if (relativeImportEscapesPackage(fileRel, imp, pkg.dir)) {
+        const fixtureException = TEST_FIXTURE_RELATIVE_IMPORT_ALLOWLIST.has(`${fileRel}::${imp}`);
+        if (relativeImportEscapesPackage(fileRel, imp, pkg.dir) && !fixtureException) {
           err(
             `${fileRel} imports "${imp}" — relative import escapes package root "${pkg.dir}"`,
           );
