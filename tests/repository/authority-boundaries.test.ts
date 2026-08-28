@@ -42,7 +42,7 @@ const ENTRY_FILES = [
 
 const PRODUCT_DEFINITION =
   "Sestina 最终应当是一个本地交互式科研 App。其内部本体是 Research Deliberation Kernel，主要交互面是 Research Room；MCP、Skill、Hooks、CLI 只是外部宿主接入、自动化和恢复接口。Sestina 作为本地科研过程调试器，让 AI 始终围绕当前研究问题工作，记住已经作出的研究决定，识别目标替换、重复审计、论证跳跃和伪深度，并要求每一轮修改说明真正增加了什么。";
-const CURRENT_STATUS = "implementation_completed_real_host_pilot_blocked";
+const CURRENT_STATUS = "completed_and_verified";
 
 const GUIDANCE_FIXTURES: Record<string, string> = {
   "docs/product/CURRENT-PRODUCT-DEFINITION.md": [
@@ -65,8 +65,8 @@ const GUIDANCE_FIXTURES: Record<string, string> = {
     "RI-51 Project-level Minimal Governed Working Memory and Recovery Continuity",
     "RI-51 已完成并验证",
     "RI-52 Closed External App Pilot",
-    "implementation_completed_real_host_pilot_blocked",
-    "complete_RI52_real_host_pilot",
+    "RI-52（已完成）",
+    "none_active_RI53_not_started",
     "completed_and_verified_implementation_real_provider_evidence_blocked",
     "Market Gate 0",
   ].join("\n"),
@@ -92,7 +92,7 @@ const GUIDANCE_FIXTURES: Record<string, string> = {
   ].join("\n"),
   "docs/execution/RI-52-CLOSED-EXTERNAL-APP-PILOT-TASK-RESULT.md": [
     "task: RI-52",
-    "status: implementation_completed_real_host_pilot_blocked",
+    "status: completed_and_verified",
     "schema: 20",
     "production_visual_and_functional_acceptance: passed",
     "context_preview_actual_payload_match: passed",
@@ -102,8 +102,9 @@ const GUIDANCE_FIXTURES: Record<string, string> = {
     "automatic_retry: zero_verified",
     "candidate_authority: model_proposed_only",
     "real_codex_candidate_session: passed",
-    "real_codex_continuity_new_host_session: unproven",
-    "next_code_goal: complete_RI52_real_host_pilot",
+    "real_codex_continuity_new_host_session: passed",
+    "real_codex_evidence_composition: prior_real_candidate_plus_new_real_fresh_session_continuity",
+    "next_code_goal: none_active_RI53_not_started",
     "ri53_status: not_started",
   ].join("\n"),
   "docs/execution/RI-52-PRODUCTION-VISUAL-AND-FUNCTIONAL-ACCEPTANCE.md": [
@@ -114,7 +115,7 @@ const GUIDANCE_FIXTURES: Record<string, string> = {
     "blocker_remaining: 0",
     "major_remaining: 0",
     "in_scope_moderate_remaining: 0",
-    "real_codex_continuity_evidence: unproven",
+    "real_codex_continuity_evidence: passed_by_separate_continuity_only_host_observation",
   ].join("\n"),
   "docs/execution/TASK-START-GATE.md": [
     "required_before_every_task",
@@ -331,18 +332,18 @@ function activeBlock(currentTask: string): string {
     "<!-- sestina-prework-direction-gate: required -->",
     `<!-- sestina-current-task: ${currentTask} -->`,
     `<!-- sestina-current-status: ${CURRENT_STATUS} -->`,
-    "<!-- sestina-last-completed-task: RI-51 -->",
+    "<!-- sestina-last-completed-task: RI-52 -->",
     "<!-- sestina-last-completed-status: completed_and_verified -->",
     "<!-- sestina-implementation-base: cf8c2a761f7c0088934b75ef195f99188c26b19b -->",
-    "<!-- sestina-next-code-goal: complete_RI52_real_host_pilot -->",
-    "<!-- sestina-next-execution-goal: await_explicit_user_authorization_for_one_fresh_continuity_run -->",
-    "<!-- sestina-next-code-sequence: complete_RI52_real_host_pilot -->",
+    "<!-- sestina-next-code-goal: none_active_RI53_not_started -->",
+    "<!-- sestina-next-execution-goal: await_explicit_user_authorization -->",
+    "<!-- sestina-next-code-sequence: none_active_RI53_not_started -->",
     "<!-- sestina-production-visual-and-functional-acceptance: passed -->",
     "<!-- sestina-ri51-status: completed_and_verified -->",
-    "<!-- sestina-ri52-status: blocked_missing_real_host_evidence -->",
+    "<!-- sestina-ri52-status: completed_and_verified -->",
     "<!-- sestina-ri53-status: not_started -->",
     "<!-- sestina-ri52-target-host: codex -->",
-    "<!-- sestina-ri52-closed-host-pilot: blocked_missing_real_continuity_evidence -->",
+    "<!-- sestina-ri52-closed-host-pilot: passed -->",
     "<!-- sestina-ri52-public-mcp-write-capability: absent -->",
     "<!-- sestina-ri52-host-authority-mutation: zero_verified -->",
     "<!-- sestina-ri52-cross-project-leakage: zero_verified -->",
@@ -350,7 +351,7 @@ function activeBlock(currentTask: string): string {
     "<!-- sestina-ri52-context-preview-actual-payload-match: passed -->",
     "<!-- sestina-ri52-candidate-authority: model_proposed_only -->",
     "<!-- sestina-ri52-real-codex-candidate-session: passed -->",
-    "<!-- sestina-ri52-real-codex-continuity-new-host-session: unproven -->",
+    "<!-- sestina-ri52-real-codex-continuity-new-host-session: passed -->",
     "<!-- sestina-ri52-production-visual-and-functional-acceptance: passed -->",
     "<!-- sestina-governed-project-memory-implementation: passed -->",
     "<!-- sestina-cross-project-memory-leakage: zero_verified -->",
@@ -456,17 +457,18 @@ describe("verify-authority positive fixtures", () => {
     expect(r.exitCode).toBe(0);
   });
 
-  it("P3. the checked-in authority records the honest RI-52 real-continuity evidence boundary", () => {
+  it("P3. the checked-in authority records the completed RI-52 real-continuity evidence boundary", () => {
     const expected = [
       "<!-- sestina-current-task: RI-52 -->",
-      "<!-- sestina-current-status: implementation_completed_real_host_pilot_blocked -->",
-      "<!-- sestina-next-code-goal: complete_RI52_real_host_pilot -->",
-      "<!-- sestina-next-execution-goal: await_explicit_user_authorization_for_one_fresh_continuity_run -->",
+      "<!-- sestina-current-status: completed_and_verified -->",
+      "<!-- sestina-last-completed-task: RI-52 -->",
+      "<!-- sestina-next-code-goal: none_active_RI53_not_started -->",
+      "<!-- sestina-next-execution-goal: await_explicit_user_authorization -->",
       "<!-- sestina-production-visual-and-functional-acceptance: passed -->",
       "<!-- sestina-ri51-status: completed_and_verified -->",
-      "<!-- sestina-ri52-status: blocked_missing_real_host_evidence -->",
+      "<!-- sestina-ri52-status: completed_and_verified -->",
       "<!-- sestina-ri52-real-codex-candidate-session: passed -->",
-      "<!-- sestina-ri52-real-codex-continuity-new-host-session: unproven -->",
+      "<!-- sestina-ri52-real-codex-continuity-new-host-session: passed -->",
       "<!-- sestina-ri53-status: not_started -->",
     ];
 
@@ -498,10 +500,10 @@ describe("verify-authority positive fixtures", () => {
       "utf8",
     );
     expect(taskResult).toContain(
-      "status: implementation_completed_real_host_pilot_blocked",
+      "status: completed_and_verified",
     );
     expect(taskResult).toContain(
-      "real_codex_continuity_new_host_session: unproven",
+      "real_codex_continuity_new_host_session: passed",
     );
   });
 });

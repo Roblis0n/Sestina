@@ -8,6 +8,26 @@ export interface Ri52RuntimeObservation {
   readonly invocationOrdinal: number;
 }
 
+export interface ContinuityOnlyHostRuntime extends ClosedExternalAppHostRuntime {
+  readonly invocationCount: number;
+}
+
+export function createContinuityOnlyHostRuntime(delegate: ClosedExternalAppHostRuntime): ContinuityOnlyHostRuntime {
+  let invocationCount = 0;
+  return Object.freeze({
+    evidenceClass: delegate.evidenceClass,
+    get invocationCount() { return invocationCount; },
+    inspect: async () => await delegate.inspect(),
+    run: async (input: Parameters<ClosedExternalAppHostRuntime["run"]>[0]): Promise<ClosedCodexPilotRunResult> => {
+      if (input.kind !== "continuity_check" || invocationCount !== 0) {
+        return { ok: false, error: { code: "host_protocol_mismatch" } };
+      }
+      invocationCount += 1;
+      return await delegate.run(input);
+    },
+  });
+}
+
 export class Ri52FixtureHostRuntime implements ClosedExternalAppHostRuntime {
   readonly evidenceClass = "synthetic_fixture" as const;
   readonly observations: Ri52RuntimeObservation[] = [];

@@ -82,8 +82,8 @@ const GUIDANCE_FILES = [
       "RI-51 Project-level Minimal Governed Working Memory and Recovery Continuity",
       "RI-51 已完成并验证",
       "RI-52 Closed External App Pilot",
-      "implementation_completed_real_host_pilot_blocked",
-      "complete_RI52_real_host_pilot",
+      "RI-52（已完成）",
+      "none_active_RI53_not_started",
       "completed_and_verified_implementation_real_provider_evidence_blocked",
       "Market Gate 0",
     ],
@@ -126,7 +126,7 @@ const GUIDANCE_FILES = [
     path: "docs/execution/RI-52-CLOSED-EXTERNAL-APP-PILOT-TASK-RESULT.md",
     required: [
       "task: RI-52",
-      "status: implementation_completed_real_host_pilot_blocked",
+      "status: completed_and_verified",
       "schema: 20",
       "production_visual_and_functional_acceptance: passed",
       "context_preview_actual_payload_match: passed",
@@ -136,8 +136,9 @@ const GUIDANCE_FILES = [
       "automatic_retry: zero_verified",
       "candidate_authority: model_proposed_only",
       "real_codex_candidate_session: passed",
-      "real_codex_continuity_new_host_session: unproven",
-      "next_code_goal: complete_RI52_real_host_pilot",
+      "real_codex_continuity_new_host_session: passed",
+      "real_codex_evidence_composition: prior_real_candidate_plus_new_real_fresh_session_continuity",
+      "next_code_goal: none_active_RI53_not_started",
       "ri53_status: not_started",
     ],
   },
@@ -151,7 +152,7 @@ const GUIDANCE_FILES = [
       "blocker_remaining: 0",
       "major_remaining: 0",
       "in_scope_moderate_remaining: 0",
-      "real_codex_continuity_evidence: unproven",
+      "real_codex_continuity_evidence: passed_by_separate_continuity_only_host_observation",
     ],
   },
   {
@@ -456,12 +457,12 @@ const MARKER_CONTRACT = {
     why: "the current task id must be well formed and consistent across entries",
   },
   "sestina-current-status": {
-    exact: "implementation_completed_real_host_pilot_blocked",
-    why: "RI-52 implementation and visual acceptance passed but the fresh real-host continuity session is unproven",
+    exact: "completed_and_verified",
+    why: "RI-52 implementation and both bounded real Codex host observations passed",
   },
   "sestina-last-completed-task": {
-    exact: "RI-51",
-    why: "RI-51 is the most recently completed governed task",
+    exact: "RI-52",
+    why: "RI-52 is the most recently completed governed task",
   },
   "sestina-last-completed-status": {
     exact: "completed_and_verified",
@@ -472,16 +473,16 @@ const MARKER_CONTRACT = {
     why: "RI-52 starts from the verified RI-51 completion commit",
   },
   "sestina-next-code-goal": {
-    exact: "complete_RI52_real_host_pilot",
-    why: "the only remaining RI-52 goal is one fresh real-host continuity run",
+    exact: "none_active_RI53_not_started",
+    why: "RI-52 is complete and RI-53 requires new explicit authorization",
   },
   "sestina-next-execution-goal": {
-    exact: "await_explicit_user_authorization_for_one_fresh_continuity_run",
-    why: "the exhausted bounded call budget cannot be silently extended",
+    exact: "await_explicit_user_authorization",
+    why: "no next stage is active",
   },
   "sestina-next-code-sequence": {
-    exact: "complete_RI52_real_host_pilot",
-    why: "the governed sequence remains inside RI-52 and cannot start RI-53",
+    exact: "none_active_RI53_not_started",
+    why: "the governed sequence cannot start RI-53 without user authorization",
   },
   "sestina-production-visual-and-functional-acceptance": {
     exact: "passed",
@@ -492,8 +493,8 @@ const MARKER_CONTRACT = {
     why: "RI-51 passed its full implementation and delivery contract",
   },
   "sestina-ri52-status": {
-    exact: "blocked_missing_real_host_evidence",
-    why: "the required second fresh Codex continuity session is unproven",
+    exact: "completed_and_verified",
+    why: "the prior candidate and new fresh continuity observations jointly close RI-52",
   },
   "sestina-ri53-status": {
     exact: "not_started",
@@ -504,8 +505,8 @@ const MARKER_CONTRACT = {
     why: "RI-52 is deliberately closed to one supported external app",
   },
   "sestina-ri52-closed-host-pilot": {
-    exact: "blocked_missing_real_continuity_evidence",
-    why: "the candidate session passed but the fresh continuity session did not run",
+    exact: "passed",
+    why: "the prior candidate and separately authorized fresh continuity sessions both passed",
   },
   "sestina-ri52-public-mcp-write-capability": {
     exact: "absent",
@@ -536,8 +537,8 @@ const MARKER_CONTRACT = {
     why: "one real Codex candidate session and both read-only MCP calls were observed",
   },
   "sestina-ri52-real-codex-continuity-new-host-session": {
-    exact: "unproven",
-    why: "no second fresh real Codex session completed within the authorized budget",
+    exact: "passed",
+    why: "one new ephemeral read-only Codex continuity session completed with both MCP calls",
   },
   "sestina-ri52-production-visual-and-functional-acceptance": {
     exact: "passed",

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { openSestina, type CoreResult } from "@sestina/core";
 import type { ClosedCodexPilotRunResult, CodexHostInspection } from "@sestina/mcp";
 import { createResearchRoomServer, type RunningResearchRoomServer } from "../src/server.js";
+import { createContinuityOnlyHostRuntime, Ri52FixtureHostRuntime } from "../../../tests/helpers/ri52-runtime.js";
 
 const USER = Object.freeze({ kind: "user" as const, actorId: "ri52-api-owner" });
 const roots: string[] = [];
@@ -51,6 +52,48 @@ afterEach(async () => {
 });
 
 describe("RI-52 production closed external App Pilot API", () => {
+  it("keeps the continuity-only host boundary to one delegated continuity invocation", async () => {
+    const delegated = new Ri52FixtureHostRuntime("rdec_01J00000000000000000000000");
+    delegated.delayMs = 0;
+    const runtime = createContinuityOnlyHostRuntime(delegated);
+    const base = {
+      projectRoot: "C:\\sestina-safe-fixture",
+      binding: {
+        pilotId: "rplt_01J00000000000000000000000",
+        attemptId: "rpat_01J00000000000000000000000",
+        manifestId: "rman_01J00000000000000000000000",
+        manifestHash: "a".repeat(64),
+        projectId: "rprj_01J00000000000000000000000",
+        briefId: "rbrf_01J00000000000000000000000",
+        briefVersion: 1,
+        episodeId: "repi_01J00000000000000000000000",
+        decisionIds: [],
+        issueIds: [],
+        evidenceIds: [],
+        canonicalStateHash: "b".repeat(64),
+        episodeStatus: "active",
+        decisionStates: [],
+        issueStates: [],
+      },
+      contextUtf8: "{}",
+      signal: new AbortController().signal,
+      timeoutMs: 120_000,
+      outputLimitBytes: 65_536,
+    } as const;
+
+    await expect(runtime.run({ ...base, kind: "candidate_generation" })).resolves.toMatchObject({ ok: false, error: { code: "host_protocol_mismatch" } });
+    expect(runtime.invocationCount).toBe(0);
+    expect(delegated.observations).toHaveLength(0);
+
+    await expect(runtime.run({ ...base, kind: "continuity_check" })).resolves.toMatchObject({ ok: true, value: { continuity: { authority: "host_observation", canMutateAuthority: false } } });
+    expect(runtime.invocationCount).toBe(1);
+    expect(delegated.observations.map((item) => item.kind)).toEqual(["continuity_check"]);
+
+    await expect(runtime.run({ ...base, kind: "continuity_check" })).resolves.toMatchObject({ ok: false, error: { code: "host_protocol_mismatch" } });
+    expect(runtime.invocationCount).toBe(1);
+    expect(delegated.observations).toHaveLength(1);
+  });
+
   it("binds the exact preview bytes to one Codex attempt, existing Review, user disposition, fresh-session continuity, and a redacted evidence export", async () => {
     const data = await fixture();
     const sent: { kind: string; contextUtf8: string; manifestHash: string; invocation: number }[] = [];

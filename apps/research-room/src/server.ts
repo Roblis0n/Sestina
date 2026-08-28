@@ -248,7 +248,7 @@ function publicError(error: unknown): { readonly status: number; readonly body: 
   return { status: 500, body: { ok: false, error: { code: "internal_error", message: "The local Research Room could not complete the request." } } };
 }
 
-function defaultClosedExternalAppHostRuntime(): ClosedExternalAppHostRuntime {
+export function createProductionClosedExternalAppHostRuntime(): ClosedExternalAppHostRuntime {
   return Object.freeze({
     evidenceClass: "owner_operated_closed_host_observation" as const,
     inspect: async () => await inspectCodexHost({}),
@@ -278,7 +278,7 @@ export class ResearchRoomHttpApplication {
     private readonly providerConfigurationService?: ProviderConfigurationService,
     private readonly secondOpinionProviderConfigurationService?: ProviderConfigurationService,
     private readonly clientAssetRoot = DEFAULT_CLIENT_ASSET_ROOT,
-    private readonly closedExternalAppHostRuntime: ClosedExternalAppHostRuntime = defaultClosedExternalAppHostRuntime(),
+    private readonly closedExternalAppHostRuntime: ClosedExternalAppHostRuntime = createProductionClosedExternalAppHostRuntime(),
   ) {}
 
   close(): void {
