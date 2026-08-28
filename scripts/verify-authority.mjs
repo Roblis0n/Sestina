@@ -84,7 +84,8 @@ const GUIDANCE_FILES = [
       "RI-52 Closed External App Pilot",
       "RI-52（已完成）",
       "RI-53 Research Room Release Resilience",
-      "research_room_release_resilience",
+      "RI-53（已完成）",
+      "none_active_RI54_not_started",
       "completed_and_verified_implementation_real_provider_evidence_blocked",
       "Market Gate 0",
     ],
@@ -95,6 +96,8 @@ const GUIDANCE_FILES = [
       "required_operating_guide",
       "只有相邻一层能够授权下一层",
       "TASK-START-GATE.md",
+      "RI-53 / completed_and_verified",
+      "none_active_RI54_not_started",
     ],
   },
   {
@@ -121,6 +124,37 @@ const GUIDANCE_FILES = [
       "production_visual_and_functional_acceptance: required",
       "ri53_status: not_started",
       "final: ready_to_start",
+    ],
+  },
+  {
+    path: "docs/execution/RI-53-RELEASE-RESILIENCE-SECURITY-RECOVERY-UPGRADE-COMPATIBILITY-TASK-RESULT.md",
+    required: [
+      "task: RI-53",
+      "status: completed_and_verified",
+      "implementation_commit: ac66bc58b7a1e9a5b72e761cb2d760f75a45a993",
+      "release_product: Sestina Research Room",
+      "release_version: 0.2.0-rc.1",
+      "production_visual_and_functional_acceptance: passed",
+      "github_actions_run: 33162451783",
+      "github_actions_windows: passed_job_98820214754_artifact_9682255063",
+      "github_actions_macos: passed_job_98820214714_artifact_9682235273",
+      "github_actions_ubuntu: passed_job_98820214718_artifact_9682237609",
+      "next_code_goal: none_active_RI54_not_started",
+      "ri54_status: not_started",
+    ],
+  },
+  {
+    path: "docs/execution/RI-53-PRODUCTION-VISUAL-AND-FUNCTIONAL-ACCEPTANCE.md",
+    required: [
+      "task: RI-53",
+      "production_route: passed",
+      "production_visual_and_functional_acceptance: passed",
+      "in_app_browser_real_interaction: passed",
+      "browser_console_errors: 0",
+      "blocker_remaining: 0",
+      "major_remaining: 0",
+      "in_scope_moderate_remaining: 0",
+      "GitHub Actions run 33162451783",
     ],
   },
   {
@@ -473,36 +507,36 @@ const MARKER_CONTRACT = {
     why: "the current task id must be well formed and consistent across entries",
   },
   "sestina-current-status": {
-    exact: "ready_to_start",
-    why: "the user authorized RI-53 and its Task Start Gate passed",
+    exact: "completed_and_verified",
+    why: "RI-53 passed implementation, production visual, and independent three-platform product gates",
   },
   "sestina-last-completed-task": {
-    exact: "RI-52",
-    why: "RI-52 is the most recently completed governed task",
+    exact: "RI-53",
+    why: "RI-53 is the most recently completed governed task",
   },
   "sestina-last-completed-status": {
     exact: "completed_and_verified",
     why: "the latest governed task passed its implementation and required host evidence gates",
   },
   "sestina-implementation-base": {
-    exact: "d92fa8c196e00b8adfe3cbd4791ed4032dfad85c",
-    why: "RI-53 starts from the verified RI-52 completion commit",
+    exact: "ac66bc58b7a1e9a5b72e761cb2d760f75a45a993",
+    why: "the completed RI-53 evidence is bound to the private implementation commit that passed the three-platform matrix",
   },
   "sestina-next-code-goal": {
-    exact: "research_room_release_resilience",
-    why: "RI-53 is the sole user-authorized implementation goal",
+    exact: "none_active_RI54_not_started",
+    why: "RI-53 is complete and RI-54 has not been authorized",
   },
   "sestina-next-execution-goal": {
-    exact: "implement_RI53_release_resilience",
-    why: "the current task must proceed through implementation and verification",
+    exact: "await_explicit_user_authorization",
+    why: "no new task may start after RI-53 without explicit user authorization",
   },
   "sestina-next-code-sequence": {
-    exact: "research_room_release_resilience",
-    why: "RI-54 remains excluded while RI-53 is active",
+    exact: "none_active_RI54_not_started",
+    why: "RI-54 remains excluded after RI-53 completion",
   },
   "sestina-production-visual-and-functional-acceptance": {
-    exact: "required",
-    why: "RI-53 changes production recovery UI and requires real artifact visual acceptance",
+    exact: "passed",
+    why: "RI-53 production recovery UI passed real artifact visual and functional acceptance",
   },
   "sestina-ri51-status": {
     exact: "completed_and_verified",
@@ -513,8 +547,28 @@ const MARKER_CONTRACT = {
     why: "the prior candidate and new fresh continuity observations jointly close RI-52",
   },
   "sestina-ri53-status": {
-    exact: "ready_to_start",
-    why: "the user explicitly authorized RI-53 and its gate passed",
+    exact: "completed_and_verified",
+    why: "RI-53 passed its implementation, product lifecycle, visual, and host matrix evidence gates",
+  },
+  "sestina-ri53-release-candidate": {
+    exact: "passed",
+    why: "the Research Room release candidate passed the exact artifact contract",
+  },
+  "sestina-ri53-windows-product-matrix": {
+    exact: "passed",
+    why: "the private Windows lifecycle job passed and uploaded its bounded artifact",
+  },
+  "sestina-ri53-macos-product-matrix": {
+    exact: "passed",
+    why: "the private macOS lifecycle job passed and uploaded its bounded artifact",
+  },
+  "sestina-ri53-ubuntu-product-matrix": {
+    exact: "passed",
+    why: "the private Ubuntu lifecycle job passed and uploaded its bounded artifact",
+  },
+  "sestina-ri53-production-visual-and-functional-acceptance": {
+    exact: "passed",
+    why: "the production recovery UI passed the whole-interface visual and functional gate",
   },
   "sestina-ri54-status": {
     exact: "not_started",

@@ -42,7 +42,7 @@ const ENTRY_FILES = [
 
 const PRODUCT_DEFINITION =
   "Sestina 最终应当是一个本地交互式科研 App。其内部本体是 Research Deliberation Kernel，主要交互面是 Research Room；MCP、Skill、Hooks、CLI 只是外部宿主接入、自动化和恢复接口。Sestina 作为本地科研过程调试器，让 AI 始终围绕当前研究问题工作，记住已经作出的研究决定，识别目标替换、重复审计、论证跳跃和伪深度，并要求每一轮修改说明真正增加了什么。";
-const CURRENT_STATUS = "ready_to_start";
+const CURRENT_STATUS = "completed_and_verified";
 
 const GUIDANCE_FIXTURES: Record<string, string> = {
   "docs/product/CURRENT-PRODUCT-DEFINITION.md": [
@@ -67,7 +67,8 @@ const GUIDANCE_FIXTURES: Record<string, string> = {
     "RI-52 Closed External App Pilot",
     "RI-52（已完成）",
     "RI-53 Research Room Release Resilience",
-    "research_room_release_resilience",
+    "RI-53（已完成）",
+    "none_active_RI54_not_started",
     "completed_and_verified_implementation_real_provider_evidence_blocked",
     "Market Gate 0",
   ].join("\n"),
@@ -75,6 +76,8 @@ const GUIDANCE_FIXTURES: Record<string, string> = {
     "required_operating_guide",
     "只有相邻一层能够授权下一层",
     "TASK-START-GATE.md",
+    "RI-53 / completed_and_verified",
+    "none_active_RI54_not_started",
   ].join("\n"),
   "docs/execution/RI-52-CLOSED-EXTERNAL-APP-PILOT-TASK-START-RECORD.md": [
     "task: RI-52",
@@ -129,6 +132,31 @@ const GUIDANCE_FIXTURES: Record<string, string> = {
     "ri52_status: completed_and_verified",
     "ri54_status: not_started",
     "final: ready_to_start",
+  ].join("\n"),
+  "docs/execution/RI-53-RELEASE-RESILIENCE-SECURITY-RECOVERY-UPGRADE-COMPATIBILITY-TASK-RESULT.md": [
+    "task: RI-53",
+    "status: completed_and_verified",
+    "implementation_commit: ac66bc58b7a1e9a5b72e761cb2d760f75a45a993",
+    "release_product: Sestina Research Room",
+    "release_version: 0.2.0-rc.1",
+    "production_visual_and_functional_acceptance: passed",
+    "github_actions_run: 33162451783",
+    "github_actions_windows: passed_job_98820214754_artifact_9682255063",
+    "github_actions_macos: passed_job_98820214714_artifact_9682235273",
+    "github_actions_ubuntu: passed_job_98820214718_artifact_9682237609",
+    "next_code_goal: none_active_RI54_not_started",
+    "ri54_status: not_started",
+  ].join("\n"),
+  "docs/execution/RI-53-PRODUCTION-VISUAL-AND-FUNCTIONAL-ACCEPTANCE.md": [
+    "task: RI-53",
+    "production_route: passed",
+    "production_visual_and_functional_acceptance: passed",
+    "in_app_browser_real_interaction: passed",
+    "browser_console_errors: 0",
+    "blocker_remaining: 0",
+    "major_remaining: 0",
+    "in_scope_moderate_remaining: 0",
+    "GitHub Actions run 33162451783",
   ].join("\n"),
   "docs/execution/TASK-START-GATE.md": [
     "required_before_every_task",
@@ -345,16 +373,21 @@ function activeBlock(currentTask: string): string {
     "<!-- sestina-prework-direction-gate: required -->",
     `<!-- sestina-current-task: ${currentTask} -->`,
     `<!-- sestina-current-status: ${CURRENT_STATUS} -->`,
-    "<!-- sestina-last-completed-task: RI-52 -->",
+    "<!-- sestina-last-completed-task: RI-53 -->",
     "<!-- sestina-last-completed-status: completed_and_verified -->",
-    "<!-- sestina-implementation-base: d92fa8c196e00b8adfe3cbd4791ed4032dfad85c -->",
-    "<!-- sestina-next-code-goal: research_room_release_resilience -->",
-    "<!-- sestina-next-execution-goal: implement_RI53_release_resilience -->",
-    "<!-- sestina-next-code-sequence: research_room_release_resilience -->",
-    "<!-- sestina-production-visual-and-functional-acceptance: required -->",
+    "<!-- sestina-implementation-base: ac66bc58b7a1e9a5b72e761cb2d760f75a45a993 -->",
+    "<!-- sestina-next-code-goal: none_active_RI54_not_started -->",
+    "<!-- sestina-next-execution-goal: await_explicit_user_authorization -->",
+    "<!-- sestina-next-code-sequence: none_active_RI54_not_started -->",
+    "<!-- sestina-production-visual-and-functional-acceptance: passed -->",
     "<!-- sestina-ri51-status: completed_and_verified -->",
     "<!-- sestina-ri52-status: completed_and_verified -->",
-    "<!-- sestina-ri53-status: ready_to_start -->",
+    "<!-- sestina-ri53-status: completed_and_verified -->",
+    "<!-- sestina-ri53-release-candidate: passed -->",
+    "<!-- sestina-ri53-windows-product-matrix: passed -->",
+    "<!-- sestina-ri53-macos-product-matrix: passed -->",
+    "<!-- sestina-ri53-ubuntu-product-matrix: passed -->",
+    "<!-- sestina-ri53-production-visual-and-functional-acceptance: passed -->",
     "<!-- sestina-ri54-status: not_started -->",
     "<!-- sestina-ri52-target-host: codex -->",
     "<!-- sestina-ri52-closed-host-pilot: passed -->",
@@ -471,19 +504,24 @@ describe("verify-authority positive fixtures", () => {
     expect(r.exitCode).toBe(0);
   });
 
-  it("P3. the checked-in authority activates the user-authorized RI-53 release-resilience boundary", () => {
+  it("P3. the checked-in authority closes RI-53 and leaves RI-54 unstarted", () => {
     const expected = [
       "<!-- sestina-current-task: RI-53 -->",
-      "<!-- sestina-current-status: ready_to_start -->",
-      "<!-- sestina-last-completed-task: RI-52 -->",
-      "<!-- sestina-next-code-goal: research_room_release_resilience -->",
-      "<!-- sestina-next-execution-goal: implement_RI53_release_resilience -->",
-      "<!-- sestina-production-visual-and-functional-acceptance: required -->",
+      "<!-- sestina-current-status: completed_and_verified -->",
+      "<!-- sestina-last-completed-task: RI-53 -->",
+      "<!-- sestina-next-code-goal: none_active_RI54_not_started -->",
+      "<!-- sestina-next-execution-goal: await_explicit_user_authorization -->",
+      "<!-- sestina-production-visual-and-functional-acceptance: passed -->",
       "<!-- sestina-ri51-status: completed_and_verified -->",
       "<!-- sestina-ri52-status: completed_and_verified -->",
       "<!-- sestina-ri52-real-codex-candidate-session: passed -->",
       "<!-- sestina-ri52-real-codex-continuity-new-host-session: passed -->",
-      "<!-- sestina-ri53-status: ready_to_start -->",
+      "<!-- sestina-ri53-status: completed_and_verified -->",
+      "<!-- sestina-ri53-release-candidate: passed -->",
+      "<!-- sestina-ri53-windows-product-matrix: passed -->",
+      "<!-- sestina-ri53-macos-product-matrix: passed -->",
+      "<!-- sestina-ri53-ubuntu-product-matrix: passed -->",
+      "<!-- sestina-ri53-production-visual-and-functional-acceptance: passed -->",
       "<!-- sestina-ri54-status: not_started -->",
     ];
 
@@ -508,6 +546,17 @@ describe("verify-authority positive fixtures", () => {
     );
     expect(taskStart).toContain("activity_status: active_release_resilience_security_recovery_upgrade_compatibility");
     expect(taskStart).toContain("ri54_status: not_started");
+
+    const taskResult = readFileSync(
+      resolve(
+        SCRIPT_DIR,
+        "docs/execution/RI-53-RELEASE-RESILIENCE-SECURITY-RECOVERY-UPGRADE-COMPATIBILITY-TASK-RESULT.md",
+      ),
+      "utf8",
+    );
+    expect(taskResult).toContain("status: completed_and_verified");
+    expect(taskResult).toContain("github_actions_run: 33162451783");
+    expect(taskResult).toContain("next_code_goal: none_active_RI54_not_started");
   });
 });
 
