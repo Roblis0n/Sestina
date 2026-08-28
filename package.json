@@ -23,6 +23,8 @@
     "test:e2e:ri49": "playwright test --config tests/e2e/playwright.ri49.config.ts",
     "test:e2e:ri50": "playwright test --config tests/e2e/playwright.ri50.config.ts",
     "test:e2e:ri51": "playwright test --config tests/e2e/playwright.ri51.config.ts",
+    "test:e2e:ri52": "pnpm --filter @sestina/research-room build && playwright test --config tests/e2e/playwright.ri52.config.ts",
+    "test:e2e:ri52:real-codex": "pnpm --filter @sestina/research-room build && vitest run --config tests/e2e/vitest.ri52-real-codex.config.ts",
     "test:e2e:codex": "pnpm --filter @sestina/mcp build && vitest run --config tests/e2e/vitest.codex.config.ts",
     "eval:locked": "node --experimental-strip-types researchbench/tools/run-evaluation.ts",
     "semantic:judge:generate": "pnpm --filter @sestina/research build && pnpm --filter @sestina/review build && node node_modules/vite-node/vite-node.mjs researchbench/research-room-semantic-judge/tools/generate-assets.mjs",
@@ -47,7 +49,7 @@
     "demo:offline": "pnpm --filter @sestina/cli build && node scripts/run-offline-demos.mjs",
     "verify:no-network": "node scripts/verify-no-network.mjs && node scripts/verify-research-room-no-network.mjs",
     "verify:pilot-no-network": "node scripts/verify-pilot-no-network.mjs",
-    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm verify:no-network && pnpm test:e2e:ri40 && pnpm test:e2e:ri41 && pnpm test:e2e:ri43 && pnpm test:e2e:ri48 && pnpm test:e2e:ui02 && pnpm test:e2e:ui03 && pnpm test:e2e:ri49 && pnpm test:e2e:ri50 && pnpm test:e2e:ri51 && pnpm docs:check && pnpm repo:check && pnpm verify:architecture && pnpm verify:authority && pnpm verify:package && pnpm demo:offline"
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm verify:no-network && pnpm test:e2e:ri40 && pnpm test:e2e:ri41 && pnpm test:e2e:ri43 && pnpm test:e2e:ri48 && pnpm test:e2e:ui02 && pnpm test:e2e:ui03 && pnpm test:e2e:ri49 && pnpm test:e2e:ri50 && pnpm test:e2e:ri51 && pnpm test:e2e:ri52 && pnpm docs:check && pnpm repo:check && pnpm verify:architecture && pnpm verify:authority && pnpm verify:package && pnpm demo:offline"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

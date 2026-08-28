@@ -4,6 +4,7 @@ import { mkdir, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { buildMcp } from "../integrations/mcp/build-lib.mjs";
 
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const appRequire = createRequire(resolve(root, "apps/research-room/package.json"));
@@ -48,3 +49,5 @@ await build({
   sourcemap: true,
   banner: { js: "#!/usr/bin/env node" },
 });
+await mkdir(resolve(outdir, "mcp"), { recursive: true });
+await buildMcp(resolve(outdir, "mcp"));

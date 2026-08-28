@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type RefObject, type SyntheticEvent } from "react";
-import type { AppLanguage, ProviderSaveInput, ProviderStatusDto } from "../../api/dto.js";
+import type { AppLanguage, CodexHostStatusDto, ProviderSaveInput, ProviderStatusDto } from "../../api/dto.js";
+import { researchRoomApi } from "../../api/client.js";
 import { Button } from "../primitives/Button.js";
 import { Modal } from "../primitives/Modal.js";
 import { StatusBadge } from "../primitives/StatusBadge.js";
@@ -29,6 +30,7 @@ export function ProviderDialog({ open, language, status, busy, returnFocusRef, o
   const [timeoutMs, setTimeoutMs] = useState("15000");
   const [maxOutputTokens, setMaxOutputTokens] = useState("");
   const [apiKey, setApiKey] = useState("");
+  const [codexHost, setCodexHost] = useState<CodexHostStatusDto>();
   const keyRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -40,6 +42,13 @@ export function ProviderDialog({ open, language, status, busy, returnFocusRef, o
     setMaxOutputTokens(status.config.maxOutputTokens ? String(status.config.maxOutputTokens) : "");
     setApiKey("");
   }, [open, status]);
+
+  useEffect(() => {
+    if (!open || idPrefix !== "provider") return undefined;
+    const controller = new AbortController();
+    void researchRoomApi.codexHost().then(setCodexHost).catch(() => { if (!controller.signal.aborted) setCodexHost(undefined); });
+    return () => { controller.abort(); };
+  }, [open, idPrefix]);
 
   async function submit(event: SyntheticEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -60,6 +69,11 @@ export function ProviderDialog({ open, language, status, busy, returnFocusRef, o
         <p>{status?.config ? `${status.config.providerId} / ${status.config.model} · ${status.config.locality}` : t(language, "ledger_only")}</p>
         <p>{status?.secretConfigured ? (language === "en" ? "Secret configured" : "密钥已配置") : (language === "en" ? "No secret configured" : "未配置密钥")}</p>
       </div>
+      {idPrefix === "provider" ? <section className="codex-host-separation" aria-label={language === "en" ? "Codex Host Adapter" : "Codex Host Adapter"}>
+        <div><p className="eyebrow">EXTERNAL APP HOST · SEPARATE BOUNDARY</p><h3>{language === "en" ? "Codex Host Adapter" : "Codex 宿主适配器"}</h3><p>{language === "en" ? "This is not the Sestina Provider above. Static availability does not prove a real Pilot run; the project workflow separately previews exact outbound context and requires confirmation." : "它不是上方的 Sestina Provider。静态可用不证明真实 Pilot 已运行；项目工作流会另行展示精确外发内容并要求确认。"}</p></div>
+        <StatusBadge tone={codexHost?.availability === "available" ? "ready" : "warning"}>{codexHost?.availability ?? "unproven"}</StatusBadge>
+        <dl><dt>{language === "en" ? "Version" : "版本"}</dt><dd>{codexHost?.supportedVersion ?? "unavailable"}</dd><dt>{language === "en" ? "Last explicit verification" : "最近显式验证"}</dt><dd>{codexHost?.verifiedAt ?? "unproven"}</dd><dt>{language === "en" ? "Authority" : "Authority"}</dt><dd>proposal_only · project write false</dd></dl>
+      </section> : null}
       <form className="provider-form" onSubmit={(event) => void submit(event)}>
         <label htmlFor={`${idPrefix}-id`}>{t(language, "provider_name")}</label>
         <input id={`${idPrefix}-id`} required maxLength={128} autoComplete="off" value={providerId} onChange={(event) => { setProviderId(event.target.value); }} />

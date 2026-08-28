@@ -94,7 +94,20 @@ export type ResearchErrorCode =
   | "user_working_memory_action_required"
   | "working_memory_source_mismatch"
   | "working_memory_limit_reached"
-  | "working_memory_command_conflict";
+  | "working_memory_command_conflict"
+  | "invalid_closed_external_app_pilot"
+  | "invalid_closed_pilot_transition"
+  | "invalid_closed_pilot_attempt"
+  | "invalid_pilot_context_manifest"
+  | "invalid_closed_pilot_candidate"
+  | "invalid_closed_pilot_continuity"
+  | "user_pilot_action_required"
+  | "pilot_confirmation_replayed"
+  | "pilot_confirmation_expired"
+  | "pilot_context_mismatch"
+  | "pilot_context_too_large"
+  | "pilot_attempt_budget_exhausted"
+  | "pilot_late_result_rejected";
 
 export type ResearchErrorDetails = Readonly<
   Record<string, string | number | boolean>
@@ -203,4 +216,17 @@ const MESSAGES: Readonly<Record<ResearchErrorCode, string>> = {
   working_memory_source_mismatch: "project working memory source no longer matches its frozen project object",
   working_memory_limit_reached: "the bounded project working-memory limit has been reached",
   working_memory_command_conflict: "the working-memory command was already used with a different payload",
+  invalid_closed_external_app_pilot: "closed external app pilot is missing, malformed, or outside its project boundary",
+  invalid_closed_pilot_transition: "closed external app pilot lifecycle transition is not allowed",
+  invalid_closed_pilot_attempt: "closed external app pilot attempt is missing, malformed, or not the active fenced attempt",
+  invalid_pilot_context_manifest: "pilot Context Manifest is missing, malformed, or not bound to the exact attempt payload",
+  invalid_closed_pilot_candidate: "Codex candidate is malformed, unbound, or not proposal-only",
+  invalid_closed_pilot_continuity: "fresh-host continuity observation is malformed or not bound to current canonical state",
+  user_pilot_action_required: "an explicit user Closed External App Pilot action is required",
+  pilot_confirmation_replayed: "the one-attempt Pilot confirmation was already consumed or confirmed",
+  pilot_confirmation_expired: "the one-attempt Pilot confirmation expired",
+  pilot_context_mismatch: "the Pilot context, Manifest, attempt, or canonical state binding does not match",
+  pilot_context_too_large: "the exact Pilot context exceeds the bounded payload limit",
+  pilot_attempt_budget_exhausted: "the explicit Closed External App Pilot attempt budget is exhausted",
+  pilot_late_result_rejected: "a cancelled, failed, interrupted, or closed Pilot cannot accept a late Host result",
 };

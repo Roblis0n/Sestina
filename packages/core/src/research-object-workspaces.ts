@@ -42,7 +42,7 @@ function fromStored<T>(result: ResearchResult<T>): CoreResult<T> {
 }
 
 export type ResearchObjectKind = "decision" | "issue" | "evidence" | "episode" | "receipt" | "appeal" | "deliberation_room";
-export type ProjectSearchObjectKind = ResearchObjectKind | "brief" | "memory";
+export type ProjectSearchObjectKind = ResearchObjectKind | "brief" | "memory" | "external_app_pilot";
 export type WorkspaceProviderStatus = "configured" | "ledger_only";
 
 export interface WorkspaceListRequest {
@@ -412,7 +412,7 @@ export interface BriefWorkspaceProjection {
 
 export interface AttentionItemProjection {
   readonly id: string;
-  readonly kind: "brief_candidate" | "decision" | "issue" | "episode" | "appeal" | "deliberation_room" | "memory" | "review" | "manifest" | "rollback" | "provider";
+  readonly kind: "brief_candidate" | "decision" | "issue" | "episode" | "appeal" | "deliberation_room" | "memory" | "external_app_pilot" | "review" | "manifest" | "rollback" | "provider";
   readonly title: string;
   readonly reason: string;
   readonly severity: "high" | "normal";
@@ -425,7 +425,7 @@ export interface AttentionItemProjection {
 
 export interface TransientAttentionSignal {
   readonly id: string;
-  readonly kind: "memory" | "review" | "manifest" | "rollback" | "provider";
+  readonly kind: "memory" | "external_app_pilot" | "review" | "manifest" | "rollback" | "provider";
   readonly title: string;
   readonly reason: string;
   readonly severity: "high" | "normal";
@@ -1321,7 +1321,8 @@ export class ResearchObjectWorkspaceService {
     const appeals = this.fingerprint(projectId, "appeal", this.store.correctionAppeals.listByProject.bind(this.store.correctionAppeals, projectId), (item) => [item.id, item.version, item.status, item.updatedAt, item.source.findingHash, item.attempts.length, item.resolutions.length]); if (!appeals.ok) return appeals;
     const deliberationRooms = this.fingerprint(projectId, "deliberation_room", this.store.deliberationRooms.listByProject.bind(this.store.deliberationRooms, projectId), (item) => [item.id, item.version, item.status, item.providerReadiness, item.updatedAt, item.differenceSummary?.canonicalHash, item.challenge?.status, item.manualExternalOpinions.length, item.resolutions.length]); if (!deliberationRooms.ok) return deliberationRooms;
     const memory = this.fingerprint(projectId, "memory", this.store.workingMemory.listByProject.bind(this.store.workingMemory, projectId), (item) => [item.id, item.version, item.state, item.state === "forgotten" ? item.forgottenAt : item.updatedAt]); if (!memory.ok) return memory;
-    return coreOk(createHash("sha256").update(JSON.stringify({ brief: [brief.value.brief.id, brief.value.brief.version, brief.value.version.id], decisions: decisions.value, issues: issues.value, evidence: evidence.value, episodes: episodes.value, receipts: receipts.value, appeals: appeals.value, deliberationRooms: deliberationRooms.value, memory: memory.value }), "utf8").digest("hex"));
+    const pilots = this.fingerprint(projectId, "external_app_pilot", (page) => this.store.closedExternalAppPilots.listByProject(projectId, page), (item) => [item.id, item.version, item.status, item.updatedAt]); if (!pilots.ok) return pilots;
+    return coreOk(createHash("sha256").update(JSON.stringify({ brief: [brief.value.brief.id, brief.value.brief.version, brief.value.version.id], decisions: decisions.value, issues: issues.value, evidence: evidence.value, episodes: episodes.value, receipts: receipts.value, appeals: appeals.value, deliberationRooms: deliberationRooms.value, memory: memory.value, pilots: pilots.value }), "utf8").digest("hex"));
   }
 
   search(projectId: string, input: { readonly query: string; readonly limit: number; readonly cursor?: string }): CoreResult<ResearchObjectSearchProjection> {
@@ -1372,6 +1373,9 @@ export class ResearchObjectWorkspaceService {
       const title = "term" in item.content ? item.content.term : "purpose" in item.content ? item.content.purpose : item.content.text;
       if (contains(item.id, query) || contains(item.kind, query) || contains(item.state, query) || contains(content, query) || contains(source, query)) add({ kind: "memory", id: item.id, title, detail: `${item.kind} · ${source}`, status: item.state, source, projectId, href: `/project/memory?item=${encodeURIComponent(item.id)}` });
     }); if (!memory.ok) return memory;
+    const pilots = this.forEachPaged((page) => this.store.closedExternalAppPilots.listByProject(projectId, page), (item) => {
+      if (contains(item.id, query) || contains("Codex Pilot", query) || contains("external app pilot", query) || contains(item.status, query) || contains(item.currentTask, query)) add({ kind: "external_app_pilot", id: item.id, title: `Codex Pilot · ${item.status}`, detail: item.currentTask, status: item.status, source: "kernel_project_pilot_projection", projectId, href: `/project/external-app-pilot/${item.id}` });
+    }); if (!pilots.ok) return pilots;
     const nextOffset = offset + found.length;
     const hasMore = matches > nextOffset;
     return coreOk(Object.freeze({ schemaVersion: RESEARCH_OBJECT_WORKSPACE_SCHEMA_VERSION, projectId, datasetVersion: datasetVersion.value, query: input.query.trim(), items: Object.freeze(found), ...(hasMore ? { nextCursor: encodeSearchCursor({ version: 1, schemaVersion: RESEARCH_OBJECT_WORKSPACE_SCHEMA_VERSION, projectId, datasetVersion: datasetVersion.value, query, offset: nextOffset }) } : {}), truncated: hasMore }));

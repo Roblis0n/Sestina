@@ -81,9 +81,9 @@ const GUIDANCE_FILES = [
       "UI-03 已按 Task Start/Result 完成并验证",
       "RI-51 Project-level Minimal Governed Working Memory and Recovery Continuity",
       "RI-51 已完成并验证",
-      "none_active_RI52_not_started",
-      "await_explicit_user_authorization",
-      "RI-52 为 `not_started`",
+      "RI-52 Closed External App Pilot",
+      "implementation_completed_real_host_pilot_blocked",
+      "complete_RI52_real_host_pilot",
       "completed_and_verified_implementation_real_provider_evidence_blocked",
       "Market Gate 0",
     ],
@@ -102,6 +102,56 @@ const GUIDANCE_FILES = [
       "required_before_every_task",
       "Gate A：方向成立",
       "final: ready_to_start | do_not_start",
+    ],
+  },
+  {
+    path: "docs/execution/RI-52-CLOSED-EXTERNAL-APP-PILOT-TASK-START-RECORD.md",
+    required: [
+      "task: RI-52",
+      "status: ready_to_start",
+      "gate_conclusion: ready_to_start_user_authorized_development",
+      "activity_status: active_closed_external_app_pilot",
+      "implementation_authorization: explicit_user_authorization_2026_08_28",
+      "next_code_goal: closed_external_app_pilot",
+      "target_host: codex",
+      "public_mcp_write_capability: prohibited",
+      "host_authority_mutation: prohibited",
+      "automatic_retry: prohibited",
+      "production_visual_and_functional_acceptance: required",
+      "ri53_status: not_started",
+      "final: ready_to_start",
+    ],
+  },
+  {
+    path: "docs/execution/RI-52-CLOSED-EXTERNAL-APP-PILOT-TASK-RESULT.md",
+    required: [
+      "task: RI-52",
+      "status: implementation_completed_real_host_pilot_blocked",
+      "schema: 20",
+      "production_visual_and_functional_acceptance: passed",
+      "context_preview_actual_payload_match: passed",
+      "public_mcp_write_capability: absent",
+      "host_authority_mutation: zero_verified",
+      "cross_project_leakage: zero_verified",
+      "automatic_retry: zero_verified",
+      "candidate_authority: model_proposed_only",
+      "real_codex_candidate_session: passed",
+      "real_codex_continuity_new_host_session: unproven",
+      "next_code_goal: complete_RI52_real_host_pilot",
+      "ri53_status: not_started",
+    ],
+  },
+  {
+    path: "docs/execution/RI-52-PRODUCTION-VISUAL-AND-FUNCTIONAL-ACCEPTANCE.md",
+    required: [
+      "task: RI-52",
+      "production_visual_and_functional_acceptance: passed",
+      "browser_automation: 3_of_3_passed",
+      "final_images_generated_and_opened: 18",
+      "blocker_remaining: 0",
+      "major_remaining: 0",
+      "in_scope_moderate_remaining: 0",
+      "real_codex_continuity_evidence: unproven",
     ],
   },
   {
@@ -406,8 +456,8 @@ const MARKER_CONTRACT = {
     why: "the current task id must be well formed and consistent across entries",
   },
   "sestina-current-status": {
-    exact: "completed_and_verified",
-    why: "RI-51 passed implementation, production browser, visual, and repository gates",
+    exact: "implementation_completed_real_host_pilot_blocked",
+    why: "RI-52 implementation and visual acceptance passed but the fresh real-host continuity session is unproven",
   },
   "sestina-last-completed-task": {
     exact: "RI-51",
@@ -418,32 +468,80 @@ const MARKER_CONTRACT = {
     why: "the latest governed task passed its implementation and required host evidence gates",
   },
   "sestina-implementation-base": {
-    exact: "b6862451f4db95f8d12458008e31c80ff1b40511",
-    why: "RI-51 starts from the verified UI-03 completion commit",
+    exact: "cf8c2a761f7c0088934b75ef195f99188c26b19b",
+    why: "RI-52 starts from the verified RI-51 completion commit",
   },
   "sestina-next-code-goal": {
-    exact: "none_active_RI52_not_started",
-    why: "RI-51 is complete and RI-52 has not been authorized",
+    exact: "complete_RI52_real_host_pilot",
+    why: "the only remaining RI-52 goal is one fresh real-host continuity run",
   },
   "sestina-next-execution-goal": {
-    exact: "await_explicit_user_authorization",
-    why: "no further implementation stage is active after RI-51 completion",
+    exact: "await_explicit_user_authorization_for_one_fresh_continuity_run",
+    why: "the exhausted bounded call budget cannot be silently extended",
   },
   "sestina-next-code-sequence": {
-    exact: "none_active_RI52_not_started",
-    why: "the governed sequence stops before RI-52 until explicit authorization",
+    exact: "complete_RI52_real_host_pilot",
+    why: "the governed sequence remains inside RI-52 and cannot start RI-53",
   },
   "sestina-production-visual-and-functional-acceptance": {
     exact: "passed",
-    why: "the final RI-51 production tree passed the real visual and functional gate",
+    why: "RI-52 production UI passed the required real-route visual and functional matrix",
   },
   "sestina-ri51-status": {
     exact: "completed_and_verified",
     why: "RI-51 passed its full implementation and delivery contract",
   },
   "sestina-ri52-status": {
+    exact: "blocked_missing_real_host_evidence",
+    why: "the required second fresh Codex continuity session is unproven",
+  },
+  "sestina-ri53-status": {
     exact: "not_started",
-    why: "RI-51 completion does not start the external pilot stage",
+    why: "RI-52 authorization cannot start RI-53",
+  },
+  "sestina-ri52-target-host": {
+    exact: "codex",
+    why: "RI-52 is deliberately closed to one supported external app",
+  },
+  "sestina-ri52-closed-host-pilot": {
+    exact: "blocked_missing_real_continuity_evidence",
+    why: "the candidate session passed but the fresh continuity session did not run",
+  },
+  "sestina-ri52-public-mcp-write-capability": {
+    exact: "absent",
+    why: "the public MCP surface remains read-only",
+  },
+  "sestina-ri52-host-authority-mutation": {
+    exact: "zero_verified",
+    why: "Host output remains model_proposed and cannot mutate Authority",
+  },
+  "sestina-ri52-cross-project-leakage": {
+    exact: "zero_verified",
+    why: "Pilot, Manifest, candidate, and confirmation bindings are project scoped",
+  },
+  "sestina-ri52-automatic-retry": {
+    exact: "zero_verified",
+    why: "every Host attempt requires explicit user confirmation",
+  },
+  "sestina-ri52-context-preview-actual-payload-match": {
+    exact: "passed",
+    why: "the frozen preview bytes are the exact invocation MCP payload bytes",
+  },
+  "sestina-ri52-candidate-authority": {
+    exact: "model_proposed_only",
+    why: "candidate import never equals user acceptance",
+  },
+  "sestina-ri52-real-codex-candidate-session": {
+    exact: "passed",
+    why: "one real Codex candidate session and both read-only MCP calls were observed",
+  },
+  "sestina-ri52-real-codex-continuity-new-host-session": {
+    exact: "unproven",
+    why: "no second fresh real Codex session completed within the authorized budget",
+  },
+  "sestina-ri52-production-visual-and-functional-acceptance": {
+    exact: "passed",
+    why: "the production Pilot workflow passed the whole-app visual gate",
   },
   "sestina-governed-project-memory-implementation": {
     exact: "passed",
@@ -628,9 +726,9 @@ for (const entry of ENTRY_FILES) {
 const tasks = [...currentTasks.entries()];
 if (tasks.length > 0) {
   const first = tasks[0][1];
-  if (first !== "RI-51") {
+  if (first !== "RI-52") {
     err(
-      `[AUTH-R003] ${tasks[0][0]}: current task is '${first}' but the explicitly authorized task is 'RI-51'`,
+      `[AUTH-R003] ${tasks[0][0]}: current task is '${first}' but the explicitly authorized task is 'RI-52'`,
     );
   }
   for (const [entry, task] of tasks) {

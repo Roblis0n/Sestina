@@ -19,6 +19,7 @@
     { "version": 16, "name": "016-research-room" },
     { "version": 17, "name": "017-correction-appeals" },
     { "version": 18, "name": "018-deliberation-rooms" },
-    { "version": 19, "name": "019-project-working-memory" }
+    { "version": 19, "name": "019-project-working-memory" },
+    { "version": 20, "name": "020-closed-external-app-pilots" }
   ]
 }

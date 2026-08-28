@@ -8,6 +8,7 @@ import {
   parseResearchArtifact,
   parseResearchBrief,
   parseCorrectionAppeal,
+  parseClosedExternalAppPilot,
   parseDeliberationRoom,
   parseProjectWorkingMemory,
   parseResumeCheckpoint,
@@ -27,6 +28,9 @@ import {
   type ResearchArtifact,
   type ResearchBrief,
   type CorrectionAppeal,
+  type ClosedExternalAppPilot,
+  type ClosedPilotAttempt,
+  type ClosedPilotEvent,
   type DeliberationRoom,
   type ProjectWorkingMemory,
   type ResumeCheckpoint,
@@ -43,6 +47,7 @@ import {
   type RevisionEpisode,
   PROJECT_WORKING_MEMORY_MAX_ACTIVE_ITEMS,
   PROJECT_WORKING_MEMORY_STATES,
+  CLOSED_EXTERNAL_APP_PILOT_STATUSES,
 } from "@sestina/research";
 import type { StorageDatabase } from "@sestina/storage";
 import { decodeDomainJson, encodeDomainJson } from "../mappers/domain-json.js";
@@ -1393,6 +1398,189 @@ export function createResearchRepositories(db: StorageDatabase): ResearchReposit
     },
   };
 
+  const closedExternalAppPilots: ResearchRepositories["closedExternalAppPilots"] = {
+    create(value) {
+      return writeResult(db, () => {
+        const parsed = parseClosedExternalAppPilot(value);
+        if (!parsed.ok) return parsed;
+        const project = requireProject(db, parsed.value.projectId);
+        if (!project.ok) return project;
+        if (db.get("SELECT pilot_id FROM closed_external_app_pilots WHERE pilot_id = ?", parsed.value.id)) {
+          return { ok: false, error: researchError("version_conflict") };
+        }
+        const data = encodeDomainJson(parsed.value, parseClosedExternalAppPilot);
+        if (!data.ok) return data;
+        const manifest = parsed.value.manifests.at(-1);
+        db.run(
+          `INSERT INTO closed_external_app_pilots
+             (pilot_id, project_id, host, brief_id, brief_version, episode_id, status, version,
+              current_manifest_id, current_manifest_hash, candidate_id, candidate_hash, review_id,
+              receipt_id, continuity_attempt_id, evidence_class, created_at, updated_at, closed_at, data)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          parsed.value.id,
+          parsed.value.projectId,
+          parsed.value.host,
+          parsed.value.brief.id,
+          parsed.value.brief.version,
+          parsed.value.episode.id,
+          parsed.value.status,
+          parsed.value.version,
+          manifest?.id ?? null,
+          manifest?.payloadHash ?? null,
+          parsed.value.candidate?.id ?? null,
+          parsed.value.candidate?.candidateHash ?? null,
+          parsed.value.review?.reviewId ?? null,
+          parsed.value.disposition?.receiptId ?? null,
+          parsed.value.continuity?.attemptId ?? null,
+          parsed.value.evidenceClass,
+          parsed.value.createdAt,
+          parsed.value.updatedAt,
+          parsed.value.closedAt ?? null,
+          data.value,
+        );
+        for (const attempt of parsed.value.attempts) {
+          const inserted = insertClosedPilotAttempt(db, parsed.value, attempt);
+          if (!inserted.ok) return inserted;
+        }
+        for (const event of parsed.value.events) {
+          const inserted = insertClosedPilotEvent(db, parsed.value, event);
+          if (!inserted.ok) return inserted;
+        }
+        return parsed;
+      });
+    },
+    getById(projectId, pilotId) {
+      return readResult<ClosedExternalAppPilot | undefined>(() => {
+        const project = validId(projectId, "rprj_");
+        const pilot = validId(pilotId, "rpil_");
+        if (!project.ok || !pilot.ok) return { ok: false, error: researchError("invalid_closed_external_app_pilot") };
+        const row = db.get<{ data: string }>("SELECT data FROM closed_external_app_pilots WHERE project_id = ? AND pilot_id = ?", project.value, pilot.value);
+        return row === undefined ? { ok: true, value: undefined } : decodeStoredClosedPilot(row.data);
+      });
+    },
+    listByProject(projectId, page, statuses) {
+      return readResult(() => {
+        const selected = statuses === undefined ? [...CLOSED_EXTERNAL_APP_PILOT_STATUSES] : [...statuses];
+        if (selected.length === 0 || selected.length > CLOSED_EXTERNAL_APP_PILOT_STATUSES.length || new Set(selected).size !== selected.length || selected.some((status) => !CLOSED_EXTERNAL_APP_PILOT_STATUSES.includes(status))) {
+          return { ok: false, error: researchError("invalid_closed_external_app_pilot") };
+        }
+        const placeholders = selected.map(() => "?").join(",");
+        return pageRows(db, {
+          table: "closed_external_app_pilots",
+          idColumn: "pilot_id",
+          idPrefix: "rpil_",
+          projectId,
+          where: `project_id = ? AND status IN (${placeholders})`,
+          params: [projectId, ...selected],
+          page,
+          parser: parseStoredClosedPilot,
+        });
+      });
+    },
+    listAttempts(projectId, pilotId, page) {
+      return readResult(() => {
+        const project = validId(projectId, "rprj_");
+        const pilot = validId(pilotId, "rpil_");
+        const parsedPage = parseResearchPageRequest(page);
+        if (!project.ok || !pilot.ok || !parsedPage.ok) return { ok: false, error: researchError("invalid_closed_external_app_pilot") };
+        const found = db.get<{ data: string }>("SELECT data FROM closed_external_app_pilots WHERE project_id = ? AND pilot_id = ?", project.value, pilot.value);
+        if (found === undefined) return { ok: true, value: immutablePage([], undefined) };
+        const aggregate = decodeStoredClosedPilot(found.data);
+        if (!aggregate.ok) return aggregate;
+        return boundedClosedPilotPage(aggregate.value.attempts, parsedPage.value, project.value, (item) => String(item.ordinal).padStart(4, "0"));
+      });
+    },
+    listEvents(projectId, pilotId, page) {
+      return readResult(() => {
+        const project = validId(projectId, "rprj_");
+        const pilot = validId(pilotId, "rpil_");
+        const parsedPage = parseResearchPageRequest(page);
+        if (!project.ok || !pilot.ok || !parsedPage.ok) return { ok: false, error: researchError("invalid_closed_external_app_pilot") };
+        const found = db.get<{ data: string }>("SELECT data FROM closed_external_app_pilots WHERE project_id = ? AND pilot_id = ?", project.value, pilot.value);
+        if (found === undefined) return { ok: true, value: immutablePage([], undefined) };
+        const aggregate = decodeStoredClosedPilot(found.data);
+        if (!aggregate.ok) return aggregate;
+        return boundedClosedPilotPage(aggregate.value.events, parsedPage.value, project.value, (item) => String(item.index).padStart(8, "0"));
+      });
+    },
+    compareAndSwap(value, expectedVersion) {
+      return writeResult(db, () => {
+        const next = parseClosedExternalAppPilot(value);
+        const expected = parseEntityVersion(expectedVersion);
+        if (!next.ok || !expected.ok) return { ok: false, error: researchError("invalid_closed_external_app_pilot") };
+        const row = db.get<{ data: string }>("SELECT data FROM closed_external_app_pilots WHERE project_id = ? AND pilot_id = ? AND version = ?", next.value.projectId, next.value.id, expected.value);
+        if (row === undefined) return { ok: false, error: researchError("version_conflict") };
+        const current = decodeStoredClosedPilot(row.data);
+        if (!current.ok) return current;
+        const versions = requireExpectedNext(current.value.version, expected.value, next.value.version);
+        if (!versions.ok) return versions;
+        if (
+          current.value.id !== next.value.id
+          || current.value.projectId !== next.value.projectId
+          || current.value.host !== next.value.host
+          || current.value.authority !== next.value.authority
+          || current.value.canMutateAuthority !== next.value.canMutateAuthority
+          || current.value.createdAt !== next.value.createdAt
+          || current.value.evidenceClass !== next.value.evidenceClass
+          || !sameValue(current.value.brief, next.value.brief)
+          || !sameValue(current.value.episode, next.value.episode)
+          || current.value.currentTask !== next.value.currentTask
+          || next.value.events.length !== current.value.events.length + 1
+          || !sameValue(next.value.events.slice(0, current.value.events.length), current.value.events)
+          || next.value.manifests.length < current.value.manifests.length
+          || next.value.manifests.length > current.value.manifests.length + 1
+          || !sameValue(next.value.manifests.slice(0, current.value.manifests.length), current.value.manifests)
+          || next.value.attempts.length < current.value.attempts.length
+          || next.value.attempts.length > current.value.attempts.length + 1
+        ) return { ok: false, error: researchError("version_conflict") };
+        for (const [index, prior] of current.value.attempts.entries()) {
+          const following = next.value.attempts[index];
+          if (following === undefined || prior.id !== following.id || prior.kind !== following.kind || prior.ordinal !== following.ordinal || prior.manifestId !== following.manifestId || prior.manifestHash !== following.manifestHash || prior.confirmationNonce !== following.confirmationNonce || prior.confirmationExpiresAt !== following.confirmationExpiresAt) return { ok: false, error: researchError("version_conflict") };
+        }
+        const data = encodeDomainJson(next.value, parseClosedExternalAppPilot);
+        if (!data.ok) return data;
+        const manifest = next.value.manifests.at(-1);
+        const update = db.run(
+          `UPDATE closed_external_app_pilots
+           SET status = ?, version = ?, current_manifest_id = ?, current_manifest_hash = ?,
+               candidate_id = ?, candidate_hash = ?, review_id = ?, receipt_id = ?,
+               continuity_attempt_id = ?, updated_at = ?, closed_at = ?, data = ?
+           WHERE project_id = ? AND pilot_id = ? AND version = ?`,
+          next.value.status,
+          next.value.version,
+          manifest?.id ?? null,
+          manifest?.payloadHash ?? null,
+          next.value.candidate?.id ?? null,
+          next.value.candidate?.candidateHash ?? null,
+          next.value.review?.reviewId ?? null,
+          next.value.disposition?.receiptId ?? null,
+          next.value.continuity?.attemptId ?? null,
+          next.value.updatedAt,
+          next.value.closedAt ?? null,
+          data.value,
+          next.value.projectId,
+          next.value.id,
+          expected.value,
+        );
+        if (Number(update.changes) !== 1) return { ok: false, error: researchError("version_conflict") };
+        for (const [index, attempt] of next.value.attempts.entries()) {
+          if (index < current.value.attempts.length) {
+            const updated = updateClosedPilotAttempt(db, next.value, attempt);
+            if (!updated.ok) return updated;
+          } else {
+            const inserted = insertClosedPilotAttempt(db, next.value, attempt);
+            if (!inserted.ok) return inserted;
+          }
+        }
+        for (const event of next.value.events.slice(current.value.events.length)) {
+          const inserted = insertClosedPilotEvent(db, next.value, event);
+          if (!inserted.ok) return inserted;
+        }
+        return next;
+      });
+    },
+  };
+
   return Object.freeze({
     projects,
     artifacts,
@@ -1407,6 +1595,7 @@ export function createResearchRepositories(db: StorageDatabase): ResearchReposit
     deliberationRooms,
     workingMemory,
     resumeCheckpoints,
+    closedExternalAppPilots,
     ...createArgumentGraphRepositories(db),
   });
 }
@@ -1423,4 +1612,80 @@ function decodeStoredResumeCheckpoint(data: string): ResearchResult<ResumeCheckp
   return decoded.ok
     ? decoded
     : { ok: false, error: researchError("research_storage_unavailable") };
+}
+
+function parseStoredClosedPilot(input: unknown): ResearchResult<ClosedExternalAppPilot> {
+  const parsed = parseClosedExternalAppPilot(input);
+  return parsed.ok ? parsed : { ok: false, error: researchError("research_storage_unavailable") };
+}
+
+function decodeStoredClosedPilot(data: string): ResearchResult<ClosedExternalAppPilot> {
+  const decoded = decodeDomainJson(data, parseClosedExternalAppPilot);
+  return decoded.ok ? decoded : { ok: false, error: researchError("research_storage_unavailable") };
+}
+
+function encodeClosedPilotMember(value: unknown): ResearchResult<string> {
+  const encoded = canonicalStringify(value);
+  return encoded.ok ? encoded : { ok: false, error: researchError("research_storage_unavailable") };
+}
+
+function insertClosedPilotAttempt(db: StorageDatabase, pilot: ClosedExternalAppPilot, attempt: ClosedPilotAttempt): ResearchResult<void> {
+  const data = encodeClosedPilotMember(attempt);
+  if (!data.ok) return data;
+  db.run(
+    `INSERT INTO closed_external_app_pilot_attempts
+       (attempt_id, pilot_id, project_id, kind, ordinal, status, manifest_id, manifest_hash,
+        confirmation_nonce, confirmation_expires_at, confirmed_at, confirmation_consumed_at,
+        invocation_id, started_at, completed_at, failure_code, data)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    attempt.id, pilot.id, pilot.projectId, attempt.kind, attempt.ordinal, attempt.status,
+    attempt.manifestId, attempt.manifestHash, attempt.confirmationNonce, attempt.confirmationExpiresAt,
+    attempt.confirmedAt ?? null, attempt.confirmationConsumedAt ?? null, attempt.invocationId ?? null,
+    attempt.startedAt ?? null, attempt.completedAt ?? null, attempt.failureCode ?? null, data.value,
+  );
+  return { ok: true, value: undefined };
+}
+
+function updateClosedPilotAttempt(db: StorageDatabase, pilot: ClosedExternalAppPilot, attempt: ClosedPilotAttempt): ResearchResult<void> {
+  const data = encodeClosedPilotMember(attempt);
+  if (!data.ok) return data;
+  const update = db.run(
+    `UPDATE closed_external_app_pilot_attempts
+     SET status = ?, confirmed_at = ?, confirmation_consumed_at = ?, invocation_id = ?,
+         started_at = ?, completed_at = ?, failure_code = ?, data = ?
+     WHERE project_id = ? AND pilot_id = ? AND attempt_id = ?`,
+    attempt.status, attempt.confirmedAt ?? null, attempt.confirmationConsumedAt ?? null,
+    attempt.invocationId ?? null, attempt.startedAt ?? null, attempt.completedAt ?? null,
+    attempt.failureCode ?? null, data.value, pilot.projectId, pilot.id, attempt.id,
+  );
+  return Number(update.changes) === 1 ? { ok: true, value: undefined } : { ok: false, error: researchError("version_conflict") };
+}
+
+function insertClosedPilotEvent(db: StorageDatabase, pilot: ClosedExternalAppPilot, event: ClosedPilotEvent): ResearchResult<void> {
+  const data = encodeClosedPilotMember(event);
+  if (!data.ok) return data;
+  db.run(
+    `INSERT INTO closed_external_app_pilot_events
+       (event_id, pilot_id, project_id, event_index, from_status, to_status, reason, occurred_at, data)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    event.id, pilot.id, pilot.projectId, event.index, event.from ?? null, event.to, event.reason, event.at, data.value,
+  );
+  return { ok: true, value: undefined };
+}
+
+function boundedClosedPilotPage<T extends { readonly id: string }>(
+  values: readonly T[],
+  page: ResearchPageRequest,
+  projectId: string,
+  sortKey: (value: T) => string,
+): ResearchResult<ResearchPage<T>> {
+  const cursor = decodeCursor(page, projectId);
+  if (!cursor.ok) return cursor;
+  const ordered = [...values].sort((left, right) => sortKey(left).localeCompare(sortKey(right)) || left.id.localeCompare(right.id));
+  const after = cursor.value === undefined ? ordered : ordered.filter((item) => sortKey(item) > cursor.value!.sortKey || (sortKey(item) === cursor.value!.sortKey && item.id > cursor.value!.id));
+  const selected = after.slice(0, page.limit + 1);
+  const hasMore = selected.length > page.limit;
+  const items = hasMore ? selected.slice(0, page.limit) : selected;
+  const last = items.at(-1);
+  return { ok: true, value: immutablePage(items, hasMore && last !== undefined ? encodeCursor(projectId, sortKey(last), last.id) : undefined) };
 }

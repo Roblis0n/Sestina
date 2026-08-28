@@ -10,7 +10,9 @@ const GENERATED_TYPESCRIPT_RELATIVE_PATH = "src/generated/codex.ts";
 
 // Append a superseded generated bundle hash here before changing the canonical
 // Skill or Codex metadata. This is the only hand-maintained ownership history.
-const KNOWN_PREVIOUS_BUNDLE_HASHES = Object.freeze([] as readonly string[]);
+const KNOWN_PREVIOUS_BUNDLE_HASHES = Object.freeze([
+  "98c84a8953867ddaaff9cc23dabf290fa0679041bcfec324e0ba5e697ac3f490",
+] as readonly string[]);
 
 const CODEX_METADATA = `interface:
   display_name: "Sestina Research Integrity"
@@ -20,7 +22,7 @@ dependencies:
   tools:
     - type: "mcp"
       value: "sestina"
-      description: "Read-only access to the current Sestina Research Brief."
+      description: "Read-only access to the current or invocation-frozen Sestina research context."
 policy:
   allow_implicit_invocation: true
 `;

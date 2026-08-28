@@ -6,6 +6,6 @@ dependencies:
   tools:
     - type: "mcp"
       value: "sestina"
-      description: "Read-only access to the current Sestina Research Brief."
+      description: "Read-only access to the current or invocation-frozen Sestina research context."
 policy:
   allow_implicit_invocation: true

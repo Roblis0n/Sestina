@@ -45,6 +45,15 @@ import {
   type ResearchSnapshot,
   type ResearchSource,
   type RevisionEpisode,
+  type ClosedExternalAppPilot,
+  type ClosedPilotCandidateInput,
+  type ClosedPilotContinuityObservation,
+  type ClosedPilotEvidenceClass,
+  type ClosedPilotEvidenceExport,
+  type ClosedPilotFailureCode,
+  type ClosedPilotFeedbackCode,
+  type ClosedPilotHostCapabilities,
+  type ClosedPilotMcpObservation,
 } from "@sestina/research";
 import { createResearchStore, createSqliteReviewRunRepository, type ResearchStore } from "@sestina/research-store";
 import {
@@ -181,6 +190,7 @@ import {
   type ReceiptDetailProjection,
   type ReceiptSummaryProjection,
   type ResearchObjectSearchProjection,
+  type TransientAttentionSignal,
   type WorkspaceListRequest,
   type WorkspacePage,
   type WorkspaceProviderStatus,
@@ -202,6 +212,10 @@ import type {
   ProjectWorkingMemorySensitivity,
   ResumeCheckpoint,
 } from "@sestina/research";
+import {
+  ClosedExternalAppPilotService,
+  type PrepareClosedExternalAppPilotContextInput,
+} from "./closed-external-app-pilot.js";
 
 const PAGE = Object.freeze({ limit: 200 });
 const SYSTEM_ACTOR: ResearchActor = Object.freeze({ kind: "system", component: "sestina-core" });
@@ -381,6 +395,7 @@ export class SestinaCore {
   readonly #deliberationRooms: DeliberationRoomService;
   readonly #researchObjects: ResearchObjectWorkspaceService;
   readonly #projectMemory: ProjectMemoryService;
+  readonly #closedExternalAppPilots: ClosedExternalAppPilotService;
   readonly #reviewMemoryManifests = new Map<string, {
     readonly manifest: ProjectMemoryManifestProjection;
     readonly provider: ProjectMemoryProviderBinding;
@@ -401,6 +416,7 @@ export class SestinaCore {
     this.#deliberationRooms = new DeliberationRoomService(this.#store, clock, idFactory, (projectId) => this.#researchRoom.getState(projectId), deliberationParticipantProviders, deliberationParticipantProviderTimeoutMs);
     this.#researchObjects = new ResearchObjectWorkspaceService(this.#store);
     this.#projectMemory = new ProjectMemoryService(this.#store, clock, idFactory);
+    this.#closedExternalAppPilots = new ClosedExternalAppPilotService(this.#store, clock, idFactory, (projectId) => this.#researchRoom.getState(projectId), (projectId, page) => this.#projectMemory.projection(projectId, page));
   }
 
   close(): void { this.#database.close(); }
@@ -1108,7 +1124,10 @@ export class SestinaCore {
   refreshDeliberationRoomSource(projectId: string, roomId: string): CoreResult<DeliberationRoom> { return this.#deliberationRooms.refreshSource(projectId, roomId); }
   recoverInterruptedDeliberationRooms(): CoreResult<number> { return this.#deliberationRooms.recoverInterrupted(); }
 
-  getProjectOverviewProjection(projectId: string, input: { readonly providerStatus: WorkspaceProviderStatus }): CoreResult<ProjectOverviewProjection> { return this.#researchObjects.getOverview(projectId, input, this.#researchRoom.getAttentionSignals(projectId)); }
+  getProjectOverviewProjection(projectId: string, input: { readonly providerStatus: WorkspaceProviderStatus }): CoreResult<ProjectOverviewProjection> {
+    const supplemental = this.#supplementalAttentionSignals(projectId); if (!supplemental.ok) return supplemental;
+    return this.#researchObjects.getOverview(projectId, input, [...this.#researchRoom.getAttentionSignals(projectId), ...supplemental.value]);
+  }
   getBriefWorkspaceProjection(projectId: string, historyLimit?: number): CoreResult<BriefWorkspaceProjection> { return this.#researchObjects.getBriefWorkspace(projectId, historyLimit); }
   listDecisionProjections(projectId: string, request: WorkspaceListRequest): CoreResult<WorkspacePage<DecisionSummaryProjection>> { return this.#researchObjects.listDecisions(projectId, request); }
   getDecisionProjection(projectId: string, decisionId: string): CoreResult<DecisionDetailProjection | undefined> { return this.#researchObjects.getDecision(projectId, decisionId); }
@@ -1125,8 +1144,17 @@ export class SestinaCore {
   listDeliberationRoomProjections(projectId: string, request: WorkspaceListRequest): CoreResult<WorkspacePage<DeliberationRoomSummaryProjection>> { return this.#researchObjects.listDeliberationRooms(projectId, request); }
   getDeliberationRoomProjection(projectId: string, roomId: string): CoreResult<DeliberationRoomDetailProjection | undefined> { return this.#researchObjects.getDeliberationRoom(projectId, roomId); }
   getAttentionProjection(projectId: string): CoreResult<AttentionProjection> {
+    const supplemental = this.#supplementalAttentionSignals(projectId); if (!supplemental.ok) return supplemental;
+    return this.#researchObjects.getAttention(projectId, [...this.#researchRoom.getAttentionSignals(projectId), ...supplemental.value]);
+  }
+  searchResearchObjects(projectId: string, input: { readonly query: string; readonly limit: number; readonly cursor?: string }): CoreResult<ResearchObjectSearchProjection> {
+    const reconciled = this.#projectMemory.projection(projectId, { limit: 200 }); if (!reconciled.ok) return reconciled;
+    return this.#researchObjects.search(projectId, input);
+  }
+
+  #supplementalAttentionSignals(projectId: string): CoreResult<readonly TransientAttentionSignal[]> {
     const memory = this.#projectMemory.projection(projectId, { limit: 200 }); if (!memory.ok) return memory;
-    const memorySignals = memory.value.attention.map((signal) => {
+    const memorySignals: readonly TransientAttentionSignal[] = memory.value.attention.map((signal) => {
       const item = memory.value.workingMemory.items.find((candidate) => candidate.id === signal.id);
       const primaryAction = signal.kind === "memory_candidate" ? "Review and explicitly confirm or retire"
         : signal.kind === "memory_stale" ? "Re-pin from the current source or retire"
@@ -1134,11 +1162,18 @@ export class SestinaCore {
             : "Review retention before expiry";
       return Object.freeze({ id: signal.id, kind: "memory" as const, title: signal.title, reason: signal.reason, severity: signal.severity, href: `/project/memory?item=${encodeURIComponent(signal.id)}`, primaryAction, sourceObject: Object.freeze({ kind: signal.kind, id: signal.id }), createdAt: item?.updatedAt ?? item?.forgottenAt ?? "1970-01-01T00:00:00.000Z" });
     });
-    return this.#researchObjects.getAttention(projectId, [...this.#researchRoom.getAttentionSignals(projectId), ...memorySignals]);
-  }
-  searchResearchObjects(projectId: string, input: { readonly query: string; readonly limit: number; readonly cursor?: string }): CoreResult<ResearchObjectSearchProjection> {
-    const reconciled = this.#projectMemory.projection(projectId, { limit: 200 }); if (!reconciled.ok) return reconciled;
-    return this.#researchObjects.search(projectId, input);
+    const pilots = this.#closedExternalAppPilots.list(projectId, { limit: 200 }); if (!pilots.ok) return pilots;
+    if (pilots.value.nextCursor !== undefined) return coreErr("state_conflict");
+    const pilotSignals: TransientAttentionSignal[] = [];
+    for (const pilot of pilots.value.items) {
+      const mapping = pilot.status === "candidate_confirmation_required" ? { title: "Codex candidate awaits user review", reason: "A validated model-proposed candidate is neither imported nor rejected.", primaryAction: "Inspect and reject or import", severity: "high" as const }
+        : pilot.status === "user_disposition_required" || pilot.status === "review_required" ? { title: "Imported Codex candidate awaits user disposition", reason: "Import did not accept the candidate; the bound Sestina Review still requires the user.", primaryAction: "Restore or run Review and choose a legal disposition", severity: "high" as const }
+          : pilot.status === "continuity_check_ready" ? { title: "Codex Pilot continuity check is ready", reason: "The user disposition is committed; a new-session read-only verification remains optional and explicit.", primaryAction: "Preview and confirm the fresh-session Manifest", severity: "normal" as const }
+            : ["stale", "expired", "cancelled", "failed", "blocked_host_unavailable", "interrupted_unknown"].includes(pilot.status) ? { title: `Codex Pilot stopped · ${pilot.status}`, reason: pilot.failure?.publicReason ?? "The bounded attempt stopped without an accepted result or automatic retry.", primaryAction: "Inspect failure and explicitly recover or close", severity: pilot.status === "failed" || pilot.status === "blocked_host_unavailable" ? "high" as const : "normal" as const }
+              : undefined;
+      if (mapping) pilotSignals.push(Object.freeze({ id: pilot.id, kind: "external_app_pilot", ...mapping, href: `/project/external-app-pilot/${pilot.id}`, sourceObject: Object.freeze({ kind: "closed_external_app_pilot", id: pilot.id }), createdAt: pilot.updatedAt }));
+    }
+    return coreOk(Object.freeze([...memorySignals, ...pilotSignals]));
   }
 
   getProjectMemoryProjection(projectId: string, page: { readonly limit: number; readonly cursor?: string }): CoreResult<ProjectMemoryProjection> { return this.#projectMemory.projection(projectId, page); }
@@ -1153,6 +1188,55 @@ export class SestinaCore {
   prepareProjectMemoryManifest(input: { readonly projectId: string; readonly selectedItemIds: readonly string[]; readonly provider: ProjectMemoryProviderBinding; readonly actor: ResearchActor }): CoreResult<ProjectMemoryManifestProjection> { return this.#projectMemory.prepareManifest(input); }
   confirmProjectMemoryManifest(input: { readonly projectId: string; readonly manifestId: string; readonly expectedVersion: number; readonly confirmationNonce: string; readonly manifestHash: string; readonly provider: ProjectMemoryProviderBinding; readonly actor: ResearchActor }): CoreResult<ProjectMemoryManifestProjection> { return this.#projectMemory.confirmManifest(input); }
   consumeProjectMemoryManifest(input: { readonly projectId: string; readonly manifestId: string; readonly expectedVersion: number; readonly manifestHash: string; readonly provider: ProjectMemoryProviderBinding }): CoreResult<ProjectMemoryManifestProjection> { return this.#projectMemory.consumeManifest(input); }
+
+  createClosedExternalAppPilot(input: { readonly projectId: string; readonly evidenceClass: ClosedPilotEvidenceClass; readonly actor: ResearchActor }): CoreResult<ClosedExternalAppPilot> { return this.#closedExternalAppPilots.create(input); }
+  getClosedExternalAppPilot(projectId: string, pilotId: string): CoreResult<ClosedExternalAppPilot> { return this.#closedExternalAppPilots.get(projectId, pilotId); }
+  listClosedExternalAppPilots(projectId: string, page: { readonly limit: number; readonly cursor?: string }): CoreResult<{ readonly items: readonly ClosedExternalAppPilot[]; readonly nextCursor?: string }> { return this.#closedExternalAppPilots.list(projectId, page); }
+  recordClosedExternalAppPilotPreflight(input: { readonly projectId: string; readonly pilotId: string; readonly expectedVersion: number; readonly availability: "available" | "unavailable"; readonly supportedVersion: string | null; readonly verifiedAt?: string; readonly capabilities: ClosedPilotHostCapabilities }): CoreResult<ClosedExternalAppPilot> { return this.#closedExternalAppPilots.preflight(input); }
+  prepareClosedExternalAppPilotContext(input: PrepareClosedExternalAppPilotContextInput): CoreResult<ClosedExternalAppPilot> { return this.#closedExternalAppPilots.prepare(input); }
+  confirmClosedExternalAppPilotContext(input: { readonly projectId: string; readonly pilotId: string; readonly expectedVersion: number; readonly attemptId: string; readonly manifestId: string; readonly manifestHash: string; readonly confirmationNonce: string; readonly actor: ResearchActor }): CoreResult<ClosedExternalAppPilot> { return this.#closedExternalAppPilots.confirm(input); }
+  startClosedExternalAppPilotAttempt(input: { readonly projectId: string; readonly pilotId: string; readonly expectedVersion: number; readonly attemptId: string; readonly manifestHash: string }): CoreResult<ClosedExternalAppPilot> { return this.#closedExternalAppPilots.start(input); }
+  markClosedExternalAppPilotAttemptRunning(input: { readonly projectId: string; readonly pilotId: string; readonly expectedVersion: number; readonly attemptId: string; readonly invocationId: string }): CoreResult<ClosedExternalAppPilot> { return this.#closedExternalAppPilots.running(input); }
+  receiveClosedExternalAppPilotCandidate(input: { readonly projectId: string; readonly pilotId: string; readonly expectedVersion: number; readonly attemptId: string; readonly invocationId: string; readonly manifestHash: string; readonly mcpObservation: ClosedPilotMcpObservation; readonly candidate: ClosedPilotCandidateInput; readonly stdoutBytes?: number; readonly stderrBytes?: number; readonly usage?: { readonly inputTokens: number; readonly outputTokens: number } | "unavailable" }): CoreResult<ClosedExternalAppPilot> { return this.#closedExternalAppPilots.receiveCandidate(input); }
+  rejectClosedExternalAppPilotCandidate(input: { readonly projectId: string; readonly pilotId: string; readonly expectedVersion: number; readonly actor: ResearchActor }): CoreResult<ClosedExternalAppPilot> { return this.#closedExternalAppPilots.rejectCandidate(input); }
+  importClosedExternalAppPilotCandidate(input: { readonly projectId: string; readonly pilotId: string; readonly expectedVersion: number; readonly actor: ResearchActor }): CoreResult<{ readonly pilot: ClosedExternalAppPilot; readonly revision: ArtifactRevision; readonly review: PreparedResearchRoomReview }> {
+    const pilot = this.#closedExternalAppPilots.get(input.projectId, input.pilotId); if (!pilot.ok) return pilot;
+    if (pilot.value.version !== input.expectedVersion || pilot.value.candidate?.status !== "received") return coreErr("stale_state");
+    const episode = found(this.getEpisode(input.projectId, pilot.value.episode.id)); if (!episode.ok) return episode;
+    const revision = this.createRevision({ projectId: input.projectId, artifactId: episode.value.artifactId, parentRevisionId: episode.value.lockedStart.baselineRevisionId, content: pilot.value.candidate.candidateMarkdown, mediaType: "text/markdown", actor: input.actor, allowFork: true });
+    if (!revision.ok) return revision;
+    const imported = this.#closedExternalAppPilots.importCandidate(input); if (!imported.ok) return imported;
+    const review = this.prepareResearchRoomReview({ projectId: input.projectId, suggestion: pilot.value.candidate.candidateMarkdown, evidenceClass: pilot.value.evidenceClass === "synthetic_fixture" ? "synthetic_fixture" : "owner_scenario", countsAsExternalEvidence: false, actor: input.actor });
+    if (!review.ok) return review;
+    const bound = this.#closedExternalAppPilots.bindReview({ projectId: input.projectId, pilotId: input.pilotId, expectedVersion: imported.value.version, reviewId: review.value.reviewId, importedRevisionId: revision.value.id, reviewMode: review.value.providerStatus === "ready" ? "provider_assisted" : "ledger_only" });
+    return bound.ok ? coreOk(Object.freeze({ pilot: bound.value, revision: revision.value, review: review.value })) : bound;
+  }
+  restoreClosedExternalAppPilotReview(input: { readonly projectId: string; readonly pilotId: string; readonly expectedPilotVersion: number; readonly actor: ResearchActor }): CoreResult<{ readonly pilot: ClosedExternalAppPilot; readonly review: PreparedResearchRoomReview }> {
+    const pilot = this.#closedExternalAppPilots.get(input.projectId, input.pilotId); if (!pilot.ok) return pilot;
+    if (pilot.value.version !== input.expectedPilotVersion || pilot.value.status !== "user_disposition_required" || pilot.value.candidate?.status !== "imported" || pilot.value.review === undefined) return coreErr("stale_state");
+    const review = this.prepareResearchRoomReview({ projectId: input.projectId, suggestion: pilot.value.candidate.candidateMarkdown, evidenceClass: pilot.value.evidenceClass === "synthetic_fixture" ? "synthetic_fixture" : "owner_scenario", countsAsExternalEvidence: false, actor: input.actor });
+    if (!review.ok) return review;
+    const rebound = this.#closedExternalAppPilots.restoreReview({ projectId: input.projectId, pilotId: input.pilotId, expectedVersion: pilot.value.version, reviewId: review.value.reviewId, reviewMode: review.value.providerStatus === "ready" ? "provider_assisted" : "ledger_only", actor: input.actor });
+    return rebound.ok ? coreOk(Object.freeze({ pilot: rebound.value, review: review.value })) : rebound;
+  }
+  commitClosedExternalAppPilotDisposition(input: { readonly projectId: string; readonly pilotId: string; readonly expectedPilotVersion: number; readonly reviewId: string; readonly authorityNonce: string; readonly expectedStateBinding: CommitResearchRoomDispositionInput["expectedStateBinding"]; readonly disposition: CommitResearchRoomDispositionInput["disposition"]; readonly reason: string; readonly modifiedProposal?: string; readonly redirectQuestion?: string; readonly actor: ResearchActor }): CoreResult<{ readonly pilot: ClosedExternalAppPilot; readonly receipt: ResearchRoomReceipt }> {
+    const pilot = this.#closedExternalAppPilots.get(input.projectId, input.pilotId); if (!pilot.ok) return pilot;
+    if (pilot.value.version !== input.expectedPilotVersion || pilot.value.review?.reviewId !== input.reviewId) return coreErr("stale_state");
+    const receipt = this.#researchRoom.commit({ projectId: input.projectId, reviewId: input.reviewId, authorityNonce: input.authorityNonce, expectedStateBinding: input.expectedStateBinding, disposition: input.disposition, reason: input.reason, ...(input.modifiedProposal ? { modifiedProposal: input.modifiedProposal } : {}), ...(input.redirectQuestion ? { redirectQuestion: input.redirectQuestion } : {}), actor: input.actor });
+    if (!receipt.ok) return receipt;
+    const disposition = input.disposition === "accepted" ? "accept" as const : input.disposition === "rejected" ? "reject" as const : input.disposition === "modified_accepted" ? "modify" as const : input.disposition === "deferred" ? "defer" as const : "other" as const;
+    const bound = this.#closedExternalAppPilots.bindDisposition({ projectId: input.projectId, pilotId: input.pilotId, expectedVersion: input.expectedPilotVersion, reviewId: input.reviewId, receiptId: receipt.value.id, traceId: receipt.value.id, disposition, actor: input.actor });
+    return bound.ok ? coreOk(Object.freeze({ pilot: bound.value, receipt: receipt.value })) : bound;
+  }
+  completeClosedExternalAppPilotContinuity(input: { readonly projectId: string; readonly pilotId: string; readonly expectedVersion: number; readonly attemptId: string; readonly invocationId: string; readonly manifestHash: string; readonly observation: ClosedPilotContinuityObservation }): CoreResult<ClosedExternalAppPilot> { return this.#closedExternalAppPilots.completeContinuity(input); }
+  cancelClosedExternalAppPilotAttempt(input: { readonly projectId: string; readonly pilotId: string; readonly expectedVersion: number; readonly attemptId: string; readonly actor: ResearchActor }): CoreResult<ClosedExternalAppPilot> { return this.#closedExternalAppPilots.cancel(input); }
+  failClosedExternalAppPilotAttempt(input: { readonly projectId: string; readonly pilotId: string; readonly expectedVersion: number; readonly attemptId: string; readonly failureCode: ClosedPilotFailureCode; readonly publicReason: string }): CoreResult<ClosedExternalAppPilot> { return this.#closedExternalAppPilots.fail(input); }
+  markClosedExternalAppPilotStale(input: { readonly projectId: string; readonly pilotId: string; readonly expectedVersion: number; readonly publicReason: string }): CoreResult<ClosedExternalAppPilot> { return this.#closedExternalAppPilots.stale(input); }
+  expireClosedExternalAppPilotConfirmation(input: { readonly projectId: string; readonly pilotId: string; readonly expectedVersion: number }): CoreResult<ClosedExternalAppPilot> { return this.#closedExternalAppPilots.expire(input); }
+  recordClosedExternalAppPilotFeedback(input: { readonly projectId: string; readonly pilotId: string; readonly expectedVersion: number; readonly codes: readonly ClosedPilotFeedbackCode[]; readonly note?: string; readonly actor: ResearchActor }): CoreResult<ClosedExternalAppPilot> { return this.#closedExternalAppPilots.feedback(input); }
+  closeClosedExternalAppPilot(input: { readonly projectId: string; readonly pilotId: string; readonly expectedVersion: number; readonly actor: ResearchActor }): CoreResult<ClosedExternalAppPilot> { return this.#closedExternalAppPilots.close(input); }
+  exportClosedExternalAppPilotEvidence(projectId: string, pilotId: string): CoreResult<ClosedPilotEvidenceExport> { return this.#closedExternalAppPilots.exportEvidence(projectId, pilotId); }
+  recoverInterruptedClosedExternalAppPilots(): CoreResult<number> { return this.#closedExternalAppPilots.recoverInterrupted(); }
 
   private get ports(): { readonly clock: Clock; readonly idFactory: IdFactory } { return { clock: this.#clock, idFactory: this.#idFactory }; }
 
@@ -1222,6 +1306,8 @@ export async function openSestina(options: OpenSestinaOptions): Promise<CoreResu
     if (options.readOnly !== true) {
       const recovery = core.recoverInterruptedDeliberationRooms();
       if (!recovery.ok) { core.close(); return recovery; }
+      const pilotRecovery = core.recoverInterruptedClosedExternalAppPilots();
+      if (!pilotRecovery.ok) { core.close(); return pilotRecovery; }
     }
     return coreOk(core);
   } catch (error) {

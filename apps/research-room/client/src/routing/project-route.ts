@@ -1,4 +1,4 @@
-export type ProjectWorkspace = "review" | "overview" | "brief" | "decision" | "issue" | "evidence" | "episode" | "receipt" | "appeal" | "deliberation_room" | "memory" | "attention" | "not_found";
+export type ProjectWorkspace = "review" | "overview" | "brief" | "decision" | "issue" | "evidence" | "episode" | "receipt" | "appeal" | "deliberation_room" | "memory" | "external_app_pilot" | "attention" | "not_found";
 export interface ProjectRoute { readonly workspace: ProjectWorkspace; readonly objectId?: string; readonly creating?: boolean; }
 
 const COLLECTIONS = Object.freeze({ decisions: "decision", issues: "issue", evidence: "evidence", episodes: "episode", receipts: "receipt", appeals: "appeal", "deliberation-rooms": "deliberation_room" } as const);
@@ -9,6 +9,8 @@ export function parseProjectRoute(pathname: string): ProjectRoute {
   if (pathname === "/project/overview") return { workspace: "overview" };
   if (pathname === "/project/brief") return { workspace: "brief" };
   if (pathname === "/project/memory") return { workspace: "memory" };
+  const pilot = /^\/project\/external-app-pilot(?:\/(rpil_[0-9A-HJKMNP-TV-Z]{26}))?$/u.exec(pathname);
+  if (pilot) return { workspace: "external_app_pilot", ...(pilot[1] ? { objectId: pilot[1] } : {}) };
   if (pathname === "/project/attention") return { workspace: "attention" };
   const match = /^\/project\/(decisions|issues|evidence|episodes|receipts|appeals|deliberation-rooms)(?:\/([^/]+))?$/u.exec(pathname);
   if (!match?.[1]) return { workspace: "not_found" };
@@ -25,6 +27,7 @@ export function hrefForRoute(route: ProjectRoute): string {
   if (route.workspace === "overview") return "/project/overview";
   if (route.workspace === "brief") return "/project/brief";
   if (route.workspace === "memory") return "/project/memory";
+  if (route.workspace === "external_app_pilot") return `/project/external-app-pilot${route.objectId ? `/${encodeURIComponent(route.objectId)}` : ""}`;
   if (route.workspace === "attention") return "/project/attention";
   if (route.workspace === "not_found") return "/project/not-found";
   const collection = route.workspace === "decision" ? "decisions" : route.workspace === "issue" ? "issues" : route.workspace === "evidence" ? "evidence" : route.workspace === "episode" ? "episodes" : route.workspace === "receipt" ? "receipts" : route.workspace === "appeal" ? "appeals" : "deliberation-rooms";

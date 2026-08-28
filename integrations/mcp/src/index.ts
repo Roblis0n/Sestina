@@ -6,12 +6,16 @@ export {
   MIN_OUTPUT_LIMIT_BYTES,
   MIN_QUERY_TIMEOUT_MS,
   openProjectReader,
+  openFrozenProjectReader,
   runWithQueryDeadline,
 } from "./project-reader.js";
 export { createIdempotentShutdown } from "./lifecycle.js";
 export type {
   OpenProjectReaderOptions,
+  OpenFrozenProjectReaderOptions,
+  FrozenPilotContextPayload,
   ProjectReader,
+  ProjectReaderAuditBinding,
   ProjectReaderHealth,
   ResearchContextPayload,
 } from "./project-reader.js";
@@ -57,6 +61,7 @@ export type {
   SestinaMcpResult,
 } from "./protocol-errors.js";
 export { createSestinaMcpServer, SERVER_INSTRUCTIONS } from "./server.js";
+export type { McpToolAuditSink } from "./server.js";
 export {
   CURRENT_BRIEF_URI,
   MCP_PROTOCOL_REVISION,
@@ -68,3 +73,40 @@ export {
   TOOL_NAMES,
 } from "./tools/health.js";
 export type { McpLimits } from "./tools/health.js";
+export {
+  CODEX_HOST_FINAL_MAX_BYTES,
+  CODEX_HOST_JSONL_MAX_LINES,
+  CODEX_HOST_STDERR_MAX_BYTES,
+  CODEX_HOST_STDOUT_MAX_BYTES,
+  CODEX_HOST_TIMEOUT_MS,
+  codexMcpConfigArgs,
+  defaultCodexExecutableLocator,
+  defaultCodexLaunchTargetLocator,
+  defaultCodexProcessRunner,
+  inspectCodexHost,
+  parseClosedCodexPilotOutput,
+  parseCodexVerificationEvidence,
+  runClosedCodexPilotAttempt,
+  verifyCodexHost,
+} from "./codex-host.js";
+export type {
+  ClosedCodexCandidate,
+  ClosedCodexContinuityObservation,
+  ClosedCodexPilotBinding,
+  ClosedCodexPilotFailureCode,
+  ClosedCodexPilotKind,
+  ClosedCodexPilotOutput,
+  ClosedCodexPilotRunResult,
+  CodexContextBinding,
+  CodexExecutableLocator,
+  CodexHostInspection,
+  CodexLaunchTarget,
+  CodexLaunchTargetLocator,
+  CodexMcpLaunchConfig,
+  CodexProcessRequest,
+  CodexProcessResult,
+  CodexProcessRunner,
+  CodexVerificationErrorCode,
+  CodexVerificationEvidence,
+  CodexVerificationResult,
+} from "./codex-host.js";

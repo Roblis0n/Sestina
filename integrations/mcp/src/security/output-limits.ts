@@ -20,8 +20,8 @@ export const DEFAULT_QUERY_TIMEOUT_MS = 2_000;
 export const MIN_QUERY_TIMEOUT_MS = 1;
 export const MAX_QUERY_TIMEOUT_MS = 10_000;
 
-export interface SerializedResearchContext {
-  readonly payload: ResearchContextPayload;
+export interface SerializedResearchContext<TPayload extends object = ResearchContextPayload> {
+  readonly payload: TPayload;
   readonly json: string;
   readonly bytes: number;
 }

@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@sestina/core": "workspace:*",
+    "@sestina/mcp": "workspace:*",
     "@sestina/skills": "workspace:*",
     "smol-toml": "1.8.0"
   },

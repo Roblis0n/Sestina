@@ -23,6 +23,7 @@ import type { ResearchRoomReceipt } from "../room/research-room.js";
 import type { CorrectionAppeal } from "../appeal/correction-appeal.js";
 import type { DeliberationRoom, DeliberationSourceKind } from "../deliberation/deliberation-room.js";
 import type { ProjectWorkingMemory, ProjectWorkingMemoryState, ResumeCheckpoint } from "../memory/project-working-memory.js";
+import type { ClosedExternalAppPilot, ClosedExternalAppPilotStatus, ClosedPilotAttempt, ClosedPilotEvent } from "../pilot/closed-external-app-pilot.js";
 
 export const RESEARCH_PAGE_LIMIT_MAX = 200;
 
@@ -175,6 +176,15 @@ export interface ResumeCheckpointRepository {
   listByProject(projectId: string, page: ResearchPageRequest): ResearchResult<ResearchPage<ResumeCheckpoint>>;
 }
 
+export interface ClosedExternalAppPilotRepository {
+  create(value: ClosedExternalAppPilot): ResearchResult<ClosedExternalAppPilot>;
+  getById(projectId: string, pilotId: string): ResearchResult<ClosedExternalAppPilot | undefined>;
+  listByProject(projectId: string, page: ResearchPageRequest, statuses?: readonly ClosedExternalAppPilotStatus[]): ResearchResult<ResearchPage<ClosedExternalAppPilot>>;
+  listAttempts(projectId: string, pilotId: string, page: ResearchPageRequest): ResearchResult<ResearchPage<ClosedPilotAttempt>>;
+  listEvents(projectId: string, pilotId: string, page: ResearchPageRequest): ResearchResult<ResearchPage<ClosedPilotEvent>>;
+  compareAndSwap(value: ClosedExternalAppPilot, expectedVersion: EntityVersion): ResearchResult<ClosedExternalAppPilot>;
+}
+
 export interface ResearchRepositories extends ArgumentGraphRepositories {
   readonly projects: ResearchProjectRepository;
   readonly artifacts: ResearchArtifactRepository;
@@ -189,6 +199,7 @@ export interface ResearchRepositories extends ArgumentGraphRepositories {
   readonly deliberationRooms: DeliberationRoomRepository;
   readonly workingMemory: ProjectWorkingMemoryRepository;
   readonly resumeCheckpoints: ResumeCheckpointRepository;
+  readonly closedExternalAppPilots: ClosedExternalAppPilotRepository;
 }
 
 export interface ResearchUnitOfWork {

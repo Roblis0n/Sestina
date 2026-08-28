@@ -209,8 +209,10 @@ export function addArtifactRevision(
       return err(researchError("invalid_revision_parent"));
     }
   }
+  const preserveActiveParent = options.allowFork === true &&
+    candidate.value.parentRevisionId === artifact.value.activeRevisionId;
   const branchHeads = artifact.value.branchHeads.filter(
-    (id) => id !== candidate.value.parentRevisionId,
+    (id) => id !== candidate.value.parentRevisionId || preserveActiveParent,
   );
   branchHeads.push(candidate.value.id);
   const activeRevisionId =

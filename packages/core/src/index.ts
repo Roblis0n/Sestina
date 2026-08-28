@@ -117,3 +117,21 @@ export type {
   ProjectMemoryProjection,
   ProjectMemoryProviderBinding,
 } from "./project-memory.js";
+export type { ClosedExternalAppPilotPage, PrepareClosedExternalAppPilotContextInput } from "./closed-external-app-pilot.js";
+export type {
+  ClosedExternalAppPilot,
+  ClosedExternalAppPilotStatus,
+  ClosedPilotAttempt,
+  ClosedPilotAttemptKind,
+  ClosedPilotCandidate,
+  ClosedPilotCandidateInput,
+  ClosedPilotContinuityBinding,
+  ClosedPilotContinuityObservation,
+  ClosedPilotEvidenceClass,
+  ClosedPilotEvidenceExport,
+  ClosedPilotFailureCode,
+  ClosedPilotFeedbackCode,
+  ClosedPilotHostCapabilities,
+  ClosedPilotMcpObservation,
+  PilotContextManifest,
+} from "@sestina/research";

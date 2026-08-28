@@ -2,7 +2,7 @@ import type { ProjectReader } from "../project-reader.js";
 import { resourceFailure } from "../protocol-errors.js";
 import { serializeMcpResult } from "../security/output-limits.js";
 
-export async function readCurrentBriefResource(reader: ProjectReader, uri: URL): Promise<{
+export async function readCurrentBriefResource<TPayload extends object>(reader: ProjectReader<TPayload>, uri: URL): Promise<{
   readonly contents: { readonly uri: string; readonly mimeType: "application/json"; readonly text: string }[];
 }> {
   const result = await reader.readSerializedResearchContext();

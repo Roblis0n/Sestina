@@ -2,13 +2,14 @@ import { createHash, randomBytes } from "node:crypto";
 import { existsSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { lstat, mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
-import { basename, extname, join, resolve } from "node:path";
+import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   openSestina,
   coreErr,
   coreOk,
   type BriefProjectionPublisher,
+  type ClosedExternalAppPilot,
   type CorrectionAppealSecondOpinionProvider,
   type CoreResult,
   type DeliberationParticipantProvider,
@@ -16,6 +17,14 @@ import {
   type ResearchRoomProvider,
   type SestinaCore,
 } from "@sestina/core";
+import {
+  inspectCodexHost,
+  runClosedCodexPilotAttempt,
+  type ClosedCodexPilotBinding,
+  type ClosedCodexPilotKind,
+  type ClosedCodexPilotRunResult,
+  type CodexHostInspection,
+} from "@sestina/mcp";
 import { isAppLanguage, type LanguagePreferenceStore } from "./language-preferences.js";
 import { createOpenAICompatibleDeliberationParticipant, createOpenAICompatibleProvider, createOpenAICompatibleSecondOpinionProvider, OpenAICompatibleProviderError, testOpenAICompatibleProviderConnection } from "./openai-compatible-provider.js";
 import { OPENAI_COMPATIBLE_API_KEY_REF, ProviderSettingsError, SECOND_OPINION_OPENAI_COMPATIBLE_API_KEY_REF, type ProviderConfigurationService, type SaveOpenAICompatibleProviderInput } from "./provider-settings.js";
@@ -26,6 +35,21 @@ const BROWSER_BLOCKED_PORTS = new Set([1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 
 const USER = Object.freeze({ kind: "user" as const, actorId: "local-research-owner" });
 const CSP = "default-src 'self'; base-uri 'none'; connect-src 'self'; font-src 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self' blob:; manifest-src 'self'; object-src 'none'; script-src 'self'; style-src 'self'";
 const DEFAULT_CLIENT_ASSET_ROOT = resolve(fileURLToPath(new URL("../dist/client", import.meta.url)));
+const DEFAULT_MCP_RUNTIME = resolve(fileURLToPath(new URL("../dist/mcp/main.js", import.meta.url)));
+
+export interface ClosedExternalAppHostRuntime {
+  readonly evidenceClass: "synthetic_fixture" | "owner_operated_closed_host_observation";
+  inspect(): Promise<CodexHostInspection>;
+  run(input: {
+    readonly kind: ClosedCodexPilotKind;
+    readonly projectRoot: string;
+    readonly binding: ClosedCodexPilotBinding;
+    readonly contextUtf8: string;
+    readonly signal: AbortSignal;
+    readonly timeoutMs: number;
+    readonly outputLimitBytes: number;
+  }): Promise<ClosedCodexPilotRunResult>;
+}
 
 export interface ResearchRoomServerOptions {
   readonly host?: string;
@@ -41,6 +65,7 @@ export interface ResearchRoomServerOptions {
   readonly providerConfigurationService?: ProviderConfigurationService;
   readonly secondOpinionProviderConfigurationService?: ProviderConfigurationService;
   readonly clientAssetRoot?: string;
+  readonly closedExternalAppHostRuntime?: ClosedExternalAppHostRuntime;
 }
 
 export interface DirectoryPicker {
@@ -223,11 +248,23 @@ function publicError(error: unknown): { readonly status: number; readonly body: 
   return { status: 500, body: { ok: false, error: { code: "internal_error", message: "The local Research Room could not complete the request." } } };
 }
 
+function defaultClosedExternalAppHostRuntime(): ClosedExternalAppHostRuntime {
+  return Object.freeze({
+    evidenceClass: "owner_operated_closed_host_observation" as const,
+    inspect: async () => await inspectCodexHost({}),
+    run: async (input: Parameters<ClosedExternalAppHostRuntime["run"]>[0]) => await runClosedCodexPilotAttempt({
+      ...input,
+      mcpLaunch: { command: process.execPath, args: [DEFAULT_MCP_RUNTIME], cwd: dirname(DEFAULT_MCP_RUNTIME) },
+    }),
+  });
+}
+
 export class ResearchRoomHttpApplication {
   readonly sessionToken = randomBytes(32).toString("hex");
   #opened: OpenedProject | undefined;
   #pickerAbort: AbortController | undefined;
   #pendingInitialization: PendingProjectInitialization | undefined;
+  readonly #pilotAbort = new Map<string, AbortController>();
 
   constructor(
     private readonly provider?: ResearchRoomProvider,
@@ -241,9 +278,14 @@ export class ResearchRoomHttpApplication {
     private readonly providerConfigurationService?: ProviderConfigurationService,
     private readonly secondOpinionProviderConfigurationService?: ProviderConfigurationService,
     private readonly clientAssetRoot = DEFAULT_CLIENT_ASSET_ROOT,
+    private readonly closedExternalAppHostRuntime: ClosedExternalAppHostRuntime = defaultClosedExternalAppHostRuntime(),
   ) {}
 
-  close(): void { this.#pickerAbort?.abort(); this.#pickerAbort = undefined; this.#pendingInitialization = undefined; this.#opened?.core.close(); this.#opened = undefined; }
+  close(): void {
+    this.#pickerAbort?.abort(); this.#pickerAbort = undefined;
+    for (const controller of this.#pilotAbort.values()) controller.abort();
+    this.#pilotAbort.clear(); this.#pendingInitialization = undefined; this.#opened?.core.close(); this.#opened = undefined;
+  }
 
   private requireOpened(): OpenedProject {
     if (this.#opened === undefined) throw new HttpProblem(409, "project_not_open", "Open an initialized Sestina project first.");
@@ -631,6 +673,110 @@ export class ResearchRoomHttpApplication {
     };
   }
 
+  private async createClosedExternalAppPilot(input: unknown): Promise<unknown> {
+    if (!isRecord(input) || !hasExactKeys(input, ["confirmed"]) || input.confirmed !== true) throw new HttpProblem(400, "user_confirmation_required", "Starting a closed Codex Pilot requires an explicit user action.");
+    const opened = this.requireOpened();
+    const created = resultValue(opened.core.createClosedExternalAppPilot({ projectId: opened.project.id, evidenceClass: this.closedExternalAppHostRuntime.evidenceClass, actor: USER }));
+    const inspection = await this.closedExternalAppHostRuntime.inspect();
+    return resultValue(opened.core.recordClosedExternalAppPilotPreflight({
+      projectId: opened.project.id,
+      pilotId: created.id,
+      expectedVersion: created.version,
+      availability: inspection.availability,
+      supportedVersion: inspection.supportedVersion,
+      ...(inspection.verifiedAt === undefined ? {} : { verifiedAt: inspection.verifiedAt }),
+      capabilities: inspection.capabilities,
+    }));
+  }
+
+  private prepareClosedExternalAppPilotContext(pilotId: string, input: unknown): unknown {
+    if (!isRecord(input) || !hasExactKeys(input, ["expectedVersion", "externalModelServiceMayBeCalled", "kind", "outputLimitBytes", "selectedMemoryItemIds", "timeoutMs"]) || !Number.isSafeInteger(input.expectedVersion) || !["candidate_generation", "continuity_check"].includes(String(input.kind)) || input.externalModelServiceMayBeCalled !== true || !Array.isArray(input.selectedMemoryItemIds) || input.selectedMemoryItemIds.length > 64 || input.selectedMemoryItemIds.some((item) => typeof item !== "string") || new Set(input.selectedMemoryItemIds).size !== input.selectedMemoryItemIds.length || !Number.isSafeInteger(input.timeoutMs) || !Number.isSafeInteger(input.outputLimitBytes)) throw new HttpProblem(400, "invalid_input", "The exact Pilot Context Manifest request is invalid.");
+    const opened = this.requireOpened();
+    return resultValue(opened.core.prepareClosedExternalAppPilotContext({
+      projectId: opened.project.id,
+      pilotId,
+      expectedVersion: Number(input.expectedVersion),
+      kind: input.kind as ClosedCodexPilotKind,
+      selectedMemoryItemIds: input.selectedMemoryItemIds as string[],
+      confirmationExpiresAt: new Date(Date.now() + 10 * 60_000).toISOString(),
+      externalModelServiceMayBeCalled: true,
+      timeoutMs: Number(input.timeoutMs),
+      outputLimitBytes: Number(input.outputLimitBytes),
+      actor: USER,
+    }));
+  }
+
+  private confirmClosedExternalAppPilotContext(pilotId: string, input: unknown): unknown {
+    if (!isRecord(input) || !hasExactKeys(input, ["attemptId", "confirmationNonce", "confirmed", "expectedVersion", "manifestHash", "manifestId"]) || input.confirmed !== true || !Number.isSafeInteger(input.expectedVersion) || ![input.attemptId, input.confirmationNonce, input.manifestHash, input.manifestId].every((value) => typeof value === "string")) throw new HttpProblem(400, "user_confirmation_required", "Confirm this exact Host, Pilot attempt, nonce, and Manifest hash before dispatch.");
+    const opened = this.requireOpened();
+    return resultValue(opened.core.confirmClosedExternalAppPilotContext({ projectId: opened.project.id, pilotId, expectedVersion: Number(input.expectedVersion), attemptId: input.attemptId as string, manifestId: input.manifestId as string, manifestHash: input.manifestHash as string, confirmationNonce: input.confirmationNonce as string, actor: USER }));
+  }
+
+  private pilotRunBinding(pilot: ClosedExternalAppPilot, attemptId: string): { readonly manifest: ClosedExternalAppPilot["manifests"][number]; readonly binding: ClosedCodexPilotBinding } {
+    const manifest = pilot.manifests.find((item) => item.attemptId === attemptId);
+    if (manifest === undefined) throw new HttpProblem(404, "not_found", "The bound Pilot attempt was not found.");
+    return {
+      manifest,
+      binding: {
+        pilotId: pilot.id,
+        attemptId,
+        manifestId: manifest.id,
+        manifestHash: manifest.payloadHash,
+        projectId: pilot.projectId,
+        briefId: manifest.payload.brief.id,
+        briefVersion: manifest.payload.brief.version,
+        episodeId: manifest.payload.episode.id,
+        decisionIds: manifest.payload.decisions.map((item) => item.id),
+        issueIds: manifest.payload.issues.map((item) => item.id),
+        evidenceIds: manifest.payload.evidence.map((item) => item.id),
+        canonicalStateHash: manifest.payload.projectStateHash,
+        episodeStatus: manifest.payload.episode.status,
+        decisionStates: manifest.payload.decisions.map((item) => ({ id: item.id, status: item.status })),
+        issueStates: manifest.payload.issues.map((item) => ({ id: item.id, status: item.status })),
+      },
+    };
+  }
+
+  private async launchClosedExternalAppPilot(pilotId: string, input: unknown): Promise<unknown> {
+    if (!isRecord(input) || !hasExactKeys(input, ["attemptId", "confirmed", "expectedVersion", "manifestHash"]) || input.confirmed !== true || !Number.isSafeInteger(input.expectedVersion) || typeof input.attemptId !== "string" || typeof input.manifestHash !== "string") throw new HttpProblem(400, "user_confirmation_required", "The exact confirmed Pilot attempt is required before launch.");
+    const opened = this.requireOpened();
+    const before = resultValue(opened.core.getClosedExternalAppPilot(opened.project.id, pilotId));
+    if (before.status !== "context_confirmed") throw new HttpProblem(400, "user_confirmation_required", "Confirm the exact Context Manifest before launching Codex.");
+    const run = this.pilotRunBinding(before, input.attemptId);
+    if (run.manifest.payloadHash !== input.manifestHash) throw new HttpProblem(409, "context_binding_mismatch", "The confirmed Manifest hash no longer matches this attempt.");
+    let pilot = resultValue(opened.core.startClosedExternalAppPilotAttempt({ projectId: opened.project.id, pilotId, expectedVersion: Number(input.expectedVersion), attemptId: input.attemptId, manifestHash: input.manifestHash }));
+    const invocationId = pilot.attempts.find((item) => item.id === input.attemptId)?.invocationId;
+    if (invocationId === undefined) throw new HttpProblem(500, "infrastructure_failure", "The bounded Codex invocation identity was not created.");
+    pilot = resultValue(opened.core.markClosedExternalAppPilotAttemptRunning({ projectId: opened.project.id, pilotId, expectedVersion: pilot.version, attemptId: input.attemptId, invocationId }));
+    const controller = new AbortController();
+    if (this.#pilotAbort.has(pilotId)) throw new HttpProblem(409, "state_conflict", "This Pilot already has an active invocation.");
+    this.#pilotAbort.set(pilotId, controller);
+    try {
+      const outcome = await this.closedExternalAppHostRuntime.run({ kind: run.manifest.purpose, projectRoot: opened.root, binding: run.binding, contextUtf8: run.manifest.payloadUtf8, signal: controller.signal, timeoutMs: run.manifest.disclosure.timeoutMs, outputLimitBytes: run.manifest.disclosure.outputLimitBytes });
+      const current = resultValue(opened.core.getClosedExternalAppPilot(opened.project.id, pilotId));
+      if (current.status === "cancelled") return current;
+      if (!outcome.ok) {
+        return resultValue(opened.core.failClosedExternalAppPilotAttempt({ projectId: opened.project.id, pilotId, expectedVersion: current.version, attemptId: input.attemptId, failureCode: outcome.error.code, publicReason: `The bounded Codex attempt stopped with ${outcome.error.code}; no candidate or continuity result was committed.` }));
+      }
+      if (run.manifest.purpose === "candidate_generation" && outcome.value.candidate !== undefined) {
+        return resultValue(opened.core.receiveClosedExternalAppPilotCandidate({ projectId: opened.project.id, pilotId, expectedVersion: current.version, attemptId: input.attemptId, invocationId, manifestHash: input.manifestHash, mcpObservation: outcome.value.mcpObservation, candidate: outcome.value.candidate, stdoutBytes: outcome.value.stdoutBytes, stderrBytes: outcome.value.stderrBytes, usage: outcome.value.usage }));
+      }
+      if (run.manifest.purpose === "continuity_check" && outcome.value.continuity !== undefined) {
+        return resultValue(opened.core.completeClosedExternalAppPilotContinuity({ projectId: opened.project.id, pilotId, expectedVersion: current.version, attemptId: input.attemptId, invocationId, manifestHash: input.manifestHash, observation: { ...outcome.value.continuity, mcpObservation: outcome.value.mcpObservation } }));
+      }
+      return resultValue(opened.core.failClosedExternalAppPilotAttempt({ projectId: opened.project.id, pilotId, expectedVersion: current.version, attemptId: input.attemptId, failureCode: "host_protocol_mismatch", publicReason: "The bounded Codex attempt returned no result matching its confirmed purpose." }));
+    } finally {
+      if (this.#pilotAbort.get(pilotId) === controller) this.#pilotAbort.delete(pilotId);
+    }
+  }
+
+  private cancelClosedExternalAppPilot(pilotId: string, input: unknown): unknown {
+    if (!isRecord(input) || !hasExactKeys(input, ["attemptId", "confirmed", "expectedVersion"]) || input.confirmed !== true || !Number.isSafeInteger(input.expectedVersion) || typeof input.attemptId !== "string") throw new HttpProblem(400, "user_confirmation_required", "Cancelling this exact Pilot attempt requires explicit confirmation.");
+    const opened = this.requireOpened();
+    this.#pilotAbort.get(pilotId)?.abort();
+    return resultValue(opened.core.cancelClosedExternalAppPilotAttempt({ projectId: opened.project.id, pilotId, expectedVersion: Number(input.expectedVersion), attemptId: input.attemptId, actor: USER }));
+  }
+
   private async serveClient(pathname: string, response: ServerResponse): Promise<void> {
     const decoded = decodeURIComponent(pathname);
     const isClientRoute = decoded === "/" || decoded === "/index.html" || (extname(decoded) === "" && !decoded.startsWith("/assets/"));
@@ -667,6 +813,7 @@ export class ResearchRoomHttpApplication {
       if (request.method === "POST" && url.pathname === "/api/preferences/language") { json(response, 200, { ok: true, value: await this.setLanguagePreference(await readBody(request)) }); return; }
       await this.requireLanguagePreference();
       if (request.method === "GET" && url.pathname === "/api/provider") { json(response, 200, { ok: true, value: await this.providerStatus() }); return; }
+      if (request.method === "GET" && url.pathname === "/api/codex-host") { json(response, 200, { ok: true, value: await this.closedExternalAppHostRuntime.inspect() }); return; }
       if (request.method === "POST" && url.pathname === "/api/provider") { json(response, 200, { ok: true, value: await this.saveProvider(await readBody(request)) }); return; }
       if (request.method === "DELETE" && url.pathname === "/api/provider/config") { json(response, 200, { ok: true, value: await this.deleteProviderConfig() }); return; }
       if (request.method === "DELETE" && url.pathname === "/api/provider/secret") { json(response, 200, { ok: true, value: await this.deleteProviderSecret() }); return; }
@@ -682,6 +829,65 @@ export class ResearchRoomHttpApplication {
       if (request.method === "POST" && url.pathname === "/api/project/open") { json(response, 200, { ok: true, value: await this.openProject(await readBody(request)) }); return; }
       if (request.method === "POST" && url.pathname === "/api/project/brief") { json(response, 200, { ok: true, value: await this.activateInitialBrief(await readBody(request)) }); return; }
       const opened = this.requireOpened();
+      if (request.method === "POST" && url.pathname === "/api/project/external-app-pilots") { json(response, 201, { ok: true, value: await this.createClosedExternalAppPilot(await readBody(request)) }); return; }
+      if (request.method === "GET" && url.pathname === "/api/project/external-app-pilots") {
+        if ([...url.searchParams.keys()].some((key) => key !== "limit" && key !== "cursor")) throw new HttpProblem(400, "invalid_input", "The Pilot list query is invalid.");
+        const rawLimit = url.searchParams.get("limit") ?? "50"; const cursor = url.searchParams.get("cursor") ?? undefined;
+        if (!/^\d{1,3}$/u.test(rawLimit) || Number(rawLimit) < 1 || Number(rawLimit) > 200 || (cursor !== undefined && (cursor.length === 0 || cursor.length > 8192))) throw new HttpProblem(400, "invalid_input", "The Pilot list query is invalid.");
+        json(response, 200, { ok: true, value: resultValue(opened.core.listClosedExternalAppPilots(opened.project.id, { limit: Number(rawLimit), ...(cursor ? { cursor } : {}) })) }); return;
+      }
+      const pilotDetail = /^\/api\/project\/external-app-pilots\/(rpil_[0-9A-HJKMNP-TV-Z]{26})$/u.exec(url.pathname);
+      if (request.method === "GET" && pilotDetail?.[1]) { json(response, 200, { ok: true, value: resultValue(opened.core.getClosedExternalAppPilot(opened.project.id, pilotDetail[1])) }); return; }
+      const pilotEvidence = /^\/api\/project\/external-app-pilots\/(rpil_[0-9A-HJKMNP-TV-Z]{26})\/evidence$/u.exec(url.pathname);
+      if (request.method === "GET" && pilotEvidence?.[1]) { json(response, 200, { ok: true, value: resultValue(opened.core.exportClosedExternalAppPilotEvidence(opened.project.id, pilotEvidence[1])) }); return; }
+      const pilotAction = /^\/api\/project\/external-app-pilots\/(rpil_[0-9A-HJKMNP-TV-Z]{26})\/(context|confirm|launch|cancel|feedback|close)$/u.exec(url.pathname);
+      if (request.method === "POST" && pilotAction?.[1] && pilotAction[2]) {
+        const body = await readBody(request);
+        const value = pilotAction[2] === "context" ? this.prepareClosedExternalAppPilotContext(pilotAction[1], body)
+          : pilotAction[2] === "confirm" ? this.confirmClosedExternalAppPilotContext(pilotAction[1], body)
+            : pilotAction[2] === "launch" ? await this.launchClosedExternalAppPilot(pilotAction[1], body)
+              : pilotAction[2] === "cancel" ? this.cancelClosedExternalAppPilot(pilotAction[1], body)
+                : pilotAction[2] === "feedback" ? (() => {
+                  if (!isRecord(body) || !hasExactKeys(body, ["codes", "confirmed", "expectedVersion", "note"]) || body.confirmed !== true || !Number.isSafeInteger(body.expectedVersion) || !Array.isArray(body.codes) || body.codes.some((item) => typeof item !== "string") || typeof body.note !== "string") throw new HttpProblem(400, "invalid_input", "The local Pilot feedback is invalid.");
+                  return resultValue(opened.core.recordClosedExternalAppPilotFeedback({ projectId: opened.project.id, pilotId: pilotAction[1], expectedVersion: Number(body.expectedVersion), codes: body.codes as never, ...(body.note.trim().length === 0 ? {} : { note: body.note }), actor: USER }));
+                })()
+                  : (() => {
+                    if (!isRecord(body) || !hasExactKeys(body, ["confirmed", "expectedVersion"]) || body.confirmed !== true || !Number.isSafeInteger(body.expectedVersion)) throw new HttpProblem(400, "user_confirmation_required", "Closing the local Pilot requires explicit confirmation.");
+                    return resultValue(opened.core.closeClosedExternalAppPilot({ projectId: opened.project.id, pilotId: pilotAction[1], expectedVersion: Number(body.expectedVersion), actor: USER }));
+                  })();
+        json(response, 200, { ok: true, value }); return;
+      }
+      const candidateAction = /^\/api\/project\/external-app-pilots\/(rpil_[0-9A-HJKMNP-TV-Z]{26})\/candidate\/(import|reject)$/u.exec(url.pathname);
+      if (request.method === "POST" && candidateAction?.[1] && candidateAction[2]) {
+        const body = await readBody(request);
+        if (!isRecord(body) || !hasExactKeys(body, ["confirmed", "expectedVersion"]) || body.confirmed !== true || !Number.isSafeInteger(body.expectedVersion)) throw new HttpProblem(400, "user_confirmation_required", "Choose whether to import or reject this exact model-proposed candidate.");
+        const value = candidateAction[2] === "import"
+          ? resultValue(opened.core.importClosedExternalAppPilotCandidate({ projectId: opened.project.id, pilotId: candidateAction[1], expectedVersion: Number(body.expectedVersion), actor: USER }))
+          : resultValue(opened.core.rejectClosedExternalAppPilotCandidate({ projectId: opened.project.id, pilotId: candidateAction[1], expectedVersion: Number(body.expectedVersion), actor: USER }));
+        json(response, 200, { ok: true, value }); return;
+      }
+      const pilotReviewRestore = /^\/api\/project\/external-app-pilots\/(rpil_[0-9A-HJKMNP-TV-Z]{26})\/review\/restore$/u.exec(url.pathname);
+      if (request.method === "POST" && pilotReviewRestore?.[1]) {
+        const body = await readBody(request);
+        if (!isRecord(body) || !hasExactKeys(body, ["confirmed", "expectedVersion"]) || body.confirmed !== true || !Number.isSafeInteger(body.expectedVersion)) throw new HttpProblem(400, "user_confirmation_required", "Restoring the bound deterministic Review requires the user to confirm this Pilot version.");
+        json(response, 200, { ok: true, value: resultValue(opened.core.restoreClosedExternalAppPilotReview({ projectId: opened.project.id, pilotId: pilotReviewRestore[1], expectedPilotVersion: Number(body.expectedVersion), actor: USER })) }); return;
+      }
+      const pilotReview = /^\/api\/project\/external-app-pilots\/(rpil_[0-9A-HJKMNP-TV-Z]{26})\/review\/analyze$/u.exec(url.pathname);
+      if (request.method === "POST" && pilotReview?.[1]) {
+        const body = await readBody(request);
+        if (!isRecord(body) || !hasExactKeys(body, ["confirmationNonce", "confirmed", "manifestHash", "reviewId"]) || body.confirmed !== true || ![body.confirmationNonce, body.manifestHash, body.reviewId].every((item) => typeof item === "string")) throw new HttpProblem(400, "user_confirmation_required", "The bound Review analysis requires explicit confirmation.");
+        const pilot = resultValue(opened.core.getClosedExternalAppPilot(opened.project.id, pilotReview[1]));
+        if (pilot.review?.reviewId !== body.reviewId) throw new HttpProblem(409, "cross_project_reference", "The Review is not bound to this Pilot.");
+        json(response, 200, { ok: true, value: resultValue(await opened.core.analyzeResearchRoomSuggestion({ reviewId: body.reviewId as string, confirmationNonce: body.confirmationNonce as string, manifestHash: body.manifestHash as string, memoryProvider: await this.projectMemoryProviderBinding() })) }); return;
+      }
+      const pilotDisposition = /^\/api\/project\/external-app-pilots\/(rpil_[0-9A-HJKMNP-TV-Z]{26})\/disposition$/u.exec(url.pathname);
+      if (request.method === "POST" && pilotDisposition?.[1]) {
+        const body = await readBody(request);
+        const required = ["authorityNonce", "confirmed", "disposition", "expectedStateBinding", "expectedVersion", "reason", "reviewId"];
+        const optional = body && typeof body === "object" && "disposition" in body && body.disposition === "modified_accepted" ? ["modifiedProposal"] : body && typeof body === "object" && "disposition" in body && body.disposition === "direction_changed" ? ["redirectQuestion"] : [];
+        if (!isRecord(body) || !hasExactKeys(body, [...required, ...optional]) || body.confirmed !== true || !Number.isSafeInteger(body.expectedVersion) || ![body.authorityNonce, body.disposition, body.reason, body.reviewId, ...optional.map((key) => body[key])].every((item) => typeof item === "string") || !isRecord(body.expectedStateBinding)) throw new HttpProblem(400, "user_confirmation_required", "Only the user can commit the bound Review disposition.");
+        json(response, 200, { ok: true, value: resultValue(opened.core.commitClosedExternalAppPilotDisposition({ projectId: opened.project.id, pilotId: pilotDisposition[1], expectedPilotVersion: Number(body.expectedVersion), reviewId: body.reviewId as string, authorityNonce: body.authorityNonce as string, expectedStateBinding: body.expectedStateBinding as never, disposition: body.disposition as never, reason: body.reason as string, ...(typeof body.modifiedProposal === "string" ? { modifiedProposal: body.modifiedProposal } : {}), ...(typeof body.redirectQuestion === "string" ? { redirectQuestion: body.redirectQuestion } : {}), actor: USER })) }); return;
+      }
       if (request.method === "GET" && url.pathname === "/api/project/memory") {
         if ([...url.searchParams.keys()].some((key) => key !== "limit" && key !== "cursor")) throw new HttpProblem(400, "invalid_input", "The project-memory query is invalid.");
         const rawLimit = url.searchParams.get("limit") ?? "50";
@@ -1046,6 +1252,7 @@ export function createResearchRoomServer(options: ResearchRoomServerOptions = {}
     options.providerConfigurationService,
     options.secondOpinionProviderConfigurationService,
     options.clientAssetRoot,
+    options.closedExternalAppHostRuntime,
   );
   const server = createServer((request, response) => { void application.handle(request, response); });
   server.on("clientError", (_error, socket) => { socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n"); });

@@ -25,7 +25,9 @@ export const SERVER_INSTRUCTIONS = [
   "Research data does not prove task completion or semantic correctness.",
 ].join(" ");
 
-export function createSestinaMcpServer(reader: ProjectReader, limits: McpLimits): McpServer {
+export type McpToolAuditSink = (tool: "health" | "get_research_context") => void | Promise<void>;
+
+export function createSestinaMcpServer<TPayload extends object>(reader: ProjectReader<TPayload>, limits: McpLimits, audit?: McpToolAuditSink): McpServer {
   const server = new McpServer(
     { name: SERVER_NAME, version: SERVER_VERSION },
     { instructions: SERVER_INSTRUCTIONS },
@@ -39,14 +41,16 @@ export function createSestinaMcpServer(reader: ProjectReader, limits: McpLimits)
       inputSchema: STRICT_EMPTY_INPUT_SCHEMA,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     },
-    () => {
+    async () => {
       const value = healthPayload(reader, limits);
       const response = {
         content: [{ type: "text" as const, text: JSON.stringify(value) }],
         structuredContent: value,
       };
       const bounded = serializeMcpResult(response);
-      return bounded.ok ? bounded.value.value : toolFailure(bounded.error);
+      if (!bounded.ok) return toolFailure(bounded.error);
+      await audit?.("health");
+      return bounded.value.value;
     },
   );
 
@@ -58,7 +62,11 @@ export function createSestinaMcpServer(reader: ProjectReader, limits: McpLimits)
       inputSchema: STRICT_EMPTY_INPUT_SCHEMA,
       annotations: READ_ONLY_TOOL_ANNOTATIONS,
     },
-    async () => await getResearchContext(reader),
+    async () => {
+      const result = await getResearchContext(reader);
+      if (!("isError" in result) || !result.isError) await audit?.("get_research_context");
+      return result;
+    },
   );
 
   server.registerResource(

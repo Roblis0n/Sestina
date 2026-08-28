@@ -1,6 +1,9 @@
 import {
   openSestina,
 } from "@sestina/core";
+import { createHash } from "node:crypto";
+import { readFile, realpath, stat } from "node:fs/promises";
+import { isAbsolute } from "node:path";
 import {
   mcpErr,
   mcpOk,
@@ -40,10 +43,17 @@ export interface ProjectReaderHealth {
   readonly readOnly: true;
 }
 
-export interface ProjectReader {
+export interface ProjectReaderAuditBinding {
+  readonly projectId: string;
+  readonly manifestHash: string;
+  readonly payloadHash: string;
+}
+
+export interface ProjectReader<TPayload extends object = ResearchContextPayload> {
   readonly health: () => ProjectReaderHealth;
-  readonly readResearchContext: () => Promise<SestinaMcpResult<ResearchContextPayload>>;
-  readonly readSerializedResearchContext: () => Promise<SestinaMcpResult<SerializedResearchContext>>;
+  readonly readResearchContext: () => Promise<SestinaMcpResult<TPayload>>;
+  readonly readSerializedResearchContext: () => Promise<SestinaMcpResult<SerializedResearchContext<TPayload>>>;
+  readonly auditBinding?: () => ProjectReaderAuditBinding;
   readonly close: () => void;
 }
 
@@ -51,6 +61,28 @@ export interface OpenProjectReaderOptions {
   readonly projectRoot: string;
   readonly outputLimitBytes: number;
   readonly queryTimeoutMs: number;
+}
+
+export interface OpenFrozenProjectReaderOptions {
+  readonly contextFile: string;
+  readonly expectedProjectId: string;
+  readonly expectedManifestHash: string;
+  readonly outputLimitBytes: number;
+  readonly queryTimeoutMs: number;
+}
+
+export interface FrozenPilotContextPayload extends Readonly<Record<string, unknown>> {
+  readonly schemaVersion: "1.0.0";
+  readonly contentBoundary: Readonly<Record<string, unknown>>;
+  readonly manifestBinding: {
+    readonly pilotId: string;
+    readonly attemptId: string;
+    readonly manifestId: string;
+    readonly projectId: string;
+    readonly host: "codex";
+    readonly purpose: "candidate_generation" | "continuity_check";
+  };
+  readonly projectStateHash: string;
 }
 
 export async function runWithQueryDeadline<T>(
@@ -184,6 +216,88 @@ class CoreProjectReader implements ProjectReader {
   close(): void {
     if (this.#closed) return;
     this.#closed = true;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function validSha256(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9a-f]{64}$/u.test(value);
+}
+
+function validFrozenPayload(value: unknown, expectedProjectId: string): value is FrozenPilotContextPayload {
+  if (!isRecord(value) || value.schemaVersion !== "1.0.0" || !isRecord(value.contentBoundary) || !isRecord(value.manifestBinding)) return false;
+  const boundary = value.contentBoundary;
+  const binding = value.manifestBinding;
+  return boundary.kind === "untrusted_research_data"
+    && boundary.authority === "none"
+    && boundary.mayDirectTools === false
+    && boundary.grantsPermissions === false
+    && boundary.representsUserAcceptance === false
+    && boundary.representsAdjudication === false
+    && boundary.representsTaskCompletion === false
+    && typeof binding.pilotId === "string"
+    && typeof binding.attemptId === "string"
+    && typeof binding.manifestId === "string"
+    && binding.projectId === expectedProjectId
+    && binding.host === "codex"
+    && (binding.purpose === "candidate_generation" || binding.purpose === "continuity_check")
+    && validSha256(value.projectStateHash);
+}
+
+class FrozenProjectReader implements ProjectReader<FrozenPilotContextPayload> {
+  #closed = false;
+
+  constructor(
+    readonly payload: FrozenPilotContextPayload,
+    readonly json: string,
+    readonly bytes: number,
+    readonly binding: ProjectReaderAuditBinding,
+  ) {}
+
+  health(): ProjectReaderHealth {
+    return Object.freeze({ rootValidated: true, stateDatabaseInitialized: true, projectBinding: "single", readOnly: true });
+  }
+
+  auditBinding(): ProjectReaderAuditBinding { return this.binding; }
+
+  async readResearchContext(): Promise<SestinaMcpResult<FrozenPilotContextPayload>> {
+    return this.#closed ? mcpErr("project_state_unavailable") : mcpOk(this.payload);
+  }
+
+  async readSerializedResearchContext(): Promise<SestinaMcpResult<SerializedResearchContext<FrozenPilotContextPayload>>> {
+    return this.#closed ? mcpErr("project_state_unavailable") : mcpOk(Object.freeze({ payload: this.payload, json: this.json, bytes: this.bytes }));
+  }
+
+  close(): void { this.#closed = true; }
+}
+
+export async function openFrozenProjectReader(options: OpenFrozenProjectReaderOptions): Promise<SestinaMcpResult<ProjectReader<FrozenPilotContextPayload>>> {
+  if (!isAbsolute(options.contextFile)
+    || !validSha256(options.expectedManifestHash)
+    || typeof options.expectedProjectId !== "string"
+    || options.expectedProjectId.length === 0
+    || !Number.isInteger(options.outputLimitBytes)
+    || options.outputLimitBytes < MIN_OUTPUT_LIMIT_BYTES
+    || options.outputLimitBytes > MAX_OUTPUT_LIMIT_BYTES
+    || !Number.isInteger(options.queryTimeoutMs)
+    || options.queryTimeoutMs < MIN_QUERY_TIMEOUT_MS
+    || options.queryTimeoutMs > MAX_QUERY_TIMEOUT_MS) return mcpErr("invalid_arguments");
+  try {
+    const canonical = await realpath(options.contextFile);
+    if (!(await stat(canonical)).isFile()) return mcpErr("project_state_unavailable");
+    const json = await readFile(canonical, "utf8");
+    const bytes = Buffer.byteLength(json, "utf8");
+    if (bytes > options.outputLimitBytes) return mcpErr("response_too_large");
+    const payload = JSON.parse(json) as unknown;
+    const digest = createHash("sha256").update(json, "utf8").digest("hex");
+    if (digest !== options.expectedManifestHash || !validFrozenPayload(payload, options.expectedProjectId) || JSON.stringify(payload) !== json) return mcpErr("project_state_unavailable");
+    const binding = Object.freeze({ projectId: options.expectedProjectId, manifestHash: options.expectedManifestHash, payloadHash: digest });
+    return mcpOk(new FrozenProjectReader(Object.freeze(payload), json, bytes, binding));
+  } catch {
+    return mcpErr("project_state_unavailable");
   }
 }
 

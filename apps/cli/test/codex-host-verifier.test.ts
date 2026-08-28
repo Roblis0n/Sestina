@@ -90,7 +90,7 @@ describe("Codex host verification evidence", () => {
     expect(request.cwd).toBe(projectRoot);
     expect(request.args[0]).toBe("fixed-launcher.js");
     expect(request.args).toEqual(expect.arrayContaining([
-      "exec", "--ephemeral", "--json", "--sandbox", "read-only", "--ignore-user-config", "--output-schema", "--output-last-message", "-c",
+      "exec", "--ephemeral", "--json", "--sandbox", "read-only", "--ignore-user-config", "--skip-git-repo-check", "--output-schema", "--output-last-message", "-c",
     ]));
     expect(request.args).not.toContain("danger-full-access");
     expect(request.args).not.toContain("--dangerously-bypass-approvals-and-sandbox");

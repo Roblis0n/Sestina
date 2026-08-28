@@ -44,6 +44,9 @@ importers:
       '@sestina/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@sestina/mcp':
+        specifier: workspace:*
+        version: link:../../integrations/mcp
       '@sestina/skills':
         specifier: workspace:*
         version: link:../../integrations/skills
@@ -63,6 +66,9 @@ importers:
       '@sestina/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@sestina/mcp':
+        specifier: workspace:*
+        version: link:../../integrations/mcp
       react:
         specifier: ^19.2.8
         version: 19.2.8

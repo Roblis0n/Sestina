@@ -7,6 +7,13 @@ import type {
   AppLanguage,
   AssessmentDto,
   BriefWorkspaceDto,
+  ClosedExternalAppPilotDto,
+  ClosedExternalAppPilotStatusDto,
+  ClosedPilotDispositionDto,
+  ClosedPilotEvidenceDto,
+  ClosedPilotImportDto,
+  ClosedPilotReviewRestoreDto,
+  CodexHostStatusDto,
   ContextManifestDto,
   DecisionDetailDto,
   DecisionSummaryDto,
@@ -409,6 +416,98 @@ export function decodeProviderStatus(value: unknown): ProviderStatusDto {
     ...(typeof status.projectReopenRequired === "boolean" ? { projectReopenRequired: status.projectReopenRequired } : {}),
     ...(config ? { config: { family: config.family === "openai_compatible" ? "openai_compatible" : fail("provider status.config.family"), providerId: string(config.providerId, "provider status.config.providerId"), model: string(config.model, "provider status.config.model"), baseUrl: string(config.baseUrl, "provider status.config.baseUrl"), locality: config.locality === "local" || config.locality === "external" ? config.locality : fail("provider status.config.locality"), generation: number(config.generation, "provider status.config.generation"), timeoutMs: number(config.timeoutMs, "provider status.config.timeoutMs"), ...(typeof config.maxOutputTokens === "number" ? { maxOutputTokens: config.maxOutputTokens } : {}) } } : {}),
   };
+}
+
+const PILOT_STATUSES: readonly ClosedExternalAppPilotStatusDto[] = ["draft", "preflight_ready", "context_confirmation_required", "context_confirmed", "launching", "running", "candidate_received", "candidate_confirmation_required", "review_required", "user_disposition_required", "continuity_check_ready", "continuity_check_running", "continuity_verified", "closed", "stale", "expired", "cancelled", "failed", "blocked_host_unavailable", "interrupted_unknown"];
+const CAPABILITY_STATES = ["observed", "unavailable", "unproven"] as const;
+function capability(value: unknown, path: string): (typeof CAPABILITY_STATES)[number] { return CAPABILITY_STATES.includes(value as never) ? value as (typeof CAPABILITY_STATES)[number] : fail(path); }
+function sha(value: unknown, path: string): string { const result = string(value, path); return /^[0-9a-f]{64}$/u.test(result) ? result : fail(path); }
+
+export function decodeCodexHostStatus(value: unknown): CodexHostStatusDto {
+  const host = record(value, "Codex Host status");
+  allowedKeys(host, ["availability", "capabilities", "configurationSeparateFromVerification", "supportedVersion", "verifiedAt"], "Codex Host status");
+  requiredKeys(host, ["availability", "capabilities", "configurationSeparateFromVerification", "supportedVersion"], "Codex Host status");
+  const capabilities = record(host.capabilities, "Codex Host capabilities");
+  exactKeys(capabilities, ["cancellation", "contextIsolation", "mcp", "readOnlySandbox", "start", "structuredOutput"], "Codex Host capabilities");
+  if (host.availability !== "available" && host.availability !== "unavailable") fail("Codex Host availability");
+  if (host.supportedVersion !== null && typeof host.supportedVersion !== "string") fail("Codex Host supportedVersion");
+  if (host.configurationSeparateFromVerification !== true) fail("Codex Host configuration boundary");
+  return {
+    availability: host.availability,
+    supportedVersion: host.supportedVersion,
+    ...(typeof host.verifiedAt === "string" ? { verifiedAt: host.verifiedAt } : {}),
+    capabilities: { start: capability(capabilities.start, "Codex Host start"), structuredOutput: capability(capabilities.structuredOutput, "Codex Host structuredOutput"), mcp: capability(capabilities.mcp, "Codex Host mcp"), readOnlySandbox: capability(capabilities.readOnlySandbox, "Codex Host readOnlySandbox"), cancellation: capability(capabilities.cancellation, "Codex Host cancellation"), contextIsolation: capability(capabilities.contextIsolation, "Codex Host contextIsolation") },
+    configurationSeparateFromVerification: true,
+  };
+}
+
+function decodePilotManifest(value: unknown, path: string): ClosedExternalAppPilotDto["manifests"][number] {
+  const manifest = record(value, path);
+  exactKeys(manifest, ["attemptId", "createdAt", "disclosure", "excluded", "expiresAt", "host", "id", "included", "payload", "payloadBytes", "payloadHash", "payloadUtf8", "pilotId", "projectId", "purpose", "schemaVersion", "version", "workingMemorySelection"], path);
+  if (manifest.schemaVersion !== "1.0.0" || manifest.version !== 1 || manifest.host !== "codex" || (manifest.purpose !== "candidate_generation" && manifest.purpose !== "continuity_check")) fail(path);
+  const included = array(manifest.included, `${path}.included`).map<ClosedExternalAppPilotDto["manifests"][number]["included"][number]>((raw, index) => {
+    const item = record(raw, `${path}.included[${index}]`);
+    exactKeys(item, ["category", "contentBytes", "contentHash", "id", "sensitivity", "source", "version"], `${path}.included[${index}]`);
+    const sensitivity = item.sensitivity;
+    if (sensitivity !== "public" && sensitivity !== "project_private") fail(`${path}.included[${index}].sensitivity`);
+    return { category: string(item.category, `${path}.included.category`), id: string(item.id, `${path}.included.id`), version: number(item.version, `${path}.included.version`), source: string(item.source, `${path}.included.source`), sensitivity, contentHash: sha(item.contentHash, `${path}.included.contentHash`), contentBytes: number(item.contentBytes, `${path}.included.contentBytes`) };
+  });
+  const excluded = array(manifest.excluded, `${path}.excluded`).map((raw, index) => { const item = record(raw, `${path}.excluded[${index}]`); allowedKeys(item, ["category", "id", "reason", "sensitivity", "source"], `${path}.excluded[${index}]`); requiredKeys(item, ["category", "reason", "sensitivity", "source"], `${path}.excluded[${index}]`); if (!["public", "project_private", "secret_never_send"].includes(String(item.sensitivity))) fail(`${path}.excluded.sensitivity`); return { category: string(item.category, `${path}.excluded.category`), ...(typeof item.id === "string" ? { id: item.id } : {}), reason: string(item.reason, `${path}.excluded.reason`), source: string(item.source, `${path}.excluded.source`), sensitivity: item.sensitivity as "public" | "project_private" | "secret_never_send" }; });
+  const selection = record(manifest.workingMemorySelection, `${path}.workingMemorySelection`); exactKeys(selection, ["defaultSelectedCount", "neverSendIncludedCount", "selectedIds"], `${path}.workingMemorySelection`); if (selection.defaultSelectedCount !== 0 || selection.neverSendIncludedCount !== 0) fail(`${path}.workingMemorySelection`);
+  const disclosure = record(manifest.disclosure, `${path}.disclosure`); exactKeys(disclosure, ["automaticRetries", "externalModelServiceMayBeCalled", "hostCan", "hostCannot", "invocationLimit", "outputLimitBytes", "projectWrite", "sandbox", "timeoutMs"], `${path}.disclosure`); if (disclosure.invocationLimit !== 1 || disclosure.automaticRetries !== 0 || disclosure.sandbox !== "read_only" || disclosure.projectWrite !== false) fail(`${path}.disclosure`);
+  const payload = record(manifest.payload, `${path}.payload`); safeTree(payload, `${path}.payload`);
+  const payloadUtf8 = string(manifest.payloadUtf8, `${path}.payloadUtf8`); const payloadBytes = number(manifest.payloadBytes, `${path}.payloadBytes`);
+  if (new TextEncoder().encode(payloadUtf8).byteLength !== payloadBytes) fail(`${path}.payloadBytes`);
+  try { JSON.parse(payloadUtf8); } catch { fail(`${path}.payloadUtf8`); }
+  return { id: string(manifest.id, `${path}.id`), attemptId: string(manifest.attemptId, `${path}.attemptId`), purpose: manifest.purpose, included, excluded, workingMemorySelection: { defaultSelectedCount: 0, selectedIds: strings(selection.selectedIds, `${path}.selectedIds`), neverSendIncludedCount: 0 }, disclosure: { externalModelServiceMayBeCalled: boolean(disclosure.externalModelServiceMayBeCalled, `${path}.externalModelServiceMayBeCalled`), hostCan: strings(disclosure.hostCan, `${path}.hostCan`), hostCannot: strings(disclosure.hostCannot, `${path}.hostCannot`), timeoutMs: number(disclosure.timeoutMs, `${path}.timeoutMs`), outputLimitBytes: number(disclosure.outputLimitBytes, `${path}.outputLimitBytes`), invocationLimit: 1, automaticRetries: 0, sandbox: "read_only", projectWrite: false }, payload, payloadUtf8, payloadBytes, payloadHash: sha(manifest.payloadHash, `${path}.payloadHash`), createdAt: string(manifest.createdAt, `${path}.createdAt`), expiresAt: string(manifest.expiresAt, `${path}.expiresAt`) };
+}
+
+export function decodeClosedExternalAppPilot(value: unknown): ClosedExternalAppPilotDto {
+  const pilot = record(value, "closed external App Pilot");
+  allowedKeys(pilot, ["attempts", "authority", "brief", "cancelledAt", "canMutateAuthority", "candidate", "closedAt", "continuity", "createdAt", "currentTask", "disposition", "episode", "events", "evidenceClass", "failedAt", "failure", "feedback", "host", "id", "invocationBudget", "manifests", "preflight", "projectId", "review", "schemaVersion", "startedAt", "status", "updatedAt", "version"], "closed external App Pilot");
+  requiredKeys(pilot, ["attempts", "authority", "brief", "canMutateAuthority", "createdAt", "currentTask", "episode", "events", "evidenceClass", "host", "id", "invocationBudget", "manifests", "projectId", "schemaVersion", "status", "updatedAt", "version"], "closed external App Pilot");
+  if (pilot.schemaVersion !== "1.0.0" || pilot.host !== "codex" || pilot.authority !== "external_host_proposal_only" || pilot.canMutateAuthority !== false || !PILOT_STATUSES.includes(pilot.status as ClosedExternalAppPilotStatusDto) || !["synthetic_fixture", "owner_operated_closed_host_observation"].includes(String(pilot.evidenceClass))) fail("closed external App Pilot invariants");
+  const brief = record(pilot.brief, "Pilot brief"); exactKeys(brief, ["id", "version", "versionId"], "Pilot brief");
+  const episode = record(pilot.episode, "Pilot episode"); exactKeys(episode, ["id", "version"], "Pilot episode");
+  const budget = record(pilot.invocationBudget, "Pilot invocation budget"); exactKeys(budget, ["automaticRetries", "candidateAttemptsUsed", "candidateMaximum", "continuityAttemptsUsed", "continuityMaximum"], "Pilot invocation budget"); if (budget.candidateMaximum !== 2 || budget.continuityMaximum !== 2 || budget.automaticRetries !== 0) fail("Pilot invocation budget");
+  const manifests = array(pilot.manifests, "Pilot manifests").map((raw, index) => decodePilotManifest(raw, `Pilot manifests[${index}]`));
+  const attempts = array(pilot.attempts, "Pilot attempts").map((raw, index) => { const item = record(raw, `Pilot attempts[${index}]`); allowedKeys(item, ["cancelledAt", "completedAt", "confirmationConsumedAt", "confirmationExpiresAt", "confirmationNonce", "confirmedAt", "failedAt", "failureCode", "id", "invocationId", "kind", "manifestHash", "manifestId", "mcpObservation", "ordinal", "startedAt", "status", "stderrBytes", "stdoutBytes", "usage"], `Pilot attempts[${index}]`); requiredKeys(item, ["confirmationExpiresAt", "confirmationNonce", "id", "kind", "manifestHash", "manifestId", "ordinal", "status"], `Pilot attempts[${index}]`); if (!["candidate_generation", "continuity_check"].includes(String(item.kind)) || ![1, 2].includes(Number(item.ordinal)) || !["prepared", "confirmed", "launching", "running", "completed", "failed", "cancelled", "unknown"].includes(String(item.status))) fail(`Pilot attempts[${index}]`); safeTree(item, `Pilot attempts[${index}]`); return item as unknown as ClosedExternalAppPilotDto["attempts"][number]; });
+  let candidate: ClosedExternalAppPilotDto["candidate"];
+  if (pilot.candidate !== undefined) { const item = record(pilot.candidate, "Pilot candidate"); allowedKeys(item, ["affectedIssueIds", "attemptId", "authority", "canMutateAuthority", "candidateHash", "candidateMarkdown", "evidenceUsed", "id", "importedAt", "invocationId", "manifestHash", "manifestId", "materialDelta", "preservedDecisionIds", "receivedAt", "rejectedAt", "reopenResolvedIssue", "status", "unknowns"], "Pilot candidate"); requiredKeys(item, ["affectedIssueIds", "attemptId", "authority", "canMutateAuthority", "candidateHash", "candidateMarkdown", "evidenceUsed", "id", "invocationId", "manifestHash", "manifestId", "materialDelta", "preservedDecisionIds", "receivedAt", "reopenResolvedIssue", "status", "unknowns"], "Pilot candidate"); if (item.authority !== "model_proposed" || item.canMutateAuthority !== false || !["received", "imported", "rejected", "stale"].includes(String(item.status))) fail("Pilot candidate Authority"); safeTree(item, "Pilot candidate"); candidate = item as unknown as ClosedExternalAppPilotDto["candidate"]; }
+  const optionalTree = (key: "continuity" | "disposition" | "events" | "failure" | "feedback" | "review") => { if (pilot[key] !== undefined) safeTree(pilot[key], `Pilot ${key}`); };
+  optionalTree("continuity"); optionalTree("disposition"); optionalTree("events"); optionalTree("failure"); optionalTree("feedback"); optionalTree("review");
+  if (pilot.continuity !== undefined) { const continuity = record(pilot.continuity, "Pilot continuity"); if (continuity.authority !== "host_observation" || continuity.canMutateAuthority !== false) fail("Pilot continuity Authority"); }
+  if (pilot.disposition !== undefined) { const disposition = record(pilot.disposition, "Pilot disposition"); if (disposition.decidedBy !== "user") fail("Pilot disposition Authority"); }
+  return { ...pilot, manifests, attempts, ...(candidate === undefined ? {} : { candidate }) } as unknown as ClosedExternalAppPilotDto;
+}
+
+export function decodeClosedPilotPage(value: unknown): { readonly items: readonly ClosedExternalAppPilotDto[]; readonly nextCursor?: string } {
+  const page = record(value, "Pilot page"); allowedKeys(page, ["items", "nextCursor"], "Pilot page"); requiredKeys(page, ["items"], "Pilot page");
+  return { items: array(page.items, "Pilot page.items").map(decodeClosedExternalAppPilot), ...(typeof page.nextCursor === "string" ? { nextCursor: page.nextCursor } : {}) };
+}
+
+export function decodeClosedPilotImport(value: unknown): ClosedPilotImportDto {
+  const result = record(value, "Pilot candidate import"); exactKeys(result, ["pilot", "review", "revision"], "Pilot candidate import"); safeTree(result.revision, "Pilot imported revision");
+  return { pilot: decodeClosedExternalAppPilot(result.pilot), revision: result.revision as Readonly<Record<string, unknown>>, review: decodePreparedReview(result.review) };
+}
+
+export function decodeClosedPilotReviewRestore(value: unknown): ClosedPilotReviewRestoreDto {
+  const result = record(value, "Pilot Review restore");
+  allowedKeys(result, ["pilot", "review"], "Pilot Review restore");
+  requiredKeys(result, ["pilot", "review"], "Pilot Review restore");
+  return { pilot: decodeClosedExternalAppPilot(result.pilot), review: decodePreparedReview(result.review) };
+}
+
+export function decodeClosedPilotDisposition(value: unknown): ClosedPilotDispositionDto {
+  const result = record(value, "Pilot disposition"); exactKeys(result, ["pilot", "receipt"], "Pilot disposition");
+  return { pilot: decodeClosedExternalAppPilot(result.pilot), receipt: decodeReceipt(result.receipt, "Pilot disposition receipt") };
+}
+
+export function decodeClosedPilotEvidence(value: unknown): ClosedPilotEvidenceDto {
+  const evidence = record(value, "Pilot evidence export"); allowedKeys(evidence, ["authorityMutationCount", "automaticRetryCount", "context", "counts", "evidenceClass", "externalUserEvidenceCount", "feedbackCodes", "host", "pilotBindingHash", "projectBindingHash", "schemaVersion", "stableErrorCode", "stableOutcome", "stages"], "Pilot evidence export"); requiredKeys(evidence, ["authorityMutationCount", "automaticRetryCount", "context", "counts", "evidenceClass", "externalUserEvidenceCount", "feedbackCodes", "host", "pilotBindingHash", "projectBindingHash", "schemaVersion", "stableOutcome", "stages"], "Pilot evidence export");
+  if (evidence.schemaVersion !== "1.0.0" || evidence.host !== "codex" || !["synthetic_fixture", "owner_operated_closed_host_observation"].includes(String(evidence.evidenceClass)) || !PILOT_STATUSES.includes(evidence.stableOutcome as ClosedExternalAppPilotStatusDto) || evidence.authorityMutationCount !== 0 || evidence.automaticRetryCount !== 0 || evidence.externalUserEvidenceCount !== 0) fail("Pilot evidence invariants");
+  safeTree(evidence, "Pilot evidence export"); sha(evidence.projectBindingHash, "Pilot evidence project hash"); sha(evidence.pilotBindingHash, "Pilot evidence binding hash");
+  return evidence as unknown as ClosedPilotEvidenceDto;
 }
 
 export function decodeLanguage(value: unknown): { readonly language: AppLanguage } {

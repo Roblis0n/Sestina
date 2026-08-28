@@ -27,7 +27,7 @@ export interface McpLimits {
   readonly queryTimeoutMs: number;
 }
 
-export function healthPayload(reader: ProjectReader, limits: McpLimits): Readonly<Record<string, unknown>> {
+export function healthPayload<TPayload extends object>(reader: ProjectReader<TPayload>, limits: McpLimits): Readonly<Record<string, unknown>> {
   return Object.freeze({
     schemaVersion: "1.0",
     ok: true,

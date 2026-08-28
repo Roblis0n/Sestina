@@ -17,6 +17,7 @@ import { migration016 } from "./016-research-room.js";
 import { migration017 } from "./017-correction-appeals.js";
 import { migration018 } from "./018-deliberation-rooms.js";
 import { migration019 } from "./019-project-working-memory.js";
+import { migration020 } from "./020-closed-external-app-pilots.js";
 import { SESTINA_MIGRATION_MANIFEST } from "@sestina/schema";
 import type { Migration } from "../migrator.js";
 
@@ -43,6 +44,7 @@ const IMPLEMENTATIONS: readonly Migration[] = [
   migration017,
   migration018,
   migration019,
+  migration020,
 ];
 
 export const MIGRATION_MANIFEST_VERSION = SESTINA_MIGRATION_MANIFEST.schemaVersion;

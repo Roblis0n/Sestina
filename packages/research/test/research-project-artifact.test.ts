@@ -179,6 +179,18 @@ describe("artifact revisions", () => {
       error: { code: "invalid_revision_parent" },
     });
 
+    const activeFork = createArtifactRevision(
+      { projectId, artifactId: artifact.value.id, parentRevisionId: first.value.id, content: "candidate", mediaType: "text/plain", source: USER_SOURCE },
+      { clock, idFactory: ids },
+    );
+    expect(activeFork.ok).toBe(true);
+    if (!activeFork.ok) return;
+    const forkedFromActive = addArtifactRevision(withFirst.value, activeFork.value, withFirst.value.version, { allowFork: true });
+    expect(forkedFromActive.ok).toBe(true);
+    if (!forkedFromActive.ok) return;
+    expect(forkedFromActive.value.activeRevisionId).toBe(first.value.id);
+    expect(forkedFromActive.value.branchHeads).toEqual([first.value.id, activeFork.value.id]);
+
     const second = createArtifactRevision(
       { projectId, artifactId: artifact.value.id, parentRevisionId: first.value.id, content: "v2", mediaType: "text/plain", source: USER_SOURCE },
       { clock, idFactory: ids },

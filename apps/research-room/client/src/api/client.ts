@@ -5,6 +5,13 @@ import {
   decodeAttention,
   decodeBriefActivation,
   decodeBriefWorkspace,
+  decodeClosedExternalAppPilot,
+  decodeClosedPilotDisposition,
+  decodeClosedPilotEvidence,
+  decodeClosedPilotImport,
+  decodeClosedPilotReviewRestore,
+  decodeClosedPilotPage,
+  decodeCodexHostStatus,
   decodeDecisionSupersede,
   decodeDirectoryPickerCancellation,
   decodeLanguage,
@@ -38,7 +45,13 @@ import type {
   AppealSummaryDto,
   AttentionDto,
   BriefWorkspaceDto,
+  ClosedExternalAppPilotDto,
+  ClosedPilotDispositionDto,
+  ClosedPilotEvidenceDto,
+  ClosedPilotImportDto,
+  ClosedPilotReviewRestoreDto,
   CommitDispositionInput,
+  CodexHostStatusDto,
   DecisionDetailDto,
   DecisionSummaryDto,
   DeliberationRoomDetailDto,
@@ -120,6 +133,77 @@ export class ResearchRoomApi {
 
   async provider(): Promise<ProviderStatusDto> {
     return this.request("/api/provider", decodeProviderStatus);
+  }
+
+  async codexHost(): Promise<CodexHostStatusDto> {
+    return this.request("/api/codex-host", decodeCodexHostStatus);
+  }
+
+  async listClosedExternalAppPilots(limit = 50, cursor?: string): Promise<{ readonly items: readonly ClosedExternalAppPilotDto[]; readonly nextCursor?: string }> {
+    const query = new URLSearchParams({ limit: String(limit) }); if (cursor) query.set("cursor", cursor);
+    return this.request(`/api/project/external-app-pilots?${query.toString()}`, decodeClosedPilotPage);
+  }
+
+  async getClosedExternalAppPilot(pilotId: string): Promise<ClosedExternalAppPilotDto> {
+    return this.request(`/api/project/external-app-pilots/${encodeURIComponent(pilotId)}`, decodeClosedExternalAppPilot);
+  }
+
+  async createClosedExternalAppPilot(): Promise<ClosedExternalAppPilotDto> {
+    return this.request("/api/project/external-app-pilots", decodeClosedExternalAppPilot, { method: "POST", mutation: true, body: { confirmed: true } });
+  }
+
+  async prepareClosedExternalAppPilotContext(pilot: ClosedExternalAppPilotDto, kind: "candidate_generation" | "continuity_check", selectedMemoryItemIds: readonly string[]): Promise<ClosedExternalAppPilotDto> {
+    return this.request(`/api/project/external-app-pilots/${encodeURIComponent(pilot.id)}/context`, decodeClosedExternalAppPilot, { method: "POST", mutation: true, body: { expectedVersion: pilot.version, kind, selectedMemoryItemIds, externalModelServiceMayBeCalled: true, timeoutMs: 120_000, outputLimitBytes: 65_536 } });
+  }
+
+  async confirmClosedExternalAppPilotContext(pilot: ClosedExternalAppPilotDto): Promise<ClosedExternalAppPilotDto> {
+    const attempt = pilot.attempts.at(-1); const manifest = pilot.manifests.at(-1);
+    if (!attempt || !manifest || attempt.id !== manifest.attemptId) throw new ResearchRoomApiError("invalid_payload", "The exact Pilot Manifest binding is unavailable.", false);
+    return this.request(`/api/project/external-app-pilots/${encodeURIComponent(pilot.id)}/confirm`, decodeClosedExternalAppPilot, { method: "POST", mutation: true, body: { expectedVersion: pilot.version, attemptId: attempt.id, manifestId: manifest.id, manifestHash: manifest.payloadHash, confirmationNonce: attempt.confirmationNonce, confirmed: true } });
+  }
+
+  async launchClosedExternalAppPilot(pilot: ClosedExternalAppPilotDto, signal?: AbortSignal): Promise<ClosedExternalAppPilotDto> {
+    const attempt = pilot.attempts.at(-1); const manifest = pilot.manifests.at(-1);
+    if (!attempt || !manifest || attempt.id !== manifest.attemptId) throw new ResearchRoomApiError("invalid_payload", "The exact Pilot attempt is unavailable.", false);
+    return this.request(`/api/project/external-app-pilots/${encodeURIComponent(pilot.id)}/launch`, decodeClosedExternalAppPilot, { method: "POST", mutation: true, ...(signal ? { signal } : {}), body: { expectedVersion: pilot.version, attemptId: attempt.id, manifestHash: manifest.payloadHash, confirmed: true } });
+  }
+
+  async cancelClosedExternalAppPilot(pilot: ClosedExternalAppPilotDto): Promise<ClosedExternalAppPilotDto> {
+    const attempt = pilot.attempts.findLast((item) => item.status === "launching" || item.status === "running");
+    if (!attempt) throw new ResearchRoomApiError("invalid_payload", "No active Pilot attempt can be cancelled.", false);
+    return this.request(`/api/project/external-app-pilots/${encodeURIComponent(pilot.id)}/cancel`, decodeClosedExternalAppPilot, { method: "POST", mutation: true, body: { expectedVersion: pilot.version, attemptId: attempt.id, confirmed: true } });
+  }
+
+  async importClosedExternalAppPilotCandidate(pilot: ClosedExternalAppPilotDto): Promise<ClosedPilotImportDto> {
+    return this.request(`/api/project/external-app-pilots/${encodeURIComponent(pilot.id)}/candidate/import`, decodeClosedPilotImport, { method: "POST", mutation: true, body: { expectedVersion: pilot.version, confirmed: true } });
+  }
+
+  async rejectClosedExternalAppPilotCandidate(pilot: ClosedExternalAppPilotDto): Promise<ClosedExternalAppPilotDto> {
+    return this.request(`/api/project/external-app-pilots/${encodeURIComponent(pilot.id)}/candidate/reject`, decodeClosedExternalAppPilot, { method: "POST", mutation: true, body: { expectedVersion: pilot.version, confirmed: true } });
+  }
+
+  async analyzeClosedExternalAppPilotReview(pilot: ClosedExternalAppPilotDto, prepared: PreparedReviewDto, signal?: AbortSignal): Promise<AnalyzedReviewDto> {
+    return this.request(`/api/project/external-app-pilots/${encodeURIComponent(pilot.id)}/review/analyze`, decodeAnalyzedReview, { method: "POST", mutation: true, ...(signal ? { signal } : {}), body: { reviewId: prepared.reviewId, confirmationNonce: prepared.confirmationNonce, manifestHash: prepared.manifestHash, confirmed: true } });
+  }
+
+  async restoreClosedExternalAppPilotReview(pilot: ClosedExternalAppPilotDto): Promise<ClosedPilotReviewRestoreDto> {
+    return this.request(`/api/project/external-app-pilots/${encodeURIComponent(pilot.id)}/review/restore`, decodeClosedPilotReviewRestore, { method: "POST", mutation: true, body: { expectedVersion: pilot.version, confirmed: true } });
+  }
+
+  async commitClosedExternalAppPilotDisposition(pilot: ClosedExternalAppPilotDto, analyzed: AnalyzedReviewDto, disposition: CommitDispositionInput["disposition"], reason: string, changes: { readonly modifiedProposal?: string; readonly redirectQuestion?: string } = {}): Promise<ClosedPilotDispositionDto> {
+    return this.request(`/api/project/external-app-pilots/${encodeURIComponent(pilot.id)}/disposition`, decodeClosedPilotDisposition, { method: "POST", mutation: true, body: { expectedVersion: pilot.version, reviewId: analyzed.reviewId, authorityNonce: analyzed.authorityNonce, expectedStateBinding: analyzed.stateBinding, disposition, reason, ...changes, confirmed: true } });
+  }
+
+  async recordClosedExternalAppPilotFeedback(pilot: ClosedExternalAppPilotDto, codes: readonly string[], note: string): Promise<ClosedExternalAppPilotDto> {
+    return this.request(`/api/project/external-app-pilots/${encodeURIComponent(pilot.id)}/feedback`, decodeClosedExternalAppPilot, { method: "POST", mutation: true, body: { expectedVersion: pilot.version, codes, note, confirmed: true } });
+  }
+
+  async closeClosedExternalAppPilot(pilot: ClosedExternalAppPilotDto): Promise<ClosedExternalAppPilotDto> {
+    return this.request(`/api/project/external-app-pilots/${encodeURIComponent(pilot.id)}/close`, decodeClosedExternalAppPilot, { method: "POST", mutation: true, body: { expectedVersion: pilot.version, confirmed: true } });
+  }
+
+  async closedExternalAppPilotEvidence(pilotId: string): Promise<ClosedPilotEvidenceDto> {
+    return this.request(`/api/project/external-app-pilots/${encodeURIComponent(pilotId)}/evidence`, decodeClosedPilotEvidence);
   }
 
   async saveProvider(input: ProviderSaveInput): Promise<ProviderStatusDto> {
