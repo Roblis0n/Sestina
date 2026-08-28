@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { access, mkdir, mkdtemp, readFile, readdir, realpath, rm, stat } from "node:fs/promises";
-import { constants } from "node:fs";
+import { constants, readFileSync } from "node:fs";
 import { request as requestHttp } from "node:http";
 import { join, relative, resolve } from "node:path";
 import { tmpdir } from "node:os";
@@ -53,6 +53,7 @@ const viteNode = join(repositoryRoot, "node_modules", "vite-node", "vite-node.mj
 const fixtureScript = join(repositoryRoot, "scripts", "prepare-ri53-lifecycle-fixture.mjs");
 let artifactRoot = join(installDirectory, manifest.contents.releaseBundleRoot);
 let running;
+const expectedGuardedProcessIds = [];
 
 const guardedEnvironment = {
   ...process.env,
@@ -75,12 +76,31 @@ function checkedProcess(entry, args, label, timeout = 60_000) {
     timeout,
     windowsHide: true,
   });
+  assertNetworkGuardActive(result.pid, label);
   const combined = String(result.stdout ?? "") + String(result.stderr ?? "");
   invariant(!combined.includes("SESTINA_NETWORK_BLOCKED:"), label + "_attempted_network");
   if (result.error || result.status !== 0) {
     throw new Error(label + "_failed:" + String(result.status ?? "no_status") + ":" + combined.slice(-2_000));
   }
   return result;
+}
+
+function activatedProcessIds() {
+  try {
+    return new Set(readFileSync(marker, "utf8")
+      .split(/\r?\n/u)
+      .filter(Boolean)
+      .map((value) => Number.parseInt(value, 10))
+      .filter(Number.isInteger));
+  } catch {
+    return new Set();
+  }
+}
+
+function assertNetworkGuardActive(pid, label) {
+  invariant(Number.isInteger(pid) && pid > 0, label + "_pid_missing");
+  invariant(activatedProcessIds().has(pid), label + "_network_guard_not_active");
+  expectedGuardedProcessIds.push(pid);
 }
 
 async function installArtifact() {
@@ -135,6 +155,7 @@ async function startArtifact() {
     child.stdout.on("data", onData);
     child.once("exit", onExit);
   });
+  assertNetworkGuardActive(child.pid, "artifact_server");
   running = { child, origin, stderr: () => stderr };
   return running;
 }
@@ -438,7 +459,11 @@ try {
   const attempts = (await readFile(attemptMarker, "utf8").catch(() => Buffer.from(""))).toString("utf8").trim();
   invariant(attempts === "", "hidden_network_attempt_detected");
   const activations = (await readFile(marker, "utf8")).trim().split(/\r?\n/u).filter(Boolean).length;
-  invariant(activations >= 10, "network_guard_not_active_across_lifecycle");
+  const activatedIds = activatedProcessIds();
+  invariant(
+    expectedGuardedProcessIds.length > 0 && expectedGuardedProcessIds.every((pid) => activatedIds.has(pid)),
+    "network_guard_not_active_across_lifecycle",
+  );
   process.stdout.write(JSON.stringify({
     ok: true,
     product: identity.product,
@@ -461,6 +486,7 @@ try {
     uninstallPreservedProjectBytes: true,
     reinstallContinuity: true,
     guardedProcesses: activations,
+    guardedLifecycleProcesses: expectedGuardedProcessIds.length,
     networkAttempts: 0,
   }) + "\n");
 } catch (error) {
