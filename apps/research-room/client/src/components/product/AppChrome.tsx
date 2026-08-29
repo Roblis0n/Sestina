@@ -70,7 +70,7 @@ export function AppChrome(props: AppChromeProps) {
     <>
       <header ref={chromeRef} className="app-chrome">
         <a className="brand" href="#main-content" aria-label={`${t(props.language, "app_name")} — ${t(props.language, "app_subtitle")}`}>
-          <span className="brand__mark" aria-hidden="true">S</span>
+          <img className="sestina-logo sestina-logo--chrome" src="/sestina-logo.png" alt="" aria-hidden="true" width="1024" height="1024" draggable={false} />
           <span><strong>{t(props.language, "app_name")}</strong><small>{t(props.language, "app_subtitle")}</small></span>
         </a>
         <div className="app-chrome__status" aria-label={props.language === "en" ? "Runtime status" : "运行状态"} data-provider-mode={props.provider?.mode ?? "offline_ledger"}>

@@ -41,7 +41,8 @@ pre { max-height: 22rem; overflow: auto; padding: var(--space-3); border: 1px so
 
 .app-chrome { position: sticky; z-index: 30; top: 0; display: grid; min-height: 3.75rem; grid-template-columns: minmax(11rem, 0.75fr) minmax(11rem, 0.55fr) minmax(0, 1.7fr); align-items: center; gap: var(--space-4); border-bottom: 1px solid var(--border-subtle); padding: var(--space-2) clamp(var(--space-3), 2vw, var(--space-5)); background: var(--surface-chrome); }
 .brand { display: inline-flex; width: fit-content; min-width: 0; max-width: 100%; align-items: center; gap: var(--space-2); color: var(--text-primary); text-decoration: none; }
-.brand__mark { display: grid; width: 2rem; height: 2rem; place-items: center; border: 1px solid var(--accent-primary); color: var(--accent-primary); font-family: Georgia, serif; font-weight: 700; }
+.sestina-logo { display: block; flex: 0 0 auto; aspect-ratio: 1; object-fit: contain; background: #fff; user-select: none; }
+.sestina-logo--chrome { width: 2.25rem; height: 2.25rem; }
 .brand strong, .brand small { display: block; }
 .brand > span:last-child { min-width: 0; }
 .brand strong, .brand small { overflow-wrap: anywhere; }
@@ -67,7 +68,7 @@ pre { max-height: 22rem; overflow: auto; padding: var(--space-3); border: 1px so
 .live-region[data-tone="danger"] { border-left-color: var(--status-danger); }
 
 .boot-screen, .fatal-screen { display: grid; min-height: 100vh; place-content: center; gap: var(--space-3); padding: var(--space-6); text-align: center; }
-.boot-mark { margin: auto; display: grid; width: 4rem; height: 4rem; place-items: center; border: 1px solid var(--accent-primary); font: 700 2rem Georgia, serif; color: var(--accent-primary); }
+.sestina-logo--boot { width: 5rem; height: 5rem; margin: auto; }
 
 .language-screen { display: grid; min-height: 100vh; grid-template-columns: minmax(0, 1.25fr) minmax(22rem, 0.75fr); }
 .language-screen__context { display: flex; flex-direction: column; justify-content: center; padding: clamp(2rem, 8vw, 8rem); background: var(--accent-primary); color: var(--surface-primary); }
@@ -297,7 +298,6 @@ input[type="checkbox"], input[type="radio"] { width: auto; }
 
 :root[data-theme="high_contrast"] .button, :root[data-theme="high_contrast"] input, :root[data-theme="high_contrast"] textarea, :root[data-theme="high_contrast"] select, :root[data-theme="high_contrast"] .status-badge, :root[data-theme="high_contrast"] .app-chrome, :root[data-theme="high_contrast"] .project-navigation, :root[data-theme="high_contrast"] .context-inspector, :root[data-theme="high_contrast"] .thread-event { border-width: 2px; }
 :root[data-theme="high_contrast"] a { text-decoration-thickness: 0.18em; text-underline-offset: 0.2em; }
-:root[data-theme="high_contrast"] .brand__mark { border-width: 3px; background: var(--accent-primary); color: var(--surface-primary); }
 :root[data-theme="high_contrast"] .room-link[data-active="true"] { border: 2px solid var(--accent-highlight); border-left: 0.5rem solid var(--accent-vivid); }
 
 /* UI-02 research object workspaces reuse the production Shell and token system. */

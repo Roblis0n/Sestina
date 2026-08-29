@@ -42,6 +42,18 @@ async function expectNoHorizontalOverflow(page: Page): Promise<void> {
   expect(overflow).toEqual([]);
 }
 
+async function expectOfficialLogo(page: Page, selector: ".sestina-logo--boot" | ".sestina-logo--chrome"): Promise<void> {
+  const logo = page.locator(selector);
+  await expect(logo).toBeVisible();
+  await expect(logo).toHaveAttribute("src", "/sestina-logo.png");
+  const intrinsic = await page.evaluate<{ readonly complete: boolean; readonly naturalWidth: number; readonly naturalHeight: number } | null>(`(() => {
+    const element = document.querySelector("${selector}");
+    if (!(element instanceof HTMLImageElement)) return null;
+    return { complete: element.complete, naturalWidth: element.naturalWidth, naturalHeight: element.naturalHeight };
+  })()`);
+  expect(intrinsic).toEqual({ complete: true, naturalWidth: 1024, naturalHeight: 1024 });
+}
+
 async function capture(page: Page, testInfo: TestInfo, name: string, width: number, height: number): Promise<void> {
   await page.setViewportSize({ width, height });
   await expectNoHorizontalOverflow(page);
@@ -52,6 +64,32 @@ async function capture(page: Page, testInfo: TestInfo, name: string, width: numb
 }
 
 test.describe("UI-03 production experience cohesion", () => {
+  test("uses the sole official logo during production boot and in browser metadata", async ({ page }, testInfo) => {
+    const server = await createResearchRoomServer({
+      languagePreferenceStore: new MemoryLanguagePreferenceStore("en"),
+    }).start();
+    servers.push(server);
+
+    let releaseStatus: (() => void) | undefined;
+    const statusGate = new Promise<void>((resolve) => { releaseStatus = resolve; });
+    await page.route("**/api/status", async (route) => {
+      await statusGate;
+      await route.continue();
+    });
+
+    await page.goto(server.origin);
+    await expectOfficialLogo(page, ".sestina-logo--boot");
+    await expect(page.locator('link[rel="icon"]')).toHaveAttribute("href", "/sestina-logo.png");
+    const logoResponse = await page.request.get(`${server.origin}/sestina-logo.png`);
+    expect(logoResponse.status()).toBe(200);
+    expect(logoResponse.headers()["content-type"]).toBe("image/png");
+    await capture(page, testInfo, "brand01-official-logo-boot-en-light-1280x800.png", 1280, 800);
+
+    releaseStatus?.();
+    await expect(page.getByRole("status")).toContainText("Local service is ready");
+    await expectOfficialLogo(page, ".sestina-logo--chrome");
+  });
+
   test("keeps the active research line visible while Search stays an on-demand entry", async ({ page }) => {
     const fixture = await startRoom(page);
 
@@ -105,6 +143,7 @@ test.describe("UI-03 production experience cohesion", () => {
 
   test("remains operable at narrow desktop, 200 percent text, themes, languages, and reduced preferences", async ({ page }, testInfo) => {
     await startRoom(page);
+    await expectOfficialLogo(page, ".sestina-logo--chrome");
     await page.setViewportSize({ width: 1100, height: 800 });
     expect(await page.evaluate<string>(`getComputedStyle(document.querySelector(".project-shell")).transitionDuration`)).toBe("0s");
     await page.evaluate('document.documentElement.style.setProperty("font-size", "200%", "important")');
@@ -115,8 +154,17 @@ test.describe("UI-03 production experience cohesion", () => {
     await page.evaluate('document.documentElement.style.removeProperty("font-size")');
     await expect.poll(async () => Math.round((await page.locator(".app-chrome").boundingBox())?.height ?? 999)).toBeLessThan(180);
     await expect(page.locator("html")).toHaveAttribute("data-chrome-layout", "sticky");
+    await capture(page, testInfo, "brand01-light-zh-review-1280x800.png", 1280, 800);
+
     await page.getByRole("button", { name: "外观" }).click();
     await expect(page.getByRole("group", { name: "主题" }).getByRole("radio", { name: "跟随系统" })).toBeFocused();
+    await page.getByRole("radio", { name: "深色" }).check();
+    await page.getByRole("button", { name: "应用外观" }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await expectOfficialLogo(page, ".sestina-logo--chrome");
+    await capture(page, testInfo, "brand01-dark-zh-review-1440x900.png", 1440, 900);
+
+    await page.getByRole("button", { name: "外观" }).click();
     await page.getByRole("radio", { name: "高对比" }).check();
     await page.getByRole("group", { name: "减少动态" }).getByRole("radio", { name: "开启" }).check();
     await page.getByRole("checkbox", { name: "减少透明" }).check();
@@ -127,10 +175,18 @@ test.describe("UI-03 production experience cohesion", () => {
     await expect(page.locator("html")).toHaveAttribute("data-transparency", "reduced");
     await page.getByRole("button", { name: "EN", exact: true }).click();
     await expect(page.getByRole("region", { name: "Current research line" })).toBeVisible();
+    await expectOfficialLogo(page, ".sestina-logo--chrome");
     const activeBorder = await page.evaluate<number>(`parseFloat(getComputedStyle(document.querySelector('.room-link[data-active="true"]')).borderTopWidth)`);
     const inactiveBorder = await page.evaluate<number>(`parseFloat(getComputedStyle(document.querySelector('.room-link[data-active="false"]')).borderTopWidth)`);
     expect(activeBorder).toBeGreaterThan(inactiveBorder);
     await expectNoHorizontalOverflow(page);
-    await capture(page, testInfo, "ui03-high-contrast-en-review-1100x800.png", 1100, 800);
+    await capture(page, testInfo, "brand01-high-contrast-en-review-1728x1080.png", 1728, 1080);
+
+    await page.getByRole("button", { name: "Appearance" }).click();
+    await page.getByRole("radio", { name: "Light" }).check();
+    await page.getByRole("button", { name: "Apply appearance" }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await expectOfficialLogo(page, ".sestina-logo--chrome");
+    await capture(page, testInfo, "brand01-light-en-review-1920x1080.png", 1920, 1080);
   });
 });

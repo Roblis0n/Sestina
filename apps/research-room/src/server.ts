@@ -898,9 +898,10 @@ export class ResearchRoomHttpApplication {
 
   private async serveClient(pathname: string, response: ServerResponse): Promise<void> {
     const decoded = decodeURIComponent(pathname);
+    const isOfficialLogo = decoded === "/sestina-logo.png";
     const isClientRoute = decoded === "/" || decoded === "/index.html" || (extname(decoded) === "" && !decoded.startsWith("/assets/"));
     const relative = isClientRoute ? "index.html" : decoded.slice(1);
-    if (relative.includes("..") || relative.includes("\\") || (!isClientRoute && !relative.startsWith("assets/"))) {
+    if (relative.includes("..") || relative.includes("\\") || (!isClientRoute && !isOfficialLogo && !relative.startsWith("assets/"))) {
       throw new HttpProblem(404, "client_asset_not_found", "The requested client asset was not found.");
     }
     const contentType = clientContentType(relative);

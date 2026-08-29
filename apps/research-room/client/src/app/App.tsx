@@ -258,7 +258,7 @@ export function App() {
       <a className="skip-link" href="#main-content">Skip to main content</a>
       {chrome}
       <div className="live-region" role="status" aria-live="polite" data-tone={notice?.tone ?? "ready"}>{notice ? <><span>{notice.message}</span><button type="button" aria-label={language === "en" ? "Dismiss notification" : "关闭通知"} onClick={() => { setNotice(undefined); }}>×</button></> : null}</div>
-      {phase === "boot" ? <main className="boot-screen"><div className="boot-mark">S</div><p>Starting the local Research Room…</p></main> : null}
+      {phase === "boot" ? <main className="boot-screen"><img className="sestina-logo sestina-logo--boot" src="/sestina-logo.png" alt="Sestina" width="1024" height="1024" draggable={false} /><p>Starting the local Research Room…</p></main> : null}
     {phase === "language" ? <LanguageScreen busy={busy} onChoose={(next) => void chooseLanguage(next)} /> : null}
     {phase === "start" && status ? <StartCenter language={language} directoryPickerAvailable={status.directoryPickerAvailable} busy={busy} onPreviewNative={previewNative} onCancelNative={cancelNative} onOpenManual={openManual} onInitializeNative={initializeNative} onOpened={(value) => void opened(value)} onNotice={showNotice} /> : null}
     {phase === "brief" && openedProject ? <BriefSetup language={language} projectTitle={openedProject.title} busy={busy} onActivate={activateBrief} onActivated={activated} onError={(message) => { showNotice(message, "danger"); }} /> : null}

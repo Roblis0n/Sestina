@@ -44,6 +44,7 @@ async function clientRoot(): Promise<string> {
   );
   await writeFile(join(root, "assets", "app-a1b2c3.js"), "export const shell = true;\n", "utf8");
   await writeFile(join(root, "assets", "app-a1b2c3.css"), ":root{color-scheme:light dark}\n", "utf8");
+  await writeFile(join(root, "sestina-logo.png"), Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
   return root;
 }
 
@@ -80,6 +81,11 @@ describe("production Research Room client assets", () => {
     expect(script.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
     expect(script.headers.get("cache-control")).toContain("immutable");
 
+    const logo = await fetch(`${running.origin}/sestina-logo.png`);
+    expect(logo.status).toBe(200);
+    expect(logo.headers.get("content-type")).toBe("image/png");
+    expect(Buffer.from(await logo.arrayBuffer())).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+
     const fallback = await fetch(`${running.origin}/review`);
     expect(fallback.status).toBe(200);
     expect(fallback.headers.get("content-type")).toBe("text/html; charset=utf-8");
@@ -104,6 +110,13 @@ describe("production Research Room client assets", () => {
     const legacy = await fetch(`${running.origin}/app.js`);
     expect(legacy.status).toBe(404);
     expect(await legacy.json()).toMatchObject({
+      ok: false,
+      error: { code: "client_asset_not_found" },
+    });
+
+    const unapprovedLogo = await fetch(`${running.origin}/alternate-logo.png`);
+    expect(unapprovedLogo.status).toBe(404);
+    expect(await unapprovedLogo.json()).toMatchObject({
       ok: false,
       error: { code: "client_asset_not_found" },
     });
