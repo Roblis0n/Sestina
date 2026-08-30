@@ -5,10 +5,13 @@ import { join, relative, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
 const releaseRoot = join(root, "release");
-const [expectedOs, expectedArchitecture] = process.argv.slice(2);
+const rawArguments = process.argv.slice(2);
+const argumentsWithoutSeparator =
+  rawArguments[0] === "--" ? rawArguments.slice(1) : rawArguments;
+const [expectedOs, expectedArchitecture] = argumentsWithoutSeparator;
 
 if (
-  process.argv.length !== 4 ||
+  argumentsWithoutSeparator.length !== 2 ||
   !["win32", "darwin", "linux"].includes(expectedOs) ||
   !["x64", "arm64"].includes(expectedArchitecture)
 ) {

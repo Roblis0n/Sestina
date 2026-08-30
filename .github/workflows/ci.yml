@@ -59,7 +59,7 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm verify:ri54 -- ${{ matrix.expected-os }} ${{ matrix.expected-arch }}
+      - run: pnpm verify:ri54 ${{ matrix.expected-os }} ${{ matrix.expected-arch }}
       - uses: actions/upload-artifact@v4
         with:
           name: sestina-ri54-${{ matrix.platform }}-${{ github.sha }}

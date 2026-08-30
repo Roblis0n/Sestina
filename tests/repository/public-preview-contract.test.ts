@@ -66,6 +66,7 @@ describe("RI-54 public preview repository contract", () => {
       "expected-arch: arm64",
       "ubuntu-24.04",
       "expected-os: linux",
+      "pnpm verify:ri54 ${{ matrix.expected-os }} ${{ matrix.expected-arch }}",
     ]) {
       expect(workflow).toContain(expected);
     }
