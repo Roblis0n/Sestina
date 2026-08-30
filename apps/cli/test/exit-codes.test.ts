@@ -21,6 +21,9 @@ describe("CLI exit-code contract", () => {
     expect(exitCodeForCoreError("storage_readonly")).toBe(6);
     expect(exitCodeForCoreError("storage_corrupt")).toBe(6);
     expect(exitCodeForCoreError("storage_unavailable")).toBe(6);
+    expect(exitCodeForCoreError("confirmation_expired")).toBe(4);
+    expect(exitCodeForCoreError("confirmation_replayed")).toBe(4);
+    expect(exitCodeForCoreError("confirmation_binding_mismatch")).toBe(4);
     expect(exitCodeForCoreError("unsupported_format")).toBe(8);
     expect(exitCodeForCoreError("operation_cancelled")).toBe(9);
   });

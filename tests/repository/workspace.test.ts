@@ -329,15 +329,17 @@ describe("CI workflow", () => {
     expect(content).not.toMatch(/pnpm test:integration/);
   });
 
-  it("CI keeps the unified verify entry as its only quality step after install", () => {
+  it("CI keeps exactly one shared and one platform RI-53 quality entry after their installs", () => {
     const content = readFileSync(ciPath, "utf-8");
-    // After the frozen install there must be exactly one quality run: verify.
     const runSteps = content.match(/^\s*- run:.*$/gm) ?? [];
-    const afterInstall = runSteps.slice(
-      runSteps.findIndex((s) => s.includes("pnpm install")) + 1,
-    );
-    expect(afterInstall).toHaveLength(1);
-    expect(afterInstall[0]).toMatch(/pnpm verify\b/);
+    const installs = runSteps.filter((step) => step.includes("pnpm install"));
+    const quality = runSteps.filter((step) => !step.includes("pnpm install"));
+    expect(installs).toHaveLength(2);
+    expect(quality).toHaveLength(2);
+    expect(quality).toEqual(expect.arrayContaining([
+      expect.stringMatching(/pnpm verify:ri53:shared\b/),
+      expect.stringMatching(/pnpm verify:ri53\b(?!:)/),
+    ]));
   });
 
   it("CI uses Node 24 across all platforms", () => {

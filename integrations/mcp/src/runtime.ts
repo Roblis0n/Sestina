@@ -70,7 +70,7 @@ export function parseServerArguments(args: readonly string[]): SestinaMcpResult<
   const auditFile = values.get("--audit-file");
   const normalMode = projectRoot !== undefined && frozenContextFile === undefined && expectedProjectId === undefined && expectedManifestHash === undefined && auditFile === undefined;
   const frozenMode = projectRoot === undefined && frozenContextFile !== undefined && expectedProjectId !== undefined && expectedManifestHash !== undefined && auditFile !== undefined;
-  if ((!normalMode && !frozenMode) || (normalMode && projectRoot?.trim().length === 0)
+  if ((!normalMode && !frozenMode) || (normalMode && projectRoot.trim().length === 0)
     || (frozenMode && (!isAbsolute(frozenContextFile) || !isAbsolute(auditFile) || expectedProjectId.trim().length === 0 || !/^[0-9a-f]{64}$/u.test(expectedManifestHash)))) {
     return mcpErr("missing_project_root");
   }

@@ -64,7 +64,7 @@ export function createSestinaMcpServer<TPayload extends object>(reader: ProjectR
     },
     async () => {
       const result = await getResearchContext(reader);
-      if (!("isError" in result) || !result.isError) await audit?.("get_research_context");
+      if (!("isError" in result)) await audit?.("get_research_context");
       return result;
     },
   );

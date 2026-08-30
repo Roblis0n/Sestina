@@ -1517,9 +1517,6 @@ export function createResearchRepositories(db: StorageDatabase): ResearchReposit
         if (
           current.value.id !== next.value.id
           || current.value.projectId !== next.value.projectId
-          || current.value.host !== next.value.host
-          || current.value.authority !== next.value.authority
-          || current.value.canMutateAuthority !== next.value.canMutateAuthority
           || current.value.createdAt !== next.value.createdAt
           || current.value.evidenceClass !== next.value.evidenceClass
           || !sameValue(current.value.brief, next.value.brief)
@@ -1535,7 +1532,7 @@ export function createResearchRepositories(db: StorageDatabase): ResearchReposit
         ) return { ok: false, error: researchError("version_conflict") };
         for (const [index, prior] of current.value.attempts.entries()) {
           const following = next.value.attempts[index];
-          if (following === undefined || prior.id !== following.id || prior.kind !== following.kind || prior.ordinal !== following.ordinal || prior.manifestId !== following.manifestId || prior.manifestHash !== following.manifestHash || prior.confirmationNonce !== following.confirmationNonce || prior.confirmationExpiresAt !== following.confirmationExpiresAt) return { ok: false, error: researchError("version_conflict") };
+          if (following?.id !== prior.id || prior.kind !== following.kind || prior.ordinal !== following.ordinal || prior.manifestId !== following.manifestId || prior.manifestHash !== following.manifestHash || prior.confirmationNonce !== following.confirmationNonce || prior.confirmationExpiresAt !== following.confirmationExpiresAt) return { ok: false, error: researchError("version_conflict") };
         }
         const data = encodeDomainJson(next.value, parseClosedExternalAppPilot);
         if (!data.ok) return data;
@@ -1682,7 +1679,8 @@ function boundedClosedPilotPage<T extends { readonly id: string }>(
   const cursor = decodeCursor(page, projectId);
   if (!cursor.ok) return cursor;
   const ordered = [...values].sort((left, right) => sortKey(left).localeCompare(sortKey(right)) || left.id.localeCompare(right.id));
-  const after = cursor.value === undefined ? ordered : ordered.filter((item) => sortKey(item) > cursor.value!.sortKey || (sortKey(item) === cursor.value!.sortKey && item.id > cursor.value!.id));
+  const cursorValue = cursor.value;
+  const after = cursorValue === undefined ? ordered : ordered.filter((item) => sortKey(item) > cursorValue.sortKey || (sortKey(item) === cursorValue.sortKey && item.id > cursorValue.id));
   const selected = after.slice(0, page.limit + 1);
   const hasMore = selected.length > page.limit;
   const items = hasMore ? selected.slice(0, page.limit) : selected;

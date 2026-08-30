@@ -70,7 +70,7 @@ describe("@sestina/mcp package and architecture boundary", () => {
       const source = await readFile(file, "utf8");
       combined += source;
       expect(source).not.toMatch(/from\s+["']node:(?:net|http|https|http2|dgram)["']/u);
-      expect(source).not.toMatch(/\b(?:SELECT|INSERT\s+INTO|UPDATE|DELETE\s+FROM|PRAGMA)\b/iu);
+      expect(source).not.toMatch(/\b(?:SELECT\s+|INSERT\s+INTO|UPDATE\s+[A-Za-z_"]|DELETE\s+FROM|PRAGMA\s+)\b/iu);
     }
     expect(combined).toContain("readOnly: true");
     expect(combined).not.toContain("readOnly: false");

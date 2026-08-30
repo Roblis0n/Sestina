@@ -5,6 +5,12 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createProjectStateBackup, openSestina, RandomIdFactory, SestinaCore, SystemClock, type CoreResult } from "@sestina/core";
 import { MIGRATIONS, openDatabase, readSchemaVersion } from "@sestina/storage";
 import { createResearchRoomServer, type RunningResearchRoomServer } from "../src/server.js";
+import type {
+  ExecutedProjectStateRestoreDto,
+  PreparedProjectStateRestoreDto,
+  ProjectRecoveryStatusDto,
+  ProjectStateBackupDto,
+} from "../client/src/api/dto.js";
 
 const USER = Object.freeze({ kind: "user" as const, actorId: "ri53-api-owner" });
 const roots: string[] = [];
@@ -61,9 +67,15 @@ async function start() {
   return { running, token: status.value.sessionToken };
 }
 
-async function api(origin: string, token: string, method: "GET" | "POST", path: string, body?: unknown) {
+interface ApiBody<T> {
+  readonly ok: boolean;
+  readonly value: T;
+  readonly error?: { readonly code: string };
+}
+
+async function api<T = unknown>(origin: string, token: string, method: "GET" | "POST", path: string, body?: unknown) {
   const response = await fetch(`${origin}${path}`, { method, headers: { "x-sestina-session": token, ...(body === undefined ? {} : { "content-type": "application/json" }) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
-  return { response, body: await response.json() as { readonly ok: boolean; readonly value?: any; readonly error?: { readonly code: string } } };
+  return { response, body: await response.json() as ApiBody<T> };
 }
 
 afterEach(async () => {
@@ -76,22 +88,22 @@ describe("RI-53 production recovery API", () => {
     const project = await fixture();
     const { running, token } = await start();
     expect((await api(running.origin, token, "POST", "/api/project/open", { projectPath: project.root, initializeIfNeeded: false })).body).toMatchObject({ ok: true, value: { recoveryRequired: false } });
-    const backup = await api(running.origin, token, "POST", "/api/project/recovery/backup", {});
+    const backup = await api<ProjectStateBackupDto>(running.origin, token, "POST", "/api/project/recovery/backup", {});
     expect(backup.response.status).toBe(201);
     expect(backup.body).toMatchObject({ ok: true, value: { kind: "manual", integrity: "ok", briefBinding: "matched", networkUsed: false } });
-    const backupId = backup.body.value.backupId as string;
-    const status = await api(running.origin, token, "GET", "/api/project/recovery");
+    const backupId = backup.body.value.backupId;
+    const status = await api<ProjectRecoveryStatusDto>(running.origin, token, "GET", "/api/project/recovery");
     expect(status.body).toMatchObject({ ok: true, value: { currentState: "healthy", restoreAvailable: true, backups: [expect.objectContaining({ backupId, verification: "verified", valid: true })], networkUsed: false } });
 
-    const prepared = await api(running.origin, token, "POST", "/api/project/recovery/restore/preview", { backupId });
+    const prepared = await api<PreparedProjectStateRestoreDto>(running.origin, token, "POST", "/api/project/recovery/restore/preview", { backupId });
     expect(prepared.body).toMatchObject({ ok: true, value: { backupId, confirmationRequired: true, compatibility: "supported", currentState: { currentState: "healthy" }, networkUsed: false } });
     expect(prepared.body.value.confirmationNonce).toMatch(/^[0-9a-f]{64}$/);
     expect(prepared.body.value.stateBinding).toMatch(/^[0-9a-f]{64}$/);
-    const restored = await api(running.origin, token, "POST", "/api/project/recovery/restore", { backupId, confirmationNonce: prepared.body.value.confirmationNonce, expectedStateBinding: prepared.body.value.stateBinding, confirmed: true });
+    const restored = await api<ExecutedProjectStateRestoreDto>(running.origin, token, "POST", "/api/project/recovery/restore", { backupId, confirmationNonce: prepared.body.value.confirmationNonce, expectedStateBinding: prepared.body.value.stateBinding, confirmed: true });
     expect(restored.body).toMatchObject({ ok: true, value: { restored: true, confirmationConsumed: true, reopened: true, rollback: { performed: false, currentStatePreserved: true }, project: { id: project.projectId }, networkUsed: false } });
     expect((await api(running.origin, token, "POST", "/api/project/recovery/restore", { backupId, confirmationNonce: prepared.body.value.confirmationNonce, expectedStateBinding: prepared.body.value.stateBinding, confirmed: true })).body).toMatchObject({ ok: false, error: { code: "confirmation_replayed" } });
 
-    const driftPreview = await api(running.origin, token, "POST", "/api/project/recovery/restore/preview", { backupId });
+    const driftPreview = await api<PreparedProjectStateRestoreDto>(running.origin, token, "POST", "/api/project/recovery/restore/preview", { backupId });
     await writeFile(join(project.root, ".sestina", "research-brief.yaml"), `${project.yaml}# drift\n`, "utf8");
     expect((await api(running.origin, token, "POST", "/api/project/recovery/restore", { backupId, confirmationNonce: driftPreview.body.value.confirmationNonce, expectedStateBinding: driftPreview.body.value.stateBinding, confirmed: true })).body).toMatchObject({ ok: false, error: { code: "confirmation_binding_mismatch" } });
   });
@@ -105,8 +117,8 @@ describe("RI-53 production recovery API", () => {
     const opened = await api(running.origin, token, "POST", "/api/project/open", { projectPath: project.root, initializeIfNeeded: false });
     expect(opened.body).toMatchObject({ ok: true, value: { recoveryRequired: true, setupRequired: false } });
     expect((await api(running.origin, token, "GET", "/api/project/recovery")).body).toMatchObject({ ok: true, value: { currentState: "recovery_required", databaseIntegrity: "failed", restoreAvailable: true } });
-    const prepared = await api(running.origin, token, "POST", "/api/project/recovery/restore/preview", { backupId: created.backupId });
-    const restored = await api(running.origin, token, "POST", "/api/project/recovery/restore", { backupId: created.backupId, confirmationNonce: prepared.body.value.confirmationNonce, expectedStateBinding: prepared.body.value.stateBinding, confirmed: true });
+    const prepared = await api<PreparedProjectStateRestoreDto>(running.origin, token, "POST", "/api/project/recovery/restore/preview", { backupId: created.backupId });
+    const restored = await api<ExecutedProjectStateRestoreDto>(running.origin, token, "POST", "/api/project/recovery/restore", { backupId: created.backupId, confirmationNonce: prepared.body.value.confirmationNonce, expectedStateBinding: prepared.body.value.stateBinding, confirmed: true });
     expect(restored.body).toMatchObject({ ok: true, value: { restored: true, reopened: true, forensicCopyPreserved: true } });
     expect((await readFile(databasePath)).subarray(0, 15).toString("utf8")).toBe("SQLite format 3");
     expect((await api(running.origin, token, "GET", "/api/project/recovery")).body).toMatchObject({ ok: true, value: { currentState: "healthy", databaseIntegrity: "ok", currentBriefBinding: "matched" } });
@@ -124,7 +136,7 @@ describe("RI-53 production recovery API", () => {
     const project = await fixtureAtSchema16(); const { running, token } = await start();
     const opened = await api(running.origin, token, "POST", "/api/project/open", { projectPath: project.root, initializeIfNeeded: false });
     expect(opened.body).toMatchObject({ ok: true, value: { recoveryRequired: false, project: { id: project.projectId } } });
-    const status = await api(running.origin, token, "GET", "/api/project/recovery");
+    const status = await api<ProjectRecoveryStatusDto>(running.origin, token, "GET", "/api/project/recovery");
     expect(status.body).toMatchObject({ ok: true, value: { currentState: "healthy", schema: { status: "recognized", version: 20, supportedMinimum: 16, supportedVersion: 20 }, backups: [expect.objectContaining({ kind: "pre_upgrade", databaseSchemaVersion: 16, verification: "verified", valid: true })] } });
     const database = await openDatabase({ path: join(project.root, ".sestina", "state.sqlite"), readOnly: true });
     expect(readSchemaVersion(database)).toBe(20); database.close();
@@ -133,7 +145,7 @@ describe("RI-53 production recovery API", () => {
     await running.close(); servers.splice(servers.indexOf(running), 1);
     const restarted = await start();
     expect((await api(restarted.running.origin, restarted.token, "POST", "/api/project/open", { projectPath: project.root, initializeIfNeeded: false })).body).toMatchObject({ ok: true, value: { recoveryRequired: false, project: { id: project.projectId } } });
-    const restartedStatus = await api(restarted.running.origin, restarted.token, "GET", "/api/project/recovery");
+    const restartedStatus = await api<ProjectRecoveryStatusDto>(restarted.running.origin, restarted.token, "GET", "/api/project/recovery");
     expect(restartedStatus.body.value.backups.filter((backup: { readonly kind: string }) => backup.kind === "pre_upgrade")).toHaveLength(1);
   });
 

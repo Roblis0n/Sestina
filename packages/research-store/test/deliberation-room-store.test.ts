@@ -51,8 +51,8 @@ describe("SQLite RI-50 deliberation room repository", () => {
     return { scenario, source, room };
   }
 
-  it("uses schema 19 and persists, reopens, pages, and project-isolates the complete aggregate JSON", async () => {
-    expect(SCHEMA_VERSION).toBe(19);
+  it("uses schema 20 and persists, reopens, pages, and project-isolates the complete aggregate JSON", async () => {
+    expect(SCHEMA_VERSION).toBe(20);
     expect(db.get<{ name: string }>("SELECT name FROM sqlite_schema WHERE type = 'table' AND name = 'deliberation_rooms'")?.name).toBe("deliberation_rooms");
     const fixture = roomFixture(18_000);
     const store = createResearchStore(db);

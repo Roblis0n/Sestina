@@ -19,6 +19,9 @@ export function exitCodeForCoreError(code: CoreErrorCode): CliExitCode {
     case "invalid_input": return EXIT_CODES.invalidInput;
     case "not_found": return EXIT_CODES.projectNotInitialized;
     case "stale_state":
+    case "confirmation_expired":
+    case "confirmation_replayed":
+    case "confirmation_binding_mismatch":
     case "state_conflict": return EXIT_CODES.stateConflict;
     case "review_blocked": return EXIT_CODES.reviewBlockingIssue;
     case "infrastructure_failure":

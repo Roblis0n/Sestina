@@ -4,7 +4,19 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { openSestina, type CoreResult } from "@sestina/core";
 import type { ClosedCodexPilotRunResult, CodexHostInspection } from "@sestina/mcp";
-import { createResearchRoomServer, type RunningResearchRoomServer } from "../src/server.js";
+import {
+  createResearchRoomServer,
+  type ClosedExternalAppHostRuntime,
+  type RunningResearchRoomServer,
+} from "../src/server.js";
+import type {
+  AnalyzedReviewDto,
+  ClosedExternalAppPilotDto,
+  ClosedPilotDispositionDto,
+  ClosedPilotEvidenceDto,
+  ClosedPilotImportDto,
+  StatusDto,
+} from "../client/src/api/dto.js";
 import { createContinuityOnlyHostRuntime, Ri52FixtureHostRuntime } from "../../../tests/helpers/ri52-runtime.js";
 
 const USER = Object.freeze({ kind: "user" as const, actorId: "ri52-api-owner" });
@@ -17,8 +29,8 @@ function valueOf<T>(result: CoreResult<T>): T {
 }
 
 class LanguageStore {
-  async readLanguage() { return "en" as const; }
-  async writeLanguage() { return undefined; }
+  readLanguage() { return Promise.resolve("en" as const); }
+  writeLanguage() { return Promise.resolve(); }
 }
 
 async function fixture() {
@@ -41,9 +53,15 @@ async function fixture() {
   return { root, projectId: project.id, decisionId: decision.id };
 }
 
-async function api(origin: string, token: string, method: "GET" | "POST", path: string, body?: unknown) {
+interface ApiBody<T> {
+  readonly ok: boolean;
+  readonly value: T;
+  readonly error?: { readonly code: string };
+}
+
+async function api<T = unknown>(origin: string, token: string, method: "GET" | "POST", path: string, body?: unknown) {
   const response = await fetch(`${origin}${path}`, { method, headers: { ...(body === undefined ? {} : { "content-type": "application/json" }), "x-sestina-session": token }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
-  return { response, body: await response.json() as { readonly ok: boolean; readonly value?: any; readonly error?: { readonly code: string } } };
+  return { response, body: await response.json() as ApiBody<T> };
 }
 
 afterEach(async () => {
@@ -98,54 +116,54 @@ describe("RI-52 production closed external App Pilot API", () => {
     const data = await fixture();
     const sent: { kind: string; contextUtf8: string; manifestHash: string; invocation: number }[] = [];
     const inspection: CodexHostInspection = { availability: "available", supportedVersion: "codex-cli 0.150.0", verifiedAt: "2026-08-28T02:00:00.000Z", capabilities: { start: "observed", structuredOutput: "observed", mcp: "observed", readOnlySandbox: "observed", cancellation: "observed", contextIsolation: "observed" }, configurationSeparateFromVerification: true };
-    const runtime = {
+    const runtime: ClosedExternalAppHostRuntime = {
       evidenceClass: "synthetic_fixture" as const,
-      inspect: async () => inspection,
-      run: async (input: any): Promise<ClosedCodexPilotRunResult> => {
+      inspect: () => Promise.resolve(inspection),
+      run: (input): Promise<ClosedCodexPilotRunResult> => {
         sent.push({ kind: input.kind, contextUtf8: input.contextUtf8, manifestHash: input.binding.manifestHash, invocation: sent.length + 1 });
-        if (input.kind === "candidate_generation") return { ok: true, value: { candidate: { candidateMarkdown: "# Safe synthetic project\n\nAdd a bounded uncertainty statement.", materialDelta: "Adds one bounded uncertainty statement.", preservedDecisionIds: [data.decisionId], affectedIssueIds: [], evidenceUsed: [], unknowns: ["External user value remains unproven."], reopenResolvedIssue: false, authority: "model_proposed", canMutateAuthority: false }, mcpObservation: { health: "completed", getResearchContext: "completed", payloadHash: input.binding.manifestHash }, stdoutBytes: 512, stderrBytes: 0, usage: "unavailable" } };
-        return { ok: true, value: { continuity: { authority: "host_observation", canMutateAuthority: false, projectId: input.binding.projectId, briefId: input.binding.briefId, briefVersion: input.binding.briefVersion, episodeId: input.binding.episodeId, episodeStatus: input.binding.episodeStatus, decisionStates: input.binding.decisionStates, issueStates: input.binding.issueStates.map((item: { id: string; status: string }) => ({ ...item, treatAsOpenAudit: false, reopenProposed: false })), canonicalStateHash: input.binding.canonicalStateHash }, mcpObservation: { health: "completed", getResearchContext: "completed", payloadHash: input.binding.manifestHash }, stdoutBytes: 384, stderrBytes: 0, usage: "unavailable" } };
+        if (input.kind === "candidate_generation") return Promise.resolve({ ok: true, value: { candidate: { candidateMarkdown: "# Safe synthetic project\n\nAdd a bounded uncertainty statement.", materialDelta: "Adds one bounded uncertainty statement.", preservedDecisionIds: [data.decisionId], affectedIssueIds: [], evidenceUsed: [], unknowns: ["External user value remains unproven."], reopenResolvedIssue: false, authority: "model_proposed", canMutateAuthority: false }, mcpObservation: { health: "completed", getResearchContext: "completed", payloadHash: input.binding.manifestHash }, stdoutBytes: 512, stderrBytes: 0, usage: "unavailable" } });
+        return Promise.resolve({ ok: true, value: { continuity: { authority: "host_observation", canMutateAuthority: false, projectId: input.binding.projectId, briefId: input.binding.briefId, briefVersion: input.binding.briefVersion, episodeId: input.binding.episodeId, episodeStatus: input.binding.episodeStatus ?? "unknown", decisionStates: input.binding.decisionStates ?? [], issueStates: (input.binding.issueStates ?? []).map((item) => ({ ...item, treatAsOpenAudit: false, reopenProposed: false })), canonicalStateHash: input.binding.canonicalStateHash ?? "" }, mcpObservation: { health: "completed", getResearchContext: "completed", payloadHash: input.binding.manifestHash }, stdoutBytes: 384, stderrBytes: 0, usage: "unavailable" } });
       },
     };
-    const server = await createResearchRoomServer({ languagePreferenceStore: new LanguageStore(), closedExternalAppHostRuntime: runtime } as never).start(); servers.push(server);
-    const status = (await (await fetch(`${server.origin}/api/status`)).json() as any).value;
+    const server = await createResearchRoomServer({ languagePreferenceStore: new LanguageStore(), closedExternalAppHostRuntime: runtime }).start(); servers.push(server);
+    const status = (await (await fetch(`${server.origin}/api/status`)).json() as ApiBody<StatusDto>).value;
     expect((await api(server.origin, status.sessionToken, "POST", "/api/project/open", { projectPath: data.root })).response.status).toBe(200);
-    expect((await api(server.origin, status.sessionToken, "GET", "/api/codex-host")).body.value).toEqual(inspection);
+    expect((await api<CodexHostInspection>(server.origin, status.sessionToken, "GET", "/api/codex-host")).body.value).toEqual(inspection);
 
-    let pilot = (await api(server.origin, status.sessionToken, "POST", "/api/project/external-app-pilots", { confirmed: true })).body.value;
+    let pilot = (await api<ClosedExternalAppPilotDto>(server.origin, status.sessionToken, "POST", "/api/project/external-app-pilots", { confirmed: true })).body.value;
     expect(pilot).toMatchObject({ projectId: data.projectId, host: "codex", authority: "external_host_proposal_only", canMutateAuthority: false, status: "preflight_ready" });
-    pilot = (await api(server.origin, status.sessionToken, "POST", `/api/project/external-app-pilots/${pilot.id}/context`, { expectedVersion: pilot.version, kind: "candidate_generation", selectedMemoryItemIds: [], externalModelServiceMayBeCalled: true, timeoutMs: 120_000, outputLimitBytes: 65_536 })).body.value;
+    pilot = (await api<ClosedExternalAppPilotDto>(server.origin, status.sessionToken, "POST", `/api/project/external-app-pilots/${pilot.id}/context`, { expectedVersion: pilot.version, kind: "candidate_generation", selectedMemoryItemIds: [], externalModelServiceMayBeCalled: true, timeoutMs: 120_000, outputLimitBytes: 65_536 })).body.value;
     const manifest = pilot.manifests[0]; const attempt = pilot.attempts[0];
     expect(manifest.workingMemorySelection).toEqual({ defaultSelectedCount: 0, selectedIds: [], neverSendIncludedCount: 0 });
     const blocked = await api(server.origin, status.sessionToken, "POST", `/api/project/external-app-pilots/${pilot.id}/launch`, { expectedVersion: pilot.version, attemptId: attempt.id, manifestHash: manifest.payloadHash, confirmed: true });
     expect(blocked.response.status).toBe(400);
     expect(blocked.body.error?.code).toBe("user_confirmation_required");
-    pilot = (await api(server.origin, status.sessionToken, "POST", `/api/project/external-app-pilots/${pilot.id}/confirm`, { expectedVersion: pilot.version, attemptId: attempt.id, manifestId: manifest.id, manifestHash: manifest.payloadHash, confirmationNonce: attempt.confirmationNonce, confirmed: true })).body.value;
-    pilot = (await api(server.origin, status.sessionToken, "POST", `/api/project/external-app-pilots/${pilot.id}/launch`, { expectedVersion: pilot.version, attemptId: attempt.id, manifestHash: manifest.payloadHash, confirmed: true })).body.value;
+    pilot = (await api<ClosedExternalAppPilotDto>(server.origin, status.sessionToken, "POST", `/api/project/external-app-pilots/${pilot.id}/confirm`, { expectedVersion: pilot.version, attemptId: attempt.id, manifestId: manifest.id, manifestHash: manifest.payloadHash, confirmationNonce: attempt.confirmationNonce, confirmed: true })).body.value;
+    pilot = (await api<ClosedExternalAppPilotDto>(server.origin, status.sessionToken, "POST", `/api/project/external-app-pilots/${pilot.id}/launch`, { expectedVersion: pilot.version, attemptId: attempt.id, manifestHash: manifest.payloadHash, confirmed: true })).body.value;
     expect(pilot.status).toBe("candidate_confirmation_required");
     expect(sent[0]).toMatchObject({ kind: "candidate_generation", contextUtf8: manifest.payloadUtf8, manifestHash: manifest.payloadHash, invocation: 1 });
     expect(Buffer.byteLength(sent[0]?.contextUtf8 ?? "", "utf8")).toBe(manifest.payloadBytes);
 
-    const imported = (await api(server.origin, status.sessionToken, "POST", `/api/project/external-app-pilots/${pilot.id}/candidate/import`, { expectedVersion: pilot.version, confirmed: true })).body.value;
+    const imported = (await api<ClosedPilotImportDto>(server.origin, status.sessionToken, "POST", `/api/project/external-app-pilots/${pilot.id}/candidate/import`, { expectedVersion: pilot.version, confirmed: true })).body.value;
     pilot = imported.pilot;
     expect(imported).toMatchObject({ pilot: { status: "user_disposition_required", candidate: { status: "imported", authority: "model_proposed", canMutateAuthority: false } }, review: { providerStatus: "ledger_only" } });
-    const analyzed = (await api(server.origin, status.sessionToken, "POST", `/api/project/external-app-pilots/${pilot.id}/review/analyze`, { reviewId: imported.review.reviewId, confirmationNonce: imported.review.confirmationNonce, manifestHash: imported.review.manifestHash, confirmed: true })).body.value;
-    const disposed = (await api(server.origin, status.sessionToken, "POST", `/api/project/external-app-pilots/${pilot.id}/disposition`, { expectedVersion: pilot.version, reviewId: analyzed.reviewId, authorityNonce: analyzed.authorityNonce, expectedStateBinding: analyzed.stateBinding, disposition: "deferred", reason: "Owner defers this model proposal after Review.", confirmed: true })).body.value;
+    const analyzed = (await api<AnalyzedReviewDto>(server.origin, status.sessionToken, "POST", `/api/project/external-app-pilots/${pilot.id}/review/analyze`, { reviewId: imported.review.reviewId, confirmationNonce: imported.review.confirmationNonce, manifestHash: imported.review.manifestHash, confirmed: true })).body.value;
+    const disposed = (await api<ClosedPilotDispositionDto>(server.origin, status.sessionToken, "POST", `/api/project/external-app-pilots/${pilot.id}/disposition`, { expectedVersion: pilot.version, reviewId: analyzed.reviewId, authorityNonce: analyzed.authorityNonce, expectedStateBinding: analyzed.stateBinding, disposition: "deferred", reason: "Owner defers this model proposal after Review.", confirmed: true })).body.value;
     pilot = disposed.pilot;
     expect(disposed).toMatchObject({ pilot: { status: "continuity_check_ready", disposition: { decidedBy: "user" } }, receipt: { providerStatus: "ledger_only", authority: { actor: { kind: "user" } } } });
 
-    pilot = (await api(server.origin, status.sessionToken, "POST", `/api/project/external-app-pilots/${pilot.id}/context`, { expectedVersion: pilot.version, kind: "continuity_check", selectedMemoryItemIds: [], externalModelServiceMayBeCalled: true, timeoutMs: 120_000, outputLimitBytes: 65_536 })).body.value;
+    pilot = (await api<ClosedExternalAppPilotDto>(server.origin, status.sessionToken, "POST", `/api/project/external-app-pilots/${pilot.id}/context`, { expectedVersion: pilot.version, kind: "continuity_check", selectedMemoryItemIds: [], externalModelServiceMayBeCalled: true, timeoutMs: 120_000, outputLimitBytes: 65_536 })).body.value;
     const continuityManifest = pilot.manifests[1]; const continuityAttempt = pilot.attempts[1];
-    pilot = (await api(server.origin, status.sessionToken, "POST", `/api/project/external-app-pilots/${pilot.id}/confirm`, { expectedVersion: pilot.version, attemptId: continuityAttempt.id, manifestId: continuityManifest.id, manifestHash: continuityManifest.payloadHash, confirmationNonce: continuityAttempt.confirmationNonce, confirmed: true })).body.value;
-    pilot = (await api(server.origin, status.sessionToken, "POST", `/api/project/external-app-pilots/${pilot.id}/launch`, { expectedVersion: pilot.version, attemptId: continuityAttempt.id, manifestHash: continuityManifest.payloadHash, confirmed: true })).body.value;
+    pilot = (await api<ClosedExternalAppPilotDto>(server.origin, status.sessionToken, "POST", `/api/project/external-app-pilots/${pilot.id}/confirm`, { expectedVersion: pilot.version, attemptId: continuityAttempt.id, manifestId: continuityManifest.id, manifestHash: continuityManifest.payloadHash, confirmationNonce: continuityAttempt.confirmationNonce, confirmed: true })).body.value;
+    pilot = (await api<ClosedExternalAppPilotDto>(server.origin, status.sessionToken, "POST", `/api/project/external-app-pilots/${pilot.id}/launch`, { expectedVersion: pilot.version, attemptId: continuityAttempt.id, manifestHash: continuityManifest.payloadHash, confirmed: true })).body.value;
     expect(pilot).toMatchObject({ status: "continuity_verified", continuity: { authority: "host_observation", canMutateAuthority: false } });
     expect(sent[1]).toMatchObject({ kind: "continuity_check", contextUtf8: continuityManifest.payloadUtf8, manifestHash: continuityManifest.payloadHash, invocation: 2 });
     expect(sent[1]?.contextUtf8).not.toContain("Add a bounded uncertainty statement.");
 
-    pilot = (await api(server.origin, status.sessionToken, "POST", `/api/project/external-app-pilots/${pilot.id}/feedback`, { expectedVersion: pilot.version, codes: ["useful"], note: "Bounded local fixture.", confirmed: true })).body.value;
-    pilot = (await api(server.origin, status.sessionToken, "POST", `/api/project/external-app-pilots/${pilot.id}/close`, { expectedVersion: pilot.version, confirmed: true })).body.value;
+    pilot = (await api<ClosedExternalAppPilotDto>(server.origin, status.sessionToken, "POST", `/api/project/external-app-pilots/${pilot.id}/feedback`, { expectedVersion: pilot.version, codes: ["useful"], note: "Bounded local fixture.", confirmed: true })).body.value;
+    pilot = (await api<ClosedExternalAppPilotDto>(server.origin, status.sessionToken, "POST", `/api/project/external-app-pilots/${pilot.id}/close`, { expectedVersion: pilot.version, confirmed: true })).body.value;
     expect(pilot.status).toBe("closed");
-    const evidence = (await api(server.origin, status.sessionToken, "GET", `/api/project/external-app-pilots/${pilot.id}/evidence`)).body.value;
+    const evidence = (await api<ClosedPilotEvidenceDto>(server.origin, status.sessionToken, "GET", `/api/project/external-app-pilots/${pilot.id}/evidence`)).body.value;
     expect(evidence).toMatchObject({ evidenceClass: "synthetic_fixture", stableOutcome: "closed", stages: { continuityVerified: true, closed: true }, authorityMutationCount: 0, automaticRetryCount: 0, externalUserEvidenceCount: 0 });
     const serialized = JSON.stringify(evidence);
     expect(serialized).not.toContain("Safe synthetic project");

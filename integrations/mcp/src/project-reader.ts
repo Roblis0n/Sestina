@@ -263,12 +263,12 @@ class FrozenProjectReader implements ProjectReader<FrozenPilotContextPayload> {
 
   auditBinding(): ProjectReaderAuditBinding { return this.binding; }
 
-  async readResearchContext(): Promise<SestinaMcpResult<FrozenPilotContextPayload>> {
-    return this.#closed ? mcpErr("project_state_unavailable") : mcpOk(this.payload);
+  readResearchContext(): Promise<SestinaMcpResult<FrozenPilotContextPayload>> {
+    return Promise.resolve(this.#closed ? mcpErr("project_state_unavailable") : mcpOk(this.payload));
   }
 
-  async readSerializedResearchContext(): Promise<SestinaMcpResult<SerializedResearchContext<FrozenPilotContextPayload>>> {
-    return this.#closed ? mcpErr("project_state_unavailable") : mcpOk(Object.freeze({ payload: this.payload, json: this.json, bytes: this.bytes }));
+  readSerializedResearchContext(): Promise<SestinaMcpResult<SerializedResearchContext<FrozenPilotContextPayload>>> {
+    return Promise.resolve(this.#closed ? mcpErr("project_state_unavailable") : mcpOk(Object.freeze({ payload: this.payload, json: this.json, bytes: this.bytes })));
   }
 
   close(): void { this.#closed = true; }

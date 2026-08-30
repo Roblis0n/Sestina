@@ -207,7 +207,8 @@ export class ClosedExternalAppPilotService {
     const currentState = this.readState(input.projectId); if (!currentState.ok) return currentState;
     const pilot = this.get(input.projectId, input.pilotId); if (!pilot.ok) return pilot;
     const manifest = pilot.value.manifests.find((item) => item.attemptId === input.attemptId);
-    if (manifest === undefined || manifest.payloadHash !== input.manifestHash || manifest.payload.brief.versionId !== currentState.value.brief.versionId || manifest.payload.episode.id !== currentState.value.currentEpisode?.id || manifest.payload.episode.version !== currentState.value.currentEpisode?.version) return coreErr("stale_state");
+    const currentEpisode = currentState.value.currentEpisode;
+    if (currentEpisode === undefined || manifest?.payloadHash !== input.manifestHash || manifest.payload.brief.versionId !== currentState.value.brief.versionId || manifest.payload.episode.id !== currentEpisode.id || manifest.payload.episode.version !== currentEpisode.version) return coreErr("stale_state");
     return this.change(input.projectId, input.pilotId, input.expectedVersion, (value) => startClosedPilotAttempt(value, { ...input, expectedVersion: value.version }, this.ports));
   }
 

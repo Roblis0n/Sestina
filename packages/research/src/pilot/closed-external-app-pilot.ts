@@ -445,9 +445,9 @@ function move(
   if (!version.ok) return version;
   if (!timestamp.ok || !id.ok || !text(reason, 512)) return fail("invalid_closed_external_app_pilot");
   const event: ClosedPilotEvent = cloneFrozen({ id: id.value, index: pilot.events.length, from: pilot.status, to, reason, actor, at: timestamp.value });
-  const merged = { ...pilot, ...patch, status: to, version: version.value, updatedAt: timestamp.value, events: [...pilot.events, event] } as Record<string, unknown>;
-  for (const key of Object.keys(merged)) {
-    if (merged[key] === undefined) delete merged[key];
+  const merged: Record<string, unknown> = { ...pilot, ...patch, status: to, version: version.value, updatedAt: timestamp.value, events: [...pilot.events, event] };
+  for (const [key, value] of Object.entries(merged)) {
+    if (value === undefined) Reflect.deleteProperty(merged, key);
   }
   return parseClosedExternalAppPilot(cloneFrozen(merged));
 }
@@ -510,7 +510,7 @@ function candidateAllowedIds(manifest: PilotContextManifest): { decisions: Set<s
   };
 }
 
-function validCandidate(input: ClosedPilotCandidateInput, manifest: PilotContextManifest): boolean {
+function validCandidate(input: unknown, manifest: PilotContextManifest): input is ClosedPilotCandidateInput {
   if (!isRecord(input) || !validExactKeys(input, ["candidateMarkdown", "materialDelta", "preservedDecisionIds", "affectedIssueIds", "evidenceUsed", "unknowns", "reopenResolvedIssue", "authority", "canMutateAuthority"])) return false;
   if (!text(input.candidateMarkdown, 65_536) || !text(input.materialDelta, 16_384) || pathLike(input.candidateMarkdown) || pathLike(input.materialDelta)) return false;
   if (input.authority !== "model_proposed" || input.canMutateAuthority || typeof input.reopenResolvedIssue !== "boolean") return false;
@@ -584,7 +584,7 @@ function validateContextInput(pilot: ClosedExternalAppPilot, input: PrepareClose
   if (input.decisions.some((item) => !parseResearchIdFor(item.id, "rdec_").ok || !Number.isSafeInteger(item.version) || item.version < 1 || !text(item.status, 128) || !text(item.statement, 16_384))) return false;
   if (input.issues.some((item) => !parseResearchIdFor(item.id, "riss_").ok || !Number.isSafeInteger(item.version) || item.version < 1 || !text(item.status, 128) || !text(item.summary, 16_384) || typeof item.resolutionRecorded !== "boolean" || (item.reopenCondition !== undefined && !text(item.reopenCondition, 8_192)))) return false;
   if (input.evidence.some((item) => !parseResearchId(item.id).ok || !Number.isSafeInteger(item.version) || item.version < 1 || !text(item.summary, 16_384) || !text(item.source, 512) || !["public", "project_private"].includes(item.sensitivity))) return false;
-  if (input.workingMemory.some((item) => !parseResearchIdFor(item.id, "rmem_").ok || !Number.isSafeInteger(item.version) || item.version < 1 || !text(item.kind, 128) || !text(item.content, 16_384) || !text(item.source, 512) || !["public", "project_private"].includes(item.sensitivity) || item.outboundPolicy !== "explicit_manifest_only")) return false;
+  if (input.workingMemory.some((item) => !parseResearchIdFor(item.id, "rmem_").ok || !Number.isSafeInteger(item.version) || item.version < 1 || !text(item.kind, 128) || !text(item.content, 16_384) || !text(item.source, 512) || !["public", "project_private"].includes(item.sensitivity))) return false;
   return input.excluded.every((item) => isRecord(item) && text(item.category, 128) && text(item.reason, 512) && text(item.source, 512) && ["public", "project_private", "secret_never_send"].includes(item.sensitivity) && (item.id === undefined || text(item.id, 256)));
 }
 
@@ -665,7 +665,7 @@ export function confirmClosedPilotContext(pilotInput: ClosedExternalAppPilot, in
   const index = attemptIndex(pilot.value, input.attemptId);
   const attempt = pilot.value.attempts[index];
   if (attempt?.confirmedAt !== undefined) return fail("pilot_confirmation_replayed");
-  if (pilot.value.status !== "context_confirmation_required" || attempt === undefined || attempt.status !== "prepared") return fail("invalid_closed_pilot_transition");
+  if (pilot.value.status !== "context_confirmation_required" || attempt?.status !== "prepared") return fail("invalid_closed_pilot_transition");
   if (attempt.manifestId !== input.manifestId || attempt.manifestHash !== input.manifestHash || attempt.confirmationNonce !== input.confirmationNonce) return fail("pilot_context_mismatch");
   const timestamp = now(ports.clock);
   if (!timestamp.ok) return fail("invalid_closed_external_app_pilot");
@@ -678,7 +678,7 @@ export function startClosedPilotAttempt(pilotInput: ClosedExternalAppPilot, inpu
   if (!pilot.ok) return pilot;
   const index = attemptIndex(pilot.value, input.attemptId);
   const attempt = pilot.value.attempts[index];
-  if (pilot.value.status !== "context_confirmed" || attempt === undefined || attempt.status !== "confirmed" || attempt.manifestHash !== input.manifestHash || attempt.confirmedAt === undefined) return fail("invalid_closed_pilot_transition");
+  if (pilot.value.status !== "context_confirmed" || attempt?.status !== "confirmed" || attempt.manifestHash !== input.manifestHash || attempt.confirmedAt === undefined) return fail("invalid_closed_pilot_transition");
   const timestamp = now(ports.clock);
   const invocationId = parseResearchIdFor(ports.idFactory.create("rpiv_"), "rpiv_");
   if (!timestamp.ok || !invocationId.ok) return fail("invalid_closed_external_app_pilot");
@@ -697,7 +697,7 @@ export function markClosedPilotAttemptRunning(pilotInput: ClosedExternalAppPilot
   if (!pilot.ok) return pilot;
   const index = attemptIndex(pilot.value, input.attemptId);
   const attempt = pilot.value.attempts[index];
-  if (pilot.value.status !== "launching" || attempt === undefined || attempt.status !== "launching" || attempt.invocationId !== input.invocationId) return fail("invalid_closed_pilot_attempt");
+  if (pilot.value.status !== "launching" || attempt?.status !== "launching" || attempt.invocationId !== input.invocationId) return fail("invalid_closed_pilot_attempt");
   return move(pilot.value, input.expectedVersion, attempt.kind === "candidate_generation" ? "running" : "continuity_check_running", `${attempt.kind}_codex_process_running`, "kernel", ports, { attempts: replaceAttempt(pilot.value, index, { ...attempt, status: "running" }) });
 }
 
@@ -707,7 +707,7 @@ export function receiveClosedPilotCandidate(pilotInput: ClosedExternalAppPilot, 
   const index = attemptIndex(pilot.value, input.attemptId);
   const attempt = pilot.value.attempts[index];
   if (["cancelled", "closed", "interrupted_unknown", "failed"].includes(pilot.value.status) || attempt?.status === "cancelled" || attempt?.status === "unknown") return fail("pilot_late_result_rejected");
-  if (pilot.value.status !== "running" || attempt === undefined || attempt.kind !== "candidate_generation" || attempt.status !== "running" || attempt.invocationId !== input.invocationId || attempt.manifestHash !== input.manifestHash || !validMcpObservation(input.mcpObservation) || input.mcpObservation.payloadHash !== attempt.manifestHash || pilot.value.candidate !== undefined) return fail("invalid_closed_pilot_attempt");
+  if (pilot.value.status !== "running" || attempt?.kind !== "candidate_generation" || attempt.status !== "running" || attempt.invocationId !== input.invocationId || attempt.manifestHash !== input.manifestHash || !validMcpObservation(input.mcpObservation) || input.mcpObservation.payloadHash !== attempt.manifestHash || pilot.value.candidate !== undefined) return fail("invalid_closed_pilot_attempt");
   const manifest = manifestForAttempt(pilot.value, attempt);
   if (manifest === undefined || !validCandidate(input.candidate, manifest)) return fail("invalid_closed_pilot_candidate");
   const timestamp = now(ports.clock);
@@ -779,9 +779,9 @@ export function completeClosedPilotContinuity(pilotInput: ClosedExternalAppPilot
   if (!pilot.ok) return pilot;
   const index = attemptIndex(pilot.value, input.attemptId);
   const attempt = pilot.value.attempts[index];
-  if (pilot.value.status !== "continuity_check_running" || attempt === undefined || attempt.kind !== "continuity_check" || attempt.status !== "running" || attempt.invocationId !== input.invocationId || attempt.manifestHash !== input.manifestHash || input.observation.authority !== "host_observation" || input.observation.canMutateAuthority || input.observation.projectId !== pilot.value.projectId || input.observation.briefId !== pilot.value.brief.id || input.observation.episodeId !== pilot.value.episode.id || !shaString(input.observation.canonicalStateHash) || !validMcpObservation(input.observation.mcpObservation) || input.observation.mcpObservation.payloadHash !== attempt.manifestHash) return fail("invalid_closed_pilot_continuity");
+  if (pilot.value.status !== "continuity_check_running" || attempt?.kind !== "continuity_check" || attempt.status !== "running" || attempt.invocationId !== input.invocationId || attempt.manifestHash !== input.manifestHash || input.observation.projectId !== pilot.value.projectId || input.observation.briefId !== pilot.value.brief.id || input.observation.episodeId !== pilot.value.episode.id || !shaString(input.observation.canonicalStateHash) || !validMcpObservation(input.observation.mcpObservation) || input.observation.mcpObservation.payloadHash !== attempt.manifestHash) return fail("invalid_closed_pilot_continuity");
   const manifest = manifestForAttempt(pilot.value, attempt);
-  if (manifest === undefined || manifest.payload.projectStateHash !== input.observation.canonicalStateHash || manifest.payload.brief.version !== input.observation.briefVersion || manifest.payload.episode.status !== input.observation.episodeStatus) return fail("pilot_context_mismatch");
+  if (manifest?.payload.projectStateHash !== input.observation.canonicalStateHash || manifest.payload.brief.version !== input.observation.briefVersion || manifest.payload.episode.status !== input.observation.episodeStatus) return fail("pilot_context_mismatch");
   const decisions = new Map(manifest.payload.decisions.map((item) => [item.id, item.status]));
   const issues = new Map(manifest.payload.issues.map((item) => [item.id, item.status]));
   if (input.observation.decisionStates.some((item) => decisions.get(item.id) !== item.status) || input.observation.issueStates.some((item) => issues.get(item.id) !== item.status || (item.status === "resolved" && item.treatAsOpenAudit))) return fail("pilot_context_mismatch");
@@ -933,25 +933,29 @@ export function createClosedPilotEvidenceExport(pilotInput: ClosedExternalAppPil
   }));
 }
 
+function persistedValue(value: unknown): unknown {
+  return value;
+}
+
 export function parseClosedExternalAppPilot(input: unknown): ResearchResult<ClosedExternalAppPilot> {
   if (!isRecord(input) || input.schemaVersion !== "1.0.0" || !parseResearchIdFor(input.id, "rpil_").ok || !parseResearchIdFor(input.projectId, "rprj_").ok || input.host !== "codex" || input.authority !== "external_host_proposal_only" || input.canMutateAuthority !== false || !validBrief(input.brief) || !validEpisode(input.episode) || !text(input.currentTask, 16_384) || !["synthetic_fixture", "owner_operated_closed_host_observation"].includes(String(input.evidenceClass)) || !CLOSED_EXTERNAL_APP_PILOT_STATUSES.includes(input.status as ClosedExternalAppPilotStatus) || !parseEntityVersion(input.version).ok || !Array.isArray(input.manifests) || !Array.isArray(input.attempts) || !Array.isArray(input.events) || !text(input.createdAt, 128) || !text(input.updatedAt, 128)) return fail("invalid_closed_external_app_pilot");
   const pilot = input as unknown as ClosedExternalAppPilot;
-  if (!isRecord(pilot.invocationBudget) || pilot.invocationBudget.candidateMaximum !== 2 || pilot.invocationBudget.continuityMaximum !== 2 || pilot.invocationBudget.automaticRetries !== 0 || !Number.isSafeInteger(pilot.invocationBudget.candidateAttemptsUsed) || !Number.isSafeInteger(pilot.invocationBudget.continuityAttemptsUsed) || pilot.invocationBudget.candidateAttemptsUsed < 0 || pilot.invocationBudget.candidateAttemptsUsed > 2 || pilot.invocationBudget.continuityAttemptsUsed < 0 || pilot.invocationBudget.continuityAttemptsUsed > 2) return fail("invalid_closed_external_app_pilot");
+  if (!isRecord(pilot.invocationBudget) || persistedValue(pilot.invocationBudget.candidateMaximum) !== 2 || persistedValue(pilot.invocationBudget.continuityMaximum) !== 2 || persistedValue(pilot.invocationBudget.automaticRetries) !== 0 || !Number.isSafeInteger(pilot.invocationBudget.candidateAttemptsUsed) || !Number.isSafeInteger(pilot.invocationBudget.continuityAttemptsUsed) || pilot.invocationBudget.candidateAttemptsUsed < 0 || pilot.invocationBudget.candidateAttemptsUsed > 2 || pilot.invocationBudget.continuityAttemptsUsed < 0 || pilot.invocationBudget.continuityAttemptsUsed > 2) return fail("invalid_closed_external_app_pilot");
   if (pilot.manifests.length > 4 || pilot.attempts.length > 4 || pilot.manifests.length !== pilot.attempts.length || new Set(pilot.manifests.map((item) => item.id)).size !== pilot.manifests.length || new Set(pilot.attempts.map((item) => item.id)).size !== pilot.attempts.length) return fail("invalid_closed_external_app_pilot");
   for (const manifest of pilot.manifests) {
-    if (manifest.schemaVersion !== "1.0.0" || !parseResearchIdFor(manifest.id, "rman_").ok || manifest.version !== 1 || manifest.pilotId !== pilot.id || manifest.projectId !== pilot.projectId || manifest.host !== "codex" || !["candidate_generation", "continuity_check"].includes(manifest.purpose) || !parseResearchIdFor(manifest.attemptId, "rpat_").ok || !shaString(manifest.payloadHash) || bytes(manifest.payloadUtf8) !== manifest.payloadBytes || manifest.payloadBytes > MAX_CONTEXT_BYTES || manifest.payload.manifestBinding.manifestId !== manifest.id || manifest.payload.manifestBinding.attemptId !== manifest.attemptId || manifest.payload.manifestBinding.projectId !== pilot.projectId || manifest.payload.manifestBinding.pilotId !== pilot.id || manifest.payload.manifestBinding.purpose !== manifest.purpose || manifest.payload.manifestBinding.host !== "codex" || manifest.workingMemorySelection.defaultSelectedCount !== 0 || manifest.workingMemorySelection.neverSendIncludedCount !== 0 || manifest.disclosure.automaticRetries !== 0 || manifest.disclosure.invocationLimit !== 1 || manifest.disclosure.sandbox !== "read_only" || manifest.disclosure.projectWrite) return fail("invalid_pilot_context_manifest");
+    if (persistedValue(manifest.schemaVersion) !== "1.0.0" || !parseResearchIdFor(manifest.id, "rman_").ok || persistedValue(manifest.version) !== 1 || manifest.pilotId !== pilot.id || manifest.projectId !== pilot.projectId || persistedValue(manifest.host) !== "codex" || !["candidate_generation", "continuity_check"].includes(manifest.purpose) || !parseResearchIdFor(manifest.attemptId, "rpat_").ok || !shaString(manifest.payloadHash) || bytes(manifest.payloadUtf8) !== manifest.payloadBytes || manifest.payloadBytes > MAX_CONTEXT_BYTES || manifest.payload.manifestBinding.manifestId !== manifest.id || manifest.payload.manifestBinding.attemptId !== manifest.attemptId || manifest.payload.manifestBinding.projectId !== pilot.projectId || manifest.payload.manifestBinding.pilotId !== pilot.id || manifest.payload.manifestBinding.purpose !== manifest.purpose || persistedValue(manifest.payload.manifestBinding.host) !== "codex" || persistedValue(manifest.workingMemorySelection.defaultSelectedCount) !== 0 || persistedValue(manifest.workingMemorySelection.neverSendIncludedCount) !== 0 || persistedValue(manifest.disclosure.automaticRetries) !== 0 || persistedValue(manifest.disclosure.invocationLimit) !== 1 || persistedValue(manifest.disclosure.sandbox) !== "read_only" || persistedValue(manifest.disclosure.projectWrite) !== false) return fail("invalid_pilot_context_manifest");
     const canonical = canonicalStringify(manifest.payload);
     const digest = sha(manifest.payload);
     if (!canonical.ok || !digest.ok || canonical.value !== manifest.payloadUtf8 || digest.value !== manifest.payloadHash) return fail("invalid_pilot_context_manifest");
-    if (manifest.payload.workingMemory.some((item) => item.outboundPolicy !== "explicit_manifest_only" || !manifest.workingMemorySelection.selectedIds.includes(item.id))) return fail("invalid_pilot_context_manifest");
+    if (manifest.payload.workingMemory.some((item) => persistedValue(item.outboundPolicy) !== "explicit_manifest_only" || !manifest.workingMemorySelection.selectedIds.includes(item.id))) return fail("invalid_pilot_context_manifest");
   }
   for (const attempt of pilot.attempts) {
     if (!parseResearchIdFor(attempt.id, "rpat_").ok || !["candidate_generation", "continuity_check"].includes(attempt.kind) || ![1, 2].includes(attempt.ordinal) || !["prepared", "confirmed", "launching", "running", "completed", "failed", "cancelled", "unknown"].includes(attempt.status) || !parseResearchIdFor(attempt.manifestId, "rman_").ok || !shaString(attempt.manifestHash) || !parseResearchIdFor(attempt.confirmationNonce, "rpno_").ok || pilot.manifests.every((manifest) => manifest.id !== attempt.manifestId || manifest.attemptId !== attempt.id || manifest.payloadHash !== attempt.manifestHash)) return fail("invalid_closed_pilot_attempt");
     if (attempt.invocationId !== undefined && !parseResearchIdFor(attempt.invocationId, "rpiv_").ok) return fail("invalid_closed_pilot_attempt");
   }
-  if (pilot.candidate !== undefined && (pilot.candidate.authority !== "model_proposed" || pilot.candidate.canMutateAuthority || !parseResearchIdFor(pilot.candidate.id, "rpca_").ok || !shaString(pilot.candidate.candidateHash))) return fail("invalid_closed_pilot_candidate");
-  if (pilot.continuity !== undefined && (pilot.continuity.authority !== "host_observation" || pilot.continuity.canMutateAuthority || pilot.continuity.projectId !== pilot.projectId)) return fail("invalid_closed_pilot_continuity");
+  if (pilot.candidate !== undefined && (persistedValue(pilot.candidate.authority) !== "model_proposed" || persistedValue(pilot.candidate.canMutateAuthority) !== false || !parseResearchIdFor(pilot.candidate.id, "rpca_").ok || !shaString(pilot.candidate.candidateHash))) return fail("invalid_closed_pilot_candidate");
+  if (pilot.continuity !== undefined && (persistedValue(pilot.continuity.authority) !== "host_observation" || persistedValue(pilot.continuity.canMutateAuthority) !== false || pilot.continuity.projectId !== pilot.projectId)) return fail("invalid_closed_pilot_continuity");
   if (pilot.events.length === 0 || pilot.events.length > 256 || pilot.events.some((event, index) => !parseResearchIdFor(event.id, "rpev_").ok || event.index !== index || !CLOSED_EXTERNAL_APP_PILOT_STATUSES.includes(event.to) || (index === 0 ? event.from !== null : event.from !== pilot.events[index - 1]?.to) || !text(event.reason, 512) || !["user", "kernel", "host"].includes(event.actor))) return fail("invalid_closed_external_app_pilot");
-  if (pilot.events.at(-1)?.to !== pilot.status || (pilot.status === "closed" && pilot.closedAt === undefined) || pilot.authority !== "external_host_proposal_only" || pilot.canMutateAuthority) return fail("invalid_closed_external_app_pilot");
+  if (pilot.events.at(-1)?.to !== pilot.status || (pilot.status === "closed" && pilot.closedAt === undefined) || persistedValue(pilot.authority) !== "external_host_proposal_only" || persistedValue(pilot.canMutateAuthority) !== false) return fail("invalid_closed_external_app_pilot");
   return ok(cloneFrozen(pilot));
 }

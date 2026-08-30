@@ -38,6 +38,11 @@ function value<T>(result: { ok: true; value: T } | { ok: false; error: { code: s
   return result.value;
 }
 
+function required<T>(item: T | undefined, label: string): T {
+  if (item === undefined) throw new Error(`Missing ${label}`);
+  return item;
+}
+
 function ports(seed = 100, at = "2026-08-28T02:00:00.000Z") {
   return { clock: new FixedClock(at), idFactory: new SequenceIdFactory(seed) };
 }
@@ -106,7 +111,7 @@ function readyPilot(): ClosedExternalAppPilot {
 function runningCandidatePilot(): ClosedExternalAppPilot {
   const preflight = readyPilot();
   const prepared = value(prepareClosedPilotContext(preflight, { ...contextInput(), expectedVersion: preflight.version }, ports(300)));
-  const attempt = prepared.attempts[0]!;
+  const attempt = required(prepared.attempts[0], "prepared attempt");
   const confirmed = value(confirmClosedPilotContext(prepared, {
     expectedVersion: prepared.version,
     attemptId: attempt.id,
@@ -120,10 +125,11 @@ function runningCandidatePilot(): ClosedExternalAppPilot {
     attemptId: attempt.id,
     manifestHash: attempt.manifestHash,
   }, ports(500, "2026-08-28T02:06:00.000Z")));
+  const launchedAttempt = required(launched.attempts[0], "launched attempt");
   return value(markClosedPilotAttemptRunning(launched, {
     expectedVersion: launched.version,
     attemptId: attempt.id,
-    invocationId: launched.attempts[0]!.invocationId!,
+    invocationId: required(launchedAttempt.invocationId, "launched invocation id"),
   }, ports(600, "2026-08-28T02:06:01.000Z")));
 }
 
@@ -144,8 +150,8 @@ describe("RI-52 ClosedExternalAppPilot domain", () => {
   it("freezes preview bytes exactly, excludes never_send content, and binds one nonce to one attempt/hash", () => {
     const preflight = readyPilot();
     const prepared = value(prepareClosedPilotContext(preflight, { ...contextInput(), expectedVersion: preflight.version }, ports(301)));
-    const attempt = prepared.attempts[0]!;
-    const manifest = prepared.manifests[0]!;
+    const attempt = required(prepared.attempts[0], "prepared attempt");
+    const manifest = required(prepared.manifests[0], "prepared manifest");
     expect(prepared.status).toBe("context_confirmation_required");
     expect(manifest.payloadBytes).toBe(new TextEncoder().encode(manifest.payloadUtf8).byteLength);
     expect(manifest.payloadUtf8).toContain(MEMORY_ID);
@@ -161,11 +167,11 @@ describe("RI-52 ClosedExternalAppPilot domain", () => {
 
   it("accepts one strict model_proposed candidate but import is not acceptance or disposition", () => {
     const running = runningCandidatePilot();
-    const attempt = running.attempts[0]!;
+    const attempt = required(running.attempts[0], "running attempt");
     const received = value(receiveClosedPilotCandidate(running, {
       expectedVersion: running.version,
       attemptId: attempt.id,
-      invocationId: attempt.invocationId!,
+      invocationId: required(attempt.invocationId, "running invocation id"),
       manifestHash: attempt.manifestHash,
       mcpObservation: { health: "completed", getResearchContext: "completed", payloadHash: attempt.manifestHash },
       candidate: {
@@ -190,10 +196,10 @@ describe("RI-52 ClosedExternalAppPilot domain", () => {
 
   it("fences cancellation and restart-unknown attempts so late output cannot reopen or auto-retry", () => {
     const running = runningCandidatePilot();
-    const attempt = running.attempts[0]!;
+    const attempt = required(running.attempts[0], "running attempt");
     const cancelled = value(cancelClosedPilotAttempt(running, { expectedVersion: running.version, attemptId: attempt.id, actor: USER }, ports(800)));
     expect(cancelled.status).toBe("cancelled");
-    expect(receiveClosedPilotCandidate(cancelled, { expectedVersion: cancelled.version, attemptId: attempt.id, invocationId: attempt.invocationId!, manifestHash: attempt.manifestHash, mcpObservation: { health: "completed", getResearchContext: "completed", payloadHash: attempt.manifestHash }, candidate: { candidateMarkdown: "late", materialDelta: "late", preservedDecisionIds: [], affectedIssueIds: [], evidenceUsed: [], unknowns: [], reopenResolvedIssue: false, authority: "model_proposed", canMutateAuthority: false } }, ports(801))).toMatchObject({ ok: false, error: { code: "pilot_late_result_rejected" } });
+    expect(receiveClosedPilotCandidate(cancelled, { expectedVersion: cancelled.version, attemptId: attempt.id, invocationId: required(attempt.invocationId, "running invocation id"), manifestHash: attempt.manifestHash, mcpObservation: { health: "completed", getResearchContext: "completed", payloadHash: attempt.manifestHash }, candidate: { candidateMarkdown: "late", materialDelta: "late", preservedDecisionIds: [], affectedIssueIds: [], evidenceUsed: [], unknowns: [], reopenResolvedIssue: false, authority: "model_proposed", canMutateAuthority: false } }, ports(801))).toMatchObject({ ok: false, error: { code: "pilot_late_result_rejected" } });
 
     const recovered = value(recoverInterruptedClosedPilot(running, { expectedVersion: running.version }, ports(802, "2026-08-28T03:00:00.000Z")));
     expect(recovered).toMatchObject({ status: "interrupted_unknown", invocationBudget: { automaticRetries: 0 } });
@@ -202,21 +208,23 @@ describe("RI-52 ClosedExternalAppPilot domain", () => {
 
   it("requires existing Review and user disposition before a fresh continuity invocation can verify state", () => {
     const running = runningCandidatePilot();
-    const attempt = running.attempts[0]!;
-    const received = value(receiveClosedPilotCandidate(running, { expectedVersion: running.version, attemptId: attempt.id, invocationId: attempt.invocationId!, manifestHash: attempt.manifestHash, mcpObservation: { health: "completed", getResearchContext: "completed", payloadHash: attempt.manifestHash }, candidate: { candidateMarkdown: "Association-bounded candidate.", materialDelta: "Removes causal overclaim.", preservedDecisionIds: [DECISION_ID], affectedIssueIds: [ISSUE_ID], evidenceUsed: [EVIDENCE_ID], unknowns: [], reopenResolvedIssue: false, authority: "model_proposed", canMutateAuthority: false } }, ports(900)));
+    const attempt = required(running.attempts[0], "running attempt");
+    const received = value(receiveClosedPilotCandidate(running, { expectedVersion: running.version, attemptId: attempt.id, invocationId: required(attempt.invocationId, "running invocation id"), manifestHash: attempt.manifestHash, mcpObservation: { health: "completed", getResearchContext: "completed", payloadHash: attempt.manifestHash }, candidate: { candidateMarkdown: "Association-bounded candidate.", materialDelta: "Removes causal overclaim.", preservedDecisionIds: [DECISION_ID], affectedIssueIds: [ISSUE_ID], evidenceUsed: [EVIDENCE_ID], unknowns: [], reopenResolvedIssue: false, authority: "model_proposed", canMutateAuthority: false } }, ports(900)));
     const requested = value(requireClosedPilotCandidateConfirmation(received, { expectedVersion: received.version }, ports(901)));
     const imported = value(importClosedPilotCandidate(requested, { expectedVersion: requested.version, actor: USER }, ports(902)));
     const review = value(bindClosedPilotReview(imported, { expectedVersion: imported.version, reviewId: "rrvw_00000000000000000000000010", importedRevisionId: "rrev_00000000000000000000000011", reviewMode: "ledger_only" }, ports(903)));
     expect(review.status).toBe("user_disposition_required");
-    const disposed = value(bindClosedPilotDisposition(review, { expectedVersion: review.version, reviewId: review.review!.reviewId, receiptId: "rrcp_00000000000000000000000012", traceId: "rrcp_00000000000000000000000013", disposition: "accept", actor: USER }, ports(904)));
+    const disposed = value(bindClosedPilotDisposition(review, { expectedVersion: review.version, reviewId: required(review.review, "bound review").reviewId, receiptId: "rrcp_00000000000000000000000012", traceId: "rrcp_00000000000000000000000013", disposition: "accept", actor: USER }, ports(904)));
     expect(disposed.status).toBe("continuity_check_ready");
 
     const prepared = value(prepareClosedPilotContext(disposed, { ...contextInput("continuity_check"), expectedVersion: disposed.version }, ports(905)));
-    const continuityAttempt = prepared.attempts.at(-1)!;
+    const continuityAttempt = required(prepared.attempts.at(-1), "continuity attempt");
     const confirmed = value(confirmClosedPilotContext(prepared, { expectedVersion: prepared.version, attemptId: continuityAttempt.id, manifestId: continuityAttempt.manifestId, manifestHash: continuityAttempt.manifestHash, confirmationNonce: continuityAttempt.confirmationNonce, actor: USER }, ports(906, "2026-08-28T02:05:00.000Z")));
     const launched = value(startClosedPilotAttempt(confirmed, { expectedVersion: confirmed.version, attemptId: continuityAttempt.id, manifestHash: continuityAttempt.manifestHash }, ports(907)));
-    const runningContinuity = value(markClosedPilotAttemptRunning(launched, { expectedVersion: launched.version, attemptId: continuityAttempt.id, invocationId: launched.attempts.at(-1)!.invocationId! }, ports(908)));
-    const completed = value(completeClosedPilotContinuity(runningContinuity, { expectedVersion: runningContinuity.version, attemptId: continuityAttempt.id, invocationId: runningContinuity.attempts.at(-1)!.invocationId!, manifestHash: continuityAttempt.manifestHash, observation: { authority: "host_observation", canMutateAuthority: false, projectId: PROJECT_ID, briefId: BRIEF_ID, briefVersion: 2, episodeId: EPISODE_ID, episodeStatus: "accepted", decisionStates: [{ id: DECISION_ID, status: "accepted" }], issueStates: [{ id: ISSUE_ID, status: "resolved", treatAsOpenAudit: false, reopenProposed: false }], canonicalStateHash: "a".repeat(64), mcpObservation: { health: "completed", getResearchContext: "completed", payloadHash: continuityAttempt.manifestHash } } }, ports(909)));
+    const launchedContinuity = required(launched.attempts.at(-1), "launched continuity attempt");
+    const runningContinuity = value(markClosedPilotAttemptRunning(launched, { expectedVersion: launched.version, attemptId: continuityAttempt.id, invocationId: required(launchedContinuity.invocationId, "launched continuity invocation id") }, ports(908)));
+    const runningContinuityAttempt = required(runningContinuity.attempts.at(-1), "running continuity attempt");
+    const completed = value(completeClosedPilotContinuity(runningContinuity, { expectedVersion: runningContinuity.version, attemptId: continuityAttempt.id, invocationId: required(runningContinuityAttempt.invocationId, "running continuity invocation id"), manifestHash: continuityAttempt.manifestHash, observation: { authority: "host_observation", canMutateAuthority: false, projectId: PROJECT_ID, briefId: BRIEF_ID, briefVersion: 2, episodeId: EPISODE_ID, episodeStatus: "accepted", decisionStates: [{ id: DECISION_ID, status: "accepted" }], issueStates: [{ id: ISSUE_ID, status: "resolved", treatAsOpenAudit: false, reopenProposed: false }], canonicalStateHash: "a".repeat(64), mcpObservation: { health: "completed", getResearchContext: "completed", payloadHash: continuityAttempt.manifestHash } } }, ports(909)));
     expect(completed.status).toBe("continuity_verified");
     expect(completed.continuity?.invocationId).not.toBe(attempt.invocationId);
     expect(value(closeClosedExternalAppPilot(completed, { expectedVersion: completed.version, actor: USER }, ports(910))).status).toBe("closed");

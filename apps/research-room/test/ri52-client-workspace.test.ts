@@ -21,7 +21,7 @@ describe("RI-52 production External App Pilot workspace", () => {
       onInspect: vi.fn(),
       onError: vi.fn(),
       onNotice: vi.fn(),
-      onAuthorityChanged: vi.fn(async () => undefined),
+      onAuthorityChanged: vi.fn(() => Promise.resolve()),
     }));
     expect(html).toContain("Closed Codex External App Pilot");
     expect(html).toContain("What leaves this device");

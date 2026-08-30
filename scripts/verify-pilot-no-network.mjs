@@ -15,11 +15,10 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { build } from "esbuild";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const preload = join(repositoryRoot, "scripts", "no-network-preload.mjs");
-const buildKit = join(repositoryRoot, "scripts", "build-pilot-kit.mjs");
-const releaseRoot = join(repositoryRoot, "release");
 const runtime = mkdtempSync(join(tmpdir(), "sestina-pilot-no-network-空格-"));
 const guardMarker = join(runtime, "guard-active.txt");
 const attemptMarker = join(runtime, "outbound-attempts.txt");
@@ -35,6 +34,21 @@ const aggregateJson = join(aggregateDirectory, "aggregate.json");
 const aggregateMarkdown = join(aggregateDirectory, "aggregate.md");
 const kitRoot = join(runtime, "交付 kit with spaces");
 const buildId = "86469e5ccc3c3b593084c6207545a4d8bfd1d23f19016d1d63973b49052c3085";
+const releaseVersion = "0.1.0";
+const staticPayloadPaths = [
+  "README.md",
+  "bin/sestina-pilot.mjs",
+  "docs/CONSENT.md",
+  "docs/EXIT-INTERVIEW.md",
+  "docs/OBSERVATION-FORM.md",
+  "docs/PROTOCOL.md",
+  "docs/RESULTS-TEMPLATE.md",
+  "install/install-linux.sh",
+  "install/install-macos.sh",
+  "install/install-windows.ps1",
+  "schema/shareable-pilot-export.schema.json",
+  "walkthrough/SYNTHETIC-WALKTHROUGH.md",
+];
 
 function invariant(condition, message) {
   if (!condition) throw new Error(message);
@@ -57,6 +71,93 @@ function digestTree(directory) {
     result[relativePath] = createHash("sha256").update(readFileSync(path)).digest("hex");
   }
   return result;
+}
+
+function sha256(bytes) {
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+function writeKitFile(relativePath, bytes) {
+  const target = join(kitRoot, ...relativePath.split("/"));
+  mkdirSync(dirname(target), { recursive: true });
+  writeFileSync(target, bytes);
+}
+
+async function buildSyntheticKitFixture() {
+  const runnerPath = join(kitRoot, "bin", "sestina-pilot.mjs");
+  mkdirSync(dirname(runnerPath), { recursive: true });
+  await build({
+    entryPoints: [join(repositoryRoot, "packages", "pilot", "src", "main.ts")],
+    outfile: runnerPath,
+    bundle: true,
+    platform: "node",
+    target: "node24",
+    format: "esm",
+    sourcemap: false,
+    legalComments: "none",
+    minify: false,
+    logLevel: "silent",
+  });
+
+  const copiedSources = new Map([
+    ["docs/CONSENT.md", join(repositoryRoot, "docs", "pilot", "CONSENT.md")],
+    ["docs/EXIT-INTERVIEW.md", join(repositoryRoot, "docs", "pilot", "EXIT-INTERVIEW.md")],
+    ["docs/OBSERVATION-FORM.md", join(repositoryRoot, "docs", "pilot", "OBSERVATION-FORM.md")],
+    ["docs/PROTOCOL.md", join(repositoryRoot, "docs", "pilot", "PROTOCOL.md")],
+    ["docs/RESULTS-TEMPLATE.md", join(repositoryRoot, "docs", "pilot", "RESULTS-TEMPLATE.md")],
+    ["schema/shareable-pilot-export.schema.json", join(repositoryRoot, "packages", "pilot", "schema", "shareable-pilot-export.schema.json")],
+    ["walkthrough/SYNTHETIC-WALKTHROUGH.md", join(repositoryRoot, "docs", "pilot", "SYNTHETIC-WALKTHROUGH.md")],
+  ]);
+  for (const [relativePath, source] of copiedSources) {
+    writeKitFile(relativePath, readFileSync(source));
+  }
+  for (const relativePath of [
+    "README.md",
+    "install/install-linux.sh",
+    "install/install-macos.sh",
+    "install/install-windows.ps1",
+  ]) {
+    writeKitFile(relativePath, Buffer.from(`synthetic RI-43 fixture: ${relativePath}\n`, "utf8"));
+  }
+
+  const artifactFile = `sestina-cli-${releaseVersion}.tgz`;
+  const artifactPath = `release/${artifactFile}`;
+  writeKitFile(artifactPath, Buffer.from("synthetic RI-43 CLI artifact fixture\n", "utf8"));
+  const payloadPaths = [...staticPayloadPaths, artifactPath]
+    .sort((left, right) => left.localeCompare(right, "en"));
+  const files = payloadPaths.map((path) => {
+    const bytes = readFileSync(join(kitRoot, ...path.split("/")));
+    return { path, sha256: sha256(bytes), size: bytes.length };
+  });
+  const artifact = files.find((file) => file.path === artifactPath);
+  invariant(artifact !== undefined, "pilot_fixture_artifact_missing");
+  const manifest = {
+    schemaVersion: "1.0.0",
+    pilotKitVersion: "1.0.0",
+    protocolVersion: "2026-08-21",
+    consentVersion: "2026-08-21",
+    sestinaRelease: {
+      version: releaseVersion,
+      buildId,
+      artifactFile,
+      artifactSha256: artifact.sha256,
+    },
+    files,
+    security: {
+      localOnly: true,
+      noTelemetry: true,
+      participantControlledExport: true,
+      containsResearchContent: false,
+      containsCredentials: false,
+    },
+  };
+  const manifestBytes = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  writeKitFile("pilot-kit-manifest.json", manifestBytes);
+  const sums = [
+    ...files.map((file) => `${file.sha256}  ${file.path}`),
+    `${sha256(manifestBytes)}  pilot-kit-manifest.json`,
+  ].sort((left, right) => left.slice(66).localeCompare(right.slice(66), "en"));
+  writeKitFile("SHA256SUMS", Buffer.from(`${sums.join("\n")}\n`, "utf8"));
 }
 
 const guardedEnvironment = {
@@ -115,7 +216,7 @@ try {
     "pilot_network_canary_attempt_not_recorded",
   );
 
-  run(buildKit, [releaseRoot, kitRoot]);
+  await buildSyntheticKitFixture();
   const runner = join(kitRoot, "bin", "sestina-pilot.mjs");
   run(runner, ["verify-kit", "--kit-root", kitRoot]);
   const startOutput = run(runner, [
