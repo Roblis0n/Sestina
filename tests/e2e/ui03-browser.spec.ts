@@ -129,13 +129,14 @@ test.describe("UI-03 production experience cohesion", () => {
     await page.getByLabel("单个建议").fill("Preserve the bounded research question and disclose every unknown.");
     await page.getByLabel("证据类别").selectOption("synthetic_fixture");
     await page.getByRole("button", { name: "先生成 Context Manifest" }).click();
-    const inspectorTrigger = page.getByRole("button", { name: "检查 Context Manifest" });
     await expect(page.getByRole("complementary", { name: "Context Inspector" })).toBeVisible();
     await page.keyboard.press("Escape");
-    await expect(inspectorTrigger).toBeFocused();
+    const analyzeAction = page.getByRole("button", { name: "我已核对，开始分析" });
+    await expect(analyzeAction).toBeFocused();
 
-    await page.getByRole("button", { name: "我已核对，开始分析" }).click();
+    await analyzeAction.click();
     await page.keyboard.press("Escape");
+    await expect(page.getByRole("button", { name: "核对并记录处置" })).toBeFocused();
     const accept = page.getByRole("button", { name: "接受", exact: true });
     await expect(accept).toBeDisabled();
     await expect(page.getByRole("note", { name: "为什么这些操作不可用" })).toContainText("semantic_ready");

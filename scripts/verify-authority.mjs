@@ -85,7 +85,9 @@ const GUIDANCE_FILES = [
       "RI-52（已完成）",
       "RI-53 Research Room Release Resilience",
       "RI-53（已完成）",
-      "none_active_RI54_not_started",
+      "UI-04 Production Interface Craft and Whole-Product Coherence",
+      "active_production_interface_craft_and_whole_product_coherence",
+      "UI04_production_interface_craft",
       "completed_and_verified_implementation_real_provider_evidence_blocked",
       "Market Gate 0",
     ],
@@ -96,8 +98,8 @@ const GUIDANCE_FILES = [
       "required_operating_guide",
       "只有相邻一层能够授权下一层",
       "TASK-START-GATE.md",
-      "RI-53 / completed_and_verified",
-      "none_active_RI54_not_started",
+      "UI-04 / active_production_interface_craft_and_whole_product_coherence",
+      "UI04_production_interface_craft",
     ],
   },
   {
@@ -106,6 +108,23 @@ const GUIDANCE_FILES = [
       "required_before_every_task",
       "Gate A：方向成立",
       "final: ready_to_start | do_not_start",
+    ],
+  },
+  {
+    path: "docs/execution/UI-04-PRODUCTION-INTERFACE-CRAFT-AND-WHOLE-PRODUCT-COHERENCE-TASK-START-RECORD.md",
+    required: [
+      "task: UI-04",
+      "status: ready_to_start",
+      "gate_conclusion: ready_to_start_user_authorized_development",
+      "activity_status: active_production_interface_craft_and_whole_product_coherence",
+      "implementation_authorization: explicit_user_authorization_2026_08_30",
+      "next_code_goal: UI04_production_interface_craft",
+      "production_visual_and_functional_acceptance: required",
+      "ri53_status: completed_and_verified",
+      "brand01_status: completed_and_verified",
+      "ui04_status: active",
+      "ri54_status: not_started",
+      "final: ready_to_start",
     ],
   },
   {
@@ -507,8 +526,8 @@ const MARKER_CONTRACT = {
     why: "the current task id must be well formed and consistent across entries",
   },
   "sestina-current-status": {
-    exact: "completed_and_verified",
-    why: "RI-53 passed implementation, production visual, and independent three-platform product gates",
+    exact: "active_production_interface_craft_and_whole_product_coherence",
+    why: "the user explicitly authorized UI-04 as the sole active production-interface task",
   },
   "sestina-last-completed-task": {
     exact: "RI-53",
@@ -519,24 +538,24 @@ const MARKER_CONTRACT = {
     why: "the latest governed task passed its implementation and required host evidence gates",
   },
   "sestina-implementation-base": {
-    exact: "ac66bc58b7a1e9a5b72e761cb2d760f75a45a993",
-    why: "the completed RI-53 evidence is bound to the private implementation commit that passed the three-platform matrix",
+    exact: "f392786bac535c0d21b7485cb065c9bb3ed7586a",
+    why: "UI-04 starts from the private BRAND-01 authority closeout commit without rewriting later work",
   },
   "sestina-next-code-goal": {
-    exact: "none_active_RI54_not_started",
-    why: "RI-53 is complete and RI-54 has not been authorized",
+    exact: "UI04_production_interface_craft",
+    why: "UI-04 is the only authorized code goal and RI-54 remains excluded",
   },
   "sestina-next-execution-goal": {
-    exact: "await_explicit_user_authorization",
-    why: "no new task may start after RI-53 without explicit user authorization",
+    exact: "execute_UI04_production_interface_craft",
+    why: "the user explicitly authorized complete UI-04 implementation and verification",
   },
   "sestina-next-code-sequence": {
-    exact: "none_active_RI54_not_started",
-    why: "RI-54 remains excluded after RI-53 completion",
+    exact: "UI04_production_interface_craft",
+    why: "UI-04 is the sole active sequence and publication remains out of scope",
   },
   "sestina-production-visual-and-functional-acceptance": {
-    exact: "passed",
-    why: "RI-53 production recovery UI passed real artifact visual and functional acceptance",
+    exact: "required",
+    why: "UI-04 cannot complete without fresh rendered production-route functional and whole-interface acceptance",
   },
   "sestina-ri51-status": {
     exact: "completed_and_verified",
@@ -570,9 +589,41 @@ const MARKER_CONTRACT = {
     exact: "passed",
     why: "the production recovery UI passed the whole-interface visual and functional gate",
   },
+  "sestina-brand01-status": {
+    exact: "completed_and_verified",
+    why: "the sole official Logo authority is complete and must remain unchanged during UI-04",
+  },
+  "sestina-ui04-status": {
+    exact: "active",
+    why: "UI-04 is the sole user-authorized active product-interface task",
+  },
   "sestina-ri54-status": {
     exact: "not_started",
     why: "RI-53 authorization cannot start publication work",
+  },
+  "sestina-publication-actions": {
+    exact: "not_started",
+    why: "UI-04 does not authorize a tag, Release, public repository, npm publication, installer, or Desktop",
+  },
+  "sestina-official-logo-asset": {
+    exact: "apps/research-room/client/public/sestina-logo.png",
+    why: "UI-04 must preserve the single user-approved official Logo asset",
+  },
+  "sestina-official-logo-sha256": {
+    exact: "593661E38F3EF0AE664A4CF6E2EEEDFBA3E43D51B31A19C20E93B62E82570137",
+    why: "the official Logo bytes must not drift during interface craft work",
+  },
+  "sestina-real-sestina-provider-smoke": {
+    exact: "blocked_missing_user_config",
+    why: "UI-04 does not configure or simulate a real Sestina Provider",
+  },
+  "sestina-external-user-value": {
+    exact: "unproven",
+    why: "owner-operated UI work does not establish external-user value",
+  },
+  "sestina-market-value": {
+    exact: "unproven",
+    why: "interface implementation cannot fabricate market evidence",
   },
   "sestina-ri52-target-host": {
     exact: "codex",
@@ -801,9 +852,9 @@ for (const entry of ENTRY_FILES) {
 const tasks = [...currentTasks.entries()];
 if (tasks.length > 0) {
   const first = tasks[0][1];
-  if (first !== "RI-53") {
+  if (first !== "UI-04") {
     err(
-      `[AUTH-R003] ${tasks[0][0]}: current task is '${first}' but the explicitly authorized task is 'RI-53'`,
+      `[AUTH-R003] ${tasks[0][0]}: current task is '${first}' but the explicitly authorized task is 'UI-04'`,
     );
   }
   for (const [entry, task] of tasks) {

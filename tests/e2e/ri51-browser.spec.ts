@@ -244,7 +244,7 @@ test.describe("RI-51 governed project memory production flow", () => {
     await expect(reviewManifest).toContainText("工作记忆");
     await expect(reviewManifest).toContainText("1 项包含");
     await capture(page, testInfo, "ri51-review-memory-manifest-configured-fixture-zh-light-1440x900.png", 1440, 900);
-    await reviewManifest.getByRole("button", { name: "我已核对，开始分析" }).click();
+    await page.getByRole("button", { name: "我已核对，开始分析" }).click();
     expect(provider.calls).toBe(1);
     expect(provider.lastRequest?.context.workingMemory?.items).toEqual([
       expect.objectContaining({ content: expect.objectContaining({ definition: expect.stringContaining(fixture.eligibleSearchToken) }) }),

@@ -123,6 +123,8 @@ export async function createUi02Project(options: { readonly title?: string; read
       briefVersionId: brief.currentVersionId,
       actor: UI02_USER,
     }));
+    const activeBriefProjection = coreValue(core.getActiveBriefProjection(project.id));
+    if (!activeBriefProjection) throw new Error("UI production fixture is missing its active Research Brief projection.");
     core.close();
     coreClosed = true;
 
@@ -146,7 +148,7 @@ export async function createUi02Project(options: { readonly title?: string; read
       database.close();
     }
 
-    await writeFile(join(stateDirectory, "research-brief.yaml"), "# Durable projection replaced by an explicit Brief activation.\n", "utf8");
+    await writeFile(join(stateDirectory, "research-brief.yaml"), activeBriefProjection.yaml, "utf8");
     await writeFile(join(root, "ordinary-project-note.txt"), `This ordinary file contains ${uniqueToken} and must never enter structured search.\n`, "utf8");
     return {
       root,

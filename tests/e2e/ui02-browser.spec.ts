@@ -417,8 +417,10 @@ test.describe("UI-02 production research object workspaces", () => {
     await expect(page.locator("html")).toHaveAttribute("data-theme", "high_contrast");
     await expect(page.locator("html")).toHaveAttribute("data-motion", "on");
     await expect(page.locator("html")).toHaveAttribute("data-transparency", "reduced");
-    await expect(page.locator(".brand__mark")).toHaveCSS("background-color", "rgb(0, 229, 255)");
-    await expect(page.locator(".brand__mark")).toHaveCSS("border-top-width", "3px");
+    const officialLogo = page.locator(".sestina-logo--chrome");
+    await expect(officialLogo).toHaveAttribute("src", "/sestina-logo.png");
+    await expect(officialLogo).toHaveCSS("background-color", "rgb(255, 255, 255)");
+    expect(await officialLogo.evaluate((image: HTMLImageElement) => ({ width: image.naturalWidth, height: image.naturalHeight }))).toEqual({ width: 1024, height: 1024 });
     await captureHealthyScreenshot(page, testInfo, "ui02-vivid-high-contrast-issue-zh-1728x1117.png", 1728, 1117);
 
     await chooseAppearance(page, "zh", "light", true);

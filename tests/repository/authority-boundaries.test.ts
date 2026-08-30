@@ -42,7 +42,7 @@ const ENTRY_FILES = [
 
 const PRODUCT_DEFINITION =
   "Sestina 最终应当是一个本地交互式科研 App。其内部本体是 Research Deliberation Kernel，主要交互面是 Research Room；MCP、Skill、Hooks、CLI 只是外部宿主接入、自动化和恢复接口。Sestina 作为本地科研过程调试器，让 AI 始终围绕当前研究问题工作，记住已经作出的研究决定，识别目标替换、重复审计、论证跳跃和伪深度，并要求每一轮修改说明真正增加了什么。";
-const CURRENT_STATUS = "completed_and_verified";
+const CURRENT_STATUS = "active_production_interface_craft_and_whole_product_coherence";
 
 const GUIDANCE_FIXTURES: Record<string, string> = {
   "docs/product/CURRENT-PRODUCT-DEFINITION.md": [
@@ -68,7 +68,9 @@ const GUIDANCE_FIXTURES: Record<string, string> = {
     "RI-52（已完成）",
     "RI-53 Research Room Release Resilience",
     "RI-53（已完成）",
-    "none_active_RI54_not_started",
+    "UI-04 Production Interface Craft and Whole-Product Coherence",
+    "active_production_interface_craft_and_whole_product_coherence",
+    "UI04_production_interface_craft",
     "completed_and_verified_implementation_real_provider_evidence_blocked",
     "Market Gate 0",
   ].join("\n"),
@@ -76,8 +78,8 @@ const GUIDANCE_FIXTURES: Record<string, string> = {
     "required_operating_guide",
     "只有相邻一层能够授权下一层",
     "TASK-START-GATE.md",
-    "RI-53 / completed_and_verified",
-    "none_active_RI54_not_started",
+    "UI-04 / active_production_interface_craft_and_whole_product_coherence",
+    "UI04_production_interface_craft",
   ].join("\n"),
   "docs/execution/RI-52-CLOSED-EXTERNAL-APP-PILOT-TASK-START-RECORD.md": [
     "task: RI-52",
@@ -162,6 +164,20 @@ const GUIDANCE_FIXTURES: Record<string, string> = {
     "required_before_every_task",
     "Gate A：方向成立",
     "final: ready_to_start | do_not_start",
+  ].join("\n"),
+  "docs/execution/UI-04-PRODUCTION-INTERFACE-CRAFT-AND-WHOLE-PRODUCT-COHERENCE-TASK-START-RECORD.md": [
+    "task: UI-04",
+    "status: ready_to_start",
+    "gate_conclusion: ready_to_start_user_authorized_development",
+    "activity_status: active_production_interface_craft_and_whole_product_coherence",
+    "implementation_authorization: explicit_user_authorization_2026_08_30",
+    "next_code_goal: UI04_production_interface_craft",
+    "production_visual_and_functional_acceptance: required",
+    "ri53_status: completed_and_verified",
+    "brand01_status: completed_and_verified",
+    "ui04_status: active",
+    "ri54_status: not_started",
+    "final: ready_to_start",
   ].join("\n"),
   "docs/execution/UI-03-PRODUCTION-EXPERIENCE-QUALITY-CONSOLIDATION-TASK-START-RECORD.md": [
     "task: UI-03",
@@ -375,11 +391,11 @@ function activeBlock(currentTask: string): string {
     `<!-- sestina-current-status: ${CURRENT_STATUS} -->`,
     "<!-- sestina-last-completed-task: RI-53 -->",
     "<!-- sestina-last-completed-status: completed_and_verified -->",
-    "<!-- sestina-implementation-base: ac66bc58b7a1e9a5b72e761cb2d760f75a45a993 -->",
-    "<!-- sestina-next-code-goal: none_active_RI54_not_started -->",
-    "<!-- sestina-next-execution-goal: await_explicit_user_authorization -->",
-    "<!-- sestina-next-code-sequence: none_active_RI54_not_started -->",
-    "<!-- sestina-production-visual-and-functional-acceptance: passed -->",
+    "<!-- sestina-implementation-base: f392786bac535c0d21b7485cb065c9bb3ed7586a -->",
+    "<!-- sestina-next-code-goal: UI04_production_interface_craft -->",
+    "<!-- sestina-next-execution-goal: execute_UI04_production_interface_craft -->",
+    "<!-- sestina-next-code-sequence: UI04_production_interface_craft -->",
+    "<!-- sestina-production-visual-and-functional-acceptance: required -->",
     "<!-- sestina-ri51-status: completed_and_verified -->",
     "<!-- sestina-ri52-status: completed_and_verified -->",
     "<!-- sestina-ri53-status: completed_and_verified -->",
@@ -388,7 +404,15 @@ function activeBlock(currentTask: string): string {
     "<!-- sestina-ri53-macos-product-matrix: passed -->",
     "<!-- sestina-ri53-ubuntu-product-matrix: passed -->",
     "<!-- sestina-ri53-production-visual-and-functional-acceptance: passed -->",
+    "<!-- sestina-brand01-status: completed_and_verified -->",
+    "<!-- sestina-ui04-status: active -->",
     "<!-- sestina-ri54-status: not_started -->",
+    "<!-- sestina-publication-actions: not_started -->",
+    "<!-- sestina-official-logo-asset: apps/research-room/client/public/sestina-logo.png -->",
+    "<!-- sestina-official-logo-sha256: 593661E38F3EF0AE664A4CF6E2EEEDFBA3E43D51B31A19C20E93B62E82570137 -->",
+    "<!-- sestina-real-sestina-provider-smoke: blocked_missing_user_config -->",
+    "<!-- sestina-external-user-value: unproven -->",
+    "<!-- sestina-market-value: unproven -->",
     "<!-- sestina-ri52-target-host: codex -->",
     "<!-- sestina-ri52-closed-host-pilot: passed -->",
     "<!-- sestina-ri52-public-mcp-write-capability: absent -->",
@@ -468,7 +492,7 @@ function writeValidEntries(
   writeGuidanceFiles(root);
   for (const entry of ENTRY_FILES) {
     const isBoard = entry === "docs/execution/WORK-BOARD.md";
-    const task = "RI-53";
+    const task = "UI-04";
     const body = isBoard
       ? workBoardBody(task)
       : "\n\nLegacy prose stays below.\n";
@@ -504,14 +528,14 @@ describe("verify-authority positive fixtures", () => {
     expect(r.exitCode).toBe(0);
   });
 
-  it("P3. the checked-in authority closes RI-53 and leaves RI-54 unstarted", () => {
+  it("P3. the checked-in authority activates UI-04 and leaves RI-54 unstarted", () => {
     const expected = [
-      "<!-- sestina-current-task: RI-53 -->",
-      "<!-- sestina-current-status: completed_and_verified -->",
+      "<!-- sestina-current-task: UI-04 -->",
+      "<!-- sestina-current-status: active_production_interface_craft_and_whole_product_coherence -->",
       "<!-- sestina-last-completed-task: RI-53 -->",
-      "<!-- sestina-next-code-goal: none_active_RI54_not_started -->",
-      "<!-- sestina-next-execution-goal: await_explicit_user_authorization -->",
-      "<!-- sestina-production-visual-and-functional-acceptance: passed -->",
+      "<!-- sestina-next-code-goal: UI04_production_interface_craft -->",
+      "<!-- sestina-next-execution-goal: execute_UI04_production_interface_craft -->",
+      "<!-- sestina-production-visual-and-functional-acceptance: required -->",
       "<!-- sestina-ri51-status: completed_and_verified -->",
       "<!-- sestina-ri52-status: completed_and_verified -->",
       "<!-- sestina-ri52-real-codex-candidate-session: passed -->",
@@ -522,7 +546,15 @@ describe("verify-authority positive fixtures", () => {
       "<!-- sestina-ri53-macos-product-matrix: passed -->",
       "<!-- sestina-ri53-ubuntu-product-matrix: passed -->",
       "<!-- sestina-ri53-production-visual-and-functional-acceptance: passed -->",
+      "<!-- sestina-brand01-status: completed_and_verified -->",
+      "<!-- sestina-ui04-status: active -->",
       "<!-- sestina-ri54-status: not_started -->",
+      "<!-- sestina-publication-actions: not_started -->",
+      "<!-- sestina-official-logo-asset: apps/research-room/client/public/sestina-logo.png -->",
+      "<!-- sestina-official-logo-sha256: 593661E38F3EF0AE664A4CF6E2EEEDFBA3E43D51B31A19C20E93B62E82570137 -->",
+      "<!-- sestina-real-sestina-provider-smoke: blocked_missing_user_config -->",
+      "<!-- sestina-external-user-value: unproven -->",
+      "<!-- sestina-market-value: unproven -->",
     ];
 
     for (const entry of ENTRY_FILES) {
@@ -535,16 +567,18 @@ describe("verify-authority positive fixtures", () => {
     const taskStart = readFileSync(
       resolve(
         SCRIPT_DIR,
-        "docs/execution/RI-53-RELEASE-RESILIENCE-SECURITY-RECOVERY-UPGRADE-COMPATIBILITY-TASK-START-RECORD.md",
+        "docs/execution/UI-04-PRODUCTION-INTERFACE-CRAFT-AND-WHOLE-PRODUCT-COHERENCE-TASK-START-RECORD.md",
       ),
       "utf8",
     );
-    expect(taskStart).toContain("task: RI-53");
+    expect(taskStart).toContain("task: UI-04");
     expect(taskStart).toContain("status: ready_to_start");
     expect(taskStart).toContain(
       "gate_conclusion: ready_to_start_user_authorized_development",
     );
-    expect(taskStart).toContain("activity_status: active_release_resilience_security_recovery_upgrade_compatibility");
+    expect(taskStart).toContain("activity_status: active_production_interface_craft_and_whole_product_coherence");
+    expect(taskStart).toContain("brand01_status: completed_and_verified");
+    expect(taskStart).toContain("ui04_status: active");
     expect(taskStart).toContain("ri54_status: not_started");
 
     const taskResult = readFileSync(

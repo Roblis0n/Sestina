@@ -71,7 +71,7 @@ export function AppChrome(props: AppChromeProps) {
       <header ref={chromeRef} className="app-chrome">
         <a className="brand" href="#main-content" aria-label={`${t(props.language, "app_name")} — ${t(props.language, "app_subtitle")}`}>
           <img className="sestina-logo sestina-logo--chrome" src="/sestina-logo.png" alt="" aria-hidden="true" width="1024" height="1024" draggable={false} />
-          <span><strong>{t(props.language, "app_name")}</strong><small>{t(props.language, "app_subtitle")}</small></span>
+          <span><strong>{t(props.language, "research_room")}</strong><small>{t(props.language, "app_name")} · {t(props.language, "local_only")}</small></span>
         </a>
         <div className="app-chrome__status" aria-label={props.language === "en" ? "Runtime status" : "运行状态"} data-provider-mode={props.provider?.mode ?? "offline_ledger"}>
           <span className="app-chrome__status-copy"><strong>{t(props.language, "local_only")}</strong><small>Provider · {props.provider?.mode === "configured" ? t(props.language, "provider_configured") : t(props.language, "ledger_only")}</small></span>

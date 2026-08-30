@@ -20,6 +20,7 @@
     "test:e2e:ri48": "playwright test --config tests/e2e/playwright.ri48.config.ts",
     "test:e2e:ui02": "playwright test --config tests/e2e/playwright.ui02.config.ts",
     "test:e2e:ui03": "playwright test --config tests/e2e/playwright.ui03.config.ts",
+    "test:e2e:ui04": "playwright test --config tests/e2e/playwright.ui04.config.ts",
     "test:e2e:ri49": "playwright test --config tests/e2e/playwright.ri49.config.ts",
     "test:e2e:ri50": "playwright test --config tests/e2e/playwright.ri50.config.ts",
     "test:e2e:ri51": "playwright test --config tests/e2e/playwright.ri51.config.ts",
@@ -53,7 +54,7 @@
     "demo:offline": "pnpm --filter @sestina/cli build && node scripts/run-offline-demos.mjs",
     "verify:no-network": "node scripts/verify-no-network.mjs && node scripts/verify-research-room-no-network.mjs",
     "verify:pilot-no-network": "node scripts/verify-pilot-no-network.mjs",
-    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm verify:no-network && pnpm test:e2e:ri40 && pnpm test:e2e:ri41 && pnpm test:e2e:ri43 && pnpm test:e2e:ri48 && pnpm test:e2e:ui02 && pnpm test:e2e:ui03 && pnpm test:e2e:ri49 && pnpm test:e2e:ri50 && pnpm test:e2e:ri51 && pnpm test:e2e:ri52 && pnpm docs:check && pnpm repo:check && pnpm verify:architecture && pnpm verify:authority && pnpm verify:package && pnpm demo:offline"
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm verify:no-network && pnpm test:e2e:ri40 && pnpm test:e2e:ri41 && pnpm test:e2e:ri43 && pnpm test:e2e:ri48 && pnpm test:e2e:ui02 && pnpm test:e2e:ui03 && pnpm test:e2e:ui04 && pnpm test:e2e:ri49 && pnpm test:e2e:ri50 && pnpm test:e2e:ri51 && pnpm test:e2e:ri52 && pnpm docs:check && pnpm repo:check && pnpm verify:architecture && pnpm verify:authority && pnpm verify:package && pnpm demo:offline"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
