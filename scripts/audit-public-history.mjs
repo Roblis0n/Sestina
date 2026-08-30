@@ -135,10 +135,12 @@ function scanPersonalPaths(text, object, paths) {
 }
 
 const remote = git(["remote", "get-url", "origin"]).trim();
-invariant(
-  remote === "https://github.com/Roblis0n/Sestina.git",
-  "public_history_remote_invalid",
-);
+const canonicalRemoteUrls = new Set([
+  "https://github.com/Roblis0n/Sestina.git",
+  // actions/checkout canonicalizes the same HTTPS repository without `.git`.
+  "https://github.com/Roblis0n/Sestina",
+]);
+invariant(canonicalRemoteUrls.has(remote), "public_history_remote_invalid");
 
 const listing = git(["rev-list", "--objects", "--all"]);
 const pathsByObject = parseObjectListing(listing);

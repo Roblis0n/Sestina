@@ -79,5 +79,16 @@ describe("RI-54 public preview repository contract", () => {
         300,
       );
     }
+
+    const historyAudit = readFileSync(
+      resolve(root, "scripts/audit-public-history.mjs"),
+      "utf8",
+    );
+    expect(historyAudit).toContain(
+      '"https://github.com/Roblis0n/Sestina.git"',
+    );
+    expect(historyAudit).toContain(
+      '"https://github.com/Roblis0n/Sestina"',
+    );
   });
 });
