@@ -86,8 +86,9 @@ const GUIDANCE_FILES = [
       "RI-53 Research Room Release Resilience",
       "RI-53（已完成）",
       "UI-04 Production Interface Craft and Whole-Product Coherence",
-      "active_production_interface_craft_and_whole_product_coherence",
-      "UI04_production_interface_craft",
+      "UI-04（已完成）",
+      "none_active_RI54_not_started",
+      "await_explicit_user_authorization",
       "completed_and_verified_implementation_real_provider_evidence_blocked",
       "Market Gate 0",
     ],
@@ -98,8 +99,9 @@ const GUIDANCE_FILES = [
       "required_operating_guide",
       "只有相邻一层能够授权下一层",
       "TASK-START-GATE.md",
-      "UI-04 / active_production_interface_craft_and_whole_product_coherence",
-      "UI04_production_interface_craft",
+      "UI-04 / completed_and_verified",
+      "none_active_RI54_not_started",
+      "await_explicit_user_authorization",
     ],
   },
   {
@@ -125,6 +127,35 @@ const GUIDANCE_FILES = [
       "ui04_status: active",
       "ri54_status: not_started",
       "final: ready_to_start",
+    ],
+  },
+  {
+    path: "docs/execution/UI-04-PRODUCTION-INTERFACE-CRAFT-AND-WHOLE-PRODUCT-COHERENCE-TASK-RESULT.md",
+    required: [
+      "task: UI-04",
+      "status: completed_and_verified",
+      "implementation_commit: 6f3c1091fa22e9df7eae68fa0ac6ccf8a2ab1379",
+      "selected_direction: C_Quiet_Instrument",
+      "production_visual_and_functional_acceptance: passed",
+      "pnpm_verify: passed",
+      "next_code_goal: none_active_RI54_not_started",
+      "next_execution_goal: await_explicit_user_authorization",
+      "ri54_status: not_started",
+    ],
+  },
+  {
+    path: "docs/execution/UI-04-PRODUCTION-VISUAL-AND-FUNCTIONAL-ACCEPTANCE.md",
+    required: [
+      "task: UI-04",
+      "status: passed",
+      "selected_direction: C_Quiet_Instrument",
+      "browser_automation: 3_of_3_passed",
+      "in_app_browser_real_interaction: passed",
+      "after_in_app_action_top_bottom_px: 339.7_379.7_of_720",
+      "horizontal_page_overflow: zero_verified",
+      "blocker_remaining: 0",
+      "major_remaining: 0",
+      "in_scope_moderate_remaining: 0",
     ],
   },
   {
@@ -526,12 +557,12 @@ const MARKER_CONTRACT = {
     why: "the current task id must be well formed and consistent across entries",
   },
   "sestina-current-status": {
-    exact: "active_production_interface_craft_and_whole_product_coherence",
-    why: "the user explicitly authorized UI-04 as the sole active production-interface task",
+    exact: "completed_and_verified",
+    why: "UI-04 passed implementation, production interaction, and whole-interface acceptance",
   },
   "sestina-last-completed-task": {
-    exact: "RI-53",
-    why: "RI-53 is the most recently completed governed task",
+    exact: "UI-04",
+    why: "UI-04 is the most recently completed governed task",
   },
   "sestina-last-completed-status": {
     exact: "completed_and_verified",
@@ -542,20 +573,20 @@ const MARKER_CONTRACT = {
     why: "UI-04 starts from the private BRAND-01 authority closeout commit without rewriting later work",
   },
   "sestina-next-code-goal": {
-    exact: "UI04_production_interface_craft",
-    why: "UI-04 is the only authorized code goal and RI-54 remains excluded",
+    exact: "none_active_RI54_not_started",
+    why: "UI-04 is complete and RI-54 remains excluded until new explicit authorization",
   },
   "sestina-next-execution-goal": {
-    exact: "execute_UI04_production_interface_craft",
-    why: "the user explicitly authorized complete UI-04 implementation and verification",
+    exact: "await_explicit_user_authorization",
+    why: "the governed UI-04 task is closed and no later task is authorized",
   },
   "sestina-next-code-sequence": {
-    exact: "UI04_production_interface_craft",
-    why: "UI-04 is the sole active sequence and publication remains out of scope",
+    exact: "none_active_RI54_not_started",
+    why: "UI-04 is complete and publication remains out of scope",
   },
   "sestina-production-visual-and-functional-acceptance": {
-    exact: "required",
-    why: "UI-04 cannot complete without fresh rendered production-route functional and whole-interface acceptance",
+    exact: "passed",
+    why: "UI-04 passed fresh rendered production-route functional and whole-interface acceptance",
   },
   "sestina-ri51-status": {
     exact: "completed_and_verified",
@@ -591,11 +622,15 @@ const MARKER_CONTRACT = {
   },
   "sestina-brand01-status": {
     exact: "completed_and_verified",
-    why: "the sole official Logo authority is complete and must remain unchanged during UI-04",
+    why: "the sole official Logo authority remained unchanged throughout UI-04",
   },
   "sestina-ui04-status": {
-    exact: "active",
-    why: "UI-04 is the sole user-authorized active product-interface task",
+    exact: "completed_and_verified",
+    why: "UI-04 completed its full implementation and production acceptance contract",
+  },
+  "sestina-ui04-production-visual-and-functional-acceptance": {
+    exact: "passed",
+    why: "UI-04 passed its new production-route whole-interface acceptance matrix",
   },
   "sestina-ri54-status": {
     exact: "not_started",
@@ -854,7 +889,7 @@ if (tasks.length > 0) {
   const first = tasks[0][1];
   if (first !== "UI-04") {
     err(
-      `[AUTH-R003] ${tasks[0][0]}: current task is '${first}' but the explicitly authorized task is 'UI-04'`,
+      `[AUTH-R003] ${tasks[0][0]}: current task is '${first}' but the latest governed task is 'UI-04'`,
     );
   }
   for (const [entry, task] of tasks) {

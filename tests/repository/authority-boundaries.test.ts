@@ -42,7 +42,7 @@ const ENTRY_FILES = [
 
 const PRODUCT_DEFINITION =
   "Sestina 最终应当是一个本地交互式科研 App。其内部本体是 Research Deliberation Kernel，主要交互面是 Research Room；MCP、Skill、Hooks、CLI 只是外部宿主接入、自动化和恢复接口。Sestina 作为本地科研过程调试器，让 AI 始终围绕当前研究问题工作，记住已经作出的研究决定，识别目标替换、重复审计、论证跳跃和伪深度，并要求每一轮修改说明真正增加了什么。";
-const CURRENT_STATUS = "active_production_interface_craft_and_whole_product_coherence";
+const CURRENT_STATUS = "completed_and_verified";
 
 const GUIDANCE_FIXTURES: Record<string, string> = {
   "docs/product/CURRENT-PRODUCT-DEFINITION.md": [
@@ -69,8 +69,9 @@ const GUIDANCE_FIXTURES: Record<string, string> = {
     "RI-53 Research Room Release Resilience",
     "RI-53（已完成）",
     "UI-04 Production Interface Craft and Whole-Product Coherence",
-    "active_production_interface_craft_and_whole_product_coherence",
-    "UI04_production_interface_craft",
+    "UI-04（已完成）",
+    "none_active_RI54_not_started",
+    "await_explicit_user_authorization",
     "completed_and_verified_implementation_real_provider_evidence_blocked",
     "Market Gate 0",
   ].join("\n"),
@@ -78,8 +79,9 @@ const GUIDANCE_FIXTURES: Record<string, string> = {
     "required_operating_guide",
     "只有相邻一层能够授权下一层",
     "TASK-START-GATE.md",
-    "UI-04 / active_production_interface_craft_and_whole_product_coherence",
-    "UI04_production_interface_craft",
+    "UI-04 / completed_and_verified",
+    "none_active_RI54_not_started",
+    "await_explicit_user_authorization",
   ].join("\n"),
   "docs/execution/RI-52-CLOSED-EXTERNAL-APP-PILOT-TASK-START-RECORD.md": [
     "task: RI-52",
@@ -178,6 +180,29 @@ const GUIDANCE_FIXTURES: Record<string, string> = {
     "ui04_status: active",
     "ri54_status: not_started",
     "final: ready_to_start",
+  ].join("\n"),
+  "docs/execution/UI-04-PRODUCTION-INTERFACE-CRAFT-AND-WHOLE-PRODUCT-COHERENCE-TASK-RESULT.md": [
+    "task: UI-04",
+    "status: completed_and_verified",
+    "implementation_commit: 6f3c1091fa22e9df7eae68fa0ac6ccf8a2ab1379",
+    "selected_direction: C_Quiet_Instrument",
+    "production_visual_and_functional_acceptance: passed",
+    "pnpm_verify: passed",
+    "next_code_goal: none_active_RI54_not_started",
+    "next_execution_goal: await_explicit_user_authorization",
+    "ri54_status: not_started",
+  ].join("\n"),
+  "docs/execution/UI-04-PRODUCTION-VISUAL-AND-FUNCTIONAL-ACCEPTANCE.md": [
+    "task: UI-04",
+    "status: passed",
+    "selected_direction: C_Quiet_Instrument",
+    "browser_automation: 3_of_3_passed",
+    "in_app_browser_real_interaction: passed",
+    "after_in_app_action_top_bottom_px: 339.7_379.7_of_720",
+    "horizontal_page_overflow: zero_verified",
+    "blocker_remaining: 0",
+    "major_remaining: 0",
+    "in_scope_moderate_remaining: 0",
   ].join("\n"),
   "docs/execution/UI-03-PRODUCTION-EXPERIENCE-QUALITY-CONSOLIDATION-TASK-START-RECORD.md": [
     "task: UI-03",
@@ -389,13 +414,13 @@ function activeBlock(currentTask: string): string {
     "<!-- sestina-prework-direction-gate: required -->",
     `<!-- sestina-current-task: ${currentTask} -->`,
     `<!-- sestina-current-status: ${CURRENT_STATUS} -->`,
-    "<!-- sestina-last-completed-task: RI-53 -->",
+    "<!-- sestina-last-completed-task: UI-04 -->",
     "<!-- sestina-last-completed-status: completed_and_verified -->",
     "<!-- sestina-implementation-base: f392786bac535c0d21b7485cb065c9bb3ed7586a -->",
-    "<!-- sestina-next-code-goal: UI04_production_interface_craft -->",
-    "<!-- sestina-next-execution-goal: execute_UI04_production_interface_craft -->",
-    "<!-- sestina-next-code-sequence: UI04_production_interface_craft -->",
-    "<!-- sestina-production-visual-and-functional-acceptance: required -->",
+    "<!-- sestina-next-code-goal: none_active_RI54_not_started -->",
+    "<!-- sestina-next-execution-goal: await_explicit_user_authorization -->",
+    "<!-- sestina-next-code-sequence: none_active_RI54_not_started -->",
+    "<!-- sestina-production-visual-and-functional-acceptance: passed -->",
     "<!-- sestina-ri51-status: completed_and_verified -->",
     "<!-- sestina-ri52-status: completed_and_verified -->",
     "<!-- sestina-ri53-status: completed_and_verified -->",
@@ -405,7 +430,8 @@ function activeBlock(currentTask: string): string {
     "<!-- sestina-ri53-ubuntu-product-matrix: passed -->",
     "<!-- sestina-ri53-production-visual-and-functional-acceptance: passed -->",
     "<!-- sestina-brand01-status: completed_and_verified -->",
-    "<!-- sestina-ui04-status: active -->",
+    "<!-- sestina-ui04-status: completed_and_verified -->",
+    "<!-- sestina-ui04-production-visual-and-functional-acceptance: passed -->",
     "<!-- sestina-ri54-status: not_started -->",
     "<!-- sestina-publication-actions: not_started -->",
     "<!-- sestina-official-logo-asset: apps/research-room/client/public/sestina-logo.png -->",
@@ -528,14 +554,14 @@ describe("verify-authority positive fixtures", () => {
     expect(r.exitCode).toBe(0);
   });
 
-  it("P3. the checked-in authority activates UI-04 and leaves RI-54 unstarted", () => {
+  it("P3. the checked-in authority closes UI-04 and leaves RI-54 unstarted", () => {
     const expected = [
       "<!-- sestina-current-task: UI-04 -->",
-      "<!-- sestina-current-status: active_production_interface_craft_and_whole_product_coherence -->",
-      "<!-- sestina-last-completed-task: RI-53 -->",
-      "<!-- sestina-next-code-goal: UI04_production_interface_craft -->",
-      "<!-- sestina-next-execution-goal: execute_UI04_production_interface_craft -->",
-      "<!-- sestina-production-visual-and-functional-acceptance: required -->",
+      "<!-- sestina-current-status: completed_and_verified -->",
+      "<!-- sestina-last-completed-task: UI-04 -->",
+      "<!-- sestina-next-code-goal: none_active_RI54_not_started -->",
+      "<!-- sestina-next-execution-goal: await_explicit_user_authorization -->",
+      "<!-- sestina-production-visual-and-functional-acceptance: passed -->",
       "<!-- sestina-ri51-status: completed_and_verified -->",
       "<!-- sestina-ri52-status: completed_and_verified -->",
       "<!-- sestina-ri52-real-codex-candidate-session: passed -->",
@@ -547,7 +573,8 @@ describe("verify-authority positive fixtures", () => {
       "<!-- sestina-ri53-ubuntu-product-matrix: passed -->",
       "<!-- sestina-ri53-production-visual-and-functional-acceptance: passed -->",
       "<!-- sestina-brand01-status: completed_and_verified -->",
-      "<!-- sestina-ui04-status: active -->",
+      "<!-- sestina-ui04-status: completed_and_verified -->",
+      "<!-- sestina-ui04-production-visual-and-functional-acceptance: passed -->",
       "<!-- sestina-ri54-status: not_started -->",
       "<!-- sestina-publication-actions: not_started -->",
       "<!-- sestina-official-logo-asset: apps/research-room/client/public/sestina-logo.png -->",
@@ -584,12 +611,16 @@ describe("verify-authority positive fixtures", () => {
     const taskResult = readFileSync(
       resolve(
         SCRIPT_DIR,
-        "docs/execution/RI-53-RELEASE-RESILIENCE-SECURITY-RECOVERY-UPGRADE-COMPATIBILITY-TASK-RESULT.md",
+        "docs/execution/UI-04-PRODUCTION-INTERFACE-CRAFT-AND-WHOLE-PRODUCT-COHERENCE-TASK-RESULT.md",
       ),
       "utf8",
     );
     expect(taskResult).toContain("status: completed_and_verified");
-    expect(taskResult).toContain("github_actions_run: 33162451783");
+    expect(taskResult).toContain("selected_direction: C_Quiet_Instrument");
+    expect(taskResult).toContain(
+      "implementation_commit: 6f3c1091fa22e9df7eae68fa0ac6ccf8a2ab1379",
+    );
+    expect(taskResult).toContain("production_visual_and_functional_acceptance: passed");
     expect(taskResult).toContain("next_code_goal: none_active_RI54_not_started");
   });
 });
