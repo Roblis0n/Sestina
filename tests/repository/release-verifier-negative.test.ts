@@ -107,6 +107,8 @@ describe("RI-54 release verifier fail-closed negative fixtures", () => {
   it("rejects manifest-version and checksum tampering", () => {
     expect(() => { validateReleaseManifest({ ...manifest(), schemaVersion: "1.0.0" }); }).toThrow(/release_manifest_version_invalid/u);
     expect(() => parseChecksums(`${"0".repeat(63)}x  release-manifest.json\n`)).toThrow(/sha256sums_format_invalid/u);
+    expect(parseChecksums(`${"a".repeat(64)}  docs/CONSENT.md\n`).get("docs/CONSENT.md")).toBe("a".repeat(64));
+    expect(() => parseChecksums(`${"a".repeat(64)}  ../private.txt\n`)).toThrow(/sha256sums_format_invalid/u);
   });
 
   it("rejects dependency injection, a broken launcher, and missing co-located MCP", () => {

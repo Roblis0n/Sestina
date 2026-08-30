@@ -215,7 +215,7 @@ export function parseChecksums(content) {
   invariant(lines.length > 0, "sha256sums_empty");
   const result = new Map();
   for (const line of lines) {
-    const match = /^([a-f0-9]{64})  ([a-z0-9][a-z0-9.-]+)$/u.exec(line);
+    const match = /^([a-f0-9]{64})  ((?:[A-Za-z0-9][A-Za-z0-9._-]*)(?:\/[A-Za-z0-9][A-Za-z0-9._-]*)*)$/u.exec(line);
     invariant(match !== null && !result.has(match[2]), "sha256sums_format_invalid");
     result.set(match[2], match[1]);
   }
