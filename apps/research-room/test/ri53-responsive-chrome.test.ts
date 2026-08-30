@@ -20,4 +20,14 @@ describe("RI-53 responsive production chrome", () => {
       .find((line) => line.includes(".project-navigation__footer") && line.includes("display: none") && !line.includes("span:last-child"));
     expect(hiddenFooter).toBeUndefined();
   });
+
+  it("moves Manifest facts onto their own row before a full navigation rail can squeeze them", async () => {
+    const appRoot = join(import.meta.dirname, "..");
+    const styles = await readFile(join(appRoot, "client", "src", "styles", "app.css"), "utf8");
+    const reviewActionLayout = styles.split("@media (max-width: 92rem) {")[1]?.split("@media (max-width: 80rem)")[0] ?? "";
+
+    expect(reviewActionLayout).toContain(".review-current-action { grid-template-columns: minmax(0, 1fr) auto; }");
+    expect(reviewActionLayout).toContain(".review-current-action dl { grid-column: 1 / -1; grid-row: 2; }");
+    expect(reviewActionLayout).toContain(".review-current-action__next { grid-column: 2; grid-row: 1; }");
+  });
 });
