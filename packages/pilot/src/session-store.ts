@@ -33,12 +33,20 @@ import {
   canonicalStringify,
   createShareablePilotExport,
   sha256,
+  type DesktopNeed,
+  type DesktopSolutionEvidence,
+  type DistributionSource,
   type FindingAssessmentCounts,
   type HostEntry,
+  type LocalWebLifecycleObservation,
   type MaintenanceBurdenScores,
   type MaterialType,
+  type OperatingMode,
   type ParticipantRole,
+  type PilotDistributionObservation,
+  type PilotJourneyObservation,
   type PreferredEntry,
+  type ReleasePlatform,
   type RepeatCorrectionImpact,
   type SessionExitResult,
   type ShareableEpisodeResult,
@@ -292,7 +300,13 @@ export interface StartPilotSessionInput {
   readonly consentVersion: string;
   readonly consentAcknowledged: boolean;
   readonly releaseVersion: string;
+  readonly releaseChannel: "public_preview";
   readonly releaseBuildId: string;
+  readonly releasePlatform: ReleasePlatform;
+  readonly distributionSource: DistributionSource;
+  readonly releaseSourceCommit: string;
+  readonly releaseAssetSha256: string;
+  readonly operatingMode: OperatingMode;
   readonly at?: string;
 }
 
@@ -315,7 +329,7 @@ export async function startPilotSession(
   validateId(evidenceId, "evidence");
   const at = nowTimestamp(input.at);
   const session = signPrivatePilotSession({
-    schemaVersion: "1.0.0",
+    schemaVersion: "2.0.0",
     participantCode,
     sessionId,
     evidenceId,
@@ -327,7 +341,13 @@ export async function startPilotSession(
     protocolVersion: PILOT_PROTOCOL_VERSION,
     pilotKitVersion: PILOT_KIT_VERSION,
     releaseVersion: input.releaseVersion,
+    releaseChannel: input.releaseChannel,
     releaseBuildId: input.releaseBuildId,
+    releasePlatform: input.releasePlatform,
+    distributionSource: input.distributionSource,
+    releaseSourceCommit: input.releaseSourceCommit,
+    releaseAssetSha256: input.releaseAssetSha256,
+    operatingMode: input.operatingMode,
     startedAt: at,
     checkpoints: [],
     finish: null,
@@ -445,7 +465,12 @@ export interface FinishPilotSessionInput {
   readonly repeatCorrectionImpact: RepeatCorrectionImpact;
   readonly findingAssessment: FindingAssessmentCounts;
   readonly maintenanceBurden: MaintenanceBurdenScores;
+  readonly distribution: PilotDistributionObservation;
+  readonly journey: PilotJourneyObservation;
+  readonly localWebLifecycle: LocalWebLifecycleObservation;
   readonly preferredEntry: PreferredEntry;
+  readonly desktopNeed: DesktopNeed;
+  readonly desktopSolutionEvidence: DesktopSolutionEvidence;
   readonly uiNeed: UiNeed;
   readonly syntheticCaseDiscussion: SyntheticCaseDiscussion;
   readonly wouldUseAgain: WouldUseAgain;
@@ -488,8 +513,13 @@ export async function finishPilotSession(
       repeatCorrectionImpact: input.repeatCorrectionImpact,
       findingAssessment: input.findingAssessment,
       maintenanceBurden: input.maintenanceBurden,
+      distribution: input.distribution,
+      journey: input.journey,
+      localWebLifecycle: input.localWebLifecycle,
       secondUseObserved,
       preferredEntry: input.preferredEntry,
+      desktopNeed: input.desktopNeed,
+      desktopSolutionEvidence: input.desktopSolutionEvidence,
       uiNeed: input.uiNeed,
       syntheticCaseDiscussion: input.syntheticCaseDiscussion,
       wouldUseAgain: input.wouldUseAgain,

@@ -1,6 +1,10 @@
 import {
+  DESKTOP_NEEDS,
+  DESKTOP_SOLUTION_EVIDENCE,
+  DISTRIBUTION_SOURCES,
   HOST_ENTRIES,
   MATERIAL_TYPES,
+  OPERATING_MODES,
   PARTICIPANT_ROLES,
   PILOT_CONSENT_VERSION,
   PILOT_EXIT_POINTS,
@@ -8,6 +12,7 @@ import {
   PILOT_PROTOCOL_VERSION,
   PREFERRED_ENTRIES,
   PRIVATE_PILOT_SESSION_SCHEMA_VERSION,
+  RELEASE_PLATFORMS,
   REPEAT_CORRECTION_IMPACTS,
   SESSION_EXIT_RESULTS,
   SYNTHETIC_CASE_DISCUSSION_VALUES,
@@ -16,14 +21,25 @@ import {
   canonicalStringify,
   createShareablePilotExport,
   expectExactKeys,
+  parseLocalWebLifecycleObservation,
+  parsePilotDistributionObservation,
+  parsePilotJourneyObservation,
   sha256,
+  type DesktopNeed,
+  type DesktopSolutionEvidence,
+  type DistributionSource,
   type FindingAssessmentCounts,
   type HostEntry,
+  type LocalWebLifecycleObservation,
   type MaintenanceBurdenScores,
   type MaterialType,
+  type OperatingMode,
   type ParticipantRole,
+  type PilotDistributionObservation,
   type PilotExitPoint,
+  type PilotJourneyObservation,
   type PreferredEntry,
+  type ReleasePlatform,
   type RepeatCorrectionImpact,
   type SessionExitResult,
   type ShareableEpisodeResult,
@@ -97,7 +113,7 @@ export function isValidPilotCheckpointTransition(
   ) {
     return false;
   }
-  if (event === "connect_exited") return exitPoint === "connection";
+  if (event === "connect_exited") return exitPoint === "local_web_lifecycle";
   if (event === "participant_exited") return exitPoint !== null;
   return exitPoint === null;
 }
@@ -111,8 +127,13 @@ export interface PrivatePilotFinish {
   readonly repeatCorrectionImpact: RepeatCorrectionImpact;
   readonly findingAssessment: FindingAssessmentCounts;
   readonly maintenanceBurden: MaintenanceBurdenScores;
+  readonly distribution: PilotDistributionObservation;
+  readonly journey: PilotJourneyObservation;
+  readonly localWebLifecycle: LocalWebLifecycleObservation;
   readonly secondUseObserved: boolean;
   readonly preferredEntry: PreferredEntry;
+  readonly desktopNeed: DesktopNeed;
+  readonly desktopSolutionEvidence: DesktopSolutionEvidence;
   readonly uiNeed: UiNeed;
   readonly syntheticCaseDiscussion: SyntheticCaseDiscussion;
   readonly wouldUseAgain: WouldUseAgain;
@@ -136,7 +157,13 @@ export interface PrivatePilotSession {
   readonly protocolVersion: typeof PILOT_PROTOCOL_VERSION;
   readonly pilotKitVersion: typeof PILOT_KIT_VERSION;
   readonly releaseVersion: string;
+  readonly releaseChannel: "public_preview";
   readonly releaseBuildId: string;
+  readonly releasePlatform: ReleasePlatform;
+  readonly distributionSource: DistributionSource;
+  readonly releaseSourceCommit: string;
+  readonly releaseAssetSha256: string;
+  readonly operatingMode: OperatingMode;
   readonly startedAt: string;
   readonly checkpoints: readonly PilotCheckpoint[];
   readonly finish: PrivatePilotFinish | null;
@@ -161,7 +188,13 @@ const SESSION_KEYS = [
   "protocolVersion",
   "pilotKitVersion",
   "releaseVersion",
+  "releaseChannel",
   "releaseBuildId",
+  "releasePlatform",
+  "distributionSource",
+  "releaseSourceCommit",
+  "releaseAssetSha256",
+  "operatingMode",
   "startedAt",
   "checkpoints",
   "finish",
@@ -176,8 +209,13 @@ const FINISH_KEYS = [
   "repeatCorrectionImpact",
   "findingAssessment",
   "maintenanceBurden",
+  "distribution",
+  "journey",
+  "localWebLifecycle",
   "secondUseObserved",
   "preferredEntry",
+  "desktopNeed",
+  "desktopSolutionEvidence",
   "uiNeed",
   "syntheticCaseDiscussion",
   "wouldUseAgain",
@@ -283,13 +321,15 @@ function parseCounts(value: unknown): FindingAssessmentCounts {
 function parseBurden(value: unknown): MaintenanceBurdenScores {
   expectExactKeys(
     value,
-    ["brief", "decision", "issue"],
+    ["brief", "decision", "issue", "manifest", "recovery"],
     "pilot_session_invalid",
   );
   return {
     brief: integer(value.brief, 1, 5) as 1 | 2 | 3 | 4 | 5,
     decision: integer(value.decision, 1, 5) as 1 | 2 | 3 | 4 | 5,
     issue: integer(value.issue, 1, 5) as 1 | 2 | 3 | 4 | 5,
+    manifest: integer(value.manifest, 1, 5) as 1 | 2 | 3 | 4 | 5,
+    recovery: integer(value.recovery, 1, 5) as 1 | 2 | 3 | 4 | 5,
   };
 }
 
@@ -314,8 +354,25 @@ function parseFinish(value: unknown): PrivatePilotFinish {
     ),
     findingAssessment: parseCounts(value.findingAssessment),
     maintenanceBurden: parseBurden(value.maintenanceBurden),
+    distribution: parsePilotDistributionObservation(
+      value.distribution,
+      "pilot_session_invalid",
+    ),
+    journey: parsePilotJourneyObservation(
+      value.journey,
+      "pilot_session_invalid",
+    ),
+    localWebLifecycle: parseLocalWebLifecycleObservation(
+      value.localWebLifecycle,
+      "pilot_session_invalid",
+    ),
     secondUseObserved: value.secondUseObserved,
     preferredEntry: oneOf(value.preferredEntry, PREFERRED_ENTRIES),
+    desktopNeed: oneOf(value.desktopNeed, DESKTOP_NEEDS),
+    desktopSolutionEvidence: oneOf(
+      value.desktopSolutionEvidence,
+      DESKTOP_SOLUTION_EVIDENCE,
+    ),
     uiNeed: oneOf(value.uiNeed, UI_NEEDS),
     syntheticCaseDiscussion: oneOf(
       value.syntheticCaseDiscussion,
@@ -357,12 +414,28 @@ function parseUnsignedPrivate(value: unknown): UnsignedPrivatePilotSession {
   if (
     value.protocolVersion !== PILOT_PROTOCOL_VERSION ||
     value.pilotKitVersion !== PILOT_KIT_VERSION ||
-    typeof value.releaseVersion !== "string" ||
-    !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(value.releaseVersion) ||
+    value.releaseVersion !== "0.2.0" ||
+    value.releaseChannel !== "public_preview" ||
     typeof value.releaseBuildId !== "string" ||
     !/^[a-f0-9]{64}$/u.test(value.releaseBuildId) ||
+    typeof value.releaseSourceCommit !== "string" ||
+    !/^[a-f0-9]{40}$/u.test(value.releaseSourceCommit) ||
+    typeof value.releaseAssetSha256 !== "string" ||
+    !/^[a-f0-9]{64}$/u.test(value.releaseAssetSha256) ||
     !Array.isArray(value.checkpoints) ||
     value.checkpoints.length > 100
+  ) {
+    fail();
+  }
+  const releasePlatform = oneOf(value.releasePlatform, RELEASE_PLATFORMS);
+  const distributionSource = oneOf(
+    value.distributionSource,
+    DISTRIBUTION_SOURCES,
+  );
+  const operatingMode = oneOf(value.operatingMode, OPERATING_MODES);
+  if (
+    participantRole === "external_researcher" &&
+    distributionSource !== "github_release"
   ) {
     fail();
   }
@@ -400,8 +473,14 @@ function parseUnsignedPrivate(value: unknown): UnsignedPrivatePilotSession {
     consent,
     protocolVersion: PILOT_PROTOCOL_VERSION,
     pilotKitVersion: PILOT_KIT_VERSION,
-    releaseVersion: value.releaseVersion,
+    releaseVersion: "0.2.0",
+    releaseChannel: "public_preview",
     releaseBuildId: value.releaseBuildId,
+    releasePlatform,
+    distributionSource,
+    releaseSourceCommit: value.releaseSourceCommit,
+    releaseAssetSha256: value.releaseAssetSha256,
+    operatingMode,
     startedAt,
     checkpoints,
     finish,
@@ -453,7 +532,7 @@ export function projectShareablePilotExport(
       .toReversed()
       .find((checkpoint) => checkpoint.exitPoint !== null)?.exitPoint ?? null;
   return {
-    schemaVersion: "1.0.0",
+    schemaVersion: "2.0.0",
     participantCode: session.participantCode,
     sessionId: session.sessionId,
     evidenceId: session.evidenceId,
@@ -463,6 +542,14 @@ export function projectShareablePilotExport(
     materialType: session.materialType,
     sessionDate: session.startedAt.slice(0, 10),
     totalDurationMinutes: finish.totalDurationMinutes,
+    releasePlatform: session.releasePlatform,
+    distributionSource: session.distributionSource,
+    releaseSourceCommit: session.releaseSourceCommit,
+    releaseAssetSha256: session.releaseAssetSha256,
+    operatingMode: session.operatingMode,
+    distribution: finish.distribution,
+    journey: finish.journey,
+    localWebLifecycle: finish.localWebLifecycle,
     setup: finish.setup,
     episode: finish.episode,
     exitResult: finish.exitResult,
@@ -472,6 +559,8 @@ export function projectShareablePilotExport(
     maintenanceBurden: finish.maintenanceBurden,
     secondUseObserved: finish.secondUseObserved,
     preferredEntry: finish.preferredEntry,
+    desktopNeed: finish.desktopNeed,
+    desktopSolutionEvidence: finish.desktopSolutionEvidence,
     uiNeed: finish.uiNeed,
     syntheticCaseDiscussion: finish.syntheticCaseDiscussion,
     wouldUseAgain: finish.wouldUseAgain,
@@ -481,6 +570,7 @@ export function projectShareablePilotExport(
     protocolVersion: session.protocolVersion,
     pilotKitVersion: session.pilotKitVersion,
     releaseVersion: session.releaseVersion,
+    releaseChannel: session.releaseChannel,
     releaseBuildId: session.releaseBuildId,
   };
 }

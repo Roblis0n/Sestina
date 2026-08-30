@@ -12,6 +12,7 @@ const FORBIDDEN_CONTENT = Object.freeze([
   /AKIA[0-9A-Z]{16}/u,
   /[A-Za-z]:\\Users\\/u,
   /D:\\Codex work/u,
+  /\/Users\/[^/\s]+\//u,
 ]);
 const FORBIDDEN_SEGMENTS = new Set([".git", ".sestina", "src", "test", "tests", "fixtures"]);
 
@@ -60,19 +61,36 @@ function validateIdentity(identity) {
 }
 
 export function validateReleaseManifest(manifest) {
-  exactKeys(manifest, ["schemaVersion", "identity", "platform", "source", "compatibility", "contents", "security", "artifacts"], "release_manifest");
-  invariant(manifest.schemaVersion === "2.0.0", "release_manifest_version_invalid");
+  exactKeys(manifest, ["schemaVersion", "identity", "platform", "source", "distribution", "compatibility", "contents", "security", "artifacts"], "release_manifest");
+  invariant(manifest.schemaVersion === "3.0.0", "release_manifest_version_invalid");
   validateIdentity(manifest.identity);
 
   exactKeys(manifest.platform, ["os", "architecture", "nativeSecretBackend"], "release_platform");
   invariant(["win32", "darwin", "linux"].includes(manifest.platform.os), "release_platform_os_invalid");
-  invariant(["x64", "arm64"].includes(manifest.platform.architecture), "release_platform_architecture_invalid");
+  invariant(
+    (manifest.platform.os === "win32" && manifest.platform.architecture === "x64")
+      || (manifest.platform.os === "darwin" && manifest.platform.architecture === "arm64")
+      || (manifest.platform.os === "linux" && manifest.platform.architecture === "x64"),
+    "release_platform_architecture_invalid",
+  );
   const backend = manifest.platform.os === "win32" ? "windows-dpapi-current-user"
     : manifest.platform.os === "darwin" ? "macos-keychain-current-user" : "linux-secret-service-current-user";
   invariant(manifest.platform.nativeSecretBackend === backend, "release_native_secret_backend_invalid");
 
   exactKeys(manifest.source, ["gitCommit"], "release_source");
   invariant(/^[a-f0-9]{40}$/u.test(manifest.source.gitCommit), "release_source_commit_invalid");
+  const platformSlugs = {
+    "win32-x64": "windows-x64",
+    "darwin-arm64": "macos-arm64",
+    "linux-x64": "ubuntu-x64",
+  };
+  const platformSlug = platformSlugs[`${manifest.platform.os}-${manifest.platform.architecture}`];
+  exactKeys(manifest.distribution, ["license", "repository", "tag", "releaseUrl", "platformSlug", "primaryArtifact"], "release_distribution");
+  invariant(manifest.distribution.license === "Apache-2.0"
+    && manifest.distribution.repository === "https://github.com/Roblis0n/Sestina"
+    && manifest.distribution.tag === "v0.2.0"
+    && manifest.distribution.releaseUrl === "https://github.com/Roblis0n/Sestina/releases/tag/v0.2.0"
+    && manifest.distribution.platformSlug === platformSlug, "release_distribution_invalid");
   exactKeys(manifest.compatibility, ["nodeRange", "supportedSchemaMinimum", "supportedSchemaMaximum", "futureSchemaPolicy", "downgradeSupported"], "release_compatibility");
   invariant(manifest.compatibility.nodeRange === manifest.identity.nodeRange
     && manifest.compatibility.supportedSchemaMinimum === manifest.identity.supportedSchemaMinimum
@@ -81,7 +99,7 @@ export function validateReleaseManifest(manifest) {
     && manifest.compatibility.downgradeSupported === false, "release_compatibility_invalid");
 
   exactKeys(manifest.contents, ["releaseBundleRoot", "releaseBundlePaths", "executablePaths"], "release_contents");
-  const expectedRoot = `sestina-research-room-${manifest.identity.version}-${manifest.platform.os}-${manifest.platform.architecture}`;
+  const expectedRoot = `sestina-research-room-${manifest.identity.version}-${platformSlug}`;
   invariant(manifest.contents.releaseBundleRoot === expectedRoot, "release_bundle_root_invalid");
   sortedUniqueStrings(manifest.contents.releaseBundlePaths, "release_bundle_paths");
   sortedUniqueStrings(manifest.contents.executablePaths, "release_executable_paths");
@@ -115,6 +133,8 @@ export function validateReleaseManifest(manifest) {
     expectedArtifacts.delete(artifact.file);
   }
   invariant(expectedArtifacts.size === 0, "release_artifact_missing");
+  const expectedPrimaryArtifact = manifest.platform.os === "win32" ? `${expectedRoot}.zip` : `${expectedRoot}.tar.gz`;
+  invariant(manifest.distribution.primaryArtifact === expectedPrimaryArtifact, "release_primary_artifact_invalid");
 }
 
 function extension(path) {
@@ -153,9 +173,10 @@ export function verifyReleaseBundleEntries(entries, manifest) {
   const files = entryMap(entries);
   const root = manifest.contents.releaseBundleRoot;
   for (const path of [
-    `${root}/package.json`, `${root}/start.mjs`, `${root}/RELEASE-IDENTITY.json`, `${root}/README.md`,
+    `${root}/package.json`, `${root}/start.mjs`, `${root}/RELEASE-IDENTITY.json`, `${root}/LICENSE`, `${root}/README.md`,
     `${root}/docs/INSTALL-WINDOWS.md`, `${root}/docs/INSTALL-MACOS.md`, `${root}/docs/INSTALL-LINUX.md`,
-    `${root}/docs/RECOVERY-AND-UPGRADE.md`, `${root}/docs/SECURITY.md`,
+    `${root}/docs/RECOVERY-AND-UPGRADE.md`, `${root}/docs/SECURITY.md`, `${root}/docs/THIRD-PARTY-NOTICES.md`,
+    `${root}/docs/RELEASE-NOTES.md`, `${root}/docs/SUPPORT.md`,
     `${root}/app/main.js`, `${root}/app/server.js`, `${root}/app/mcp/main.js`, `${root}/app/mcp/runtime.js`, `${root}/app/client/index.html`,
   ]) assertRequiredPath(files, path);
   invariant([...files.keys()].some((path) => path.startsWith(`${root}/app/client/assets/`) && path.endsWith(".js")), "release_client_javascript_missing");
@@ -164,7 +185,7 @@ export function verifyReleaseBundleEntries(entries, manifest) {
   const packageJson = JSON.parse(files.get(`${root}/package.json`).data.toString("utf8"));
   exactKeys(packageJson, ["name", "version", "private", "description", "license", "type", "engines", "scripts"], "release_package_manifest");
   invariant(packageJson.name === manifest.identity.package && packageJson.version === manifest.identity.version
-    && packageJson.private === true && packageJson.license === "UNLICENSED" && packageJson.type === "module"
+    && packageJson.private === true && packageJson.license === "Apache-2.0" && packageJson.type === "module"
     && JSON.stringify(packageJson.engines) === JSON.stringify({ node: manifest.identity.nodeRange })
     && JSON.stringify(packageJson.scripts) === JSON.stringify({ start: "node start.mjs" }), "release_package_identity_invalid");
   const releaseIdentity = JSON.parse(files.get(`${root}/RELEASE-IDENTITY.json`).data.toString("utf8"));

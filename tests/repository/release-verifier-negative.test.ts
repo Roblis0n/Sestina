@@ -9,8 +9,9 @@ import {
 
 const identity = SESTINA_RELEASE_IDENTITY;
 const platform = { os: "win32", architecture: "x64", nativeSecretBackend: "windows-dpapi-current-user" } as const;
-const root = `sestina-research-room-${identity.version}-win32-x64`;
+const root = `sestina-research-room-${identity.version}-windows-x64`;
 const requiredPaths = [
+  `${root}/LICENSE`,
   `${root}/README.md`,
   `${root}/RELEASE-IDENTITY.json`,
   `${root}/app/client/assets/app.css`,
@@ -24,7 +25,10 @@ const requiredPaths = [
   `${root}/docs/INSTALL-MACOS.md`,
   `${root}/docs/INSTALL-WINDOWS.md`,
   `${root}/docs/RECOVERY-AND-UPGRADE.md`,
+  `${root}/docs/RELEASE-NOTES.md`,
   `${root}/docs/SECURITY.md`,
+  `${root}/docs/SUPPORT.md`,
+  `${root}/docs/THIRD-PARTY-NOTICES.md`,
   `${root}/node_modules/@primno/dpapi/package.json`,
   `${root}/node_modules/@primno/dpapi/prebuilds/win32-x64/@primno+dpapi.node`,
   `${root}/node_modules/node-gyp-build/node-gyp-build.js`,
@@ -36,8 +40,8 @@ const packageJson = {
   name: identity.package,
   version: identity.version,
   private: true,
-  description: "Sestina Research Room private release candidate",
-  license: "UNLICENSED",
+  description: "Sestina Research Room 0.2 public preview",
+  license: "Apache-2.0",
   type: "module",
   engines: { node: identity.nodeRange },
   scripts: { start: "node start.mjs" },
@@ -63,10 +67,18 @@ function entries(packageOverride = packageJson, paths = requiredPaths) {
 
 function manifest(paths = requiredPaths) {
   return {
-    schemaVersion: "2.0.0",
+    schemaVersion: "3.0.0",
     identity,
     platform,
     source: { gitCommit: "b".repeat(40) },
+    distribution: {
+      license: "Apache-2.0",
+      repository: "https://github.com/Roblis0n/Sestina",
+      tag: "v0.2.0",
+      releaseUrl: "https://github.com/Roblis0n/Sestina/releases/tag/v0.2.0",
+      platformSlug: "windows-x64",
+      primaryArtifact: `${root}.zip`,
+    },
     compatibility: {
       nodeRange: identity.nodeRange,
       supportedSchemaMinimum: identity.supportedSchemaMinimum,
@@ -91,7 +103,7 @@ function manifest(paths = requiredPaths) {
   };
 }
 
-describe("RI-53 release verifier fail-closed negative fixtures", () => {
+describe("RI-54 release verifier fail-closed negative fixtures", () => {
   it("rejects manifest-version and checksum tampering", () => {
     expect(() => { validateReleaseManifest({ ...manifest(), schemaVersion: "1.0.0" }); }).toThrow(/release_manifest_version_invalid/u);
     expect(() => parseChecksums(`${"0".repeat(63)}x  release-manifest.json\n`)).toThrow(/sha256sums_format_invalid/u);

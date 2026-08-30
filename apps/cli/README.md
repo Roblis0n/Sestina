@@ -83,5 +83,6 @@ output. Any action that changes user authority requires `--yes`; imported
 Capsule responses remain `model_proposed` candidates and cannot mutate
 authoritative research state.
 
-The private-preview release bundle includes platform installation guides and a
-sanitized end-to-end quickstart project.
+The 0.2.0 public-preview Research Room archive includes bilingual platform,
+security, support, and recovery guides. CLI remains a subordinate diagnostic
+and recovery interface; it is not separately published to npm.

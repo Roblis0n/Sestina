@@ -1,9 +1,9 @@
 {
   "name": "@sestina/research-room",
-  "version": "0.2.0-rc.1",
+  "version": "0.2.0",
   "private": true,
   "description": "Loopback-only local Research Room for Sestina",
-  "license": "UNLICENSED",
+  "license": "Apache-2.0",
   "type": "module",
   "bin": {
     "sestina-research-room": "./dist/main.js"

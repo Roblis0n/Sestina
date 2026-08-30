@@ -42,7 +42,7 @@ const ENTRY_FILES = [
 
 const PRODUCT_DEFINITION =
   "Sestina 最终应当是一个本地交互式科研 App。其内部本体是 Research Deliberation Kernel，主要交互面是 Research Room；MCP、Skill、Hooks、CLI 只是外部宿主接入、自动化和恢复接口。Sestina 作为本地科研过程调试器，让 AI 始终围绕当前研究问题工作，记住已经作出的研究决定，识别目标替换、重复审计、论证跳跃和伪深度，并要求每一轮修改说明真正增加了什么。";
-const CURRENT_STATUS = "completed_and_verified";
+const CURRENT_STATUS = "active_implementation";
 
 const GUIDANCE_FIXTURES: Record<string, string> = {
   "docs/product/CURRENT-PRODUCT-DEFINITION.md": [
@@ -70,8 +70,12 @@ const GUIDANCE_FIXTURES: Record<string, string> = {
     "RI-53（已完成）",
     "UI-04 Production Interface Craft and Whole-Product Coherence",
     "UI-04（已完成）",
-    "none_active_RI54_not_started",
-    "await_explicit_user_authorization",
+    "RI-54 0.2 Public Preview",
+    "RI-54 / active_implementation",
+    "RI54_public_preview_release",
+    "complete_RI54_ci_assets_private_tag_draft_publication",
+    "Apache-2.0",
+    "RI-55 / not_started_gate_closed",
     "completed_and_verified_implementation_real_provider_evidence_blocked",
     "Market Gate 0",
   ].join("\n"),
@@ -79,9 +83,23 @@ const GUIDANCE_FIXTURES: Record<string, string> = {
     "required_operating_guide",
     "只有相邻一层能够授权下一层",
     "TASK-START-GATE.md",
-    "UI-04 / completed_and_verified",
-    "none_active_RI54_not_started",
-    "await_explicit_user_authorization",
+    "RI-54 / active_implementation",
+    "RI54_public_preview_release",
+    "complete_RI54_ci_assets_private_tag_draft_publication",
+    "0/5",
+    "0/1",
+  ].join("\n"),
+  "docs/execution/RI-54-0.2-PUBLIC-PREVIEW-TASK-START-RECORD.md": [
+    "task: RI-54",
+    "status: active",
+    "current_work_board_task: RI-54",
+    "implementation_base: 7384d0775af22259ea0ce0300ae6e1fad19d4167",
+    "target_version: 0.2.0",
+    "target_release_channel: public_preview",
+    "target_tag: v0.2.0",
+    "license_decision: Apache-2.0",
+    "repository_visibility_before_publication: PRIVATE",
+    "final: ready_to_start",
   ].join("\n"),
   "docs/execution/RI-52-CLOSED-EXTERNAL-APP-PILOT-TASK-START-RECORD.md": [
     "task: RI-52",
@@ -416,10 +434,10 @@ function activeBlock(currentTask: string): string {
     `<!-- sestina-current-status: ${CURRENT_STATUS} -->`,
     "<!-- sestina-last-completed-task: UI-04 -->",
     "<!-- sestina-last-completed-status: completed_and_verified -->",
-    "<!-- sestina-implementation-base: f392786bac535c0d21b7485cb065c9bb3ed7586a -->",
-    "<!-- sestina-next-code-goal: none_active_RI54_not_started -->",
-    "<!-- sestina-next-execution-goal: await_explicit_user_authorization -->",
-    "<!-- sestina-next-code-sequence: none_active_RI54_not_started -->",
+    "<!-- sestina-implementation-base: 7384d0775af22259ea0ce0300ae6e1fad19d4167 -->",
+    "<!-- sestina-next-code-goal: RI54_public_preview_release -->",
+    "<!-- sestina-next-execution-goal: complete_RI54_ci_assets_private_tag_draft_publication -->",
+    "<!-- sestina-next-code-sequence: implementation_commit_then_private_ci_then_publication -->",
     "<!-- sestina-production-visual-and-functional-acceptance: passed -->",
     "<!-- sestina-ri51-status: completed_and_verified -->",
     "<!-- sestina-ri52-status: completed_and_verified -->",
@@ -432,8 +450,15 @@ function activeBlock(currentTask: string): string {
     "<!-- sestina-brand01-status: completed_and_verified -->",
     "<!-- sestina-ui04-status: completed_and_verified -->",
     "<!-- sestina-ui04-production-visual-and-functional-acceptance: passed -->",
-    "<!-- sestina-ri54-status: not_started -->",
-    "<!-- sestina-publication-actions: not_started -->",
+    "<!-- sestina-ri54-status: active -->",
+    "<!-- sestina-ri54-release-version: 0.2.0 -->",
+    "<!-- sestina-ri54-release-channel: public_preview -->",
+    "<!-- sestina-ri54-license: Apache-2.0 -->",
+    "<!-- sestina-ri54-production-visual-and-functional-acceptance: pending -->",
+    "<!-- sestina-publication-actions: authorized_pending_ordered_execution -->",
+    "<!-- sestina-ri55-status: not_started_gate_closed -->",
+    "<!-- sestina-ri55-external-participants: 0 -->",
+    "<!-- sestina-ri55-valid-session-pairs: 0 -->",
     "<!-- sestina-official-logo-asset: apps/research-room/client/public/sestina-logo.png -->",
     "<!-- sestina-official-logo-sha256: 593661E38F3EF0AE664A4CF6E2EEEDFBA3E43D51B31A19C20E93B62E82570137 -->",
     "<!-- sestina-real-sestina-provider-smoke: blocked_missing_user_config -->",
@@ -518,7 +543,7 @@ function writeValidEntries(
   writeGuidanceFiles(root);
   for (const entry of ENTRY_FILES) {
     const isBoard = entry === "docs/execution/WORK-BOARD.md";
-    const task = "UI-04";
+    const task = "RI-54";
     const body = isBoard
       ? workBoardBody(task)
       : "\n\nLegacy prose stays below.\n";
@@ -554,13 +579,13 @@ describe("verify-authority positive fixtures", () => {
     expect(r.exitCode).toBe(0);
   });
 
-  it("P3. the checked-in authority closes UI-04 and leaves RI-54 unstarted", () => {
+  it("P3. the checked-in authority activates RI-54 and keeps RI-55 evidence-gated", () => {
     const expected = [
-      "<!-- sestina-current-task: UI-04 -->",
-      "<!-- sestina-current-status: completed_and_verified -->",
+      "<!-- sestina-current-task: RI-54 -->",
+      "<!-- sestina-current-status: active_implementation -->",
       "<!-- sestina-last-completed-task: UI-04 -->",
-      "<!-- sestina-next-code-goal: none_active_RI54_not_started -->",
-      "<!-- sestina-next-execution-goal: await_explicit_user_authorization -->",
+      "<!-- sestina-next-code-goal: RI54_public_preview_release -->",
+      "<!-- sestina-next-execution-goal: complete_RI54_ci_assets_private_tag_draft_publication -->",
       "<!-- sestina-production-visual-and-functional-acceptance: passed -->",
       "<!-- sestina-ri51-status: completed_and_verified -->",
       "<!-- sestina-ri52-status: completed_and_verified -->",
@@ -575,8 +600,15 @@ describe("verify-authority positive fixtures", () => {
       "<!-- sestina-brand01-status: completed_and_verified -->",
       "<!-- sestina-ui04-status: completed_and_verified -->",
       "<!-- sestina-ui04-production-visual-and-functional-acceptance: passed -->",
-      "<!-- sestina-ri54-status: not_started -->",
-      "<!-- sestina-publication-actions: not_started -->",
+      "<!-- sestina-ri54-status: active -->",
+      "<!-- sestina-ri54-release-version: 0.2.0 -->",
+      "<!-- sestina-ri54-release-channel: public_preview -->",
+      "<!-- sestina-ri54-license: Apache-2.0 -->",
+      "<!-- sestina-ri54-production-visual-and-functional-acceptance: pending -->",
+      "<!-- sestina-publication-actions: authorized_pending_ordered_execution -->",
+      "<!-- sestina-ri55-status: not_started_gate_closed -->",
+      "<!-- sestina-ri55-external-participants: 0 -->",
+      "<!-- sestina-ri55-valid-session-pairs: 0 -->",
       "<!-- sestina-official-logo-asset: apps/research-room/client/public/sestina-logo.png -->",
       "<!-- sestina-official-logo-sha256: 593661E38F3EF0AE664A4CF6E2EEEDFBA3E43D51B31A19C20E93B62E82570137 -->",
       "<!-- sestina-real-sestina-provider-smoke: blocked_missing_user_config -->",
@@ -594,19 +626,16 @@ describe("verify-authority positive fixtures", () => {
     const taskStart = readFileSync(
       resolve(
         SCRIPT_DIR,
-        "docs/execution/UI-04-PRODUCTION-INTERFACE-CRAFT-AND-WHOLE-PRODUCT-COHERENCE-TASK-START-RECORD.md",
+        "docs/execution/RI-54-0.2-PUBLIC-PREVIEW-TASK-START-RECORD.md",
       ),
       "utf8",
     );
-    expect(taskStart).toContain("task: UI-04");
-    expect(taskStart).toContain("status: ready_to_start");
-    expect(taskStart).toContain(
-      "gate_conclusion: ready_to_start_user_authorized_development",
-    );
-    expect(taskStart).toContain("activity_status: active_production_interface_craft_and_whole_product_coherence");
-    expect(taskStart).toContain("brand01_status: completed_and_verified");
-    expect(taskStart).toContain("ui04_status: active");
-    expect(taskStart).toContain("ri54_status: not_started");
+    expect(taskStart).toContain("task: RI-54");
+    expect(taskStart).toContain("status: active");
+    expect(taskStart).toContain("target_version: 0.2.0");
+    expect(taskStart).toContain("target_release_channel: public_preview");
+    expect(taskStart).toContain("license_decision: Apache-2.0");
+    expect(taskStart).toContain("final: ready_to_start");
 
     const taskResult = readFileSync(
       resolve(

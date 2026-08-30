@@ -23,16 +23,28 @@ export interface PilotKitManifest {
   readonly protocolVersion: typeof PILOT_PROTOCOL_VERSION;
   readonly consentVersion: typeof PILOT_CONSENT_VERSION;
   readonly sestinaRelease: {
-    readonly version: string;
+    readonly version: "0.2.0";
+    readonly channel: "public_preview";
     readonly buildId: string;
-    readonly artifactFile: string;
-    readonly artifactSha256: string;
+    readonly sourceCommit: string;
+    readonly tag: "v0.2.0";
+    readonly repository: "https://github.com/Roblis0n/Sestina";
+    readonly releaseUrl: "https://github.com/Roblis0n/Sestina/releases/tag/v0.2.0";
+    readonly supportedAssets: readonly {
+      readonly platform: "windows_x64" | "macos_arm64" | "ubuntu_x64";
+      readonly file: string;
+    }[];
   };
   readonly files: readonly PilotKitManifestFile[];
   readonly security: {
     readonly localOnly: true;
     readonly noTelemetry: true;
     readonly participantControlledExport: true;
+    readonly noAutomaticProjectScan: true;
+    readonly noAutomaticUpload: true;
+    readonly noFreeTextExport: true;
+    readonly noDeviceIdentifiers: true;
+    readonly noRawErrors: true;
     readonly containsResearchContent: false;
     readonly containsCredentials: false;
   };
@@ -40,6 +52,7 @@ export interface PilotKitManifest {
 
 const STATIC_PAYLOAD_PATHS = [
   "README.md",
+  "LICENSE",
   "bin/sestina-pilot.mjs",
   "docs/CONSENT.md",
   "docs/EXIT-INTERVIEW.md",
@@ -49,6 +62,7 @@ const STATIC_PAYLOAD_PATHS = [
   "install/install-linux.sh",
   "install/install-macos.sh",
   "install/install-windows.ps1",
+  "release/RELEASE-BINDING.json",
   "schema/shareable-pilot-export.schema.json",
   "walkthrough/SYNTHETIC-WALKTHROUGH.md",
 ] as const;
@@ -113,24 +127,54 @@ export function parsePilotKitManifest(value: unknown): PilotKitManifest {
   }
   expectExactKeys(
     value.sestinaRelease,
-    ["version", "buildId", "artifactFile", "artifactSha256"],
+    [
+      "version",
+      "channel",
+      "buildId",
+      "sourceCommit",
+      "tag",
+      "repository",
+      "releaseUrl",
+      "supportedAssets",
+    ],
     "pilot_kit_manifest_invalid",
   );
   const release = value.sestinaRelease;
   if (
-    typeof release.version !== "string" ||
-    !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(release.version) ||
+    release.version !== "0.2.0" ||
+    release.channel !== "public_preview" ||
     typeof release.buildId !== "string" ||
     !/^[a-f0-9]{64}$/u.test(release.buildId) ||
-    typeof release.artifactFile !== "string" ||
-    release.artifactFile !== `sestina-cli-${release.version}.tgz` ||
-    typeof release.artifactSha256 !== "string" ||
-    !/^[a-f0-9]{64}$/u.test(release.artifactSha256)
+    typeof release.sourceCommit !== "string" ||
+    !/^[a-f0-9]{40}$/u.test(release.sourceCommit) ||
+    release.tag !== "v0.2.0" ||
+    release.repository !== "https://github.com/Roblis0n/Sestina" ||
+    release.releaseUrl !==
+      "https://github.com/Roblis0n/Sestina/releases/tag/v0.2.0" ||
+    !Array.isArray(release.supportedAssets)
   ) {
     fail("pilot_kit_manifest_invalid");
   }
-  const artifactFile = release.artifactFile;
-  const artifactSha256 = release.artifactSha256;
+  const expectedAssets = [
+    {
+      platform: "windows_x64",
+      file: "sestina-research-room-0.2.0-windows-x64.zip",
+    },
+    {
+      platform: "macos_arm64",
+      file: "sestina-research-room-0.2.0-macos-arm64.tar.gz",
+    },
+    {
+      platform: "ubuntu_x64",
+      file: "sestina-research-room-0.2.0-ubuntu-x64.tar.gz",
+    },
+  ] as const;
+  for (const asset of release.supportedAssets) {
+    expectExactKeys(asset, ["platform", "file"], "pilot_kit_manifest_invalid");
+  }
+  if (JSON.stringify(release.supportedAssets) !== JSON.stringify(expectedAssets)) {
+    fail("pilot_kit_manifest_invalid");
+  }
   const files = value.files.map((item): PilotKitManifestFile => {
     expectExactKeys(
       item,
@@ -156,10 +200,9 @@ export function parsePilotKitManifest(value: unknown): PilotKitManifest {
   ) {
     fail("pilot_kit_manifest_invalid");
   }
-  const expected = [
-    ...STATIC_PAYLOAD_PATHS,
-    `release/${artifactFile}`,
-  ].sort((left, right) => left.localeCompare(right, "en"));
+  const expected = [...STATIC_PAYLOAD_PATHS].sort((left, right) =>
+    left.localeCompare(right, "en"),
+  );
   if (
     paths.length !== expected.length ||
     paths.some((path, index) => path !== expected[index])
@@ -172,6 +215,11 @@ export function parsePilotKitManifest(value: unknown): PilotKitManifest {
       "localOnly",
       "noTelemetry",
       "participantControlledExport",
+      "noAutomaticProjectScan",
+      "noAutomaticUpload",
+      "noFreeTextExport",
+      "noDeviceIdentifiers",
+      "noRawErrors",
       "containsResearchContent",
       "containsCredentials",
     ],
@@ -181,15 +229,14 @@ export function parsePilotKitManifest(value: unknown): PilotKitManifest {
     value.security.localOnly !== true ||
     value.security.noTelemetry !== true ||
     value.security.participantControlledExport !== true ||
+    value.security.noAutomaticProjectScan !== true ||
+    value.security.noAutomaticUpload !== true ||
+    value.security.noFreeTextExport !== true ||
+    value.security.noDeviceIdentifiers !== true ||
+    value.security.noRawErrors !== true ||
     value.security.containsResearchContent !== false ||
     value.security.containsCredentials !== false
   ) {
-    fail("pilot_kit_manifest_invalid");
-  }
-  const artifact = files.find(
-    (file) => file.path === `release/${artifactFile}`,
-  );
-  if (artifact?.sha256 !== artifactSha256) {
     fail("pilot_kit_manifest_invalid");
   }
   return {
@@ -198,16 +245,26 @@ export function parsePilotKitManifest(value: unknown): PilotKitManifest {
     protocolVersion: PILOT_PROTOCOL_VERSION,
     consentVersion: PILOT_CONSENT_VERSION,
     sestinaRelease: {
-      version: release.version,
+      version: "0.2.0",
+      channel: "public_preview",
       buildId: release.buildId,
-      artifactFile,
-      artifactSha256,
+      sourceCommit: release.sourceCommit,
+      tag: "v0.2.0",
+      repository: "https://github.com/Roblis0n/Sestina",
+      releaseUrl:
+        "https://github.com/Roblis0n/Sestina/releases/tag/v0.2.0",
+      supportedAssets: expectedAssets,
     },
     files,
     security: {
       localOnly: true,
       noTelemetry: true,
       participantControlledExport: true,
+      noAutomaticProjectScan: true,
+      noAutomaticUpload: true,
+      noFreeTextExport: true,
+      noDeviceIdentifiers: true,
+      noRawErrors: true,
       containsResearchContent: false,
       containsCredentials: false,
     },

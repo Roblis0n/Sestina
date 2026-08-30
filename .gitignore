@@ -33,6 +33,8 @@ secrets/
 
 # Generated release artifacts
 /release/
+/public-release/
+/.release-inputs/
 artifacts/acceptance/*/
 *.zip
 *.tar.gz

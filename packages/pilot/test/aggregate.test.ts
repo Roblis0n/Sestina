@@ -32,14 +32,14 @@ describe("deterministic Pilot aggregation", () => {
     const exports = [
       external("EXT-0001", 1, "1"),
       external("EXT-0001", 2, "2", {
-        hostEntry: "mcp",
-        preferredEntry: "mcp",
+        hostEntry: "research_room_with_mcp",
+        preferredEntry: "research_room_with_mcp",
       }),
       external("EXT-0002", 1, "3", {
         setup: { outcome: "failure", durationMinutes: 15 },
         episode: { outcome: "not_completed", durationMinutes: null },
         exitResult: "exited",
-        exitPoint: "episode",
+        exitPoint: "review",
         repeatCorrectionImpact: "increased",
         wouldUseAgain: "no",
         failureObserved: true,
@@ -70,7 +70,7 @@ describe("deterministic Pilot aggregation", () => {
     expect(report.failures.exitSessionCount).toBe(1);
     expect(report.failures.negativeFeedbackSessionCount).toBe(1);
     expect(report.exitPoints).toMatchObject({
-      counts: { episode: 1 },
+      counts: { review: 1 },
       denominator: 3,
       missing: 2,
     });
@@ -135,7 +135,9 @@ describe("deterministic Pilot aggregation", () => {
   it("reports the full five-participant synthetic matrix with explicit denominators", () => {
     const values = [
       external("EXT-0001", 1, "1"),
-      external("EXT-0001", 2, "2", { preferredEntry: "mcp" }),
+      external("EXT-0001", 2, "2", {
+        preferredEntry: "research_room_with_mcp",
+      }),
       external("EXT-0002", 1, "3", { uiNeed: "yes" }),
       external("EXT-0003", 1, "4", { repeatCorrectionImpact: "unchanged" }),
       external("EXT-0004", 1, "5", { repeatCorrectionImpact: "uncertain" }),
@@ -143,7 +145,7 @@ describe("deterministic Pilot aggregation", () => {
         setup: { outcome: "failure", durationMinutes: 12 },
         episode: { outcome: "not_completed", durationMinutes: null },
         exitResult: "abandoned",
-        exitPoint: "installation",
+        exitPoint: "download",
         repeatCorrectionImpact: "increased",
         wouldUseAgain: "no",
         failureObserved: true,

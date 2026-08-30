@@ -87,8 +87,12 @@ const GUIDANCE_FILES = [
       "RI-53（已完成）",
       "UI-04 Production Interface Craft and Whole-Product Coherence",
       "UI-04（已完成）",
-      "none_active_RI54_not_started",
-      "await_explicit_user_authorization",
+      "RI-54 0.2 Public Preview",
+      "RI-54 / active_implementation",
+      "RI54_public_preview_release",
+      "complete_RI54_ci_assets_private_tag_draft_publication",
+      "Apache-2.0",
+      "RI-55 / not_started_gate_closed",
       "completed_and_verified_implementation_real_provider_evidence_blocked",
       "Market Gate 0",
     ],
@@ -99,9 +103,11 @@ const GUIDANCE_FILES = [
       "required_operating_guide",
       "只有相邻一层能够授权下一层",
       "TASK-START-GATE.md",
-      "UI-04 / completed_and_verified",
-      "none_active_RI54_not_started",
-      "await_explicit_user_authorization",
+      "RI-54 / active_implementation",
+      "RI54_public_preview_release",
+      "complete_RI54_ci_assets_private_tag_draft_publication",
+      "0/5",
+      "0/1",
     ],
   },
   {
@@ -110,6 +116,21 @@ const GUIDANCE_FILES = [
       "required_before_every_task",
       "Gate A：方向成立",
       "final: ready_to_start | do_not_start",
+    ],
+  },
+  {
+    path: "docs/execution/RI-54-0.2-PUBLIC-PREVIEW-TASK-START-RECORD.md",
+    required: [
+      "task: RI-54",
+      "status: active",
+      "current_work_board_task: RI-54",
+      "implementation_base: 7384d0775af22259ea0ce0300ae6e1fad19d4167",
+      "target_version: 0.2.0",
+      "target_release_channel: public_preview",
+      "target_tag: v0.2.0",
+      "license_decision: Apache-2.0",
+      "repository_visibility_before_publication: PRIVATE",
+      "final: ready_to_start",
     ],
   },
   {
@@ -557,8 +578,8 @@ const MARKER_CONTRACT = {
     why: "the current task id must be well formed and consistent across entries",
   },
   "sestina-current-status": {
-    exact: "completed_and_verified",
-    why: "UI-04 passed implementation, production interaction, and whole-interface acceptance",
+    exact: "active_implementation",
+    why: "RI-54 is explicitly authorized and its implementation/publication sequence is active",
   },
   "sestina-last-completed-task": {
     exact: "UI-04",
@@ -569,20 +590,20 @@ const MARKER_CONTRACT = {
     why: "the latest governed task passed its implementation and required host evidence gates",
   },
   "sestina-implementation-base": {
-    exact: "f392786bac535c0d21b7485cb065c9bb3ed7586a",
-    why: "UI-04 starts from the private BRAND-01 authority closeout commit without rewriting later work",
+    exact: "7384d0775af22259ea0ce0300ae6e1fad19d4167",
+    why: "RI-54 starts from the explicitly verified canonical implementation base",
   },
   "sestina-next-code-goal": {
-    exact: "none_active_RI54_not_started",
-    why: "UI-04 is complete and RI-54 remains excluded until new explicit authorization",
+    exact: "RI54_public_preview_release",
+    why: "RI-54 is the sole authorized code and release goal",
   },
   "sestina-next-execution-goal": {
-    exact: "await_explicit_user_authorization",
-    why: "the governed UI-04 task is closed and no later task is authorized",
+    exact: "complete_RI54_ci_assets_private_tag_draft_publication",
+    why: "RI-54 must finish its ordered private implementation, CI, assets, tag, draft, and publication gates",
   },
   "sestina-next-code-sequence": {
-    exact: "none_active_RI54_not_started",
-    why: "UI-04 is complete and publication remains out of scope",
+    exact: "implementation_commit_then_private_ci_then_publication",
+    why: "the authorized publication order is fixed and must not be reordered",
   },
   "sestina-production-visual-and-functional-acceptance": {
     exact: "passed",
@@ -633,12 +654,40 @@ const MARKER_CONTRACT = {
     why: "UI-04 passed its new production-route whole-interface acceptance matrix",
   },
   "sestina-ri54-status": {
-    exact: "not_started",
-    why: "RI-53 authorization cannot start publication work",
+    exact: "active",
+    why: "the user explicitly authorized RI-54 on 2026-08-30",
+  },
+  "sestina-ri54-release-version": {
+    exact: "0.2.0",
+    why: "RI-54 has one exact public-preview version",
+  },
+  "sestina-ri54-release-channel": {
+    exact: "public_preview",
+    why: "RI-54 is a public preview rather than a private candidate or stable 1.0",
+  },
+  "sestina-ri54-license": {
+    exact: "Apache-2.0",
+    why: "the user explicitly selected Apache License 2.0",
+  },
+  "sestina-ri54-production-visual-and-functional-acceptance": {
+    exact: "pending",
+    why: "the final actual 0.2.0 artifact still requires rendered production acceptance",
   },
   "sestina-publication-actions": {
-    exact: "not_started",
-    why: "UI-04 does not authorize a tag, Release, public repository, npm publication, installer, or Desktop",
+    exact: "authorized_pending_ordered_execution",
+    why: "only the RI-54 ordered tag, Release, and repository-publication sequence is authorized",
+  },
+  "sestina-ri55-status": {
+    exact: "not_started_gate_closed",
+    why: "RI-55 cannot start without the real public-preview evidence threshold",
+  },
+  "sestina-ri55-external-participants": {
+    exact: "0",
+    why: "no real independent external public-preview participant evidence exists yet",
+  },
+  "sestina-ri55-valid-session-pairs": {
+    exact: "0",
+    why: "no real paired session 1/session 2 evidence exists yet",
   },
   "sestina-official-logo-asset": {
     exact: "apps/research-room/client/public/sestina-logo.png",
@@ -887,9 +936,9 @@ for (const entry of ENTRY_FILES) {
 const tasks = [...currentTasks.entries()];
 if (tasks.length > 0) {
   const first = tasks[0][1];
-  if (first !== "UI-04") {
+  if (first !== "RI-54") {
     err(
-      `[AUTH-R003] ${tasks[0][0]}: current task is '${first}' but the latest governed task is 'UI-04'`,
+      `[AUTH-R003] ${tasks[0][0]}: current task is '${first}' but the authorized active task is 'RI-54'`,
     );
   }
   for (const [entry, task] of tasks) {

@@ -1,0 +1,81 @@
+name: Bug report / 问题报告
+description: Report a reproducible Sestina 0.2.0 public-preview problem with synthetic, privacy-safe facts.
+title: "[Bug]: "
+labels: ["bug", "public-preview"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you. Use synthetic, minimal facts only.
+        **Do not include research content, any secret, a project path or personal path, raw logs, a real `.sestina` database, Provider output, token, API key, device identifier, or private screenshot.**
+        请只填写合成、最小化事实。**禁止提交研究内容、任何密钥、项目路径或个人路径、原始日志、真实 `.sestina` 数据库、Provider 输出、token、API key、设备标识或隐私截图。**
+        Security vulnerabilities must use a private GitHub Security Advisory, not this public form.
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Supported platform / 支持平台
+      options:
+        - Windows x64
+        - macOS arm64
+        - Ubuntu x64
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node.js version / Node.js 版本
+      description: Enter the exact Node.js 24.x version shown by `node --version`.
+    validations:
+      required: true
+  - type: dropdown
+    id: checksum
+    attributes:
+      label: Artifact SHA-256 verified / 已校验制品 SHA-256
+      options:
+        - "Yes / 是"
+        - "No / 否"
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area / 环节
+      options:
+        - Download or checksum / 下载或校验
+        - Extraction or first launch / 解压或首启
+        - Project open or initialization / 项目打开或初始化
+        - Research Room workflow / Research Room 流程
+        - Relaunch or recovery / 重启或恢复
+        - Local web lifecycle / 本地网页生命周期
+        - Other / 其他
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Synthetic reproduction / 合成复现步骤
+      description: Use only a new empty test directory and invented research text. Remove all paths, identifiers, content, secrets, and raw errors.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior / 预期行为
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior / 实际行为
+      description: Paraphrase the smallest visible symptom; do not paste raw logs or raw errors.
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy confirmation / 隐私确认
+      options:
+        - label: I removed research content, secrets, project paths, personal data, device identifiers, raw logs, and private screenshots. / 我已移除研究内容、密钥、项目路径、个人信息、设备标识、原始日志与隐私截图。
+          required: true
+        - label: This is not a security vulnerability; if it is, I will use a private Security Advisory. / 这不是安全漏洞；如是，我会改用私密 Security Advisory。
+          required: true

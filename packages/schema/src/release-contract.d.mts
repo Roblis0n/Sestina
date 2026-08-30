@@ -6,13 +6,13 @@ export interface SestinaReleaseContract {
   readonly cliPackage: "@sestina/cli";
   readonly primaryInterface: "research-room";
   readonly businessKernel: "research-deliberation-kernel";
-  readonly releaseChannel: "private_release_candidate";
-  readonly version: "0.2.0-rc.1";
+  readonly releaseChannel: "public_preview";
+  readonly version: "0.2.0";
   readonly nodeRange: ">=24 <25";
-  readonly runtimeVersion: "0.2.0-rc.1";
+  readonly runtimeVersion: "0.2.0";
   readonly reportSchemaVersion: "1.0.0";
   readonly capsuleResponseSchemaVersion: "1.0.0";
-  readonly mcpServerVersion: "0.2.0-rc.1";
+  readonly mcpServerVersion: "0.2.0";
   readonly mcpResearchContextSchemaVersion: "1.1";
   readonly checkerBuildContract: "deterministic-review-v1";
   readonly supportedSchemaMinimum: 16;

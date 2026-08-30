@@ -329,7 +329,7 @@ describe("CI workflow", () => {
     expect(content).not.toMatch(/pnpm test:integration/);
   });
 
-  it("CI keeps exactly one shared and one platform RI-53 quality entry after their installs", () => {
+  it("CI keeps exactly one shared and one platform RI-54 quality entry after their installs", () => {
     const content = readFileSync(ciPath, "utf-8");
     const runSteps = content.match(/^\s*- run:.*$/gm) ?? [];
     const installs = runSteps.filter((step) => step.includes("pnpm install"));
@@ -337,9 +337,12 @@ describe("CI workflow", () => {
     expect(installs).toHaveLength(2);
     expect(quality).toHaveLength(2);
     expect(quality).toEqual(expect.arrayContaining([
-      expect.stringMatching(/pnpm verify:ri53:shared\b/),
-      expect.stringMatching(/pnpm verify:ri53\b(?!:)/),
+      expect.stringMatching(/pnpm verify:ri54:shared\b/),
+      expect.stringMatching(/pnpm verify:ri54\b(?!:)/),
     ]));
+    expect(content).toContain("windows-2025");
+    expect(content).toContain("macos-15");
+    expect(content).toContain("ubuntu-24.04");
   });
 
   it("CI uses Node 24 across all platforms", () => {

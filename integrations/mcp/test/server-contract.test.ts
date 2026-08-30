@@ -99,7 +99,7 @@ describe.sequential("@sestina/mcp tool and resource contract", () => {
     expect(resources.resources.map((resource) => resource.uri)).toEqual([CURRENT_BRIEF_URI]);
     expect(resources.resources[0]?.mimeType).toBe("application/json");
     expect(SERVER_NAME).toBe("sestina-mcp");
-    expect(SERVER_VERSION).toBe("0.2.0-rc.1");
+    expect(SERVER_VERSION).toBe("0.2.0");
     expect(`${SERVER_NAME} ${SERVER_VERSION}`).not.toMatch(/spike|ri36/i);
   });
 

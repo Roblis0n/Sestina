@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import migrationManifest from "./migration-manifest.json" with { type: "json" };
 
-const PRODUCT_VERSION = "0.2.0-rc.1";
+const PRODUCT_VERSION = "0.2.0";
 
 export const SESTINA_RELEASE_CONTRACT = Object.freeze({
   schemaVersion: "2.0.0",
@@ -11,7 +11,7 @@ export const SESTINA_RELEASE_CONTRACT = Object.freeze({
   cliPackage: "@sestina/cli",
   primaryInterface: "research-room",
   businessKernel: "research-deliberation-kernel",
-  releaseChannel: "private_release_candidate",
+  releaseChannel: "public_preview",
   version: PRODUCT_VERSION,
   nodeRange: ">=24 <25",
   runtimeVersion: PRODUCT_VERSION,

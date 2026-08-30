@@ -1,4 +1,4 @@
-name: Sestina Research Room private release-candidate verification
+name: Sestina RI-54 Public Preview Artifact Matrix
 
 on:
   workflow_dispatch:
@@ -8,10 +8,12 @@ permissions:
 
 jobs:
   shared-deterministic-gates:
-    name: Shared deterministic gates
-    runs-on: ubuntu-latest
+    name: Shared public-preview gates
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@v4
         with:
           version: 11.16.0
@@ -21,16 +23,28 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm verify:ri53:shared
+      - run: pnpm verify:ri54:shared
 
-  platform-release-resilience:
-    name: Research Room lifecycle · ${{ matrix.os }}
+  platform-public-preview:
+    name: Public preview · ${{ matrix.platform }}
     needs: shared-deterministic-gates
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
+        include:
+          - platform: windows-x64
+            runner: windows-2025
+            expected-os: win32
+            expected-arch: x64
+          - platform: macos-arm64
+            runner: macos-15
+            expected-os: darwin
+            expected-arch: arm64
+          - platform: ubuntu-x64
+            runner: ubuntu-24.04
+            expected-os: linux
+            expected-arch: x64
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -42,10 +56,10 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm verify:ri53
+      - run: pnpm verify:ri54 -- ${{ matrix.expected-os }} ${{ matrix.expected-arch }}
       - uses: actions/upload-artifact@v4
         with:
-          name: sestina-research-room-${{ matrix.os }}-${{ github.sha }}
+          name: sestina-ri54-${{ matrix.platform }}-${{ github.sha }}
           path: release/*
           if-no-files-found: error
           retention-days: 14

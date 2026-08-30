@@ -217,7 +217,7 @@ describe.sequential("@sestina/mcp real stdio process", () => {
       expect(firstJsonLine(processCapture.stdout())).toMatchObject({
         jsonrpc: "2.0",
         id: 1,
-        result: { serverInfo: { name: "sestina-mcp", version: "0.2.0-rc.1" } },
+        result: { serverInfo: { name: "sestina-mcp", version: "0.2.0" } },
       });
       processCapture.child.stdin?.end();
       expect(await deadline(processCapture.exit)).toBe(0);
@@ -416,7 +416,7 @@ describe.sequential("@sestina/mcp real stdio process", () => {
         const health = await client.callTool({ name: "health", arguments: {} });
         const context = await client.callTool({ name: "get_research_context", arguments: {} });
         const resource = await client.readResource({ uri: "sestina://research/current-brief" });
-        expect(health.structuredContent).toMatchObject({ ok: true, server: { name: "sestina-mcp", version: "0.2.0-rc.1" } });
+        expect(health.structuredContent).toMatchObject({ ok: true, server: { name: "sestina-mcp", version: "0.2.0" } });
         expect(context.structuredContent).toMatchObject({ currentTask: "Add only the missing claim-evidence relation." });
         expect(context.structuredContent).toMatchObject({
           contentBoundary: { kind: "untrusted_research_data", authority: "none" },

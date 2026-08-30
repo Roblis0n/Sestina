@@ -9,11 +9,17 @@ import { verifyReleaseDirectory } from "./lib/release-verifier.mjs";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
 const releaseDirectory = join(repositoryRoot, "release");
-const stagingDirectory = join(repositoryRoot, ".release-ri53-staging");
+const stagingDirectory = join(repositoryRoot, ".release-ri54-staging");
 const identity = SESTINA_RELEASE_IDENTITY;
 const platform = process.platform;
 const architecture = process.arch;
-const platformSlug = `${platform}-${architecture}`;
+const supportedPlatformSlugs = Object.freeze({
+  "win32-x64": "windows-x64",
+  "darwin-arm64": "macos-arm64",
+  "linux-x64": "ubuntu-x64",
+});
+const platformSlug = supportedPlatformSlugs[`${platform}-${architecture}`];
+if (platformSlug === undefined) throw new Error(`unsupported_release_platform:${platform}-${architecture}`);
 const root = `sestina-research-room-${identity.version}-${platformSlug}`;
 const tarName = `${root}.tar.gz`;
 const zipName = `${root}.zip`;
@@ -59,7 +65,7 @@ async function selectedFiles(sourceRoot, archiveRoot, files) {
 async function nativeRuntimeEntries() {
   const secretRequire = createRequire(join(repositoryRoot, "packages/secrets/package.json"));
   if (platform === "win32") {
-    invariant(["x64", "arm64"].includes(architecture), `unsupported_release_architecture:${platform}-${architecture}`);
+    invariant(architecture === "x64", `unsupported_release_architecture:${platform}-${architecture}`);
     const dpapiRoot = packageRoot(secretRequire.resolve("@primno/dpapi/package.json"));
     const dpapiRequire = createRequire(join(dpapiRoot, "package.json"));
     const nodeGypBuildRoot = packageRoot(dpapiRequire.resolve("node-gyp-build/package.json"));
@@ -77,7 +83,11 @@ async function nativeRuntimeEntries() {
   }
 
   invariant(platform === "darwin" || platform === "linux", `unsupported_release_platform:${platform}`);
-  invariant(["x64", "arm64"].includes(architecture), `unsupported_release_architecture:${platform}-${architecture}`);
+  invariant(
+    (platform === "darwin" && architecture === "arm64") ||
+      (platform === "linux" && architecture === "x64"),
+    `unsupported_release_architecture:${platform}-${architecture}`,
+  );
   const keyringRoot = packageRoot(secretRequire.resolve("@napi-rs/keyring/package.json"));
   const keyringRequire = createRequire(join(keyringRoot, "package.json"));
   const nativePackage = platform === "darwin"
@@ -105,8 +115,8 @@ function artifactPackageJson() {
     name: identity.package,
     version: identity.version,
     private: true,
-    description: "Sestina Research Room private release candidate",
-    license: "UNLICENSED",
+    description: "Sestina Research Room 0.2 public preview",
+    license: "Apache-2.0",
     type: "module",
     engines: { node: identity.nodeRange },
     scripts: { start: "node start.mjs" },
@@ -143,12 +153,16 @@ async function build() {
       { path: `${root}/package.json`, data: Buffer.from(`${JSON.stringify(artifactPackageJson(), null, 2)}\n`), mode: 0o644 },
       { path: `${root}/start.mjs`, data: Buffer.from(launcherSource()), mode: 0o755 },
       { path: `${root}/RELEASE-IDENTITY.json`, data: Buffer.from(`${JSON.stringify({ ...identity, platform, architecture, nativeSecretBackend: nativeRuntime.nativeSecretBackend }, null, 2)}\n`), mode: 0o644 },
+      await repositoryEntry("LICENSE", `${root}/LICENSE`),
       await repositoryEntry("docs/release/README.md", `${root}/README.md`),
       await repositoryEntry("docs/release/INSTALL-WINDOWS.md", `${root}/docs/INSTALL-WINDOWS.md`),
       await repositoryEntry("docs/release/INSTALL-MACOS.md", `${root}/docs/INSTALL-MACOS.md`),
       await repositoryEntry("docs/release/INSTALL-LINUX.md", `${root}/docs/INSTALL-LINUX.md`),
       await repositoryEntry("docs/release/RECOVERY-AND-UPGRADE.md", `${root}/docs/RECOVERY-AND-UPGRADE.md`),
       await repositoryEntry("docs/release/SECURITY.md", `${root}/docs/SECURITY.md`),
+      await repositoryEntry("docs/release/THIRD-PARTY-NOTICES.md", `${root}/docs/THIRD-PARTY-NOTICES.md`),
+      await repositoryEntry("docs/release/RELEASE-NOTES-0.2.0.md", `${root}/docs/RELEASE-NOTES.md`),
+      await repositoryEntry("SUPPORT.md", `${root}/docs/SUPPORT.md`),
       await repositoryEntry("apps/research-room/dist/main.js", `${root}/app/main.js`, 0o755),
       await repositoryEntry("apps/research-room/dist/server.js", `${root}/app/server.js`),
       ...await directoryEntries(join(repositoryRoot, "apps/research-room/dist/client"), `${root}/app/client`),
@@ -165,11 +179,20 @@ async function build() {
     }));
     artifacts.sort((left, right) => left.file.localeCompare(right.file, "en"));
     const sourceCommit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repositoryRoot, encoding: "utf8", windowsHide: true }).trim();
+    const primaryArtifact = platform === "win32" ? zipName : tarName;
     const manifest = {
-      schemaVersion: "2.0.0",
+      schemaVersion: "3.0.0",
       identity,
       platform: { os: platform, architecture, nativeSecretBackend: nativeRuntime.nativeSecretBackend },
       source: { gitCommit: sourceCommit },
+      distribution: {
+        license: "Apache-2.0",
+        repository: "https://github.com/Roblis0n/Sestina",
+        tag: "v0.2.0",
+        releaseUrl: "https://github.com/Roblis0n/Sestina/releases/tag/v0.2.0",
+        platformSlug,
+        primaryArtifact,
+      },
       compatibility: {
         nodeRange: identity.nodeRange,
         supportedSchemaMinimum: identity.supportedSchemaMinimum,

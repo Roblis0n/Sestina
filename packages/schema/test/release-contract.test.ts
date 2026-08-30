@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createReleaseIdentity, SESTINA_RELEASE_CONTRACT } from "../src/index.js";
 
 describe("Sestina release contract", () => {
-  it("keeps one canonical Research Room release-candidate identity", () => {
+  it("keeps one canonical Research Room public-preview identity", () => {
     expect(SESTINA_RELEASE_CONTRACT).toEqual({
       schemaVersion: "2.0.0",
       product: "Sestina Research Room",
@@ -11,13 +11,13 @@ describe("Sestina release contract", () => {
       cliPackage: "@sestina/cli",
       primaryInterface: "research-room",
       businessKernel: "research-deliberation-kernel",
-      releaseChannel: "private_release_candidate",
-      version: "0.2.0-rc.1",
+      releaseChannel: "public_preview",
+      version: "0.2.0",
       nodeRange: ">=24 <25",
-      runtimeVersion: "0.2.0-rc.1",
+      runtimeVersion: "0.2.0",
       reportSchemaVersion: "1.0.0",
       capsuleResponseSchemaVersion: "1.0.0",
-      mcpServerVersion: "0.2.0-rc.1",
+      mcpServerVersion: "0.2.0",
       mcpResearchContextSchemaVersion: "1.1",
       checkerBuildContract: "deterministic-review-v1",
       supportedSchemaMinimum: 16,

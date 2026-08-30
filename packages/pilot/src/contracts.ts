@@ -1,19 +1,24 @@
 import { createHash } from "node:crypto";
 
-export const PRIVATE_PILOT_SESSION_SCHEMA_VERSION = "1.0.0" as const;
-export const SHAREABLE_PILOT_EXPORT_SCHEMA_VERSION = "1.0.0" as const;
-export const PILOT_AGGREGATE_SCHEMA_VERSION = "1.0.0" as const;
-export const PILOT_KIT_MANIFEST_SCHEMA_VERSION = "1.0.0" as const;
-export const PILOT_KIT_VERSION = "1.0.0" as const;
-export const PILOT_PROTOCOL_VERSION = "2026-08-21" as const;
-export const PILOT_CONSENT_VERSION = "2026-08-21" as const;
+export const PRIVATE_PILOT_SESSION_SCHEMA_VERSION = "2.0.0" as const;
+export const SHAREABLE_PILOT_EXPORT_SCHEMA_VERSION = "2.0.0" as const;
+export const PILOT_AGGREGATE_SCHEMA_VERSION = "2.0.0" as const;
+export const PILOT_KIT_MANIFEST_SCHEMA_VERSION = "2.0.0" as const;
+export const PILOT_KIT_VERSION = "2.0.0" as const;
+export const PILOT_PROTOCOL_VERSION = "2026-08-30" as const;
+export const PILOT_CONSENT_VERSION = "2026-08-30" as const;
 
 export const PARTICIPANT_ROLES = [
   "external_researcher",
   "project_owner",
   "internal_test",
 ] as const;
-export const HOST_ENTRIES = ["cli", "mcp", "capsule", "multiple"] as const;
+export const HOST_ENTRIES = [
+  "research_room",
+  "research_room_with_mcp",
+  "recovery_cli",
+  "multiple",
+] as const;
 export const MATERIAL_TYPES = [
   "paper",
   "chapter",
@@ -28,9 +33,9 @@ export const REPEAT_CORRECTION_IMPACTS = [
   "uncertain",
 ] as const;
 export const PREFERRED_ENTRIES = [
-  "cli",
-  "mcp",
-  "capsule",
+  "research_room",
+  "research_room_with_mcp",
+  "recovery_cli",
   "multiple",
   "none",
 ] as const;
@@ -43,14 +48,49 @@ export const SYNTHETIC_CASE_DISCUSSION_VALUES = [
 export const WOULD_USE_AGAIN_VALUES = ["yes", "no", "uncertain"] as const;
 export const SESSION_EXIT_RESULTS = ["completed", "exited", "abandoned"] as const;
 export const PILOT_EXIT_POINTS = [
-  "installation",
-  "initialization",
-  "connection",
+  "download",
+  "checksum_verification",
+  "extraction",
+  "first_launch",
+  "project",
   "brief",
-  "episode",
   "review",
+  "manifest",
+  "disposition",
+  "receipt",
+  "recovery",
+  "relaunch",
   "second_task",
+  "local_web_lifecycle",
   "other",
+] as const;
+export const RELEASE_PLATFORMS = [
+  "windows_x64",
+  "macos_arm64",
+  "ubuntu_x64",
+] as const;
+export const DISTRIBUTION_SOURCES = ["github_release", "local_build"] as const;
+export const OPERATING_MODES = ["ledger_only", "provider_configured"] as const;
+export const STEP_OUTCOMES = ["success", "failure", "not_observed"] as const;
+export const JOURNEY_OUTCOMES = [
+  "completed",
+  "not_completed",
+  "not_observed",
+] as const;
+export const RECOVERY_OUTCOMES = [
+  "success",
+  "failure",
+  "not_needed",
+  "not_observed",
+] as const;
+export const FRICTION_SEVERITIES = ["none", "minor", "major", "blocking"] as const;
+export const DESKTOP_NEEDS = ["none", "helpful", "required", "uncertain"] as const;
+export const DESKTOP_SOLUTION_EVIDENCE = [
+  "none",
+  "self_report_only",
+  "observed_workaround",
+  "blocking_without_desktop",
+  "uncertain",
 ] as const;
 
 export type ParticipantRole = (typeof PARTICIPANT_ROLES)[number];
@@ -65,6 +105,16 @@ export type SyntheticCaseDiscussion =
 export type WouldUseAgain = (typeof WOULD_USE_AGAIN_VALUES)[number];
 export type SessionExitResult = (typeof SESSION_EXIT_RESULTS)[number];
 export type PilotExitPoint = (typeof PILOT_EXIT_POINTS)[number];
+export type ReleasePlatform = (typeof RELEASE_PLATFORMS)[number];
+export type DistributionSource = (typeof DISTRIBUTION_SOURCES)[number];
+export type OperatingMode = (typeof OPERATING_MODES)[number];
+export type StepOutcome = (typeof STEP_OUTCOMES)[number];
+export type JourneyOutcome = (typeof JOURNEY_OUTCOMES)[number];
+export type RecoveryOutcome = (typeof RECOVERY_OUTCOMES)[number];
+export type FrictionSeverity = (typeof FRICTION_SEVERITIES)[number];
+export type DesktopNeed = (typeof DESKTOP_NEEDS)[number];
+export type DesktopSolutionEvidence =
+  (typeof DESKTOP_SOLUTION_EVIDENCE)[number];
 export type BurdenScore = 1 | 2 | 3 | 4 | 5;
 
 export interface ShareableSetupResult {
@@ -87,6 +137,39 @@ export interface MaintenanceBurdenScores {
   readonly brief: BurdenScore;
   readonly decision: BurdenScore;
   readonly issue: BurdenScore;
+  readonly manifest: BurdenScore;
+  readonly recovery: BurdenScore;
+}
+
+export interface PilotStepObservation {
+  readonly outcome: StepOutcome;
+  readonly durationMinutes: number | null;
+}
+
+export interface PilotDistributionObservation {
+  readonly download: PilotStepObservation;
+  readonly checksumVerification: PilotStepObservation;
+  readonly extraction: PilotStepObservation;
+  readonly firstLaunch: PilotStepObservation;
+  readonly timeToRoomMinutes: number | null;
+  readonly failurePoint: PilotExitPoint | null;
+}
+
+export interface PilotJourneyObservation {
+  readonly project: JourneyOutcome;
+  readonly brief: JourneyOutcome;
+  readonly review: JourneyOutcome;
+  readonly manifest: JourneyOutcome;
+  readonly disposition: JourneyOutcome;
+  readonly receipt: JourneyOutcome;
+  readonly recovery: RecoveryOutcome;
+  readonly relaunch: StepOutcome;
+}
+
+export interface LocalWebLifecycleObservation {
+  readonly outcome: StepOutcome;
+  readonly frictionSeverity: FrictionSeverity;
+  readonly blocking: boolean;
 }
 
 export interface UnsignedShareablePilotExport {
@@ -100,6 +183,14 @@ export interface UnsignedShareablePilotExport {
   readonly materialType: MaterialType;
   readonly sessionDate: string;
   readonly totalDurationMinutes: number;
+  readonly releasePlatform: ReleasePlatform;
+  readonly distributionSource: DistributionSource;
+  readonly releaseSourceCommit: string;
+  readonly releaseAssetSha256: string;
+  readonly operatingMode: OperatingMode;
+  readonly distribution: PilotDistributionObservation;
+  readonly journey: PilotJourneyObservation;
+  readonly localWebLifecycle: LocalWebLifecycleObservation;
   readonly setup: ShareableSetupResult;
   readonly episode: ShareableEpisodeResult;
   readonly exitResult: SessionExitResult;
@@ -109,6 +200,8 @@ export interface UnsignedShareablePilotExport {
   readonly maintenanceBurden: MaintenanceBurdenScores;
   readonly secondUseObserved: boolean;
   readonly preferredEntry: PreferredEntry;
+  readonly desktopNeed: DesktopNeed;
+  readonly desktopSolutionEvidence: DesktopSolutionEvidence;
   readonly uiNeed: UiNeed;
   readonly syntheticCaseDiscussion: SyntheticCaseDiscussion;
   readonly wouldUseAgain: WouldUseAgain;
@@ -118,6 +211,7 @@ export interface UnsignedShareablePilotExport {
   readonly protocolVersion: typeof PILOT_PROTOCOL_VERSION;
   readonly pilotKitVersion: typeof PILOT_KIT_VERSION;
   readonly releaseVersion: string;
+  readonly releaseChannel: "public_preview";
   readonly releaseBuildId: string;
 }
 
@@ -136,6 +230,14 @@ const UNSIGNED_EXPORT_KEYS = [
   "materialType",
   "sessionDate",
   "totalDurationMinutes",
+  "releasePlatform",
+  "distributionSource",
+  "releaseSourceCommit",
+  "releaseAssetSha256",
+  "operatingMode",
+  "distribution",
+  "journey",
+  "localWebLifecycle",
   "setup",
   "episode",
   "exitResult",
@@ -145,6 +247,8 @@ const UNSIGNED_EXPORT_KEYS = [
   "maintenanceBurden",
   "secondUseObserved",
   "preferredEntry",
+  "desktopNeed",
+  "desktopSolutionEvidence",
   "uiNeed",
   "syntheticCaseDiscussion",
   "wouldUseAgain",
@@ -154,6 +258,7 @@ const UNSIGNED_EXPORT_KEYS = [
   "protocolVersion",
   "pilotKitVersion",
   "releaseVersion",
+  "releaseChannel",
   "releaseBuildId",
 ] as const;
 
@@ -273,6 +378,118 @@ function parseEpisode(value: unknown, code: string): ShareableEpisodeResult {
   return { outcome, durationMinutes };
 }
 
+function parseStep(value: unknown, code: string): PilotStepObservation {
+  expectExactKeys(value, ["outcome", "durationMinutes"], code);
+  const outcome = oneOf(value.outcome, STEP_OUTCOMES, code);
+  const durationMinutes =
+    value.durationMinutes === null
+      ? null
+      : boundedInteger(value.durationMinutes, 0, 240, code);
+  if ((outcome === "not_observed") !== (durationMinutes === null)) fail(code);
+  return { outcome, durationMinutes };
+}
+
+export function parsePilotDistributionObservation(
+  value: unknown,
+  code: string,
+): PilotDistributionObservation {
+  expectExactKeys(
+    value,
+    [
+      "download",
+      "checksumVerification",
+      "extraction",
+      "firstLaunch",
+      "timeToRoomMinutes",
+      "failurePoint",
+    ],
+    code,
+  );
+  const download = parseStep(value.download, code);
+  const checksumVerification = parseStep(value.checksumVerification, code);
+  const extraction = parseStep(value.extraction, code);
+  const firstLaunch = parseStep(value.firstLaunch, code);
+  const timeToRoomMinutes =
+    value.timeToRoomMinutes === null
+      ? null
+      : boundedInteger(value.timeToRoomMinutes, 0, 480, code);
+  const failurePoint =
+    value.failurePoint === null
+      ? null
+      : oneOf(value.failurePoint, PILOT_EXIT_POINTS, code);
+  const steps = [download, checksumVerification, extraction, firstLaunch];
+  if (
+    (firstLaunch.outcome === "success") !== (timeToRoomMinutes !== null) ||
+    (steps.some((step) => step.outcome === "failure") && failurePoint === null) ||
+    (steps.every((step) => step.outcome === "success") && failurePoint !== null)
+  ) {
+    fail(code);
+  }
+  return {
+    download,
+    checksumVerification,
+    extraction,
+    firstLaunch,
+    timeToRoomMinutes,
+    failurePoint,
+  };
+}
+
+export function parsePilotJourneyObservation(
+  value: unknown,
+  code: string,
+): PilotJourneyObservation {
+  expectExactKeys(
+    value,
+    [
+      "project",
+      "brief",
+      "review",
+      "manifest",
+      "disposition",
+      "receipt",
+      "recovery",
+      "relaunch",
+    ],
+    code,
+  );
+  return {
+    project: oneOf(value.project, JOURNEY_OUTCOMES, code),
+    brief: oneOf(value.brief, JOURNEY_OUTCOMES, code),
+    review: oneOf(value.review, JOURNEY_OUTCOMES, code),
+    manifest: oneOf(value.manifest, JOURNEY_OUTCOMES, code),
+    disposition: oneOf(value.disposition, JOURNEY_OUTCOMES, code),
+    receipt: oneOf(value.receipt, JOURNEY_OUTCOMES, code),
+    recovery: oneOf(value.recovery, RECOVERY_OUTCOMES, code),
+    relaunch: oneOf(value.relaunch, STEP_OUTCOMES, code),
+  };
+}
+
+export function parseLocalWebLifecycleObservation(
+  value: unknown,
+  code: string,
+): LocalWebLifecycleObservation {
+  expectExactKeys(
+    value,
+    ["outcome", "frictionSeverity", "blocking"],
+    code,
+  );
+  const outcome = oneOf(value.outcome, STEP_OUTCOMES, code);
+  const frictionSeverity = oneOf(
+    value.frictionSeverity,
+    FRICTION_SEVERITIES,
+    code,
+  );
+  const blocking = booleanValue(value.blocking, code);
+  if (
+    blocking !== (frictionSeverity === "blocking") ||
+    (outcome === "not_observed" && frictionSeverity !== "none")
+  ) {
+    fail(code);
+  }
+  return { outcome, frictionSeverity, blocking };
+}
+
 function parseFindingCounts(
   value: unknown,
   code: string,
@@ -293,11 +510,17 @@ function parseBurden(
   value: unknown,
   code: string,
 ): MaintenanceBurdenScores {
-  expectExactKeys(value, ["brief", "decision", "issue"], code);
+  expectExactKeys(
+    value,
+    ["brief", "decision", "issue", "manifest", "recovery"],
+    code,
+  );
   return {
     brief: boundedInteger(value.brief, 1, 5, code) as BurdenScore,
     decision: boundedInteger(value.decision, 1, 5, code) as BurdenScore,
     issue: boundedInteger(value.issue, 1, 5, code) as BurdenScore,
+    manifest: boundedInteger(value.manifest, 1, 5, code) as BurdenScore,
+    recovery: boundedInteger(value.recovery, 1, 5, code) as BurdenScore,
   };
 }
 
@@ -338,6 +561,34 @@ function parseUnsignedExport(
     1_440,
     code,
   );
+  const releasePlatform = oneOf(
+    value.releasePlatform,
+    RELEASE_PLATFORMS,
+    code,
+  );
+  const distributionSource = oneOf(
+    value.distributionSource,
+    DISTRIBUTION_SOURCES,
+    code,
+  );
+  if (
+    typeof value.releaseSourceCommit !== "string" ||
+    !/^[a-f0-9]{40}$/u.test(value.releaseSourceCommit) ||
+    typeof value.releaseAssetSha256 !== "string" ||
+    !/^[a-f0-9]{64}$/u.test(value.releaseAssetSha256)
+  ) {
+    fail(code);
+  }
+  const operatingMode = oneOf(value.operatingMode, OPERATING_MODES, code);
+  const distribution = parsePilotDistributionObservation(
+    value.distribution,
+    code,
+  );
+  const journey = parsePilotJourneyObservation(value.journey, code);
+  const localWebLifecycle = parseLocalWebLifecycleObservation(
+    value.localWebLifecycle,
+    code,
+  );
   const setup = parseSetup(value.setup, code);
   const episode = parseEpisode(value.episode, code);
   const exitResult = oneOf(value.exitResult, SESSION_EXIT_RESULTS, code);
@@ -354,6 +605,12 @@ function parseUnsignedExport(
   const maintenanceBurden = parseBurden(value.maintenanceBurden, code);
   const secondUseObserved = booleanValue(value.secondUseObserved, code);
   const preferredEntry = oneOf(value.preferredEntry, PREFERRED_ENTRIES, code);
+  const desktopNeed = oneOf(value.desktopNeed, DESKTOP_NEEDS, code);
+  const desktopSolutionEvidence = oneOf(
+    value.desktopSolutionEvidence,
+    DESKTOP_SOLUTION_EVIDENCE,
+    code,
+  );
   const uiNeed = oneOf(value.uiNeed, UI_NEEDS, code);
   const syntheticCaseDiscussion = oneOf(
     value.syntheticCaseDiscussion,
@@ -378,8 +635,8 @@ function parseUnsignedExport(
     fail(code);
   }
   if (
-    typeof value.releaseVersion !== "string" ||
-    !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(value.releaseVersion) ||
+    value.releaseVersion !== "0.2.0" ||
+    value.releaseChannel !== "public_preview" ||
     typeof value.releaseBuildId !== "string" ||
     !/^[a-f0-9]{64}$/u.test(value.releaseBuildId)
   ) {
@@ -392,8 +649,22 @@ function parseUnsignedExport(
     secondUseObserved !== (sessionOrdinal === 2) ||
     ((exitResult === "completed") !== (exitPoint === null)) ||
     (setup.outcome === "failure" && !failureObserved) ||
+    (distributionSource !== "github_release" &&
+      participantRole === "external_researcher") ||
+    (localWebLifecycle.blocking && !failureObserved) ||
+    (desktopNeed === "required" &&
+      desktopSolutionEvidence === "none") ||
     (exitResult === "completed" &&
-      (setup.outcome !== "success" || episode.outcome !== "completed"))
+      (setup.outcome !== "success" ||
+        episode.outcome !== "completed" ||
+        distribution.firstLaunch.outcome !== "success" ||
+        journey.project !== "completed" ||
+        journey.brief !== "completed" ||
+        journey.review !== "completed" ||
+        journey.manifest !== "completed" ||
+        journey.disposition !== "completed" ||
+        journey.receipt !== "completed" ||
+        journey.relaunch !== "success"))
   ) {
     fail(code);
   }
@@ -408,6 +679,14 @@ function parseUnsignedExport(
     materialType,
     sessionDate,
     totalDurationMinutes,
+    releasePlatform,
+    distributionSource,
+    releaseSourceCommit: value.releaseSourceCommit,
+    releaseAssetSha256: value.releaseAssetSha256,
+    operatingMode,
+    distribution,
+    journey,
+    localWebLifecycle,
     setup,
     episode,
     exitResult,
@@ -417,6 +696,8 @@ function parseUnsignedExport(
     maintenanceBurden,
     secondUseObserved,
     preferredEntry,
+    desktopNeed,
+    desktopSolutionEvidence,
     uiNeed,
     syntheticCaseDiscussion,
     wouldUseAgain,
@@ -425,7 +706,8 @@ function parseUnsignedExport(
     consentVersion: PILOT_CONSENT_VERSION,
     protocolVersion: PILOT_PROTOCOL_VERSION,
     pilotKitVersion: PILOT_KIT_VERSION,
-    releaseVersion: value.releaseVersion,
+    releaseVersion: "0.2.0",
+    releaseChannel: "public_preview",
     releaseBuildId: value.releaseBuildId,
   };
 }

@@ -21,10 +21,11 @@ import {
 import { verifyPilotKit } from "../src/index.js";
 
 const temporaryRoots: string[] = [];
-const FIXTURE_RELEASE_VERSION = "0.1.0";
+const FIXTURE_RELEASE_VERSION = "0.2.0";
 const FIXTURE_RELEASE_BUILD_ID = "a".repeat(64);
 const STATIC_PAYLOAD_PATHS = [
   "README.md",
+  "LICENSE",
   "bin/sestina-pilot.mjs",
   "docs/CONSENT.md",
   "docs/EXIT-INTERVIEW.md",
@@ -34,6 +35,7 @@ const STATIC_PAYLOAD_PATHS = [
   "install/install-linux.sh",
   "install/install-macos.sh",
   "install/install-windows.ps1",
+  "release/RELEASE-BINDING.json",
   "schema/shareable-pilot-export.schema.json",
   "walkthrough/SYNTHETIC-WALKTHROUGH.md",
 ] as const;
@@ -58,12 +60,10 @@ function sha256(bytes: Uint8Array): string {
 }
 
 function materializeFixtureKit(output: string): void {
-  const artifactFile = `sestina-cli-${FIXTURE_RELEASE_VERSION}.tgz`;
   const payload = new Map<string, Buffer>();
   for (const relativePath of STATIC_PAYLOAD_PATHS) {
     payload.set(relativePath, Buffer.from(`deterministic fixture: ${relativePath}\n`, "utf8"));
   }
-  payload.set(`release/${artifactFile}`, Buffer.from("deterministic cli archive fixture\n", "utf8"));
 
   const files = [...payload.entries()]
     .sort(([left], [right]) => left.localeCompare(right, "en"))
@@ -74,7 +74,6 @@ function materializeFixtureKit(output: string): void {
     writeFileSync(target, bytes);
   }
 
-  const artifactSha256 = sha256(payload.get(`release/${artifactFile}`) ?? Buffer.alloc(0));
   const manifest = {
     schemaVersion: PILOT_KIT_MANIFEST_SCHEMA_VERSION,
     pilotKitVersion: PILOT_KIT_VERSION,
@@ -82,15 +81,37 @@ function materializeFixtureKit(output: string): void {
     consentVersion: PILOT_CONSENT_VERSION,
     sestinaRelease: {
       version: FIXTURE_RELEASE_VERSION,
+      channel: "public_preview",
       buildId: FIXTURE_RELEASE_BUILD_ID,
-      artifactFile,
-      artifactSha256,
+      sourceCommit: "b".repeat(40),
+      tag: "v0.2.0",
+      repository: "https://github.com/Roblis0n/Sestina",
+      releaseUrl: "https://github.com/Roblis0n/Sestina/releases/tag/v0.2.0",
+      supportedAssets: [
+        {
+          platform: "windows_x64",
+          file: "sestina-research-room-0.2.0-windows-x64.zip",
+        },
+        {
+          platform: "macos_arm64",
+          file: "sestina-research-room-0.2.0-macos-arm64.tar.gz",
+        },
+        {
+          platform: "ubuntu_x64",
+          file: "sestina-research-room-0.2.0-ubuntu-x64.tar.gz",
+        },
+      ],
     },
     files,
     security: {
       localOnly: true,
       noTelemetry: true,
       participantControlledExport: true,
+      noAutomaticProjectScan: true,
+      noAutomaticUpload: true,
+      noFreeTextExport: true,
+      noDeviceIdentifiers: true,
+      noRawErrors: true,
       containsResearchContent: false,
       containsCredentials: false,
     },
@@ -125,7 +146,7 @@ describe("deterministic, tamper-evident Pilot Kit verifier", () => {
       );
     }
     const verified = await verifyPilotKit(first);
-    expect(verified.manifest.sestinaRelease.version).toBe("0.1.0");
+    expect(verified.manifest.sestinaRelease.version).toBe("0.2.0");
     expect(verified.verifiedFiles).toContain("bin/sestina-pilot.mjs");
     expect(filesUnder(first).some((path) => path.endsWith(".map"))).toBe(false);
   }, 30_000);
@@ -144,19 +165,12 @@ describe("deterministic, tamper-evident Pilot Kit verifier", () => {
     );
   }, 30_000);
 
-  it("rejects a tampered release artifact and an extra file", async () => {
+  it("rejects a tampered release binding and an extra file", async () => {
     const { first, parent } = await buildPair();
     const releaseTamper = join(parent, "release-tamper");
     cpSync(first, releaseTamper, { recursive: true });
-    const manifest = JSON.parse(
-      readFileSync(join(releaseTamper, "pilot-kit-manifest.json"), "utf8"),
-    ) as { sestinaRelease: { artifactFile: string } };
-    const artifact = join(
-      releaseTamper,
-      "release",
-      manifest.sestinaRelease.artifactFile,
-    );
-    writeFileSync(artifact, Buffer.concat([readFileSync(artifact), Buffer.from("x")]));
+    const binding = join(releaseTamper, "release", "RELEASE-BINDING.json");
+    writeFileSync(binding, Buffer.concat([readFileSync(binding), Buffer.from("x")]));
     await expect(verifyPilotKit(releaseTamper)).rejects.toThrowError(
       "pilot_kit_hash_mismatch",
     );

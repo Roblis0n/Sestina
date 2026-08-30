@@ -1,58 +1,87 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://sestina.local/schemas/shareable-pilot-export-1.0.0.json",
+  "$id": "https://sestina.local/schemas/shareable-pilot-export-2.0.0.json",
   "title": "ShareablePilotExport",
+  "description": "Privacy-minimized public-preview behavior evidence. Free text, research content, identity, device identifiers, secrets, paths, and raw errors are intentionally absent.",
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "schemaVersion",
-    "participantCode",
-    "sessionId",
-    "evidenceId",
-    "sessionOrdinal",
-    "participantRole",
-    "hostEntry",
-    "materialType",
-    "sessionDate",
-    "totalDurationMinutes",
-    "setup",
-    "episode",
-    "exitResult",
-    "exitPoint",
-    "repeatCorrectionImpact",
-    "findingAssessment",
-    "maintenanceBurden",
-    "secondUseObserved",
-    "preferredEntry",
-    "uiNeed",
-    "syntheticCaseDiscussion",
-    "wouldUseAgain",
-    "failureObserved",
-    "negativeFeedbackObserved",
-    "consentVersion",
-    "protocolVersion",
-    "pilotKitVersion",
-    "releaseVersion",
-    "releaseBuildId",
-    "contentHash"
+    "schemaVersion", "participantCode", "sessionId", "evidenceId",
+    "sessionOrdinal", "participantRole", "hostEntry", "materialType",
+    "sessionDate", "totalDurationMinutes", "releasePlatform",
+    "distributionSource", "releaseSourceCommit", "releaseAssetSha256",
+    "operatingMode", "distribution", "journey", "localWebLifecycle",
+    "setup", "episode", "exitResult", "exitPoint",
+    "repeatCorrectionImpact", "findingAssessment", "maintenanceBurden",
+    "secondUseObserved", "preferredEntry", "desktopNeed",
+    "desktopSolutionEvidence", "uiNeed", "syntheticCaseDiscussion",
+    "wouldUseAgain", "failureObserved", "negativeFeedbackObserved",
+    "consentVersion", "protocolVersion", "pilotKitVersion",
+    "releaseVersion", "releaseChannel", "releaseBuildId", "contentHash"
   ],
   "properties": {
-    "schemaVersion": { "const": "1.0.0" },
-    "participantCode": { "type": "string", "pattern": "^(?=[A-Z0-9_-]*[A-Z])[A-Z0-9][A-Z0-9_-]{2,31}$" },
+    "schemaVersion": { "const": "2.0.0" },
+    "participantCode": {
+      "type": "string",
+      "pattern": "^(?=[A-Z0-9_-]*[A-Z])[A-Z0-9][A-Z0-9_-]{2,31}$"
+    },
     "sessionId": { "type": "string", "pattern": "^ps_[a-f0-9]{32}$" },
     "evidenceId": { "type": "string", "pattern": "^pe_[a-f0-9]{24}$" },
     "sessionOrdinal": { "enum": [1, 2] },
     "participantRole": { "enum": ["external_researcher", "project_owner", "internal_test"] },
-    "hostEntry": { "enum": ["cli", "mcp", "capsule", "multiple"] },
+    "hostEntry": { "enum": ["research_room", "research_room_with_mcp", "recovery_cli", "multiple"] },
     "materialType": { "enum": ["paper", "chapter", "research_plan", "report", "other"] },
     "sessionDate": { "type": "string", "format": "date" },
     "totalDurationMinutes": { "type": "integer", "minimum": 0, "maximum": 1440 },
+    "releasePlatform": { "enum": ["windows_x64", "macos_arm64", "ubuntu_x64"] },
+    "distributionSource": { "enum": ["github_release", "local_build"] },
+    "releaseSourceCommit": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+    "releaseAssetSha256": { "$ref": "#/$defs/sha256" },
+    "operatingMode": { "enum": ["ledger_only", "provider_configured"] },
+    "distribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["download", "checksumVerification", "extraction", "firstLaunch", "timeToRoomMinutes", "failurePoint"],
+      "properties": {
+        "download": { "$ref": "#/$defs/stepObservation" },
+        "checksumVerification": { "$ref": "#/$defs/stepObservation" },
+        "extraction": { "$ref": "#/$defs/stepObservation" },
+        "firstLaunch": { "$ref": "#/$defs/stepObservation" },
+        "timeToRoomMinutes": { "type": ["integer", "null"], "minimum": 0, "maximum": 480 },
+        "failurePoint": { "$ref": "#/$defs/nullableExitPoint" }
+      }
+    },
+    "journey": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["project", "brief", "review", "manifest", "disposition", "receipt", "recovery", "relaunch"],
+      "properties": {
+        "project": { "$ref": "#/$defs/journeyOutcome" },
+        "brief": { "$ref": "#/$defs/journeyOutcome" },
+        "review": { "$ref": "#/$defs/journeyOutcome" },
+        "manifest": { "$ref": "#/$defs/journeyOutcome" },
+        "disposition": { "$ref": "#/$defs/journeyOutcome" },
+        "receipt": { "$ref": "#/$defs/journeyOutcome" },
+        "recovery": { "enum": ["success", "failure", "not_needed", "not_observed"] },
+        "relaunch": { "$ref": "#/$defs/stepOutcome" }
+      }
+    },
+    "localWebLifecycle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome", "frictionSeverity", "blocking"],
+      "properties": {
+        "outcome": { "$ref": "#/$defs/stepOutcome" },
+        "frictionSeverity": { "enum": ["none", "minor", "major", "blocking"] },
+        "blocking": { "type": "boolean" }
+      }
+    },
     "setup": {
       "type": "object",
       "additionalProperties": false,
       "required": ["outcome", "durationMinutes"],
       "properties": {
-        "outcome": { "enum": ["success", "failure", "not_observed"] },
+        "outcome": { "$ref": "#/$defs/stepOutcome" },
         "durationMinutes": { "type": ["integer", "null"], "minimum": 0, "maximum": 240 }
       }
     },
@@ -61,57 +90,72 @@
       "additionalProperties": false,
       "required": ["outcome", "durationMinutes"],
       "properties": {
-        "outcome": { "enum": ["completed", "not_completed", "not_observed"] },
+        "outcome": { "$ref": "#/$defs/journeyOutcome" },
         "durationMinutes": { "type": ["integer", "null"], "minimum": 0, "maximum": 480 }
       }
     },
     "exitResult": { "enum": ["completed", "exited", "abandoned"] },
-    "exitPoint": {
-      "enum": [
-        "installation",
-        "initialization",
-        "connection",
-        "brief",
-        "episode",
-        "review",
-        "second_task",
-        "other",
-        null
-      ]
-    },
+    "exitPoint": { "$ref": "#/$defs/nullableExitPoint" },
     "repeatCorrectionImpact": { "enum": ["reduced", "unchanged", "increased", "uncertain"] },
     "findingAssessment": {
       "type": "object",
       "additionalProperties": false,
       "required": ["necessary", "unnecessary", "uncertain"],
       "properties": {
-        "necessary": { "type": "integer", "minimum": 0, "maximum": 1000 },
-        "unnecessary": { "type": "integer", "minimum": 0, "maximum": 1000 },
-        "uncertain": { "type": "integer", "minimum": 0, "maximum": 1000 }
+        "necessary": { "$ref": "#/$defs/findingCount" },
+        "unnecessary": { "$ref": "#/$defs/findingCount" },
+        "uncertain": { "$ref": "#/$defs/findingCount" }
       }
     },
     "maintenanceBurden": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["brief", "decision", "issue"],
+      "required": ["brief", "decision", "issue", "manifest", "recovery"],
       "properties": {
-        "brief": { "type": "integer", "minimum": 1, "maximum": 5 },
-        "decision": { "type": "integer", "minimum": 1, "maximum": 5 },
-        "issue": { "type": "integer", "minimum": 1, "maximum": 5 }
+        "brief": { "$ref": "#/$defs/burdenScore" },
+        "decision": { "$ref": "#/$defs/burdenScore" },
+        "issue": { "$ref": "#/$defs/burdenScore" },
+        "manifest": { "$ref": "#/$defs/burdenScore" },
+        "recovery": { "$ref": "#/$defs/burdenScore" }
       }
     },
     "secondUseObserved": { "type": "boolean" },
-    "preferredEntry": { "enum": ["cli", "mcp", "capsule", "multiple", "none"] },
+    "preferredEntry": { "enum": ["research_room", "research_room_with_mcp", "recovery_cli", "multiple", "none"] },
+    "desktopNeed": { "enum": ["none", "helpful", "required", "uncertain"] },
+    "desktopSolutionEvidence": { "enum": ["none", "self_report_only", "observed_workaround", "blocking_without_desktop", "uncertain"] },
     "uiNeed": { "enum": ["yes", "no", "uncertain"] },
     "syntheticCaseDiscussion": { "enum": ["yes", "no", "undecided"] },
     "wouldUseAgain": { "enum": ["yes", "no", "uncertain"] },
     "failureObserved": { "type": "boolean" },
     "negativeFeedbackObserved": { "type": "boolean" },
-    "consentVersion": { "const": "2026-08-21" },
-    "protocolVersion": { "const": "2026-08-21" },
-    "pilotKitVersion": { "const": "1.0.0" },
-    "releaseVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$" },
-    "releaseBuildId": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
-    "contentHash": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+    "consentVersion": { "const": "2026-08-30" },
+    "protocolVersion": { "const": "2026-08-30" },
+    "pilotKitVersion": { "const": "2.0.0" },
+    "releaseVersion": { "const": "0.2.0" },
+    "releaseChannel": { "const": "public_preview" },
+    "releaseBuildId": { "$ref": "#/$defs/sha256" },
+    "contentHash": { "$ref": "#/$defs/sha256" }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "stepOutcome": { "enum": ["success", "failure", "not_observed"] },
+    "journeyOutcome": { "enum": ["completed", "not_completed", "not_observed"] },
+    "stepObservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["outcome", "durationMinutes"],
+      "properties": {
+        "outcome": { "$ref": "#/$defs/stepOutcome" },
+        "durationMinutes": { "type": ["integer", "null"], "minimum": 0, "maximum": 480 }
+      }
+    },
+    "exitPoint": {
+      "enum": ["download", "checksum_verification", "extraction", "first_launch", "project", "brief", "review", "manifest", "disposition", "receipt", "recovery", "relaunch", "second_task", "local_web_lifecycle", "other"]
+    },
+    "nullableExitPoint": {
+      "anyOf": [{ "$ref": "#/$defs/exitPoint" }, { "type": "null" }]
+    },
+    "findingCount": { "type": "integer", "minimum": 0, "maximum": 1000 },
+    "burdenScore": { "type": "integer", "minimum": 1, "maximum": 5 }
   }
 }

@@ -1,9 +1,18 @@
 import {
+  DESKTOP_NEEDS,
+  DESKTOP_SOLUTION_EVIDENCE,
+  DISTRIBUTION_SOURCES,
+  FRICTION_SEVERITIES,
+  JOURNEY_OUTCOMES,
+  OPERATING_MODES,
   PILOT_AGGREGATE_SCHEMA_VERSION,
   PILOT_EXIT_POINTS,
   PREFERRED_ENTRIES,
+  RECOVERY_OUTCOMES,
+  RELEASE_PLATFORMS,
   REPEAT_CORRECTION_IMPACTS,
   SESSION_EXIT_RESULTS,
+  STEP_OUTCOMES,
   SYNTHETIC_CASE_DISCUSSION_VALUES,
   UI_NEEDS,
   WOULD_USE_AGAIN_VALUES,
@@ -60,6 +69,34 @@ export interface PilotAggregateReport {
     readonly successRate: ProportionMetric;
     readonly duration: DurationDistribution;
   };
+  readonly publicPreview: {
+    readonly releasePlatform: CategoryMetric;
+    readonly distributionSource: CategoryMetric;
+    readonly operatingMode: CategoryMetric;
+  };
+  readonly distribution: {
+    readonly downloadSuccessRate: ProportionMetric;
+    readonly checksumSuccessRate: ProportionMetric;
+    readonly extractionSuccessRate: ProportionMetric;
+    readonly firstLaunchSuccessRate: ProportionMetric;
+    readonly timeToRoom: DurationDistribution;
+    readonly failurePoints: CategoryMetric;
+  };
+  readonly journey: {
+    readonly project: CategoryMetric;
+    readonly brief: CategoryMetric;
+    readonly review: CategoryMetric;
+    readonly manifest: CategoryMetric;
+    readonly disposition: CategoryMetric;
+    readonly receipt: CategoryMetric;
+    readonly recovery: CategoryMetric;
+    readonly relaunch: CategoryMetric;
+  };
+  readonly localWebLifecycle: {
+    readonly outcome: CategoryMetric;
+    readonly frictionSeverity: CategoryMetric;
+    readonly blockingRate: ProportionMetric;
+  };
   readonly episode: {
     readonly completionRate: ProportionMetric;
     readonly duration: DurationDistribution;
@@ -81,12 +118,16 @@ export interface PilotAggregateReport {
     readonly brief: BurdenMetric;
     readonly decision: BurdenMetric;
     readonly issue: BurdenMetric;
+    readonly manifest: BurdenMetric;
+    readonly recovery: BurdenMetric;
   };
   readonly secondUse: {
     readonly status: "second_use_unproven" | "second_use_proven";
     readonly rate: ProportionMetric;
   };
   readonly entryPreference: CategoryMetric;
+  readonly desktopNeed: CategoryMetric;
+  readonly desktopSolutionEvidence: CategoryMetric;
   readonly uiNeed: CategoryMetric;
   readonly syntheticCaseDiscussion: CategoryMetric;
   readonly wouldUseAgain: CategoryMetric;
@@ -95,6 +136,28 @@ export interface PilotAggregateReport {
     readonly exitSessionCount: number;
     readonly negativeFeedbackSessionCount: number;
     readonly evidenceIds: readonly string[];
+  };
+  readonly ri55Eligibility: {
+    readonly status:
+      | "waiting_real_public_preview_behavior_evidence"
+      | "eligible_for_product_shape_review";
+    readonly requiredExternalParticipants: 5;
+    readonly missingExternalParticipants: number;
+    readonly requiredPairedParticipants: 1;
+    readonly pairedParticipantCount: number;
+    readonly missingPairedParticipants: number;
+    readonly requiredBehaviorFieldGroups: readonly [
+      "distribution",
+      "journey",
+      "local_web_lifecycle",
+      "desktop_need",
+      "maintenance_burden",
+      "repeat_correction",
+      "willingness",
+      "failures_and_exits",
+    ];
+    readonly missingBehaviorFieldSessions: number;
+    readonly missingBehaviorFieldGroups: number;
   };
   readonly limitations: readonly [
     "no_automatic_go_no_go",
@@ -340,6 +403,90 @@ export function aggregatePilotExports(
       ),
       duration: durations(firstSessions, (value) => value.setup.durationMinutes),
     },
+    publicPreview: {
+      releasePlatform: category(
+        external,
+        RELEASE_PLATFORMS,
+        (value) => value.releasePlatform,
+      ),
+      distributionSource: category(
+        external,
+        DISTRIBUTION_SOURCES,
+        (value) => value.distributionSource,
+      ),
+      operatingMode: category(
+        external,
+        OPERATING_MODES,
+        (value) => value.operatingMode,
+      ),
+    },
+    distribution: {
+      downloadSuccessRate: proportion(
+        external,
+        (value) => value.distribution.download.outcome === "success",
+        (value) => value.distribution.download.outcome === "not_observed",
+      ),
+      checksumSuccessRate: proportion(
+        external,
+        (value) =>
+          value.distribution.checksumVerification.outcome === "success",
+        (value) =>
+          value.distribution.checksumVerification.outcome === "not_observed",
+      ),
+      extractionSuccessRate: proportion(
+        external,
+        (value) => value.distribution.extraction.outcome === "success",
+        (value) => value.distribution.extraction.outcome === "not_observed",
+      ),
+      firstLaunchSuccessRate: proportion(
+        external,
+        (value) => value.distribution.firstLaunch.outcome === "success",
+        (value) => value.distribution.firstLaunch.outcome === "not_observed",
+      ),
+      timeToRoom: durations(
+        external,
+        (value) => value.distribution.timeToRoomMinutes,
+      ),
+      failurePoints: optionalCategory(
+        external,
+        PILOT_EXIT_POINTS,
+        (value) => value.distribution.failurePoint,
+      ),
+    },
+    journey: {
+      project: category(external, JOURNEY_OUTCOMES, (value) => value.journey.project),
+      brief: category(external, JOURNEY_OUTCOMES, (value) => value.journey.brief),
+      review: category(external, JOURNEY_OUTCOMES, (value) => value.journey.review),
+      manifest: category(external, JOURNEY_OUTCOMES, (value) => value.journey.manifest),
+      disposition: category(
+        external,
+        JOURNEY_OUTCOMES,
+        (value) => value.journey.disposition,
+      ),
+      receipt: category(external, JOURNEY_OUTCOMES, (value) => value.journey.receipt),
+      recovery: category(
+        external,
+        RECOVERY_OUTCOMES,
+        (value) => value.journey.recovery,
+      ),
+      relaunch: category(external, STEP_OUTCOMES, (value) => value.journey.relaunch),
+    },
+    localWebLifecycle: {
+      outcome: category(
+        external,
+        STEP_OUTCOMES,
+        (value) => value.localWebLifecycle.outcome,
+      ),
+      frictionSeverity: category(
+        external,
+        FRICTION_SEVERITIES,
+        (value) => value.localWebLifecycle.frictionSeverity,
+      ),
+      blockingRate: proportion(
+        external,
+        (value) => value.localWebLifecycle.blocking,
+      ),
+    },
     episode: {
       completionRate: proportion(
         external,
@@ -373,6 +520,8 @@ export function aggregatePilotExports(
       brief: burden(external, (value) => value.maintenanceBurden.brief),
       decision: burden(external, (value) => value.maintenanceBurden.decision),
       issue: burden(external, (value) => value.maintenanceBurden.issue),
+      manifest: burden(external, (value) => value.maintenanceBurden.manifest),
+      recovery: burden(external, (value) => value.maintenanceBurden.recovery),
     },
     secondUse: {
       status:
@@ -385,6 +534,16 @@ export function aggregatePilotExports(
       external,
       PREFERRED_ENTRIES,
       (value) => value.preferredEntry,
+    ),
+    desktopNeed: category(
+      external,
+      DESKTOP_NEEDS,
+      (value) => value.desktopNeed,
+    ),
+    desktopSolutionEvidence: category(
+      external,
+      DESKTOP_SOLUTION_EVIDENCE,
+      (value) => value.desktopSolutionEvidence,
     ),
     uiNeed: category(external, UI_NEEDS, (value) => value.uiNeed),
     syntheticCaseDiscussion: category(
@@ -414,6 +573,30 @@ export function aggregatePilotExports(
             value.negativeFeedbackObserved,
         ),
       ),
+    },
+    ri55Eligibility: {
+      status:
+        participantCodes.length >= 5 && secondUseParticipants.size >= 1
+          ? "eligible_for_product_shape_review"
+          : "waiting_real_public_preview_behavior_evidence",
+      requiredExternalParticipants: 5,
+      missingExternalParticipants: Math.max(0, 5 - participantCodes.length),
+      requiredPairedParticipants: 1,
+      pairedParticipantCount: secondUseParticipants.size,
+      missingPairedParticipants: Math.max(0, 1 - secondUseParticipants.size),
+      requiredBehaviorFieldGroups: [
+        "distribution",
+        "journey",
+        "local_web_lifecycle",
+        "desktop_need",
+        "maintenance_burden",
+        "repeat_correction",
+        "willingness",
+        "failures_and_exits",
+      ],
+      missingBehaviorFieldSessions: Math.max(0, 5 - firstSessions.length),
+      missingBehaviorFieldGroups:
+        Math.max(0, 5 - firstSessions.length) * 8,
     },
     limitations: [
       "no_automatic_go_no_go",
@@ -555,6 +738,10 @@ export function parsePilotAggregateReport(value: unknown): PilotAggregateReport 
       "inputHash",
       "sample",
       "setup",
+      "publicPreview",
+      "distribution",
+      "journey",
+      "localWebLifecycle",
       "episode",
       "exitResults",
       "exitPoints",
@@ -563,10 +750,13 @@ export function parsePilotAggregateReport(value: unknown): PilotAggregateReport 
       "maintenanceBurden",
       "secondUse",
       "entryPreference",
+      "desktopNeed",
+      "desktopSolutionEvidence",
       "uiNeed",
       "syntheticCaseDiscussion",
       "wouldUseAgain",
       "failures",
+      "ri55Eligibility",
       "limitations",
     ],
     "pilot_aggregate_invalid",
@@ -611,6 +801,73 @@ export function parsePilotAggregateReport(value: unknown): PilotAggregateReport 
   expectExactKeys(value.setup, ["successRate", "duration"], "pilot_aggregate_invalid");
   parseProportion(value.setup.successRate);
   parseDuration(value.setup.duration);
+  expectExactKeys(
+    value.publicPreview,
+    ["releasePlatform", "distributionSource", "operatingMode"],
+    "pilot_aggregate_invalid",
+  );
+  parseCategory(value.publicPreview.releasePlatform, RELEASE_PLATFORMS);
+  parseCategory(value.publicPreview.distributionSource, DISTRIBUTION_SOURCES);
+  parseCategory(value.publicPreview.operatingMode, OPERATING_MODES);
+  expectExactKeys(
+    value.distribution,
+    [
+      "downloadSuccessRate",
+      "checksumSuccessRate",
+      "extractionSuccessRate",
+      "firstLaunchSuccessRate",
+      "timeToRoom",
+      "failurePoints",
+    ],
+    "pilot_aggregate_invalid",
+  );
+  for (const key of [
+    "downloadSuccessRate",
+    "checksumSuccessRate",
+    "extractionSuccessRate",
+    "firstLaunchSuccessRate",
+  ] as const) {
+    parseProportion(value.distribution[key]);
+  }
+  parseDuration(value.distribution.timeToRoom);
+  parseCategory(value.distribution.failurePoints, PILOT_EXIT_POINTS);
+  expectExactKeys(
+    value.journey,
+    [
+      "project",
+      "brief",
+      "review",
+      "manifest",
+      "disposition",
+      "receipt",
+      "recovery",
+      "relaunch",
+    ],
+    "pilot_aggregate_invalid",
+  );
+  for (const key of [
+    "project",
+    "brief",
+    "review",
+    "manifest",
+    "disposition",
+    "receipt",
+  ] as const) {
+    parseCategory(value.journey[key], JOURNEY_OUTCOMES);
+  }
+  parseCategory(value.journey.recovery, RECOVERY_OUTCOMES);
+  parseCategory(value.journey.relaunch, STEP_OUTCOMES);
+  expectExactKeys(
+    value.localWebLifecycle,
+    ["outcome", "frictionSeverity", "blockingRate"],
+    "pilot_aggregate_invalid",
+  );
+  parseCategory(value.localWebLifecycle.outcome, STEP_OUTCOMES);
+  parseCategory(
+    value.localWebLifecycle.frictionSeverity,
+    FRICTION_SEVERITIES,
+  );
+  parseProportion(value.localWebLifecycle.blockingRate);
   expectExactKeys(value.episode, ["completionRate", "duration"], "pilot_aggregate_invalid");
   parseProportion(value.episode.completionRate);
   parseDuration(value.episode.duration);
@@ -635,10 +892,16 @@ export function parsePilotAggregateReport(value: unknown): PilotAggregateReport 
   parseProportion(value.findings.uncertainRate);
   expectExactKeys(
     value.maintenanceBurden,
-    ["brief", "decision", "issue"],
+    ["brief", "decision", "issue", "manifest", "recovery"],
     "pilot_aggregate_invalid",
   );
-  for (const key of ["brief", "decision", "issue"] as const) {
+  for (const key of [
+    "brief",
+    "decision",
+    "issue",
+    "manifest",
+    "recovery",
+  ] as const) {
     parseCategory(value.maintenanceBurden[key], ["1", "2", "3", "4", "5"], true);
   }
   expectExactKeys(value.secondUse, ["status", "rate"], "pilot_aggregate_invalid");
@@ -653,6 +916,11 @@ export function parsePilotAggregateReport(value: unknown): PilotAggregateReport 
     aggregateInvalid();
   }
   parseCategory(value.entryPreference, PREFERRED_ENTRIES);
+  parseCategory(value.desktopNeed, DESKTOP_NEEDS);
+  parseCategory(
+    value.desktopSolutionEvidence,
+    DESKTOP_SOLUTION_EVIDENCE,
+  );
   parseCategory(value.uiNeed, UI_NEEDS);
   parseCategory(
     value.syntheticCaseDiscussion,
@@ -677,6 +945,62 @@ export function parsePilotAggregateReport(value: unknown): PilotAggregateReport 
     if (aggregateInteger(value.failures[key]) > externalSessions) aggregateInvalid();
   }
   aggregateEvidence(value.failures.evidenceIds);
+  expectExactKeys(
+    value.ri55Eligibility,
+    [
+      "status",
+      "requiredExternalParticipants",
+      "missingExternalParticipants",
+      "requiredPairedParticipants",
+      "pairedParticipantCount",
+      "missingPairedParticipants",
+      "requiredBehaviorFieldGroups",
+      "missingBehaviorFieldSessions",
+      "missingBehaviorFieldGroups",
+    ],
+    "pilot_aggregate_invalid",
+  );
+  const paired = aggregateInteger(value.ri55Eligibility.pairedParticipantCount);
+  const missingParticipants = aggregateInteger(
+    value.ri55Eligibility.missingExternalParticipants,
+  );
+  const missingPairs = aggregateInteger(
+    value.ri55Eligibility.missingPairedParticipants,
+  );
+  const missingBehaviorSessions = aggregateInteger(
+    value.ri55Eligibility.missingBehaviorFieldSessions,
+  );
+  const missingBehaviorGroups = aggregateInteger(
+    value.ri55Eligibility.missingBehaviorFieldGroups,
+  );
+  const behaviorGroups = [
+    "distribution",
+    "journey",
+    "local_web_lifecycle",
+    "desktop_need",
+    "maintenance_burden",
+    "repeat_correction",
+    "willingness",
+    "failures_and_exits",
+  ];
+  if (
+    value.ri55Eligibility.requiredExternalParticipants !== 5 ||
+    value.ri55Eligibility.requiredPairedParticipants !== 1 ||
+    missingParticipants !== Math.max(0, 5 - participants) ||
+    paired > participants ||
+    missingPairs !== Math.max(0, 1 - paired) ||
+    !Array.isArray(value.ri55Eligibility.requiredBehaviorFieldGroups) ||
+    canonicalStringify(value.ri55Eligibility.requiredBehaviorFieldGroups) !==
+      canonicalStringify(behaviorGroups) ||
+    missingBehaviorSessions > 5 ||
+    missingBehaviorGroups !== missingBehaviorSessions * behaviorGroups.length ||
+    value.ri55Eligibility.status !==
+      (participants >= 5 && paired >= 1
+        ? "eligible_for_product_shape_review"
+        : "waiting_real_public_preview_behavior_evidence")
+  ) {
+    aggregateInvalid();
+  }
   if (
     !Array.isArray(value.limitations) ||
     value.limitations.length !== 3 ||
@@ -732,6 +1056,32 @@ export function renderPilotAggregateMarkdown(
     `- Setup duration: ${distribution(report.setup.duration)}`,
     `- Evidence IDs: ${ids(report.setup.successRate.evidenceIds)}`,
     "",
+    "## Public Preview distribution",
+    `- Platforms: ${counts(report.publicPreview.releasePlatform)}`,
+    `- Distribution source: ${counts(report.publicPreview.distributionSource)}`,
+    `- Operating mode: ${counts(report.publicPreview.operatingMode)}`,
+    `- Download success: ${ratio(report.distribution.downloadSuccessRate)}`,
+    `- SHA-256 verification success: ${ratio(report.distribution.checksumSuccessRate)}`,
+    `- Extraction success: ${ratio(report.distribution.extractionSuccessRate)}`,
+    `- First launch success: ${ratio(report.distribution.firstLaunchSuccessRate)}`,
+    `- Time to Research Room: ${distribution(report.distribution.timeToRoom)}`,
+    `- Distribution failure points: ${counts(report.distribution.failurePoints)}`,
+    "",
+    "## Research Room journey",
+    `- Project: ${counts(report.journey.project)}`,
+    `- Brief: ${counts(report.journey.brief)}`,
+    `- Review: ${counts(report.journey.review)}`,
+    `- Context Manifest: ${counts(report.journey.manifest)}`,
+    `- Disposition: ${counts(report.journey.disposition)}`,
+    `- Receipt: ${counts(report.journey.receipt)}`,
+    `- Recovery: ${counts(report.journey.recovery)}`,
+    `- Relaunch: ${counts(report.journey.relaunch)}`,
+    "",
+    "## Local web lifecycle",
+    `- Outcome: ${counts(report.localWebLifecycle.outcome)}`,
+    `- Friction severity: ${counts(report.localWebLifecycle.frictionSeverity)}`,
+    `- Blocking: ${ratio(report.localWebLifecycle.blockingRate)}`,
+    "",
     "## Episode",
     `- Completed one Episode: ${ratio(report.episode.completionRate)}`,
     `- Episode duration: ${distribution(report.episode.duration)}`,
@@ -752,6 +1102,8 @@ export function renderPilotAggregateMarkdown(
     `- Brief (1-5): average=${report.maintenanceBurden.brief.average ?? "not_available"}; ${counts(report.maintenanceBurden.brief)}`,
     `- Decision (1-5): average=${report.maintenanceBurden.decision.average ?? "not_available"}; ${counts(report.maintenanceBurden.decision)}`,
     `- Issue (1-5): average=${report.maintenanceBurden.issue.average ?? "not_available"}; ${counts(report.maintenanceBurden.issue)}`,
+    `- Manifest (1-5): average=${report.maintenanceBurden.manifest.average ?? "not_available"}; ${counts(report.maintenanceBurden.manifest)}`,
+    `- Recovery (1-5): average=${report.maintenanceBurden.recovery.average ?? "not_available"}; ${counts(report.maintenanceBurden.recovery)}`,
     `- Evidence IDs: ${ids(report.maintenanceBurden.brief.evidenceIds)}`,
     "",
     "## Second use",
@@ -761,6 +1113,8 @@ export function renderPilotAggregateMarkdown(
     "",
     "## Entry and UI",
     `- Entry preference: ${counts(report.entryPreference)}`,
+    `- Desktop need: ${counts(report.desktopNeed)}`,
+    `- Desktop-specific solution evidence: ${counts(report.desktopSolutionEvidence)}`,
     `- UI need: ${counts(report.uiNeed)}`,
     `- Would use again: ${counts(report.wouldUseAgain)}`,
     `- Synthetic-case discussion willingness: ${counts(report.syntheticCaseDiscussion)}`,
@@ -778,6 +1132,13 @@ export function renderPilotAggregateMarkdown(
     "## Negative feedback",
     `- Explicit negative-feedback sessions are retained, never filtered: ${report.failures.negativeFeedbackSessionCount}`,
     `- Would not use again: ${report.wouldUseAgain.counts.no ?? 0}`,
+    "",
+    "## RI-55 eligibility gate",
+    `- Status: ${report.ri55Eligibility.status}`,
+    `- Missing external participants: ${report.ri55Eligibility.missingExternalParticipants}/${report.ri55Eligibility.requiredExternalParticipants}`,
+    `- Valid paired session-1/session-2 participants: ${report.ri55Eligibility.pairedParticipantCount}; missing ${report.ri55Eligibility.missingPairedParticipants}`,
+    `- Missing participant behavior sessions: ${report.ri55Eligibility.missingBehaviorFieldSessions}`,
+    `- Missing behavior field groups: ${report.ri55Eligibility.missingBehaviorFieldGroups}`,
     "",
     "## Evidence limitations",
     "- No automatic Go, Conditional Go, or No-Go decision is produced.",

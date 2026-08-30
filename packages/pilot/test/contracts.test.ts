@@ -50,6 +50,11 @@ describe("ShareablePilotExport exact-key contract", () => {
       "stderr",
       "email",
       "institution",
+      "researchContent",
+      "identity",
+      "deviceId",
+      "secret",
+      "rawError",
     ]) {
       expect(serialized).not.toContain(`"${forbidden}"`);
     }
