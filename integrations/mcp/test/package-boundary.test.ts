@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { readFile, readdir } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -10,7 +11,7 @@ async function sourceFiles(directory: string): Promise<string[]> {
   const files: string[] = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const path = join(directory, entry.name);
-    if (entry.isDirectory()) files.push(...await sourceFiles(path));
+    if (entry.isDirectory()) files.push(...(await sourceFiles(path)));
     else if (entry.isFile() && entry.name.endsWith(".ts")) files.push(path);
   }
   return files;
@@ -18,10 +19,12 @@ async function sourceFiles(directory: string): Promise<string[]> {
 
 describe("@sestina/mcp package and architecture boundary", () => {
   it("declares the production package, public entry, scripts, and single binary", async () => {
-    const manifest = JSON.parse(await readFile(join(packageRoot, "package.json"), "utf8")) as Record<string, unknown>;
+    const manifest = JSON.parse(
+      await readFile(join(packageRoot, "package.json"), "utf8"),
+    ) as Record<string, unknown>;
     expect(manifest).toMatchObject({
       name: "@sestina/mcp",
-      version: "0.1.0",
+      version: "0.2.0",
       private: true,
       type: "module",
       engines: { node: ">=24 <25" },
@@ -29,9 +32,16 @@ describe("@sestina/mcp package and architecture boundary", () => {
       exports: { ".": "./src/index.ts" },
     });
     const scripts = manifest.scripts;
-    if (typeof scripts !== "object" || scripts === null || Array.isArray(scripts)) throw new Error("package_scripts_required");
+    if (
+      typeof scripts !== "object" ||
+      scripts === null ||
+      Array.isArray(scripts)
+    )
+      throw new Error("package_scripts_required");
     expect(typeof (scripts as Record<string, unknown>).test).toBe("string");
-    expect(typeof (scripts as Record<string, unknown>).typecheck).toBe("string");
+    expect(typeof (scripts as Record<string, unknown>).typecheck).toBe(
+      "string",
+    );
     expect(typeof (scripts as Record<string, unknown>).build).toBe("string");
     expect(manifest).not.toHaveProperty("dependencies");
   });
@@ -40,7 +50,9 @@ describe("@sestina/mcp package and architecture boundary", () => {
     const imports = new Set<string>();
     for (const file of await sourceFiles(join(packageRoot, "src"))) {
       const source = await readFile(file, "utf8");
-      for (const match of source.matchAll(/(?:from|import\s*)\s*["'](@sestina\/[^"']+)["']/gu)) {
+      for (const match of source.matchAll(
+        /(?:from|import\s*)\s*["'](@sestina\/[^"']+)["']/gu,
+      )) {
         if (match[1] !== undefined) imports.add(match[1]);
       }
       expect(source).not.toMatch(/\.\.\/\.\.\/\.\.\//u);
@@ -48,11 +60,10 @@ describe("@sestina/mcp package and architecture boundary", () => {
     expect([...imports]).toEqual(["@sestina/core"]);
   });
 
-  it("does not depend on or replace the retained RI-36 spike", async () => {
+  it("does not depend on or ship the retired MCP spike", async () => {
     const manifest = await readFile(join(packageRoot, "package.json"), "utf8");
     expect(manifest).not.toContain("mcp-v2-spike");
-    await expect(readFile(join(repositoryRoot, "spikes", "mcp-v2", "package.json"), "utf8"))
-      .resolves.toContain("@sestina/mcp-v2-spike");
+    expect(existsSync(join(repositoryRoot, "spikes", "mcp-v2"))).toBe(false);
   });
 
   it("contains no machine path or user-state artifact in production sources", async () => {
@@ -60,7 +71,9 @@ describe("@sestina/mcp package and architecture boundary", () => {
       const source = await readFile(file, "utf8");
       expect(source).not.toMatch(/[A-Za-z]:\\Users\\/u);
       expect(source).not.toMatch(/state\.sqlite-(?:wal|shm)/u);
-      expect(source).not.toMatch(/Semantic Reviewer|Minimal Correction|Finding/u);
+      expect(source).not.toMatch(
+        /Semantic Reviewer|Minimal Correction|Finding/u,
+      );
     }
   });
 
@@ -69,8 +82,12 @@ describe("@sestina/mcp package and architecture boundary", () => {
     for (const file of await sourceFiles(join(packageRoot, "src"))) {
       const source = await readFile(file, "utf8");
       combined += source;
-      expect(source).not.toMatch(/from\s+["']node:(?:net|http|https|http2|dgram)["']/u);
-      expect(source).not.toMatch(/\b(?:SELECT\s+|INSERT\s+INTO|UPDATE\s+[A-Za-z_"]|DELETE\s+FROM|PRAGMA\s+)\b/iu);
+      expect(source).not.toMatch(
+        /from\s+["']node:(?:net|http|https|http2|dgram)["']/u,
+      );
+      expect(source).not.toMatch(
+        /\b(?:SELECT\s+|INSERT\s+INTO|UPDATE\s+[A-Za-z_"]|DELETE\s+FROM|PRAGMA\s+)\b/iu,
+      );
     }
     expect(combined).toContain("readOnly: true");
     expect(combined).not.toContain("readOnly: false");

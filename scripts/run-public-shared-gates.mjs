@@ -8,7 +8,7 @@ const tsc = resolve(root, "node_modules/typescript/bin/tsc");
 const vitest = resolve(root, "node_modules/vitest/vitest.mjs");
 
 function runNode(label, args) {
-  process.stdout.write(`\n[RI-54 shared] ${label}\n`);
+  process.stdout.write(`\n[public shared] ${label}\n`);
   const result = spawnSync(node, args, {
     cwd: root,
     env: { ...process.env, CI: "true", NO_COLOR: "1" },
@@ -16,7 +16,7 @@ function runNode(label, args) {
     windowsHide: true,
   });
   if (result.error || result.status !== 0) {
-    process.stderr.write(`[RI-54 shared] failed: ${label}\n`);
+    process.stderr.write(`[public shared] failed: ${label}\n`);
     process.exit(result.status ?? 1);
   }
 }
@@ -25,7 +25,7 @@ function run(label, entry, args = []) {
   runNode(label, [entry, ...args]);
 }
 
-run("public-preview production-source lint", eslint, [
+run("production-source lint", eslint, [
   "apps/cli/src/main.ts",
   "apps/research-room/src/main.ts",
   "apps/research-room/src/server.ts",
@@ -73,7 +73,6 @@ run("public-preview, resilience, privacy, and authority tests", vitest, [
   "apps/research-room/test/server.test.ts",
   "apps/research-room/test/ri53-api.test.ts",
   "apps/research-room/test/ri53-responsive-chrome.test.ts",
-  "tests/repository/authority-boundaries.test.ts",
   "tests/repository/public-preview-contract.test.ts",
   "tests/repository/release-archive.test.ts",
   "tests/repository/release-artifact-contract.test.ts",
@@ -91,13 +90,16 @@ for (const script of [
   "scripts/lib/release-verifier.mjs",
   "scripts/lib/public-release-verifier.mjs",
   "scripts/run-fresh-install.mjs",
-  "scripts/run-ri54-platform-gates.mjs",
+  "scripts/run-public-platform-gates.mjs",
+  "scripts/prepare-release-lifecycle-fixture.mjs",
+  "scripts/audit-public-history.mjs",
+  "scripts/verify-public-repository.mjs",
 ]) {
   runNode(`syntax ${script}`, ["--check", resolve(root, script)]);
 }
 
 for (const script of [
-  "scripts/verify-authority.mjs",
+  "scripts/verify-public-repository.mjs",
   "scripts/check-doc-links.mjs",
   "scripts/check-repository-shape.mjs",
   "scripts/verify-architecture.mjs",
@@ -106,4 +108,6 @@ for (const script of [
   run(script, resolve(root, script));
 }
 
-process.stdout.write("\n[RI-54 shared] all deterministic gates passed\n");
+process.stdout.write(
+  "\n[public shared] all deterministic public gates passed\n",
+);

@@ -1,6 +1,6 @@
 # Sestina Research Room
 
-The RI-48 Research Room is a loopback-only local web application. On first run,
+Sestina Research Room is a loopback-only local web application. On first run,
 it requires an explicit `中文` or `English` interface-language choice before a
 project can be opened. The choice is stored as a strict App-level preference in
 `%LOCALAPPDATA%\Sestina\preferences.json` on Windows and is restored across
@@ -203,5 +203,5 @@ export/run/import/evaluate workflow are documented at
 `researchbench/research-room-semantic-judge/README.md`. It contains 96
 development and 96 hash-locked test cases, split equally between zh-CN and
 English. It is synthetic implementation evidence, never external-user or market
-evidence. With no user-configured Provider, the checked-in real-host smoke and
-semantic metrics remain `blocked_missing_user_config`.
+evidence. Without a user-configured Provider, no real Provider semantic result
+is claimed; the deterministic local path remains available as `ledger_only`.

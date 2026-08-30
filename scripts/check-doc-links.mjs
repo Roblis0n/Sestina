@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Check all markdown links in docs/ are valid.
+ * Check public root documents and all markdown links in docs/.
  * Reports broken links and exits 1 if any found.
  */
 import { readFileSync, readdirSync, existsSync, statSync } from "node:fs";
@@ -54,7 +54,19 @@ function getLineNumber(content, index) {
 
 // Main check
 function main() {
-  const mdFiles = findMdFiles(DOCS_DIR);
+  const rootDocuments = [
+    "README.md",
+    "AGENTS.md",
+    "CONTRIBUTING.md",
+    "CODE_OF_CONDUCT.md",
+    "PRIVACY.md",
+    "SECURITY.md",
+    "SUPPORT.md",
+    "TRADEMARKS.md",
+  ]
+    .map((path) => resolve(ROOT, path))
+    .filter((path) => existsSync(path));
+  const mdFiles = [...rootDocuments, ...findMdFiles(DOCS_DIR)].sort();
   let brokenCount = 0;
 
   for (const file of mdFiles) {

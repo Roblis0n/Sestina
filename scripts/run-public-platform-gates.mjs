@@ -16,22 +16,21 @@ if (
   !["x64", "arm64"].includes(expectedArchitecture)
 ) {
   process.stderr.write(
-    "Usage: node scripts/run-ri54-platform-gates.mjs <win32|darwin|linux> <x64|arm64>\n",
+    "Usage: node scripts/run-public-platform-gates.mjs <win32|darwin|linux> <x64|arm64>\n",
   );
   process.exit(2);
 }
-if (
-  process.platform !== expectedOs ||
-  process.arch !== expectedArchitecture
-) {
+if (process.platform !== expectedOs || process.arch !== expectedArchitecture) {
   process.stderr.write(
-    `[RI-54] runner mismatch: expected ${expectedOs}-${expectedArchitecture}, got ${process.platform}-${process.arch}\n`,
+    `[public platform] runner mismatch: expected ${expectedOs}-${expectedArchitecture}, got ${process.platform}-${process.arch}\n`,
   );
   process.exit(1);
 }
 
 function run(label, entry, args = []) {
-  process.stdout.write(`\n[RI-54 ${process.platform}-${process.arch}] ${label}\n`);
+  process.stdout.write(
+    `\n[public ${process.platform}-${process.arch}] ${label}\n`,
+  );
   const result = spawnSync(process.execPath, [resolve(root, entry), ...args], {
     cwd: root,
     env: { ...process.env, CI: "true", NO_COLOR: "1" },
@@ -40,7 +39,7 @@ function run(label, entry, args = []) {
   });
   if (result.error || result.status !== 0) {
     process.stderr.write(
-      `[RI-54 ${process.platform}-${process.arch}] failed: ${label}\n`,
+      `[public ${process.platform}-${process.arch}] failed: ${label}\n`,
     );
     process.exit(result.status ?? 1);
   }
@@ -49,9 +48,9 @@ function run(label, entry, args = []) {
 async function releaseFingerprint() {
   const records = [];
   async function visit(directory) {
-    for (const entry of (await readdir(directory, { withFileTypes: true })).sort(
-      (left, right) => left.name.localeCompare(right.name, "en"),
-    )) {
+    for (const entry of (
+      await readdir(directory, { withFileTypes: true })
+    ).sort((left, right) => left.name.localeCompare(right.name, "en"))) {
       const path = join(directory, entry.name);
       if (entry.isDirectory()) await visit(path);
       else if (entry.isFile()) {
@@ -77,21 +76,21 @@ const first = await releaseFingerprint();
 run("build public-preview artifact pass 2", "scripts/build-release.mjs");
 const second = await releaseFingerprint();
 if (first !== second) {
-  process.stderr.write("[RI-54] deterministic rebuild mismatch\n");
+  process.stderr.write("[public platform] deterministic rebuild mismatch\n");
   process.exit(1);
 }
 run("verify exact artifact contract", "scripts/verify-release-artifact.mjs", [
   "release",
 ]);
 run(
-  "exercise clean extraction, no-network first/open/reopen, rc continuity, backup/restore, failed migration no-retry, future schema refusal, restart, uninstall, and reinstall",
+  "exercise clean extraction, no-network start/reopen, upgrade continuity, backup/restore, failed migration no-retry, future schema refusal, restart, uninstall, and reinstall",
   "scripts/run-fresh-install.mjs",
   ["--release-dir", "release"],
 );
 process.stdout.write(
   `${JSON.stringify({
     ok: true,
-    gate: "ri54-platform-public-preview",
+    gate: "public-preview-platform",
     platform: process.platform,
     architecture: process.arch,
     deterministicRebuild: true,

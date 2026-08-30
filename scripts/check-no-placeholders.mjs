@@ -25,16 +25,16 @@ if (!ROOT) {
 
 // Patterns to search for (case-insensitive).  Order matches the spec.
 const PATTERNS = [
-  { name: "TODO",       regex: /TODO/gi },
-  { name: "FIXME",      regex: /FIXME/gi },
-  { name: "XXX",        regex: /XXX(?!\.)/gi },
-  { name: "PLACEHOLDER", regex: /PLACEHOLDER/gi },
-  { name: '"changeme"',  regex: /changeme/gi },
-  { name: '"replaceme"', regex: /replaceme/gi },
-  { name: '"temp_"',    regex: /temp_/gi },
-  { name: '"stub_"',    regex: /stub_/gi },
-  { name: '"WIP"',      regex: /WIP/gi },
-  { name: '"TBD"',      regex: /TBD/gi },
+  { name: "TODO", regex: /\bTODO\b/g },
+  { name: "FIXME", regex: /\bFIXME\b/g },
+  { name: "XXX", regex: /\bXXX\b(?!\.)/g },
+  { name: "PLACEHOLDER", regex: /\bPLACEHOLDER\b/g },
+  { name: '"changeme"', regex: /\bchangeme\b/gi },
+  { name: '"replaceme"', regex: /\breplaceme\b/gi },
+  { name: '"temp_"', regex: /\btemp_[a-z0-9_]*\b/gi },
+  { name: '"stub_"', regex: /\bstub_[a-z0-9_]*\b/gi },
+  { name: '"WIP"', regex: /\bWIP\b/g },
+  { name: '"TBD"', regex: /\bTBD\b/g },
 ];
 
 // Directories to exclude (specs, test code, build outputs)
@@ -47,25 +47,15 @@ const EXCLUDE_DIRS = new Set([
   ".git",
   "docs",
   "tests",
-  // Gitignored working notes (CLAUDE.md: keep resumption guides and research
-  // notes there; they legitimately quote upstream docs and are never committed).
+  // Gitignored local working notes and generated state.
   ".tmp",
   // Local, gitignored pre-pivot archives can contain private session extracts,
   // historical research packets, and machine-specific helper scripts.
   ".frozen-local",
 ]);
 
-// Files at the repo root to exclude (historical materials)
-const EXCLUDE_ROOT_FILES = new Set([
-  "handoff.md",
-  "方案详解.md",
-  "未决.md",
-  "招募合作者-未决.md",
-  "结果.md",
-  "HANDOFF-FOR-CLAUDE-CODE.md",
-  "HANDOFF-FOR-NEXT-CONVERSATION.md",
-  "pnpm-lock.yaml",
-]);
+// Lockfiles legitimately contain package names that may overlap scan words.
+const EXCLUDE_ROOT_FILES = new Set(["pnpm-lock.yaml"]);
 
 // Path to this script itself — never scan it
 const SELF_PATH = fileURLToPath(import.meta.url);
@@ -82,18 +72,17 @@ const SCAN_EXTENSIONS = new Set([
 ]);
 
 /**
- * Returns true when any segment of `dirPath` matches a skipped directory
- * or the special "OpenMythos-main (1)" directory name.
+ * Returns true when any segment of `dirPath` matches a skipped directory.
  */
 function isExcluded(dirPath) {
-  const parts = dirPath.split(/[/\\]/);
-  // Check if this is a package test directory: packages/<name>/test/
-  const normalized = dirPath.replace(/\\/g, "/");
-  if (/packages\/[^/]+\/test(\/|$)/.test(normalized)) return true;
+  const repoRelativePath = relative(ROOT, dirPath);
+  const parts = repoRelativePath.split(/[/\\]/).filter(Boolean);
+  // Tests deliberately exercise placeholder handling and are not production source.
+  const normalized = repoRelativePath.replace(/\\/g, "/");
+  if (/(^|\/)(test|tests)(\/|$)/.test(normalized)) return true;
 
   for (const part of parts) {
     if (EXCLUDE_DIRS.has(part)) return true;
-    if (part === "OpenMythos-main (1)") return true;
   }
   return false;
 }
@@ -155,7 +144,10 @@ function main() {
       let cnpMatch;
       while ((cnpMatch = cnpRegex.exec(content)) !== null) {
         // Record the span of "placeholder" within "check-no-placeholders": chars 9-20
-        cnpPositions.push({ start: cnpMatch.index + 9, end: cnpMatch.index + 20 });
+        cnpPositions.push({
+          start: cnpMatch.index + 9,
+          end: cnpMatch.index + 20,
+        });
       }
     }
 

@@ -39,7 +39,6 @@ export default tseslint.config(
       "**/*.js",
       "**/*.mjs",
       "**/*.cjs",
-      "OpenMythos-main (1)/",
       "artifacts/",
       "release/",
     ],

@@ -13,7 +13,7 @@
  *   2. pnpm-workspace.yaml declares the three required globs
  *   3. packages/, apps/, integrations/ directories exist
  *   4. No cross-imports between apps and integrations
- *   5. OpenMythos-main (1)/ is NOT in workspace
+ *   5. Workspace globs are exact and internal-only trees are absent
  *   6. Every package directory has valid @sestina/* package.json
  *   7. Public entry points exist with real exports
  *   8. Cross-package imports only reference full package names (no subpaths);
@@ -124,7 +124,6 @@ const WALK_SKIP = new Set([
   ".release-ri42-staging",
   "pilot-dist",
   "pilot-private",
-  "OpenMythos-main (1)",
 ]);
 
 function* walkFiles(relDir) {
@@ -313,7 +312,11 @@ function checkCategoryCrossImports(catDir, catLabel, otherNames) {
     for (const f of walkFiles(pkgDir)) {
       if (!/\.(ts|tsx|js|jsx|mjs|cjs|mts|cts)$/.test(f)) continue;
       for (const imp of extractImports(f)) {
-        if (otherNames.has(imp) && imp !== ownName && !CROSS_CATEGORY_IMPORT_ALLOWLIST.get(ownName)?.has(imp)) {
+        if (
+          otherNames.has(imp) &&
+          imp !== ownName &&
+          !CROSS_CATEGORY_IMPORT_ALLOWLIST.get(ownName)?.has(imp)
+        ) {
           err(
             `${f} imports "${imp}" — cross-import between ${catLabel} packages is forbidden`,
           );
@@ -340,24 +343,26 @@ if (dirsUnder("apps").length === 0 && dirsUnder("integrations").length === 0) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Check 5 — OpenMythos exclusion
+// Check 5 — Exact public workspace and internal-only tree exclusion
 // ═══════════════════════════════════════════════════════════════════════════
-process.stderr.write("\n=== Check 5: OpenMythos-main (1)/ exclusion ===\n");
-const FORBIDDEN = "OpenMythos-main (1)";
-if (existsSync(resolve(ROOT, FORBIDDEN))) {
-  const found = workspaceGlobs.some((g) => {
-    const prefix = g.replace(/\*+$/, "").replace(/\/$/, "");
-    try {
-      return resolve(ROOT, FORBIDDEN).startsWith(resolve(ROOT, prefix));
-    } catch {
-      return false;
-    }
-  });
-  found
-    ? err(`"${FORBIDDEN}/" should not be a workspace package`)
-    : ok(`"${FORBIDDEN}/" is not a workspace package`);
+process.stderr.write("\n=== Check 5: Exact public workspace ===\n");
+if (JSON.stringify(workspaceGlobs) === JSON.stringify(REQUIRED_GLOBS)) {
+  ok("workspace declares only packages, apps, and integrations");
 } else {
-  ok(`"${FORBIDDEN}/" does not exist (no issue)`);
+  err(`workspace globs must be exact: ${REQUIRED_GLOBS.join(", ")}`);
+}
+for (const internalPath of [
+  "docs/execution",
+  "docs/history",
+  "docs/pivot-inputs",
+  "docs/product-exploration",
+  "spikes",
+]) {
+  if (existsSync(resolve(ROOT, internalPath))) {
+    err(`internal-only tree is present: ${internalPath}`);
+  } else {
+    ok(`internal-only tree is absent: ${internalPath}`);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -505,8 +510,13 @@ for (const pkg of allPkgDirs) {
 
       // ── Relative imports that cross package roots ──
       if (imp.startsWith(".")) {
-        const fixtureException = TEST_FIXTURE_RELATIVE_IMPORT_ALLOWLIST.has(`${fileRel}::${imp}`);
-        if (relativeImportEscapesPackage(fileRel, imp, pkg.dir) && !fixtureException) {
+        const fixtureException = TEST_FIXTURE_RELATIVE_IMPORT_ALLOWLIST.has(
+          `${fileRel}::${imp}`,
+        );
+        if (
+          relativeImportEscapesPackage(fileRel, imp, pkg.dir) &&
+          !fixtureException
+        ) {
           err(
             `${fileRel} imports "${imp}" — relative import escapes package root "${pkg.dir}"`,
           );
@@ -603,12 +613,47 @@ process.stderr.write("\n=== Check 11: NUL bytes in text-like files ===\n");
 
 // Media/binary asset extensions that legitimately contain NUL bytes.
 const BINARY_EXTENSIONS = new Set([
-  "png", "jpg", "jpeg", "gif", "ico", "icns", "webp", "bmp", "tif", "tiff",
-  "woff", "woff2", "ttf", "otf", "eot",
-  "mp3", "mp4", "wav", "ogg", "webm", "avi", "mov",
-  "pdf", "zip", "gz", "tar", "bz2", "xz", "7z", "rar",
-  "dll", "exe", "so", "dylib", "wasm", "node", "db", "sqlite",
-  "snap", "asar", "pak",
+  "png",
+  "jpg",
+  "jpeg",
+  "gif",
+  "ico",
+  "icns",
+  "webp",
+  "bmp",
+  "tif",
+  "tiff",
+  "woff",
+  "woff2",
+  "ttf",
+  "otf",
+  "eot",
+  "mp3",
+  "mp4",
+  "wav",
+  "ogg",
+  "webm",
+  "avi",
+  "mov",
+  "pdf",
+  "zip",
+  "gz",
+  "tar",
+  "bz2",
+  "xz",
+  "7z",
+  "rar",
+  "dll",
+  "exe",
+  "so",
+  "dylib",
+  "wasm",
+  "node",
+  "db",
+  "sqlite",
+  "snap",
+  "asar",
+  "pak",
 ]);
 
 let nulErrors = 0;

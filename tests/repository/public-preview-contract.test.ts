@@ -12,7 +12,7 @@ function json(path: string): Record<string, unknown> {
   >;
 }
 
-describe("RI-54 public preview repository contract", () => {
+describe("public preview repository contract", () => {
   it("publishes the project under Apache-2.0 without enabling npm publication", () => {
     const license = readFileSync(resolve(root, "LICENSE"), "utf8");
     expect(license).toContain("Apache License");
@@ -36,7 +36,9 @@ describe("RI-54 public preview repository contract", () => {
       ".github/ISSUE_TEMPLATE/bug-report.yml",
       "docs/release/RELEASE-NOTES-0.2.0.md",
     ]) {
-      expect(readFileSync(resolve(root, path), "utf8").length).toBeGreaterThan(100);
+      expect(readFileSync(resolve(root, path), "utf8").length).toBeGreaterThan(
+        100,
+      );
     }
     const template = readFileSync(
       resolve(root, ".github/ISSUE_TEMPLATE/bug-report.yml"),
@@ -66,7 +68,7 @@ describe("RI-54 public preview repository contract", () => {
       "expected-arch: arm64",
       "ubuntu-24.04",
       "expected-os: linux",
-      "pnpm verify:ri54 ${{ matrix.expected-os }} ${{ matrix.expected-arch }}",
+      "pnpm verify:platform ${{ matrix.expected-os }} ${{ matrix.expected-arch }}",
     ]) {
       expect(workflow).toContain(expected);
     }
@@ -86,10 +88,9 @@ describe("RI-54 public preview repository contract", () => {
       "utf8",
     );
     expect(historyAudit).toContain(
-      '"https://github.com/Roblis0n/Sestina.git"',
+      "public history must have exactly one root commit",
     );
-    expect(historyAudit).toContain(
-      '"https://github.com/Roblis0n/Sestina"',
-    );
+    expect(historyAudit).toContain("@users.noreply.github.com");
+    expect(historyAudit).toContain("requiredPublicFiles");
   });
 });

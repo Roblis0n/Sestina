@@ -1,4 +1,4 @@
-name: Sestina RI-54 Public Preview Artifact Matrix
+name: Sestina Public Preview Artifact Matrix
 
 on:
   workflow_dispatch:
@@ -11,19 +11,19 @@ jobs:
     name: Shared public-preview gates
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 11.16.0
           run_install: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm verify:ri54:shared
+      - run: pnpm verify:public
 
   platform-public-preview:
     name: Public preview · ${{ matrix.platform }}
@@ -46,20 +46,20 @@ jobs:
             expected-arch: x64
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
         with:
           version: 11.16.0
           run_install: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm verify:ri54 ${{ matrix.expected-os }} ${{ matrix.expected-arch }}
-      - uses: actions/upload-artifact@v4
+      - run: pnpm verify:platform ${{ matrix.expected-os }} ${{ matrix.expected-arch }}
+      - uses: actions/upload-artifact@v7
         with:
-          name: sestina-ri54-${{ matrix.platform }}-${{ github.sha }}
+          name: sestina-public-preview-${{ matrix.platform }}-${{ github.sha }}
           path: release/*
           if-no-files-found: error
           retention-days: 14

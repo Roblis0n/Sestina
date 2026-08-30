@@ -2,10 +2,9 @@ packages:
   - "packages/*"
   - "apps/*"
   - "integrations/*"
-  - "spikes/*"
 onlyBuiltDependencies:
-  - '@primno/dpapi'
+  - "@primno/dpapi"
   - esbuild
 allowBuilds:
-  '@primno/dpapi': true
+  "@primno/dpapi": true
   esbuild: true

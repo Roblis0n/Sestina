@@ -98,6 +98,7 @@ describe("Repository Shape", () => {
     "eslint.config.mjs",
     ".npmrc",
     ".node-version",
+    ".gitattributes",
   ];
 
   it("has all required root config files", () => {
@@ -124,14 +125,13 @@ describe("Repository Shape", () => {
     expect(packages).toContain("packages/*");
     expect(packages).toContain("apps/*");
     expect(packages).toContain("integrations/*");
-    expect(packages).not.toContain("OpenMythos-main (1)/*");
-    expect(packages).not.toContain("OpenMythos-main (1)");
+    expect(packages).toEqual(["packages/*", "apps/*", "integrations/*"]);
   });
 
-  it("has no workspace-included historical directories", () => {
+  it("has no workspace-included legacy directories", () => {
     const packages = parsePnpmWorkspace();
     const historicalPatterns = packages.filter(
-      (p) => p.includes("OpenMythos") || p.includes("legacy"),
+      (p) => p.includes("history") || p.includes("legacy"),
     );
     expect(historicalPatterns).toHaveLength(0);
   });
@@ -319,27 +319,26 @@ describe("CI workflow", () => {
     expect(content).toMatch(/pnpm install.*--frozen-lockfile/);
   });
 
-  it("CI runs the unified pnpm verify entry (not test:integration which has no tests yet)", () => {
+  it("CI runs the public verification entry", () => {
     const content = readFileSync(ciPath, "utf-8");
-    // Single unified entry; verify itself chains test/build/repo:check plus
-    // the RI-03 boundary verifiers (see package.json and
-    // docs/architecture/01-DEPENDENCY-RULES.md).
-    expect(content).toMatch(/pnpm verify\b/);
+    expect(content).toMatch(/pnpm verify:public\b/);
     // Must NOT have pnpm test:integration (would fail with no tests)
     expect(content).not.toMatch(/pnpm test:integration/);
   });
 
-  it("CI keeps exactly one shared and one platform RI-54 quality entry after their installs", () => {
+  it("CI keeps exactly one shared and one platform public quality entry after their installs", () => {
     const content = readFileSync(ciPath, "utf-8");
     const runSteps = content.match(/^\s*- run:.*$/gm) ?? [];
     const installs = runSteps.filter((step) => step.includes("pnpm install"));
     const quality = runSteps.filter((step) => !step.includes("pnpm install"));
     expect(installs).toHaveLength(2);
     expect(quality).toHaveLength(2);
-    expect(quality).toEqual(expect.arrayContaining([
-      expect.stringMatching(/pnpm verify:ri54:shared\b/),
-      expect.stringMatching(/pnpm verify:ri54\b(?!:)/),
-    ]));
+    expect(quality).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/pnpm verify:public\b/),
+        expect.stringMatching(/pnpm verify:platform\b/),
+      ]),
+    );
     expect(content).toContain("windows-2025");
     expect(content).toContain("macos-15");
     expect(content).toContain("ubuntu-24.04");
