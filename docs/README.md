@@ -29,6 +29,7 @@ development history.
 - [Bounded blind deliberation](architecture/04-MUTUALLY-BLIND-BOUNDED-DELIBERATION-ROOMS.md)
 - [Governed project memory](architecture/05-PROJECT-LEVEL-GOVERNED-WORKING-MEMORY.md)
 - [Closed external-host pilot adapter](architecture/06-CLOSED-EXTERNAL-APP-PILOT.md)
+- [Agent Corrector: lightweight single-agent correction](integrations/AGENT-CORRECTOR.md)
 - [MCP and host integration](integrations/MCP-AND-HOST-INTEGRATION.md)
 - [Data-flow inventory](security/DATA-FLOW.md)
 - [Local-first guarantee](security/LOCAL-FIRST-GUARANTEE.md)

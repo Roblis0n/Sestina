@@ -66,6 +66,20 @@ Read the [privacy contract](PRIVACY.md), [security policy](SECURITY.md), and
 [data-flow inventory](docs/security/DATA-FLOW.md) before using real research
 material.
 
+## Choose the lightweight or connected Codex workflow
+
+Sestina now includes a standalone [`agent-corrector`](docs/integrations/AGENT-CORRECTOR.md)
+Skill for users who want single-agent course correction without running the
+Research Room, configuring MCP, creating a database, or enabling a Provider. It
+keeps the requested outcome, scope, protected decisions, evidence limits, and
+completion criteria in view, then corrects only material drift and resumes the
+original task.
+
+The existing `sestina-research-integrity` Skill remains the connected choice
+when a Codex host should read the bounded current Research Brief through
+Sestina's local, read-only MCP. The two choices are separate: installing
+`agent-corrector` does not configure, start, or modify Sestina project data.
+
 ## Install the 0.2.0 public preview
 
 The supported distribution is an archive, not a native installer. It requires
@@ -122,7 +136,7 @@ a semantic Provider and reports that limitation as `ledger_only`.
 | `packages/review`     | Deterministic and optional semantic review contracts          |
 | `packages/storage`    | SQLite persistence, migrations, backup, and restore           |
 | `integrations/mcp`    | Bounded read-only Model Context Protocol adapter              |
-| `integrations/skills` | Generated host skill integration                              |
+| `integrations/skills` | Standalone and MCP-backed Codex Skill integrations            |
 | `researchbench`       | Synthetic, reproducible development evaluation assets         |
 | `docs`                | Product, architecture, security, release, and recovery guides |
 

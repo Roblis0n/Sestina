@@ -46,6 +46,19 @@ Review、Appeal 或 Deliberation Room。证据不足时必须保持 unknown 或 
 后台同步、遥测、崩溃上传、自动内容日志或后台模型请求。只有在用户主动配置
 Provider、检查精确 Manifest 并确认该次请求后，绑定的内容才可能外发。
 
+## Codex 轻量纠偏选项
+
+如果只需要让一个 Codex Agent 在长任务中避免目标替换、重复审计、越界扩张、
+违背既定决定、论证跳跃或证据越级，可以单独安装
+[`agent-corrector`](../integrations/AGENT-CORRECTOR.md)。它不要求启动 Research
+Room，不连接 MCP，不创建数据库，也不依赖 Provider、账号、网络、遥测、后台
+进程或持久记忆。
+
+现有 `sestina-research-integrity` Skill 仍用于需要通过本地只读 MCP 读取当前
+Research Brief 的连接模式。两种方式彼此独立；安装轻量 Skill 不会配置或修改
+Sestina 项目数据。完整复制命令、显式 `$agent-corrector` 用法和能力边界见
+[Codex 接入指南](../getting-started/codex.md)。
+
 ## 安装 0.2.0 公开预览版
 
 0.2.0 是压缩包分发，不是原生安装器；需要 **Node.js 24.x** 和本地浏览器。

@@ -11,8 +11,10 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "generate": "node --experimental-strip-types generate.ts --write",
-    "check": "node --experimental-strip-types generate.ts --check",
+    "generate": "node --experimental-strip-types generate.ts --write && node evals/agent-corrector/generate-cases.mjs --write",
+    "check": "node --experimental-strip-types generate.ts --check && node evals/agent-corrector/generate-cases.mjs --check",
+    "eval:prompt": "node evals/agent-corrector/build-eval-prompt.mjs",
+    "eval:score": "node evals/agent-corrector/score-results.mjs",
     "test": "vitest run --root ../.. --project unit integrations/skills/test",
     "typecheck": "tsc --noEmit",
     "build": "tsc --noEmit && node build.mjs"

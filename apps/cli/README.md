@@ -72,6 +72,11 @@ project's `.sestina` directory, database, Research Brief, or research objects.
 The MCP configured by this workflow remains read-only and enables only
 `health` and `get_research_context`.
 
+The separate lightweight `agent-corrector` Skill is not managed by
+`sestina connect` or `sestina disconnect`. It has no MCP dependency and is installed
+manually at `.agents/skills/agent-corrector/`; disconnecting the MCP-backed
+workflow does not remove or modify it.
+
 The executable supports project initialization and diagnosis; Brief,
 Artifact, Revision, and Episode preparation; Decision and Issue authority
 transitions; deterministic Review runs; explicit Episode dispositions and
