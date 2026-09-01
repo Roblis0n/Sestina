@@ -3,6 +3,12 @@
 Sestina separates research authority from presentation, persistence, model
 execution, and host integration.
 
+This document describes the shipped `v0.2.0` architecture. The accepted
+[post-0.2 target architecture](product/restructure/README.md) replaces the
+future implementation direction where it conflicts with this baseline, but it
+must remain labelled as target behavior until its full migration, production,
+security, lifecycle, and release evidence passes.
+
 ## Layers
 
 1. **Research domain** — Briefs, Decisions, Issues, Evidence, Episodes,

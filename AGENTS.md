@@ -4,6 +4,20 @@ This file is the public repository instruction entry for coding agents and
 contributors. Keep changes aligned with the product described in `README.md`
 and `docs/product/CURRENT-PRODUCT-DEFINITION.md`.
 
+## Current target authority
+
+For all post-`v0.2.0` product or implementation work, read
+`docs/product/restructure/README.md` and the complete accepted plan set it
+indexes. That authority supersedes older target direction where the two
+conflict, while current release documents continue to describe what `v0.2.0`
+actually ships. The accepted target is not implementation evidence.
+
+Begin only at the current G0 contract-freeze gate and follow the G0-G13
+dependency order. Do not pull UI, Electron, Agent Corrector, migration cutover,
+legacy-path removal, documentation claims, or release work ahead of their
+defined gates. Do not use external trial feedback, adoption, market evidence,
+or Provider-quality claims to decide or validate this product-only restructure.
+
 ## Product invariants
 
 - Sestina is a local, interactive research application. Research Room is the

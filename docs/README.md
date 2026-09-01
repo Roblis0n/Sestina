@@ -7,6 +7,7 @@ development history.
 
 - [Product definition](product/CURRENT-PRODUCT-DEFINITION.md)
 - [Architecture overview](ARCHITECTURE.md)
+- [Accepted post-0.2 restructure authority](product/restructure/README.md)
 - [Research Room guide](../apps/research-room/README.md)
 - [0.2.0 release guide](release/README.md)
 - [Privacy contract](../PRIVACY.md)
@@ -22,6 +23,11 @@ development history.
 - [Offline demonstration](demos/OFFLINE-DEMO-GUIDE.md)
 
 ## Understand the system
+
+The architecture documents below describe the `v0.2.0` baseline unless they
+explicitly identify accepted target behavior. For post-0.2 changes, the
+[restructure authority](product/restructure/README.md) controls conflicts and
+implementation order.
 
 - [Dependency and authority boundaries](architecture/01-DEPENDENCY-RULES.md)
 - [Research object workspaces](architecture/02-RESEARCH-OBJECT-WORKSPACES.md)

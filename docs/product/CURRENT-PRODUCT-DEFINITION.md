@@ -5,6 +5,28 @@ preserve judgment continuity during long-running AI-assisted research: the
 current question, accepted decisions, unresolved issues, evidence boundaries,
 corrections, provenance, and the actual increment added by each revision.
 
+## Current release and accepted target
+
+The current shipped baseline remains `v0.2.0`. The complete post-0.2 product
+target has now been accepted and is governed by the
+[post-0.2 restructure authority](restructure/README.md). It is a target design,
+not a claim that the existing release already implements the new schema,
+persistent Review aggregate, task-first routes, or Electron lifecycle.
+
+The accepted target makes one causal path authoritative: a Suggestion becomes
+a persistent Review, is bound to an exact state and outbound Manifest, may
+receive a non-authoritative Provider assessment, then receives an explicit
+user-selected typed canonical effect that the Kernel commits atomically. The
+resulting research object or explicit record-only outcome is the result;
+Receipt and Trace are proof. Search, Attention, Resume, and Recovery are derived
+from the same canonical state and revision.
+
+The target is one complete Electron desktop application, with the existing
+archive retained as the accurately named local loopback research server
+preview. This decision does not authorize a shell-only release, a second
+Kernel, dual writes, or an intermediate UI connected to the old generic
+disposition path.
+
 ## Product kernel and primary interface
 
 The **Research Deliberation Kernel** is the product's business core. It owns
@@ -57,3 +79,7 @@ cloud sync, public write-capable MCP, or a formal local-model runtime.
 The release provides verified implementation and artifact evidence. Real
 external-user value, repeated-use value, Provider semantic quality, and market
 value require separate observation and are not claimed by this release.
+
+Those external and market questions are also explicitly outside the accepted
+product-only restructure. They neither block its implementation nor count as
+evidence that the target has been implemented correctly.

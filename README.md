@@ -66,6 +66,20 @@ Read the [privacy contract](PRIVACY.md), [security policy](SECURITY.md), and
 [data-flow inventory](docs/security/DATA-FLOW.md) before using real research
 material.
 
+## Accepted product target after 0.2.0
+
+The complete post-0.2 restructure is now an accepted product target. It
+converges Review, user Authority, canonical state changes, exact outbound
+Manifests, persistence, recovery, task-first navigation, and the desktop
+lifecycle into one Kernel-owned path. The target distribution is an Electron
+desktop application; the current `v0.2.0` archive remains a local loopback
+research server preview.
+
+This is design authority, not a shipped-feature claim. Read the
+[acceptance and authority record](docs/product/restructure/README.md) and its
+exact 18-file plan set before post-0.2 implementation work. The existing
+installation and limitation statements below remain the current release truth.
+
 ## Install the 0.2.0 public preview
 
 The supported distribution is an archive, not a native installer. It requires
@@ -125,6 +139,9 @@ a semantic Provider and reports that limitation as `ledger_only`.
 | `integrations/skills` | Generated host skill integration                              |
 | `researchbench`       | Synthetic, reproducible development evaluation assets         |
 | `docs`                | Product, architecture, security, release, and recovery guides |
+
+The accepted post-0.2 product and implementation design is indexed under
+[`docs/product/restructure`](docs/product/restructure/README.md).
 
 Start with the [public documentation index](docs/README.md), the
 [product definition](docs/product/CURRENT-PRODUCT-DEFINITION.md), or the
