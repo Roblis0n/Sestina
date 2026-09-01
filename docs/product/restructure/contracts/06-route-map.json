@@ -1,0 +1,238 @@
+{
+  "id": "contract.route-map",
+  "schemaVersion": "1.0.0",
+  "title": "Task-first route and responsibility map (G0 freeze)",
+  "frozenAt": "2026-09-01",
+  "baselineCommit": "08bd5f29cd59e39f06a7de6d261aa84f73a5bc63",
+  "authoritySource": "docs/product/restructure/Sestina-v0.2.0-完整重构计划集/06-TASK-ORIENTED-IA-AND-PRODUCTION-UI.md and 16-CROSS-PLAN-CONSISTENCY-AND-DECISION-LOG.md C-01/D-06",
+  "scopeNote": "This contract freezes routes and responsibilities only. Production UI implementation belongs to G9; no production UI is built in G0.",
+  "primaryEntries": ["today-review", "project", "search", "settings"],
+  "primaryEntryDefinitions": {
+    "today-review": "Today / Review — the task-first main entry: persistent Review queue, actionable Attention, current question and task, recent canonical changes.",
+    "project": "Project — current research state: Brief, Decisions, Evidence, Issues, Episode relations, contextual Memory, History as secondary content.",
+    "search": "Search — revision-bound full-text and structured search across canonical objects and history with provenance and authority labels.",
+    "settings": "Settings — Provider, Privacy & Network, Appearance & Accessibility, Recovery & Data, Integrations, About & Release Proof, Advanced Diagnostics."
+  },
+  "routes": [
+    {
+      "route": "/project/today",
+      "primaryEntry": "today-review",
+      "label": "Today / Review",
+      "allowedDomainObjects": [
+        "persistent Review queue projections",
+        "actionable Attention projections",
+        "blocking Issue summaries",
+        "recovery and projection status notices",
+        "recent canonical change summaries"
+      ],
+      "canFormCanonicalEffect": false,
+      "userAuthoritySurface": "Queue items navigate into the Review Thread; no effect is formed here. Recovery notices route to the Recovery gate which locks writes.",
+      "note": "All projections carry their source projectStateRevision."
+    },
+    {
+      "route": "/project/reviews/new",
+      "primaryEntry": "today-review",
+      "label": "New Review",
+      "allowedDomainObjects": [
+        "Review draft (suggestion, source provenance, requested target hint)",
+        "Host draft queue when the bridge is enabled"
+      ],
+      "canFormCanonicalEffect": false,
+      "userAuthoritySurface": "Draft creation only; the draft never mutates canonical state.",
+      "note": "Manual paste, clipboard import, Host, Skill, and legacy conversions all land here as the same draft schema."
+    },
+    {
+      "route": "/project/reviews/:reviewId",
+      "primaryEntry": "today-review",
+      "label": "Review Thread",
+      "allowedDomainObjects": [
+        "Review aggregate",
+        "Context Manifest (summary plus exact body)",
+        "Provider attempt and assessment",
+        "deterministic proof",
+        "effect preview",
+        "correction records",
+        "resulting object and Receipt after commit"
+      ],
+      "canFormCanonicalEffect": true,
+      "userAuthoritySurface": "The only surface that commits a CanonicalEffect: the user's explicit decision step after the effect preview, enforced by the Kernel.",
+      "note": "The route is a transport; the Kernel is the only effect executor."
+    },
+    {
+      "route": "/project/state",
+      "primaryEntry": "project",
+      "label": "Project",
+      "allowedDomainObjects": [
+        "Brief summary",
+        "Decision list",
+        "Evidence list",
+        "Issue list",
+        "current Episode",
+        "relationship projections"
+      ],
+      "canFormCanonicalEffect": false,
+      "userAuthoritySurface": "Read-only projections; navigation into Brief edit creates candidates only.",
+      "note": "Object details are secondary content, not a first-level navigation."
+    },
+    {
+      "route": "/project/state/brief",
+      "primaryEntry": "project",
+      "label": "Brief detail",
+      "allowedDomainObjects": [
+        "active Brief version",
+        "assessment coverage",
+        "section states",
+        "related Decision/Evidence/Issue refs"
+      ],
+      "canFormCanonicalEffect": false,
+      "userAuthoritySurface": "Read-only; coverage is derived and never blocks user authority.",
+      "note": "Coverage is a derived hint, not a score."
+    },
+    {
+      "route": "/project/state/brief/edit",
+      "primaryEntry": "project",
+      "label": "Edit Brief",
+      "allowedDomainObjects": ["Brief candidate and field diffs"],
+      "canFormCanonicalEffect": false,
+      "userAuthoritySurface": "Creates a persistent Brief candidate only; the candidate becomes canonical exclusively through a patch_brief or formal_direction_change effect committed in a Review.",
+      "note": "JSON editing is a read-only technical view; typed forms are the editing surface."
+    },
+    {
+      "route": "/project/state/brief/history/:versionId",
+      "primaryEntry": "project",
+      "label": "Brief history",
+      "allowedDomainObjects": [
+        "historical Brief versions",
+        "field diffs",
+        "supersedes chain",
+        "sources"
+      ],
+      "canFormCanonicalEffect": false,
+      "userAuthoritySurface": "Read-only history.",
+      "note": "Old versions are immutable."
+    },
+    {
+      "route": "/project/history",
+      "primaryEntry": "project",
+      "label": "History",
+      "allowedDomainObjects": [
+        "transition Receipts",
+        "correction history",
+        "legacy Room records",
+        "legacy Pilot records",
+        "legacy Receipt projections"
+      ],
+      "canFormCanonicalEffect": false,
+      "userAuthoritySurface": "Read-only audit; export and restore are the only actions.",
+      "note": "Legacy items always carry an explicit legacy badge and source kind."
+    },
+    {
+      "route": "/project/history/:kind/:id",
+      "primaryEntry": "project",
+      "label": "History detail",
+      "allowedDomainObjects": [
+        "Receipt proof detail",
+        "legacy Room/Pilot read-only projection",
+        "correction detail"
+      ],
+      "canFormCanonicalEffect": false,
+      "userAuthoritySurface": "Read-only; a legacy Room or Pilot may be explicitly converted into a new Review draft from here.",
+      "note": "Conversion copies candidate text and provenance only; it never copies host commands, paths, or secrets."
+    },
+    {
+      "route": "/project/search",
+      "primaryEntry": "search",
+      "label": "Search",
+      "allowedDomainObjects": [
+        "revision-bound search results across canonical objects and history",
+        "filters",
+        "index status"
+      ],
+      "canFormCanonicalEffect": false,
+      "userAuthoritySurface": "Read-only; results show authority and provenance classes.",
+      "note": "Index lag is displayed with the projection revision and a rebuild action, never as current truth."
+    },
+    {
+      "route": "/project/settings",
+      "primaryEntry": "settings",
+      "label": "Settings",
+      "allowedDomainObjects": [
+        "Provider config and generation",
+        "privacy and network state",
+        "appearance and accessibility",
+        "recovery and data",
+        "integrations",
+        "release identity"
+      ],
+      "canFormCanonicalEffect": false,
+      "userAuthoritySurface": "App-level settings only; Provider test is metadata-only with no research context. Destructive actions (forget, restore, disable bridge) require explicit user confirmation.",
+      "note": "Provider settings changes never advance projectStateRevision; they only make Manifests stale."
+    },
+    {
+      "route": "/project/settings/:section",
+      "primaryEntry": "settings",
+      "label": "Settings section",
+      "allowedDomainObjects": ["the section's configuration and diagnostics"],
+      "canFormCanonicalEffect": false,
+      "userAuthoritySurface": "Same as Settings; no research effect can be formed here."
+    }
+  ],
+  "recoveryEntry": "Recovery is reached from the startup blocking state and from Settings > Recovery. It runs read-only preflight, migration preview, backup verification, and restore previews with all project writes locked; it never fabricates a way to force-open a corrupt or future-schema project.",
+  "errorDegradation": "Error and degradation states are honest per-surface: stale shows the changed objects and revisions with a rebuild action; Provider failures never disable effects; uncertain attempts are shown as possibly-sent with no automatic retry; projection rebuilds display their source revision; corruption and future schema fail closed into Recovery.",
+  "legacyRouteDisposal": [
+    {
+      "route": "/project/review",
+      "disposal": "alias redirect to /project/today"
+    },
+    { "route": "/project/overview", "disposal": "redirect to /project/state" },
+    {
+      "route": "/project/brief",
+      "disposal": "redirect to /project/state/brief"
+    },
+    {
+      "route": "/project/decisions",
+      "disposal": "redirect to /project/state with decisions filter"
+    },
+    {
+      "route": "/project/issues",
+      "disposal": "redirect to /project/state with issues filter"
+    },
+    {
+      "route": "/project/evidence",
+      "disposal": "redirect to /project/state with evidence filter"
+    },
+    {
+      "route": "/project/episodes",
+      "disposal": "redirect to /project/state with episode filter"
+    },
+    {
+      "route": "/project/receipts",
+      "disposal": "redirect to /project/history"
+    },
+    { "route": "/project/appeals", "disposal": "redirect to /project/history" },
+    {
+      "route": "/project/deliberation-rooms",
+      "disposal": "redirect to /project/history read-only"
+    },
+    {
+      "route": "/project/external-app-pilots",
+      "disposal": "redirect to /project/history read-only"
+    },
+    {
+      "route": "/project/memory",
+      "disposal": "redirect to Project contextual memory drawer"
+    },
+    {
+      "route": "/appeals/new",
+      "disposal": "410 gone; corrections are created inside the Review Thread"
+    },
+    {
+      "route": "/deliberation-rooms/new",
+      "disposal": "410 gone; legacy Room creation is removed"
+    },
+    {
+      "route": "/external-app-pilots/new",
+      "disposal": "410 gone; Host intake is the Review draft queue only"
+    }
+  ]
+}

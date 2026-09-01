@@ -1,0 +1,463 @@
+{
+  "id": "contract.requires-code-verification",
+  "schemaVersion": "1.0.0",
+  "title": "Seven requires_code_verification items closed by code-fact review (G0 freeze)",
+  "frozenAt": "2026-09-01",
+  "baselineCommit": "08bd5f29cd59e39f06a7de6d261aa84f73a5bc63",
+  "reviewMethod": "Every item was checked against real source, types, schemas, repositories, services, IPC surfaces, tests, and call relationships at the baseline commit. No keyword-only guessing: each conclusion lists the exact paths, symbols, schemas, tests, or call sites. Absent capabilities are recorded as verified_absent, never left unresolved.",
+  "items": [
+    {
+      "id": "CV-01",
+      "question": "Which entities, tables, schemas, or files express Evidence today? Is there one canonical Evidence aggregate and one canonical write path, or multiple write paths that could bypass the Kernel? Which paths are production, and which are tests, fixtures, or legacy compatibility?",
+      "finalStatus": "verified_multiple",
+      "unresolved": false,
+      "currentImplementationConclusion": "Two distinct Evidence concepts exist at baseline. (a) The research-domain aggregate argument_evidence (id prefix revd_, migration 015) with kind, state (current/stale/disputed), inference capacity, provenance, and claim/mechanism support links; its repository (createArgumentGraphRepositories) exposes create/compareAndSwap, but no production caller writes it: ResearchObjectWorkspaceService, SestinaCore, pilots, appeals, rooms, and Memory only read it, and the server only exposes read-only list/detail routes. (b) The legacy task-scoped ledger evidence_items plus situation_assertions and claims (migrations 001/012) with EvidenceService in @sestina/evidence; its only importers are its own tests and the read-only legacy-import scanner. Writes to either aggregate exist only in tests and in the synthetic UI fixture helper. The v0.2.0 UI, CLI, MCP, Skills, and Provider have no production Evidence write command; the word 'evidence' also appears in non-canonical uses (Receipt evidenceClass with countsAsExternalEvidence fixed false, pilot evidence export diagnostics). Conclusion: there is no unique production Evidence write entry today; two aggregates exist in the schema.",
+      "targetRequirement": "argument_evidence (revd_) is frozen as the single canonical Evidence aggregate. The add_evidence effect handler (G4/G6) becomes the only production writer, reusing the existing provenance, state, inference-capacity, and support-link rules. Legacy evidence_items/situation_assertions/claims become read-only migration and legacy-import sources; they are never canonical and never dual-written. Receipts never auto-promote to Evidence.",
+      "evidence": [
+        {
+          "type": "domain_source",
+          "path": "packages/research/src/argument/evidence.ts",
+          "symbol": "ArgumentEvidence, parseArgumentEvidence, EVIDENCE_KINDS, EVIDENCE_STATES, INFERENCE_CAPACITIES",
+          "note": "Canonical research-domain Evidence aggregate type and parser."
+        },
+        {
+          "type": "schema_ddl",
+          "path": "packages/storage/src/migrations/015-argument-graph.ts",
+          "symbol": "argument_evidence table, evidence_id GLOB 'revd_*', argument_claim_evidence_links status CHECK (proven|unproven|disputed|stale)",
+          "note": "Canonical Evidence table and support-link status enums."
+        },
+        {
+          "type": "repository_source",
+          "path": "packages/research-store/src/repositories/sqlite-argument-repositories.ts",
+          "symbol": "createArgumentGraphRepositories, argumentEvidence nodeRepository with create/compareAndSwap",
+          "note": "Repository supports writes, but no production caller invokes them (see next entries)."
+        },
+        {
+          "type": "call_site",
+          "path": "packages/core/src/research-object-workspaces.ts",
+          "symbol": "ResearchObjectWorkspaceService.listEvidence / getEvidence; only listByProject/getById calls",
+          "note": "Production Core uses Evidence exclusively as read projections."
+        },
+        {
+          "type": "route_surface",
+          "path": "apps/research-room/src/server.ts",
+          "symbol": "/api/project/evidence list route and workspaceDetail evidence branch",
+          "note": "Server exposes read-only Evidence listing and detail; no create route exists."
+        },
+        {
+          "type": "schema_ddl",
+          "path": "packages/storage/src/migrations/001-initial.ts",
+          "symbol": "evidence_items table",
+          "note": "Legacy task-scoped Evidence ledger table (second aggregate)."
+        },
+        {
+          "type": "schema_ddl",
+          "path": "packages/storage/src/migrations/012-evidence-ledger.ts",
+          "symbol": "migration012 normalization of evidence_items/situation_assertions/claims",
+          "note": "Legacy ledger history normalization; not the research-domain aggregate."
+        },
+        {
+          "type": "service_source",
+          "path": "packages/evidence/src/evidence-service.ts",
+          "symbol": "EvidenceService",
+          "note": "Only imported by packages/evidence/test and packages/storage/test; not wired into any production app."
+        },
+        {
+          "type": "test_fixture",
+          "path": "tests/helpers/ui02-project.ts",
+          "symbol": "createResearchStore(database).argumentEvidence.create(evidence) at line 146",
+          "note": "Synthetic UI fixture writes Evidence directly through the store; test-only, not a production path."
+        },
+        {
+          "type": "test",
+          "path": "packages/research-store/test/argument-graph-store.test.ts",
+          "symbol": "store.argumentEvidence.create(...) calls",
+          "note": "Repository write coverage lives only in the storage test suite."
+        }
+      ],
+      "g1Impact": "G1 Evidence fixtures must be built against the argument_evidence aggregate only; G4/G6 add_evidence becomes its sole production writer. Legacy ledger fixtures stay separate and are never promoted.",
+      "hasSecurityRisk": false,
+      "hasUnknownItems": false,
+      "reviewDate": "2026-09-01",
+      "baselineCommit": "08bd5f29cd59e39f06a7de6d261aa84f73a5bc63"
+    },
+    {
+      "id": "CV-02",
+      "question": "Which persistence objects does one research-state modification touch today? Is there a database transaction, a Unit of Work, a snapshot, a revision guard, or compare-and-swap? Can a canonical mutation, Receipt, Trace, Review terminal state, or revision partially succeed, and what does a process interruption leave behind?",
+      "finalStatus": "verified_multiple",
+      "unresolved": false,
+      "currentImplementationConclusion": "Present pieces: all repositories share one StorageDatabase instance (createResearchStore), ResearchUnitOfWork.commit wraps a unit in withTransaction (BEGIN IMMEDIATE, rollback on error, savepoints for nesting, strictly synchronous); repositories expose compareAndSwap with expected-version checks (requireExpectedNext); ResearchRoomService.commit writes direction-changed Brief proposal plus version plus Receipt inside one UoW transaction, and rollback does the same. Absent pieces: there is no projectStateRevision head or event chain, no global revision guard, and no persistent interactive Review (pending/in-flight/analyzed are in-memory Maps; only the terminal Receipt persists). A crash before commit loses the whole Review stage; a crash between commit and renderer response is resolved by Receipt existence only. There is no single transaction covering canonical object, revision, Review terminal, Receipt, and Trace because those concepts do not exist yet as one unit, so the target atomic canonical mutation is verified_absent while the per-command transaction/CAS/UoW building blocks are verified_present.",
+      "targetRequirement": "G3 extends ResearchUnitOfWork so one commit transaction covers resulting object(s), revision head/event advance, Review terminal state, Receipt, and Trace with fault injection proving all-or-nothing. Every canonical repository write requires a transaction context (architecture test). Reads use single-read snapshots. Reviews become persistent aggregates (research_room_reviews) so crash recovery has a durable stage to return to.",
+      "evidence": [
+        {
+          "type": "module",
+          "path": "packages/research-store/src/transactions/research-unit-of-work.ts",
+          "symbol": "createResearchUnitOfWork(db), commit wraps work in writeResult(db, ...)",
+          "note": "UoW boundary exists and is transaction-backed."
+        },
+        {
+          "type": "module",
+          "path": "packages/storage/src/transaction.ts",
+          "symbol": "withTransaction, BEGIN IMMEDIATE, savepoint nesting, synchronous-only unit invariant, rollback on throw",
+          "note": "Shared transaction primitive with rollback semantics."
+        },
+        {
+          "type": "module",
+          "path": "packages/research-store/src/repositories/base.ts",
+          "symbol": "writeResult, requireExpectedNext, version_conflict CAS checks",
+          "note": "Repository-level compare-and-swap guard."
+        },
+        {
+          "type": "contract_source",
+          "path": "packages/research/src/ports/repositories.ts",
+          "symbol": "ResearchUnitOfWork, ResearchRepositories, per-repository compareAndSwap signatures",
+          "note": "Port contract: all repositories hang off one UoW."
+        },
+        {
+          "type": "call_site",
+          "path": "packages/core/src/research-room.ts",
+          "symbol": "ResearchRoomService.#pending/#inFlight/#analyzed Maps, commit() writes receipts (plus brief CAS for direction_changed) in one unitOfWork.commit",
+          "note": "Interactive Review stages are in-memory; only receipts persist."
+        },
+        {
+          "type": "schema_ddl",
+          "path": "packages/storage/src/migrations/016-research-room.ts",
+          "symbol": "research_room_receipts table",
+          "note": "Only the terminal Receipt is persisted for interactive Reviews."
+        },
+        {
+          "type": "module",
+          "path": "packages/core/src/unit-of-work.ts",
+          "symbol": "core UnitOfWork facade over the store UoW",
+          "note": "Core orchestration layer reuses the same transaction boundary."
+        },
+        {
+          "type": "domain_source",
+          "path": "packages/research/src/room/research-room.ts",
+          "symbol": "ResearchRoomReceipt schema, rollBackResearchRoomReceipt",
+          "note": "Receipt and rollback domain rules with hash/version checks."
+        },
+        {
+          "type": "repository_source",
+          "path": "packages/research-store/src/repositories/sqlite-repositories.ts",
+          "symbol": "createResearchRepositories(db) single StorageDatabase wiring",
+          "note": "All research repositories share one connection, so the UoW covers them together."
+        }
+      ],
+      "g1Impact": "G1 concurrency and crash fixtures must target the current UoW/CAS seams (commit, rollback, direction_changed) and the missing revision guard; G3 fault injection is designed from these exact seams.",
+      "hasSecurityRisk": false,
+      "hasUnknownItems": false,
+      "reviewDate": "2026-09-01",
+      "baselineCommit": "08bd5f29cd59e39f06a7de6d261aa84f73a5bc63"
+    },
+    {
+      "id": "CV-03",
+      "question": "How are Evidence source credibility and Brief maturity, thresholds, states, or stages expressed today? Do they share fields, enums, or implicit concepts? Is there any path that mistakes source credibility for Brief maturity? Can the planned EvidenceThreshold enum map existing data directly, or is migration required?",
+      "finalStatus": "verified_absent",
+      "unresolved": false,
+      "currentImplementationConclusion": "They are separate concepts with separate types and no shared enum. Evidence credibility is expressed as ResearchSource.authority (user_confirmed, user_recorded, model_proposed, system_derived, imported_unconfirmed) plus state (current/stale/disputed), inference capacity, and claim/mechanism link support status (proven/unproven/disputed/stale). The Brief has no maturity or threshold enum at all: it has currentStage (seven research stages), evidenceBoundaries as free-text EvidenceBoundaryRule entries (statement, scope, allowedSourceIds, forbiddenInferenceKinds), and no quality grade. No code path maps source credibility to Brief maturity, and no path promotes Provider verdicts into Brief state. The planned EvidenceThreshold (minimumSourceClass, requiredCorroboration, acceptedInferenceCapacity) cannot be mapped losslessly from the existing free-text evidenceBoundaries: minimumSourceClass must be defined from the canonical provenance/source classes and existing rules migrate as legacy threshold rules with explicit limitations. No shared-field misuse path exists today: that coupling is verified_absent.",
+      "targetRequirement": "Brief gains typed EvidenceThreshold and KnownUnknown fields whose source-class enum aligns with the canonical provenance model; evidenceBoundaries migrate to legacy threshold rules marked with limitations. Provider assessment can never auto-satisfy a threshold, and coverage stays a derived hint that never blocks user authority.",
+      "evidence": [
+        {
+          "type": "domain_source",
+          "path": "packages/research/src/brief/evidence-boundary-rule.ts",
+          "symbol": "EvidenceBoundaryRule, ForbiddenInferenceKind, allowedSourceIds",
+          "note": "Brief threshold is free-text scope rules; no maturity grade exists."
+        },
+        {
+          "type": "domain_source",
+          "path": "packages/research/src/brief/research-brief.ts",
+          "symbol": "ResearchBriefVersionFields.evidenceBoundaries, expectedDeltas, explicitNonGoals",
+          "note": "Brief fields carry constraints, not evidence credibility."
+        },
+        {
+          "type": "domain_source",
+          "path": "packages/research/src/brief/research-stage.ts",
+          "symbol": "RESEARCH_STAGES seven stage values",
+          "note": "Brief stage enum is workflow stage, not evidence maturity."
+        },
+        {
+          "type": "domain_source",
+          "path": "packages/research/src/argument/evidence.ts",
+          "symbol": "EVIDENCE_STATES (current/stale/disputed), INFERENCE_CAPACITIES",
+          "note": "Evidence state and capacity enums are distinct from Brief fields."
+        },
+        {
+          "type": "domain_source",
+          "path": "packages/research/src/authority/authority-level.ts",
+          "symbol": "AUTHORITY_LEVELS, actorKindForAuthority, validateAuthorityTransition",
+          "note": "Source credibility levels; user-level authority can only be superseded by user-level sources."
+        },
+        {
+          "type": "domain_source",
+          "path": "packages/research/src/argument/claim-evidence-link.ts",
+          "symbol": "ClaimEvidenceLink status proven/unproven/disputed/stale",
+          "note": "Support status lives in the Evidence domain, not in the Brief."
+        },
+        {
+          "type": "module",
+          "path": "packages/evidence/src/provenance.ts",
+          "symbol": "provenance entry re-exports, PEER_STATUS_CEILING",
+          "note": "Legacy evidence package provenance surface; separate namespace from Brief."
+        },
+        {
+          "type": "call_site",
+          "path": "packages/review/src/semantic/research-room-semantic-judge.ts",
+          "symbol": "provenance authority model_proposed, reasonableIncrement canMutateAuthority false",
+          "note": "Provider judgment is model-attributed and never upgrades Brief or Evidence authority."
+        }
+      ],
+      "g1Impact": "G1 fixtures for Brief thresholds must use typed legacy rule shapes and the new EvidenceThreshold draft; migration tests assert free-text boundaries become legacy rules, never synthetic quality grades.",
+      "hasSecurityRisk": false,
+      "hasUnknownItems": false,
+      "reviewDate": "2026-09-01",
+      "baselineCommit": "08bd5f29cd59e39f06a7de6d261aa84f73a5bc63"
+    },
+    {
+      "id": "CV-04",
+      "question": "Does Memory duplicate Evidence or Decision content? Does it store source object ids? What does Forget delete and not delete? Can Memory deletion break Evidence, Decision, Trace, or recovery? Can Memory be carried cross-project or into outbound context by default?",
+      "finalStatus": "verified_absent",
+      "unresolved": false,
+      "currentImplementationConclusion": "Memory does not duplicate Evidence/Decision bodies: rows store their own user-entered content plus a project_object source holding objectKind, objectId, objectVersion, and a content fingerprint (no full object body). authorityClass is working_memory_non_authoritative, so Memory never promotes to Evidence or Decision. Forget replaces the row with an irreversible tombstone (content removed) and drops unsent in-memory memory manifests; it touches nothing else: Memory is not indexed by FTS (fts tables cover only claims/evidence_items/conversation/collaboration) and does not appear in storage search. Committed Receipt Manifests keep only included item ids/versions/content hashes, never item text. Cross-project use is blocked by project-scoped ids and queries. The gaps are: no copy inventory for managed backups (which still contain pre-forget rows), no privacy redaction ledger for already-sent payloads, no Provider-side-copy disclosure, and no restore-time resurrection guard. Content duplication itself is verified_absent; the copy-boundary inventory is a target-only capability.",
+      "targetRequirement": "G2/G7 add the forget copy inventory and privacy redaction ledger: DB/FTS/cache cleanup in one transaction with forget, managed-backup inventory, Receipt/Manifest hash-only preservation, explicit Provider-side and manual-copy non-control disclosure, and restore-time redaction checks. never_send stays a Kernel hard rule; selection stays per-item and per-Review.",
+      "evidence": [
+        {
+          "type": "domain_source",
+          "path": "packages/research/src/memory/project-working-memory.ts",
+          "symbol": "ProjectWorkingMemorySource project_object with objectId/objectVersion/contentFingerprint; PROJECT_WORKING_MEMORY_STATES; outboundPolicy never_send|explicit_manifest_only; ForgottenProjectWorkingMemory tombstone",
+          "note": "Memory references objects by id and fingerprint; no body duplication; tombstone on forget."
+        },
+        {
+          "type": "call_site",
+          "path": "packages/core/src/project-memory.ts",
+          "symbol": "ProjectMemoryService.forget -> forgetProjectWorkingMemory + compareAndSwap + #manifests cleanup",
+          "note": "Forget removes the DB row content and unsent memory manifests only."
+        },
+        {
+          "type": "schema_ddl",
+          "path": "packages/storage/src/migrations/019-project-working-memory.ts",
+          "symbol": "project_working_memory table and indexes",
+          "note": "Memory persistence layout; project-scoped."
+        },
+        {
+          "type": "module",
+          "path": "packages/storage/src/search.ts",
+          "symbol": "search projection has no project_working_memory source",
+          "note": "Memory content is not search-indexed at baseline."
+        },
+        {
+          "type": "schema_ddl",
+          "path": "packages/storage/src/migrations/002-fts.ts",
+          "symbol": "fts_claims, fts_evidence, fts_conversation_messages, fts_collaboration_messages virtual tables",
+          "note": "FTS covers legacy claims/evidence_items and collaboration only; no Memory table."
+        },
+        {
+          "type": "domain_source",
+          "path": "packages/research/src/room/research-room.ts",
+          "symbol": "ResearchRoomContextManifest.workingMemory included items are itemId/version/contentHash only",
+          "note": "Committed Receipt Manifests never store Memory text."
+        },
+        {
+          "type": "module",
+          "path": "packages/storage/src/backup.ts",
+          "symbol": "backupDatabase, pruneOldBackups",
+          "note": "Managed backups contain full DB rows; no memory copy inventory exists yet."
+        },
+        {
+          "type": "module",
+          "path": "packages/core/src/recovery.ts",
+          "symbol": "ProjectRecovery multi-file restore with verified staging and atomic publish",
+          "note": "Restore path validates DB plus Brief binding; no redaction-ledger resurrection guard yet."
+        }
+      ],
+      "g1Impact": "G1 forget/restore fixtures must cover DB cleanup plus the absent copy inventory; the privacy redaction ledger becomes part of the G2 schema (025).",
+      "hasSecurityRisk": true,
+      "hasUnknownItems": false,
+      "reviewDate": "2026-09-01",
+      "baselineCommit": "08bd5f29cd59e39f06a7de6d261aa84f73a5bc63"
+    },
+    {
+      "id": "CV-05",
+      "question": "What can each external interface (MCP, Skill, CLI) read and write? Can any of them modify canonical state directly, trigger Provider, or bypass Review and Authority? Is Agent Corrector an active product capability, a historical branch capability, an experiment, or not wired at all?",
+      "finalStatus": "verified_absent",
+      "unresolved": false,
+      "currentImplementationConclusion": "No interface can bypass the Kernel. MCP exposes exactly two read-only tools (health, get_research_context) with a capability policy write=false; it can neither mutate canonical state nor trigger Provider. The sestina-research-integrity Skill is instruction-only and calls the read-only MCP plus the deterministic review CLI; it holds no runtime authority or persistence. The CLI embeds SestinaCore directly and can execute canonical commands (issue resolve/waive/dispute/reopen, Brief changes) with a user actor plus explicit --yes confirmation; these flow through the same Core authority checks and CAS, so the CLI is a user-authority transport, not a bypass. Agent Corrector is not part of this tree at the baseline: integrations/skills/canonical contains only research-integrity.md; the agent-corrector bundle exists only on the post-release branch codex/agent-corrector (commit 74c62c5f4ab22cc8267a4edc74cfaa34b078a3a8). Direct canonical writes, Provider triggering, or Review/Authority bypass by any of these interfaces is verified_absent.",
+      "targetRequirement": "MCP stays read-only; Skills stay draft-only; CLI commands map to the same typed effect handlers with the same authority policy; the Host bridge (new, disabled by default) may only submit Review drafts. Agent Corrector merges at G7 as a companion Skill with ephemeral, explicit-handoff-only semantics and no Authority.",
+      "evidence": [
+        {
+          "type": "tool_source",
+          "path": "integrations/mcp/src/tools/health.ts",
+          "symbol": "health tool definition",
+          "note": "First of the two read-only MCP tools."
+        },
+        {
+          "type": "tool_source",
+          "path": "integrations/mcp/src/tools/get-research-context.ts",
+          "symbol": "getResearchContext -> reader.readSerializedResearchContext",
+          "note": "Second read-only tool; read projection only."
+        },
+        {
+          "type": "policy_source",
+          "path": "integrations/mcp/src/security/capability-policy.ts",
+          "symbol": "capability policy with write: false",
+          "note": "MCP write capability is frozen false."
+        },
+        {
+          "type": "call_site",
+          "path": "apps/cli/src/local-project.ts",
+          "symbol": "openLocalProject -> openSestina (embedded SestinaCore)",
+          "note": "CLI speaks to the Kernel in-process; it is a transport, not a second kernel."
+        },
+        {
+          "type": "command_source",
+          "path": "apps/cli/src/commands/issue.ts",
+          "symbol": "resolve/waive/dispute/reopen with actor kind user and explicit --yes requirement",
+          "note": "CLI canonical commands require user actor plus explicit confirmation."
+        },
+        {
+          "type": "skill_source",
+          "path": "integrations/skills/hosts/codex/sestina-research-integrity/SKILL.md",
+          "symbol": "read-only MCP calls, authority=model_proposed and canMutateAuthority=false guidance",
+          "note": "Skill is instruction-only with no runtime authority."
+        },
+        {
+          "type": "server_source",
+          "path": "apps/research-room/src/server.ts",
+          "symbol": "loopback bind 127.0.0.1, loopback Host header check, session token for mutations",
+          "note": "The HTTP transport is the only production mutation surface and it routes through Core."
+        },
+        {
+          "type": "verified_absence_in_tree",
+          "path": "integrations/skills/canonical/research-integrity.md",
+          "symbol": "canonical skills directory contains only research-integrity.md at baseline 08bd5f2; agent-corrector/ is absent from this tree",
+          "note": "Agent Corrector is branch-only (codex/agent-corrector, commit 74c62c5), not a shipped or wired capability."
+        }
+      ],
+      "g1Impact": "G1 interface fixtures cover MCP read-only contract, CLI authority parity, and the draft-only Host bridge; Agent Corrector fixtures are created only at G7 when the branch merges.",
+      "hasSecurityRisk": false,
+      "hasUnknownItems": false,
+      "reviewDate": "2026-09-01",
+      "baselineCommit": "08bd5f29cd59e39f06a7de6d261aa84f73a5bc63"
+    },
+    {
+      "id": "CV-06",
+      "question": "Is there a migration journal and a schema version? Can interrupted migrations recover? Is copy-on-write supported? Is there an atomic swap after validation? Is there dual-write? Is there rollback or read-only recovery, and what is still missing before G1?",
+      "finalStatus": "verified_multiple",
+      "unresolved": false,
+      "currentImplementationConclusion": "Present: a DB-internal migration journal (migrations table with started/completed/failed, runtime version, backup path/hash, error code, timestamps); schema version equals the highest manifest migration (20 at baseline, manifest order verified against implementations); forward-only; a failed migration for an unknown version blocks writes, known failures are retried; each migration runs in its own transaction and must be idempotent; a hashed database backup precedes each destructive migration on an existing database; too_new fails closed. Restore has verified staging plus atomic rename swap with WAL cleanup; Recovery validates DB integrity, schema, project identity, and Brief binding for multi-file restore. Absent: migration itself is in-place, not copy-on-write (no staging copy, validation, then swap for migrations); the journal is DB-internal, so a staging copy cannot be recognized from outside; there is no migration-level rollback (failure keeps the pre-migration backup, not a rewind); no dual-write exists anywhere. Missing before G1: external/maintenance journal for staging recognition, copy-on-write migration pipeline with verified staging and atomic swap, revision head/event and Review/Manifest binding validation, and the 021-025 schema set.",
+      "targetRequirement": "G2 implements copy-on-write migration: read-only dry run, verified pre-migration backup, copy to staging, idempotent 021-025 in staging, full validation (integrity, project identity, Brief binding, revision/event chain, projections, privacy), atomic swap, reopen verification, and recovery that keeps the original database untouched until the swap. Dual-write stays forbidden; downgrade is restore of the pre-migration backup only.",
+      "evidence": [
+        {
+          "type": "module",
+          "path": "packages/storage/src/migrations/manifest.ts",
+          "symbol": "MIGRATIONS 001-020, SCHEMA_VERSION, manifest-implementation equality check",
+          "note": "Ordered forward-only migration manifest and schema version derivation."
+        },
+        {
+          "type": "module",
+          "path": "packages/storage/src/migrator.ts",
+          "symbol": "MigrationRunner.run: bootstrap journal, started/completed/failed, retry of known failures, too_new fail closed, per-migration transaction, hashed backup",
+          "note": "Migration journal is DB-internal; migrations run in place."
+        },
+        {
+          "type": "module",
+          "path": "packages/storage/src/transaction.ts",
+          "symbol": "withTransaction BEGIN IMMEDIATE with rollback",
+          "note": "Per-migration transactional boundary."
+        },
+        {
+          "type": "module",
+          "path": "packages/storage/src/backup.ts",
+          "symbol": "backupDatabase with .sha256 sidecar, pruneOldBackups",
+          "note": "Hashed pre-migration backups exist; no staging pipeline."
+        },
+        {
+          "type": "module",
+          "path": "packages/storage/src/restore.ts",
+          "symbol": "stageVerifiedCopy, atomic rename replace, WAL/SHM cleanup, pre-restore backup",
+          "note": "Atomic swap exists for restore, not for migration."
+        },
+        {
+          "type": "module",
+          "path": "packages/core/src/recovery.ts",
+          "symbol": "ProjectRecovery: DATABASE_FILE + BRIEF_FILE manifest binding, verified staging, atomic publish",
+          "note": "Multi-file recovery validates DB plus Brief binding."
+        },
+        {
+          "type": "schema_ddl",
+          "path": "packages/storage/src/migrations/016-research-room.ts",
+          "symbol": "research_room_receipts table",
+          "note": "Reference for the legacy data G2 must keep read-only while 021-025 land."
+        }
+      ],
+      "g1Impact": "G1 must build migration fixtures at schema 16-20 with SHA-locked corpora and fault injection at backup/copy/migrate/validate/swap points; these define the RED tests for the G2 copy-on-write pipeline.",
+      "hasSecurityRisk": false,
+      "hasUnknownItems": false,
+      "reviewDate": "2026-09-01",
+      "baselineCommit": "08bd5f29cd59e39f06a7de6d261aa84f73a5bc63"
+    },
+    {
+      "id": "CV-07",
+      "question": "What are the Provider request DNS, proxy, address validation, and redirect policies? Is there an SSRF or local-address boundary? What are the static asset path and packaged path assumptions? Where does the loopback preview end and the target Electron desktop begin? How are keys stored, and what happens when system secure storage is unavailable - can it fall back to plaintext on disk?",
+      "finalStatus": "verified_multiple",
+      "unresolved": false,
+      "currentImplementationConclusion": "Provider endpoints are validated at configuration time: external providers require HTTPS; explicit loopback may be HTTP; credentials, query, and fragments are rejected; private/metadata/link-local literals (RFC1918, 169.254.x.x, 100.64/10, multicast, metadata hostnames, IPv6 equivalents) are rejected; the request itself uses redirect=error, retry=0, size caps, and a timeout; no proxy or custom DNS dispatcher exists in the adapter, so DNS resolution and connection are delegated to the runtime fetch with no connect-time address pinning. The loopback preview server binds 127.0.0.1 only, requires a loopback Host header (421 otherwise), session tokens for mutations, and CSP/COOP/frame-deny headers; static assets are served only from the packaged client asset root with traversal and non-asset paths rejected. Secrets go to OS secure stores (DPAPI, Keychain, Secret Service) via @sestina/secrets; when the store is unavailable the system throws secure_storage_unavailable and refuses to save - there is no plaintext fallback path. The config file stores no key. Target Electron boundary: typed preload IPC, renderer without Node/secret/filesystem access, production UI with no public HTTP listener; that desktop shell does not exist at baseline (apps/ contains cli and research-room only). Connect-time DNS/address pinning and explicit proxy policy are absent today and are frozen as a G10 security gate.",
+      "targetRequirement": "G10 must add connect-time DNS resolution and address pinning (or a controlled transport with address policy), an explicit proxy policy, and the Electron IPC threat model. Until then the current configuration-time checks plus redirect=error remain the guard with the DNS-rebinding limitation documented, and the loopback preview keeps its current identity. Secret behavior stays fail-closed: no silent plaintext persistence at any point.",
+      "evidence": [
+        {
+          "type": "module",
+          "path": "apps/research-room/src/openai-compatible-provider.ts",
+          "symbol": "redirectPolicy 'error', retry 0, samePreparedInput send-time comparison, fetch without custom dispatcher",
+          "note": "Provider request contract; no DNS pinning or proxy handling."
+        },
+        {
+          "type": "module",
+          "path": "apps/research-room/src/provider-settings.ts",
+          "symbol": "validateOpenAICompatibleBaseUrl, isForbiddenNetworkLiteral, isLoopback, config file without apiKey, secure_storage_unavailable refusals",
+          "note": "Configuration-time address validation; config file stores no key."
+        },
+        {
+          "type": "module",
+          "path": "packages/secrets/src/linux-secret-service.ts",
+          "symbol": "SecretServiceProvider, secure_storage_unavailable on missing Secret Service, NEVER plaintext fallback",
+          "note": "Linux secure store behavior."
+        },
+        {
+          "type": "module",
+          "path": "packages/secrets/src/environment.ts",
+          "symbol": "SecretBackendStatus availability checks, no silent plaintext fallback",
+          "note": "Secret backend health contract."
+        },
+        {
+          "type": "module",
+          "path": "packages/core/src/provider-secrets.ts",
+          "symbol": "createSecretBackend indirect loader for desktop composition root",
+          "note": "Core keeps native keyring modules out of unrelated consumers."
+        },
+        {
+          "type": "server_source",
+          "path": "apps/research-room/src/server.ts",
+          "symbol": "LOOPBACK bind 127.0.0.1, hostAllowed 421 check, CSP headers, clientAssetRoot path containment (rejects '..' and non-asset paths)",
+          "note": "Loopback preview boundary and static asset containment."
+        },
+        {
+          "type": "module",
+          "path": "apps/research-room/src/main.ts",
+          "symbol": "createSecretBackend(process.platform) composition root",
+          "note": "Secure backend is wired in the server entry, not in renderer code."
+        },
+        {
+          "type": "verified_absence_in_tree",
+          "path": "apps/research-room/src/server.ts",
+          "symbol": "no apps/desktop directory at baseline 08bd5f2; Electron shell is target-only",
+          "note": "The desktop boundary is planned (G10), not present."
+        }
+      ],
+      "g1Impact": "G1 network fixtures must capture the current redirect=error/retry=0 behavior and the config-time address rejections; DNS-rebinding and proxy tests are designed for G10, not asserted green today.",
+      "hasSecurityRisk": true,
+      "hasUnknownItems": false,
+      "reviewDate": "2026-09-01",
+      "baselineCommit": "08bd5f29cd59e39f06a7de6d261aa84f73a5bc63"
+    }
+  ]
+}

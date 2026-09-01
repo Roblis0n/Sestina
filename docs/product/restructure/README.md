@@ -2,7 +2,7 @@
 title: Accepted post-0.2 product restructure authority
 authority_status: accepted_current_target
 accepted_at: 2026-09-01
-implementation_status: not_started
+implementation_status: g0_completed
 baseline_release: v0.2.0
 baseline_commit: caf893db7928bab91c4098eb04a7e4a8d4c62ffe
 decision_owner: user
@@ -119,9 +119,12 @@ An isolated code change may not silently reinterpret the accepted product.
 
 ## Current execution entry
 
-The only current implementation entry is **G0 — domain contract and terminology
-freeze** from plan `14`. G0 is not yet complete. Before schema or production
-code changes, it must close every explicit `requires_code_verification` item:
+**G0 — domain contract and terminology freeze** from plan `14` is complete.
+Its frozen decisions, machine-readable contracts, status boundary, and closed
+code-fact checks are recorded in [`IMPLEMENTATION-DECISIONS.md`](IMPLEMENTATION-DECISIONS.md),
+[`IMPLEMENTATION-STATUS.md`](IMPLEMENTATION-STATUS.md), and
+[`contracts/`](contracts/). G0 closed every explicit
+`requires_code_verification` item:
 
 - choose the one canonical Evidence aggregate and write repository;
 - prove the transaction/snapshot boundary shared by repositories and the
@@ -136,11 +139,11 @@ code changes, it must close every explicit `requires_code_verification` item:
 - verify Provider DNS/proxy/address controls, static asset path containment,
   and secure-store fallback behavior.
 
-G0 must then produce consistent machine-readable contracts, legacy mappings,
-route definitions, terminology, and decision IDs. Only after that may G1 RED
-tests and the compatible migration fixtures begin. Agent Corrector integration,
-Electron packaging, route replacement, documentation claims, and release work
-remain at their assigned downstream gates and must not be pulled forward.
+The next dependency gate is **G1 — RED tests and immutable compatibility
+fixtures**. G1 is not started by the G0 commit and must be performed as a
+separate scoped task. Agent Corrector integration, Electron packaging, route
+replacement, documentation claims, and release work remain at their assigned
+downstream gates and must not be pulled forward.
 
 ## Current release versus accepted target
 

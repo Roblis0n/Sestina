@@ -40,6 +40,7 @@
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint . --max-warnings 0",
     "docs:check": "node scripts/check-doc-links.mjs",
+    "verify:post-0.2-contracts": "node scripts/verify-post-0.2-contracts.mjs",
     "release:check": "pnpm lint && pnpm typecheck && pnpm test && pnpm docs:check && node scripts/check-no-placeholders.mjs && pnpm verify:repository && pnpm verify:public-history",
     "repo:check": "node scripts/check-repository-shape.mjs",
     "verify:architecture": "node scripts/verify-architecture.mjs",

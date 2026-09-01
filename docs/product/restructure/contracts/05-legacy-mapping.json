@@ -1,0 +1,162 @@
+{
+  "id": "contract.legacy-mapping",
+  "schemaVersion": "1.0.0",
+  "title": "Legacy concept mapping contract (G0 freeze)",
+  "frozenAt": "2026-09-01",
+  "baselineCommit": "08bd5f29cd59e39f06a7de6d261aa84f73a5bc63",
+  "authoritySource": "docs/product/restructure/Sestina-v0.2.0-完整重构计划集/00-MASTER-REFACTOR-PLAN.md, 11-DATA-MIGRATION-COMPATIBILITY-AND-ROLLBACK.md and 16-CROSS-PLAN-CONSISTENCY-AND-DECISION-LOG.md C-10/D-12",
+  "authorityRule": "No legacy concept may carry canonical research authority except the user-owned canonical objects (Brief, Decision, Issue, Evidence, Episode). Legacy Room, Pilot, Appeal, generic disposition, Receipt, and derived surfaces are read-only, archived, or folded history and can never form a second product kernel or a second truth.",
+  "dualWriteRule": "Dual-write between legacy tables and new tables is forbidden. Compatibility reading of legacy history is allowed only through dedicated legacy readers with an explicit source kind; every migrated row keeps its legacy payload and hash untouched.",
+  "concepts": [
+    {
+      "id": "room",
+      "name": "Deliberation Room",
+      "currentMeaning": "Active two-participant deliberation protocol with its own states, attempts, difference, and Resolution stored in deliberation_rooms (migration 018); reachable from primary navigation in v0.2.0.",
+      "targetMeaning": "Legacy deliberation record: read-only history, export, and recovery only. No creation, retry, challenge, or resolve; Resolution is historical opinion and never becomes a Decision or Evidence automatically.",
+      "disposition": "read_only",
+      "canonicalAuthority": false,
+      "compatibilityWindow": "From migration cutover (G2/G12) until legacy history removal is proven safe in G13; history renderer keeps read/export while all active commands return read-only or 410.",
+      "migrationGate": "deliberation_rooms rows migrate to a legacy history projection preserving participants, manifests, attempts, difference, resolution, unproven list, and events; canCreate/canRetry/canChallenge/canResolve frozen false."
+    },
+    {
+      "id": "pilot",
+      "name": "Closed External App Pilot",
+      "currentMeaning": "Active host session lifecycle (17+ states, attempts, continuity, candidate import) stored in closed_external_app_pilots tables (migration 020); Open Pilot is a primary navigation entry in v0.2.0.",
+      "targetMeaning": "Legacy host session record: read-only history with host/preflight/manifests/attempts/candidate/continuity/failure facts; candidate may be explicitly converted into a new Review draft. Continuity is host observation, never project continuity truth.",
+      "disposition": "read_only",
+      "canonicalAuthority": false,
+      "compatibilityWindow": "From G7 route replacement until G13 removal proof; server-side freeze happens before UI removal so no hidden write path remains.",
+      "migrationGate": "All pilot rows, attempts, and events are preserved as frozen history; active/interrupted pilots project as legacy_incomplete and are never resumed; conversion to Review is idempotent by source candidate hash."
+    },
+    {
+      "id": "episode",
+      "name": "Revision Episode",
+      "currentMeaning": "Canonical research object (revision_episodes) tracking the current revision workflow and locked start hash; participates in state binding.",
+      "targetMeaning": "Unchanged canonical object owned by the Kernel; its current state changes advance projectStateRevision.",
+      "disposition": "keep",
+      "canonicalAuthority": true,
+      "compatibilityWindow": "None; kept as canonical across the cutover.",
+      "migrationGate": "Rows preserved losslessly and included in the baseline canonical hash and revision 1 binding."
+    },
+    {
+      "id": "issue",
+      "name": "Research Issue",
+      "currentMeaning": "Canonical research object (research_issues) with create/status/resolution transitions, CAS versions, and reopen conditions.",
+      "targetMeaning": "Unchanged canonical object; create/resolve goes through the create_or_resolve_issue effect and the unified commit path.",
+      "disposition": "keep",
+      "canonicalAuthority": true,
+      "compatibilityWindow": "None; existing domain functions are reused by the effect handler.",
+      "migrationGate": "Rows and transition history preserved losslessly."
+    },
+    {
+      "id": "decision",
+      "name": "Research Decision",
+      "currentMeaning": "Canonical research object (research_decisions) with accept/freeze transitions and CAS versions.",
+      "targetMeaning": "Unchanged canonical object; create/update goes through the create_decision effect.",
+      "disposition": "keep",
+      "canonicalAuthority": true,
+      "compatibilityWindow": "None; existing domain functions are reused by the effect handler.",
+      "migrationGate": "Rows and transition history preserved losslessly."
+    },
+    {
+      "id": "evidence",
+      "name": "Evidence",
+      "currentMeaning": "Two distinct aggregates exist at baseline: the research-domain argument_evidence (revd_ id, migration 015, state current/stale/disputed, inference capacity) whose repository supports writes but has no production write caller, and the legacy task-scoped evidence_items plus situation_assertions plus claims (migrations 001/012) used only by tests and the legacy-import scanner. No UI, CLI, MCP, Skill, or Provider path writes Evidence in production v0.2.0.",
+      "targetMeaning": "argument_evidence is frozen as the single canonical Evidence aggregate. The add_evidence effect handler is the only production writer. Legacy evidence_items/situation_assertions/claims become read-only migration and legacy-import sources; never canonical, never dual-written.",
+      "disposition": "fold",
+      "canonicalAuthority": true,
+      "compatibilityWindow": "Legacy ledger tables stay readable for history and legacy import until G13; their writers were already absent from production and remain absent.",
+      "migrationGate": "Existing argument_evidence rows are preserved and bound into the baseline canonical hash. Legacy ledger rows are not promoted to canonical Evidence; provenance and support status are never synthesized from Provider verdicts."
+    },
+    {
+      "id": "memory",
+      "name": "Project Working Memory",
+      "currentMeaning": "Non-authoritative governed memory (project_working_memory, migration 019) with six internal states, sensitivity, retention, outbound policy (never_send / explicit_manifest_only), source refs, and resume checkpoints; a first-level workspace in v0.2.0.",
+      "targetMeaning": "Same governed kernel; user surface reduced to Suggested / In use / Not in use / Forgotten; contextual drawer inside Review and Project only. Memory is context, never Evidence; Store ≠ Recall ≠ Share ≠ Promote stays a hard rule.",
+      "disposition": "keep",
+      "canonicalAuthority": false,
+      "compatibilityWindow": "Internal states are preserved losslessly; UI projection changes are derived, so no data migration window is required for state names.",
+      "migrationGate": "Active items receive lastConfirmedProjectStateRevision=1 at baseline. Forget gains a copy inventory (DB, index, cache, unsent manifests, committed Receipt/Manifest hashes, managed backups, Provider-side and manual copies) and a privacy redaction ledger in G2/G7; the current build lacks that inventory and this contract records it as an implementation gap."
+    },
+    {
+      "id": "appeal",
+      "name": "Correction Appeal",
+      "currentMeaning": "Independent appeal aggregate (correction_appeals, migration 017) with its own Resolution and Receipt, a first-level entry in v0.2.0.",
+      "targetMeaning": "Review correction record: appended child of the owning Review, referencing the immutable original assessment. It can end only in a typed effect through the same commit path. No independent Resolution truth.",
+      "disposition": "fold_into_review",
+      "canonicalAuthority": false,
+      "compatibilityWindow": "Legacy correction_appeals rows migrate to research_review_corrections with the original payload preserved; active/incomplete appeals become legacy_incomplete and are never auto-retried.",
+      "migrationGate": "Resolved appeals never convert into canonical effects; any canonical object change that already happened through other paths stays canonical and the correction is historical association only."
+    },
+    {
+      "id": "review",
+      "name": "Research Review",
+      "currentMeaning": "In-memory pending/in-flight/analyzed Maps in ResearchRoomService; only terminal Receipts persist. Generic dispositions accepted/modified_accepted/rejected/deferred/direction_changed.",
+      "targetMeaning": "Persistent versioned ResearchReview aggregate with the frozen lifecycle (research_room_reviews, attempts, corrections). Generic disposition is removed from new APIs; only record_only or a typed effect may terminate a Review.",
+      "disposition": "keep_and_refactor",
+      "canonicalAuthority": false,
+      "compatibilityWindow": "Legacy research_room_receipts rows generate historical Reviews with canonical_effect_unresolved=true for accepted/modified_accepted; Map-based state is never reconstructed because it was never persisted.",
+      "migrationGate": "direction_changed maps to formal_direction_change only when Brief before/after evidence matches; rejected/deferred map losslessly to record_only; accepted/modified_accepted are lossy legacy record-only and never fabricate Decisions or Evidence."
+    },
+    {
+      "id": "brief",
+      "name": "Research Brief",
+      "currentMeaning": "Versioned canonical Brief with full structured fields and proposal/confirm workflow; first-run setup asks only for a question.",
+      "targetMeaning": "Progressive typed Brief: minimal question/task start, section states (not_provided / intentionally_empty / provided), known unknowns, evidence thresholds, derived assessment coverage, field diff/history. patch_brief and formal_direction_change are the only Brief mutations.",
+      "disposition": "keep_and_refactor",
+      "canonicalAuthority": true,
+      "compatibilityWindow": "Legacy Brief v1 fields decode into section states; new writes are v2-only (dual-read allowed in the compatibility reader, dual-write forbidden).",
+      "migrationGate": "Empty legacy lists that were user-saved map to intentionally_empty with migration_interpreted_empty; undecidable empties map to not_provided. evidenceBoundaries become a legacy threshold rule; ambiguous Decision IDs are never auto-linked."
+    },
+    {
+      "id": "manifest",
+      "name": "Exact Context Manifest",
+      "currentMeaning": "Context Manifest embedded inside research_room_receipts (fields, contextHash, suggestionHash, stateBindingHash, working memory hashes) plus exact provider request; stale gate uses the narrow stateBinding hash.",
+      "targetMeaning": "Persistent standalone Manifest records (context_manifests) with the four-layer identity (revision, projection hash, exact request hash, Provider generation) and send-time revalidation. Legacy Manifests become legacy_manifest_unresendable.",
+      "disposition": "keep_and_upgrade",
+      "canonicalAuthority": false,
+      "compatibilityWindow": "Legacy Manifests stay readable inside legacy Receipts but can never be sent by the new runtime.",
+      "migrationGate": "Legacy manifests are not re-hashed; original hashes stay auditable. New Manifests are created only from fresh snapshots."
+    },
+    {
+      "id": "agent-corrector",
+      "name": "Agent Corrector",
+      "currentMeaning": "Not part of v0.2.0. Exists only on the post-release branch codex/agent-corrector (commit 74c62c5f4ab22cc8267a4edc74cfaa34b078a3a8) as a standalone companion Skill bundle; not merged into this tree at the G0 baseline.",
+      "targetMeaning": "Companion Skill merged into integrations/skills at G7 after rebase and review: same-agent, same-session ephemeral correction candidate with no Sestina database, Memory, Manifest, or Authority. Only an explicit user handoff creates a Review draft.",
+      "disposition": "keep",
+      "canonicalAuthority": false,
+      "compatibilityWindow": "Branch content is not v0.2.0 capability and must never be claimed as shipped; merge happens at G7, not earlier.",
+      "migrationGate": "No project data migration; only claim documentation updates. Explicit invocation evidence never proves implicit discovery."
+    },
+    {
+      "id": "mcp",
+      "name": "MCP server",
+      "currentMeaning": "Public stdio MCP with exactly two read-only tools (health, get_research_context) and a capability policy with write=false.",
+      "targetMeaning": "Read-only by default, project-context and diagnostics only. Never a write, Provider trigger, or Authority surface; capability manifest stays frozen read-only.",
+      "disposition": "keep",
+      "canonicalAuthority": false,
+      "compatibilityWindow": "None; the read-only surface carries forward as-is and may only gain read projections.",
+      "migrationGate": "No write tools may be added without re-opening this contract and the authority policy together."
+    },
+    {
+      "id": "skill",
+      "name": "Host Skills",
+      "currentMeaning": "sestina-research-integrity Skill bundle instructs host models to use read-only MCP tools and the deterministic review CLI; it has no runtime authority and cannot persist anything itself.",
+      "targetMeaning": "Companion Skills remain thin: they output ReviewDraftEnvelope files or call the enabled Host bridge, and can never write canonical state, confirm Manifests, invoke Providers, or commit effects.",
+      "disposition": "keep",
+      "canonicalAuthority": false,
+      "compatibilityWindow": "None; capability budget unchanged.",
+      "migrationGate": "Generated bundles must stay in sync with canonical sources and their claims; drift is a test failure, not a capability."
+    },
+    {
+      "id": "cli",
+      "name": "CLI",
+      "currentMeaning": "Local CLI that embeds SestinaCore directly and can execute canonical commands (issue resolve/waive/dispute/reopen, Brief changes, deterministic review run) with an explicit user actor and --yes confirmation.",
+      "targetMeaning": "Remains a thin transport over the Kernel. Every command keeps the user actor plus explicit confirmation and passes through the same authority policy, CAS, and (after G3) revision/UoW path as every other surface.",
+      "disposition": "keep",
+      "canonicalAuthority": false,
+      "compatibilityWindow": "Generic disposition commands are removed from the CLI together with the server APIs; deterministic review run keeps its checker-only scope.",
+      "migrationGate": "CLI commands map to the same effect handlers; no CLI-only bypass of Review or Authority is introduced."
+    }
+  ]
+}

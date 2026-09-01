@@ -1,0 +1,50 @@
+{
+  "id": "contract.project-state-revision",
+  "schemaVersion": "1.0.0",
+  "title": "projectStateRevision contract (G0 freeze)",
+  "frozenAt": "2026-09-01",
+  "baselineCommit": "08bd5f29cd59e39f06a7de6d261aa84f73a5bc63",
+  "authoritySource": "docs/product/restructure/Sestina-v0.2.0-完整重构计划集/03-PROJECT-STATE-REVISION-AND-MANIFEST.md and 16-CROSS-PLAN-CONSISTENCY-AND-DECISION-LOG.md D-03",
+  "initialValue": "1, set once by the migration baseline. The baseline writes exactly one migration_baseline event; it never fabricates a historical transaction sequence and never reuses any legacy counter.",
+  "monotonic": true,
+  "neverDecreases": true,
+  "increments": {
+    "record_only": "Advances exactly once per committed record_only outcome (Review terminal + Receipt are canonical review history; no research object is touched).",
+    "create_decision": "Advances exactly once per committed decision creation or transition.",
+    "add_evidence": "Advances exactly once per committed evidence creation, state change, provenance change, or link change.",
+    "create_or_resolve_issue": "Advances exactly once per committed issue creation, status transition, or resolution.",
+    "patch_brief": "Advances exactly once per committed Brief patch producing a new active version.",
+    "formal_direction_change": "Advances exactly once per committed direction change producing a new Brief version with supersession marker.",
+    "record_only_outcome": "Advances exactly once; the outcome transaction is the same transaction as its Receipt and revision event, never a second advance.",
+    "memory_governance_change": "Advances once per committed Memory confirm, edit, stale, expire, renew, retire, forget, or privacy redaction (project-governed context changed).",
+    "compensation": "Advances N to N+1; a rollback or compensation never decreases the revision and never resurrects an old Manifest, even if the canonical hash returns to an old value.",
+    "migration_baseline": "Sets revision 1 with one baseline event; no further advance for the baseline itself."
+  },
+  "nonIncrements": [
+    "review_draft",
+    "manifest",
+    "provider_attempt",
+    "provider_assessment",
+    "correction",
+    "second_opinion",
+    "host_draft",
+    "provider_settings",
+    "ui_preferences",
+    "derived_projection_rebuild",
+    "backup_export",
+    "episode_read_only_view",
+    "language_theme",
+    "search_query"
+  ],
+  "optimisticConcurrency": "A commit compares the expected projectStateRevision with the current head inside the write transaction. The head is advanced by compare-and-swap; any mismatch fails the transaction with a stale-revision conflict. A stale preview is never silently rebased and never auto-committed; the user rebuilds the preview and re-confirms.",
+  "conflictBehavior": "On a revision conflict: the transaction rolls back, the Review keeps its persistent pre-commit state, and the system reports the exact changed objects and revisions. Two Reviews prepared on the same revision may both exist; only the first commit wins and the second becomes stale.",
+  "failureRevisionBehavior": "Any failure inside the commit transaction leaves the revision unchanged. There is no intermediate observable revision: the head, the event, the resulting object, the Review terminal state, and the Receipt either all land or none do. A commit whose outcome is unknown after a crash is resolved by authorityCommandId lookup, never by guessing.",
+  "receiptTraceBinding": {
+    "receipt": "Every transition Receipt records beforeProjectStateRevision and afterProjectStateRevision and references the revision event id.",
+    "trace": "Every revision event records projectId, revision, transactionId, effectKind, reviewId (when applicable), changedObjectRefs, previousCanonicalHash, nextCanonicalHash, publicSummary, and createdAt.",
+    "sameTransaction": true,
+    "recoveryRule": "Recovery validates the head against the append-only event chain; a broken chain fails closed and blocks writes."
+  },
+  "derivedProjectionRule": "Search, Attention, Today, Resume, and History projections carry their source projectStateRevision. A stale projection is displayed as rebuilding; it never becomes a write source and never impersonates the current revision.",
+  "recoveryRule": "After any restore or crash recovery, the runtime reloads the head and validates the event chain before any write. A mismatch enters Recovery with writes locked; the revision is never rewound."
+}

@@ -1,0 +1,78 @@
+{
+  "id": "contract.context-manifest-identity",
+  "schemaVersion": "1.0.0",
+  "title": "Exact Context Manifest identity contract (G0 freeze)",
+  "frozenAt": "2026-09-01",
+  "baselineCommit": "08bd5f29cd59e39f06a7de6d261aa84f73a5bc63",
+  "authoritySource": "docs/product/restructure/Sestina-v0.2.0-完整重构计划集/03-PROJECT-STATE-REVISION-AND-MANIFEST.md and 16-CROSS-PLAN-CONSISTENCY-AND-DECISION-LOG.md D-03",
+  "identity": {
+    "projectId": "Required. The project-scoped canonical project id; a Manifest can never be replayed or confirmed across projects.",
+    "projectStateRevision": "Required. The single revision from which the projection was read; part of the Manifest's four-layer identity.",
+    "contextPolicyVersion": "Required. The deterministic context-projection policy version that selected the fields.",
+    "contextProjectionSchemaVersion": "Required. The schema version of the projection input/output shapes.",
+    "contextProjectionHash": "Required. SHA-256 of the canonicalized projection bytes; proves what was selected, not that conclusions are correct.",
+    "exactRequestHash": "Required for any outbound-capable Manifest. SHA-256 of the serialized exact request body bytes actually sent; distinct from the projection hash.",
+    "exactRequestBody": "Required for any outbound-capable Manifest. Stored locally and protected; never logged, never in backups summaries, absent for a no-provider snapshot.",
+    "exactRequestBytes": "Required. Byte length of the exact request body; used for size caps and comparisons.",
+    "providerIdentity": "Required when a Provider attempt exists: providerId, family, model, baseUrlOrigin, locality, config generation.",
+    "providerGeneration": "Required when a Provider attempt exists; any generation change makes the Manifest stale.",
+    "manifestId": "System-generated, stable; rebuilds produce a new manifestId and version while the old one stays history.",
+    "reviewId": "The owning Review; one Review may hold a history of Manifests, only the current one is sendable."
+  },
+  "objectSelection": [
+    "active Brief fields selected by the projection policy",
+    "selected canonical Decisions (deterministic selection rules)",
+    "task-relevant open/recent Issues",
+    "explicitly selected Evidence references and summaries",
+    "current Episode summary",
+    "the current Suggestion",
+    "explicitly selected Memory items (item ids, versions, hashes)",
+    "deterministic Context limitations (not_provided sections)",
+    "relevant prior Review outcome summary (deterministic projection only)"
+  ],
+  "objectSelectionExclusions": [
+    "raw Receipt and Trace bodies",
+    "full history",
+    "old Provider raw outputs",
+    "secrets, tokens, authority nonces",
+    "absolute filesystem paths",
+    "hidden reasoning",
+    "unselected or never_send Memory",
+    "data from other projects"
+  ],
+  "ordering": [
+    "deterministic canonical order: fixed category order as listed in objectSelection",
+    "within each category, objects ordered by ascending object id",
+    "object fields serialized in canonical key order",
+    "array items keep their semantic order and are never sorted silently when order carries meaning",
+    "the same inputs, policy version, and schema version always produce byte-identical projection input"
+  ],
+  "canonicalization": "Canonical JSON serialization: object keys sorted lexicographically by UTF-16 code unit, no insignificant whitespace, no trailing newline inside the hashed byte sequence, Unicode normalized to NFC for user text before hashing. The canonicalization is a code-signed, versioned policy resource; research text can never modify it.",
+  "hashAlgorithm": "SHA-256 over the canonicalized bytes, rendered as lowercase hex (64 characters). contextProjectionHash and exactRequestHash use this algorithm.",
+  "encoding": "UTF-8 for all serialized projection and request bytes; byte length (exactRequestBytes) is measured over the UTF-8 byte sequence.",
+  "excludedMutableFields": [
+    "updatedAt timestamps of workflow records",
+    "derived counters and cache metadata",
+    "UI theme, language, and viewport preferences",
+    "search query text and result cursor",
+    "ephemeral AbortController handles",
+    "Provider secret values",
+    "nonce and authority command ids"
+  ],
+  "providerMetadataBoundary": "The Manifest stores Provider identity snapshot and generation only. Secrets, Authorization headers, hidden reasoning, and raw provider outputs are excluded from the Manifest and from every Receipt projection; the exactRequestBody is stored locally and protected, never transmitted as metadata.",
+  "previewPayloadConsistency": "The user-visible preview and the real payload are produced from the same projection input and the same serializer. Equality is defined by exactRequestHash: the preview must display the exact body whose hash will be sent, and the send path must re-verify that the prepared body still hashes to the same exactRequestHash.",
+  "replayComparison": "Immediately before any network I/O the Kernel re-opens a fresh single-read snapshot, recomputes the projection and request body, and compares projectStateRevision, contextProjectionHash, exactRequestHash, and Provider generation against the Manifest. Any mismatch transitions the Manifest to stale with a precise stale reason and performs zero network I/O. A changed revision with an unchanged payload still requires fresh user confirmation and never auto-sends.",
+  "staleReasons": [
+    "project_revision_changed",
+    "brief_binding_changed",
+    "target_version_changed",
+    "projection_policy_changed",
+    "memory_selection_changed",
+    "memory_item_changed",
+    "provider_generation_changed",
+    "request_body_changed",
+    "schema_changed",
+    "migration_rebind_required"
+  ],
+  "snapshotRule": "Projection reads and send-time revalidation each run inside one SQLite read snapshot; mixed-version reads across repositories are forbidden and fail closed."
+}

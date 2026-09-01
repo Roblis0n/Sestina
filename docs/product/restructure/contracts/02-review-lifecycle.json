@@ -1,0 +1,318 @@
+{
+  "id": "contract.review-lifecycle",
+  "schemaVersion": "1.0.0",
+  "title": "Persistent Review lifecycle contract (G0 freeze)",
+  "frozenAt": "2026-09-01",
+  "baselineCommit": "08bd5f29cd59e39f06a7de6d261aa84f73a5bc63",
+  "authoritySource": "docs/product/restructure/Sestina-v0.2.0-完整重构计划集/04-PERSISTENT-REVIEW-AND-SEMANTIC-CLAIMS.md and 16-CROSS-PLAN-CONSISTENCY-AND-DECISION-LOG.md D-04",
+  "nature": "A Review is a persistent, versioned, recoverable, non-authoritative workflow aggregate. It is never a modal popup or an in-memory session. Only the user's committed CanonicalEffect changes canonical research state; the Review itself carries no research authority.",
+  "states": [
+    "draft",
+    "manifest_prepared",
+    "manifest_confirmed",
+    "provider_attempt_prepared",
+    "provider_attempt_running",
+    "provider_attempt_uncertain",
+    "provider_attempt_failed",
+    "assessment_recorded",
+    "stale",
+    "disposed",
+    "committed",
+    "cancelled"
+  ],
+  "effectDraftAttribute": "effect_preview_ready is a persistent attribute of the Review (effect draft, preview hash, base revision), not a second top-level state machine.",
+  "creationRule": {
+    "from": "none",
+    "to": "draft",
+    "command": "create_review",
+    "initiator": "user or thin Host adapter",
+    "requiresUserAdjudication": false,
+    "precondition": "valid suggestion, open project",
+    "note": "Host and Skill adapters may only create drafts; they never advance the Review."
+  },
+  "transitions": [
+    {
+      "from": "draft",
+      "to": "manifest_prepared",
+      "command": "prepare_manifest",
+      "initiator": "user",
+      "requiresUserAdjudication": false,
+      "precondition": "single local snapshot readable"
+    },
+    {
+      "from": "stale",
+      "to": "manifest_prepared",
+      "command": "rebuild_manifest",
+      "initiator": "user",
+      "requiresUserAdjudication": false,
+      "precondition": "Review still active"
+    },
+    {
+      "from": "manifest_prepared",
+      "to": "manifest_confirmed",
+      "command": "confirm_manifest",
+      "initiator": "user",
+      "requiresUserAdjudication": true,
+      "precondition": "exact payload visible, version matches"
+    },
+    {
+      "from": "manifest_confirmed",
+      "to": "manifest_confirmed",
+      "command": "skip_assessment",
+      "initiator": "user",
+      "requiresUserAdjudication": false,
+      "precondition": "none; records availability=not_requested",
+      "note": "No Provider is ever required for any effect."
+    },
+    {
+      "from": "manifest_confirmed",
+      "to": "provider_attempt_prepared",
+      "command": "prepare_provider_attempt",
+      "initiator": "user",
+      "requiresUserAdjudication": false,
+      "precondition": "Provider configured, Manifest confirmed"
+    },
+    {
+      "from": "provider_attempt_prepared",
+      "to": "provider_attempt_running",
+      "command": "start_provider_attempt",
+      "initiator": "Kernel after user confirmation",
+      "requiresUserAdjudication": true,
+      "precondition": "fresh send-time revalidation passes"
+    },
+    {
+      "from": "provider_attempt_running",
+      "to": "assessment_recorded",
+      "command": "record_assessment",
+      "initiator": "Kernel",
+      "requiresUserAdjudication": false,
+      "precondition": "binding/schema/span processing completed; assessment stored immutable"
+    },
+    {
+      "from": "provider_attempt_running",
+      "to": "provider_attempt_failed",
+      "command": "record_provider_failure",
+      "initiator": "Kernel",
+      "requiresUserAdjudication": false,
+      "precondition": "known failure, timeout, or user abort"
+    },
+    {
+      "from": "provider_attempt_running",
+      "to": "provider_attempt_uncertain",
+      "command": "mark_attempt_uncertain",
+      "initiator": "Kernel recovery",
+      "requiresUserAdjudication": false,
+      "precondition": "process crash or unknown write outcome",
+      "note": "Restart never resends; the attempt can only be marked uncertain."
+    },
+    {
+      "from": "provider_attempt_failed",
+      "to": "manifest_confirmed",
+      "command": "continue_without_assessment",
+      "initiator": "user",
+      "requiresUserAdjudication": false,
+      "precondition": "failure recorded"
+    },
+    {
+      "from": "provider_attempt_uncertain",
+      "to": "provider_attempt_prepared",
+      "command": "prepare_new_attempt",
+      "initiator": "user",
+      "requiresUserAdjudication": false,
+      "precondition": "explicit new attempt, new ordinal, fresh Manifest confirmation"
+    },
+    {
+      "from": "provider_attempt_uncertain",
+      "to": "disposed",
+      "command": "commit_record_only_without_assessment",
+      "initiator": "user",
+      "requiresUserAdjudication": true,
+      "precondition": "effect preview fresh"
+    },
+    {
+      "from": "provider_attempt_uncertain",
+      "to": "committed",
+      "command": "commit_effect_without_assessment",
+      "initiator": "user",
+      "requiresUserAdjudication": true,
+      "precondition": "effect preview fresh"
+    },
+    {
+      "from": "manifest_confirmed",
+      "to": "stale",
+      "command": "mark_stale",
+      "initiator": "Kernel derived check",
+      "requiresUserAdjudication": false,
+      "precondition": "project revision changed after the base revision"
+    },
+    {
+      "from": "assessment_recorded",
+      "to": "stale",
+      "command": "mark_stale",
+      "initiator": "Kernel derived check",
+      "requiresUserAdjudication": false,
+      "precondition": "project revision changed",
+      "note": "The stored assessment remains immutable history marked as based on the old revision."
+    },
+    {
+      "from": "manifest_confirmed",
+      "to": "disposed",
+      "command": "commit_record_only",
+      "initiator": "user",
+      "requiresUserAdjudication": true,
+      "precondition": "typed record_only effect, fresh preview"
+    },
+    {
+      "from": "manifest_confirmed",
+      "to": "committed",
+      "command": "commit_effect",
+      "initiator": "user",
+      "requiresUserAdjudication": true,
+      "precondition": "typed mutation effect, fresh preview"
+    },
+    {
+      "from": "assessment_recorded",
+      "to": "disposed",
+      "command": "commit_record_only",
+      "initiator": "user",
+      "requiresUserAdjudication": true,
+      "precondition": "typed record_only effect, fresh preview"
+    },
+    {
+      "from": "assessment_recorded",
+      "to": "committed",
+      "command": "commit_effect",
+      "initiator": "user",
+      "requiresUserAdjudication": true,
+      "precondition": "typed mutation effect, fresh preview"
+    },
+    {
+      "from": "provider_attempt_failed",
+      "to": "disposed",
+      "command": "commit_record_only",
+      "initiator": "user",
+      "requiresUserAdjudication": true,
+      "precondition": "fresh preview"
+    },
+    {
+      "from": "provider_attempt_failed",
+      "to": "committed",
+      "command": "commit_effect",
+      "initiator": "user",
+      "requiresUserAdjudication": true,
+      "precondition": "fresh preview"
+    },
+    {
+      "from": "draft",
+      "to": "cancelled",
+      "command": "cancel_review",
+      "initiator": "user",
+      "requiresUserAdjudication": false,
+      "precondition": "no in-flight commit"
+    },
+    {
+      "from": "manifest_prepared",
+      "to": "cancelled",
+      "command": "cancel_review",
+      "initiator": "user",
+      "requiresUserAdjudication": false,
+      "precondition": "no active send"
+    },
+    {
+      "from": "manifest_confirmed",
+      "to": "cancelled",
+      "command": "cancel_review",
+      "initiator": "user",
+      "requiresUserAdjudication": false,
+      "precondition": "no active send"
+    },
+    {
+      "from": "provider_attempt_prepared",
+      "to": "cancelled",
+      "command": "cancel_review",
+      "initiator": "user",
+      "requiresUserAdjudication": false,
+      "precondition": "attempt not started"
+    }
+  ],
+  "illegalTransitions": [
+    {
+      "from": "committed",
+      "to": "any",
+      "reason": "terminal; a committed Review can only be compensated through a new Review with a new effect"
+    },
+    {
+      "from": "disposed",
+      "to": "any",
+      "reason": "terminal; record-only outcomes are final workflow records"
+    },
+    {
+      "from": "cancelled",
+      "to": "any",
+      "reason": "terminal; history is preserved, no resurrection"
+    },
+    {
+      "from": "provider_attempt_running",
+      "to": "assessment_recorded",
+      "condition": "without binding/schema/span validation",
+      "reason": "a Provider response can never skip manifest confirmation or validation"
+    },
+    {
+      "from": "provider_attempt_uncertain",
+      "to": "provider_attempt_running",
+      "reason": "an uncertain attempt is never automatically retried or resumed; only an explicit new attempt is allowed"
+    },
+    {
+      "from": "stale",
+      "to": "committed",
+      "reason": "a stale Review can never commit an old effect preview"
+    },
+    {
+      "from": "stale",
+      "to": "disposed",
+      "reason": "a stale Review can never commit an old effect preview"
+    },
+    {
+      "from": "assessment_recorded",
+      "to": "assessment_recorded",
+      "condition": "edit_or_overwrite_assessment",
+      "reason": "original Provider assessments are immutable; corrections are appended child records"
+    },
+    {
+      "from": "manifest_prepared",
+      "to": "provider_attempt_running",
+      "reason": "sending without explicit user Manifest confirmation is forbidden"
+    },
+    {
+      "from": "any_non_terminal",
+      "to": "committed",
+      "condition": "initiator_is_not_the_user",
+      "reason": "only the user can commit a canonical effect"
+    },
+    {
+      "from": "any_non_terminal",
+      "to": "disposed",
+      "condition": "initiator_is_not_the_user",
+      "reason": "only the user can commit a canonical effect"
+    }
+  ],
+  "terminalStates": ["committed", "disposed", "cancelled"],
+  "terminalTraceability": "Terminal states remain fully traceable: every committed/disposed Review keeps its immutable Receipt, revision event, resulting object references, and correction history readable in History and Search. Terminal states are never deleted or re-opened; corrections and compensations create new work objects that reference the original Review.",
+  "recoverySemantics": "Each persisted state recovers on restart with no automatic network behavior: running attempts recover as provider_attempt_uncertain; confirmed Manifests never auto-send; effect drafts re-preview after a fresh revision check; commit idempotency is resolved by authorityCommandId lookup against Receipt/resulting object.",
+  "correctionSemantics": "Corrections are appended Review child records referencing the immutable original assessment. A correction can only end in a typed effect through the same commit path; it never forms a second Resolution truth.",
+  "reopenSemantics": "Terminal Reviews are never re-opened in place. A user continues work by creating a new Review (optionally sourced from the terminal Review's history); compensation of a committed effect is a new Review/effect, not an edit of the old terminal state.",
+  "committableEffectKinds": [
+    "record_only",
+    "create_decision",
+    "add_evidence",
+    "create_or_resolve_issue",
+    "patch_brief",
+    "formal_direction_change"
+  ],
+  "revisionBinding": "The Review stores baseProjectStateRevision. Every commit transaction advances projectStateRevision exactly once and binds Review terminal state, resulting object, revision event, and Receipt in one unit of work.",
+  "attemptRules": {
+    "ordinal": "Provider attempts are append-only with strictly increasing ordinals per Review",
+    "uncertainty": "provider_attempt_uncertain means the request may have been sent; the system never resends automatically and never claims certainty it does not have",
+    "manifestBinding": "every attempt references exactly one confirmed Manifest identity; retry requires a new Manifest confirmation"
+  }
+}

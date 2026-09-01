@@ -1,0 +1,343 @@
+{
+  "id": "contract.terminology",
+  "schemaVersion": "1.0.0",
+  "title": "Canonical terminology and claim-level contract (G0 freeze)",
+  "frozenAt": "2026-09-01",
+  "baselineCommit": "08bd5f29cd59e39f06a7de6d261aa84f73a5bc63",
+  "authoritySource": "docs/product/restructure/Sestina-v0.2.0-完整重构计划集/15-TERMINOLOGY-DOCS-AND-CLAIM-MIGRATION.md and 16-CROSS-PLAN-CONSISTENCY-AND-DECISION-LOG.md",
+  "terms": [
+    {
+      "id": "research-deliberation-kernel",
+      "name": "Research Deliberation Kernel",
+      "nameZh": "研究审议内核",
+      "definition": "The single owner of canonical research state, legal transitions, authority policy, Context Manifest rules, revision invariants, memory governance, and recovery rules. No renderer, adapter, Provider, or legacy surface may duplicate its transitions."
+    },
+    {
+      "id": "user-authority",
+      "name": "User Authority",
+      "nameZh": "用户裁决",
+      "definition": "Only the user may commit a typed CanonicalEffect. Models, agents, tools, signatures, hashes, and consensus can propose or evidence but never accept, resolve, waive, close, supersede, or redirect research on the user's behalf."
+    },
+    {
+      "id": "canonical-effect",
+      "name": "Canonical effect",
+      "nameZh": "规范变更",
+      "definition": "A typed, user-committed command that atomically changes canonical research state or records a record-only outcome. The six kinds are record_only, create_decision, add_evidence, create_or_resolve_issue, patch_brief, and formal_direction_change. Provider availability never gates it."
+    },
+    {
+      "id": "record_only",
+      "name": "Record only",
+      "nameZh": "仅记录",
+      "definition": "The outcome that records rejected, deferred, reference-only, or assessment-disputed work without changing Brief, Decision, Issue, or Evidence. It still writes Review terminal state, one revision event, and one Receipt."
+    },
+    {
+      "id": "project-state-revision",
+      "name": "Project state revision",
+      "nameZh": "项目状态修订号",
+      "definition": "projectStateRevision: a monotonic integer starting at 1 after migration baseline, advanced exactly once per canonical transaction and never decreased. Workflow records, Provider settings, UI preferences, and derived projections never advance it."
+    },
+    {
+      "id": "context-projection-hash",
+      "name": "Context projection hash",
+      "nameZh": "上下文投影哈希",
+      "definition": "contextProjectionHash: SHA-256 of the canonicalized selected projection bytes. It proves which context was selected under a policy, not that conclusions are correct."
+    },
+    {
+      "id": "exact-request-hash",
+      "name": "Exact request hash",
+      "nameZh": "精确请求哈希",
+      "definition": "exactRequestHash: SHA-256 of the serialized request body bytes actually sent. Distinct from the projection hash and from any semantic claim."
+    },
+    {
+      "id": "review",
+      "name": "Research Review",
+      "nameZh": "审议",
+      "definition": "The persistent, versioned, recoverable, non-authoritative workflow aggregate that carries a suggestion from draft to manifest, optional Provider attempt, effect preview, and user-committed terminal state. It is a work object with history, never a modal popup."
+    },
+    {
+      "id": "brief",
+      "name": "Research Brief",
+      "nameZh": "研究简报",
+      "definition": "The progressively built canonical constraint record (question, task, scope, fixed decisions, evidence thresholds, known unknowns, non-goals) with versioning, diffs, and history. Its missing sections become explicit Context limitations, never LLM-invented content."
+    },
+    {
+      "id": "decision",
+      "name": "Research Decision",
+      "nameZh": "研究决定",
+      "definition": "A canonical, user-owned direction or constraint decision. It is a direction fact, not a claim that some proposition is factually true."
+    },
+    {
+      "id": "issue",
+      "name": "Research Issue",
+      "nameZh": "研究问题",
+      "definition": "A canonical open question, risk, or obstacle with status transitions, versions, and reopen conditions."
+    },
+    {
+      "id": "evidence",
+      "name": "Evidence",
+      "nameZh": "证据",
+      "definition": "The single canonical Evidence aggregate (argument_evidence, revd_ id) with kind, state (current/stale/disputed), inference capacity, provenance, and support links (proven/unproven/disputed/stale). Recording evidence is a user action and is not proof of fact; support status comes only from the Evidence domain."
+    },
+    {
+      "id": "evidence-threshold",
+      "name": "Evidence threshold",
+      "nameZh": "证据门槛",
+      "definition": "EvidenceThreshold: a Brief rule stating the minimum source class, corroboration, and accepted inference capacity required for a claim, decision, direction change, or completion. It governs what counts as sufficient support; it is not a quality grade of any source."
+    },
+    {
+      "id": "known-unknown",
+      "name": "Known unknown",
+      "nameZh": "已知未知项",
+      "definition": "KnownUnknown: a structured Brief entry naming an explicitly acknowledged gap with importance and resolution condition. Missing entries are not_provided, never silently empty."
+    },
+    {
+      "id": "memory",
+      "name": "Project Working Memory",
+      "nameZh": "项目工作记忆",
+      "definition": "Governed, non-authoritative local context with internal states and four user states (Suggested, In use, Not in use, Forgotten). Memory is context, never Evidence; Store, Recall, Share, and Promote are separate operations and only Share goes outbound through per-item Manifest selection."
+    },
+    {
+      "id": "manifest",
+      "name": "Exact Context Manifest",
+      "nameZh": "外发内容清单",
+      "definition": "The persistent record binding project id, projectStateRevision, projection policy and hash, selected Memory, Provider identity and generation, and the exact request body and hash. Revalidated immediately before network I/O; any mismatch fails closed with a precise stale reason."
+    },
+    {
+      "id": "provider-assessment",
+      "name": "Provider assessment",
+      "nameZh": "Provider 评估",
+      "definition": "A structured, attributed model opinion bound to one Manifest. Non-authoritative; it never gates user actions and never upgrades Evidence support. Protocol facts are reported separately as request_binding_valid, response_schema_valid, and quoted_span_integrity_valid."
+    },
+    {
+      "id": "transition-receipt",
+      "name": "Transition Receipt",
+      "nameZh": "变更凭证",
+      "definition": "The audit proof of one canonical transaction: actor, effect preview hash, before/after revision, resulting object ids, Manifest identity, assessment availability. It is proof of what changed, never the result itself."
+    },
+    {
+      "id": "transition-trace",
+      "name": "Transition Trace",
+      "nameZh": "技术轨迹",
+      "definition": "The revision event and technical transaction record behind a Receipt, expandable on demand. It complements, never replaces, the Receipt or the resulting object."
+    },
+    {
+      "id": "appeal",
+      "name": "Review correction",
+      "nameZh": "评估纠错",
+      "definition": "An appended child record of a Review referencing the immutable original assessment. It ends in a typed effect through the same commit path; it never forms a second Resolution truth."
+    },
+    {
+      "id": "room",
+      "name": "Legacy Deliberation Room",
+      "nameZh": "历史会商记录",
+      "definition": "Read-only historical deliberation protocol records. No creation, retry, challenge, or resolve; its Resolution is historical opinion."
+    },
+    {
+      "id": "pilot",
+      "name": "Legacy host pilot record",
+      "nameZh": "历史宿主试运行记录",
+      "definition": "Read-only historical Closed External App Pilot records. Candidate conversion into a Review draft is explicit and idempotent; continuity is host observation, never project continuity."
+    },
+    {
+      "id": "episode",
+      "name": "Revision Episode",
+      "nameZh": "修订章节",
+      "definition": "The canonical object tracking the current revision workflow and its locked start hash."
+    },
+    {
+      "id": "agent-corrector",
+      "name": "Agent Corrector",
+      "nameZh": "辅助纠偏 Skill",
+      "definition": "A companion Skill (branch-only at the G0 baseline, merged at G7) that produces same-agent, same-session ephemeral correction candidates. It holds no Sestina database, Memory, Manifest, or Authority; only an explicit user handoff creates a Review draft."
+    },
+    {
+      "id": "mcp",
+      "name": "MCP server",
+      "nameZh": "MCP 服务",
+      "definition": "The read-only Model Context Protocol surface exposing health and research context. Write capability is false and stays false."
+    },
+    {
+      "id": "skill",
+      "name": "Host Skill",
+      "nameZh": "宿主 Skill",
+      "definition": "Thin companion skills that read bounded context and output Review draft envelopes or call the enabled bridge. They can never write canonical state or invoke Authority."
+    },
+    {
+      "id": "cli",
+      "name": "CLI",
+      "nameZh": "命令行界面",
+      "definition": "A thin local transport over the Kernel. Commands carry a user actor and explicit confirmation and pass the same authority policy and CAS as every other surface."
+    },
+    {
+      "id": "host-bridge",
+      "name": "Host bridge",
+      "nameZh": "宿主桥接",
+      "definition": "A disabled-by-default local loopback intake that may only submit Review draft envelopes and query their status. It can never read arbitrary project data, confirm Manifests, or commit effects."
+    },
+    {
+      "id": "derived-projection",
+      "name": "Derived projection",
+      "nameZh": "派生投影",
+      "definition": "Search, Attention, Today, Resume, History, and context projections rebuilt from canonical state. Each carries its source projectStateRevision and is never a write source."
+    }
+  ],
+  "legacyTerms": [
+    "semantic_ready",
+    "ledger_only",
+    "accepted",
+    "modified_accepted",
+    "disposition",
+    "Authority Gate",
+    "stateHash",
+    "stateBinding",
+    "Review Room object workspace",
+    "Project Objects",
+    "Open Pilot",
+    "independent second opinion",
+    "Semantic Judge result as fact",
+    "confidence 0.66",
+    "review_runs as interactive Review"
+  ],
+  "forbiddenMixings": [
+    {
+      "rule": "Memory must never be written or presented as Evidence; Memory ≠ Evidence is a hard invariant."
+    },
+    {
+      "rule": "Evidence provenance/source class must never be merged with Brief threshold into one quality grade; provenance describes where a record came from, the threshold governs what counts as sufficient support."
+    },
+    {
+      "rule": "Receipt must never be presented as the result; the resulting object or explicit record-only outcome is the result."
+    },
+    {
+      "rule": "A Provider assessment must never be presented as validation of fact; only request binding, response schema, and quoted span integrity are protocol facts."
+    },
+    {
+      "rule": "provider_assessment_available must never gate effect capability; user action capability depends only on actor, target, and revision."
+    },
+    {
+      "rule": "The context preview and the real payload must be the same bytes by exactRequestHash; a preview that differs from the sent body is forbidden."
+    },
+    {
+      "rule": "Legacy Room and Pilot projections must never be mixed with active canonical objects as the same kind of truth."
+    },
+    {
+      "rule": "projectStateRevision must never be mixed with any per-object version or with Provider generation; they are separate identities."
+    },
+    {
+      "rule": "Deterministic protocol proof must never be relabeled as a semantic verdict."
+    },
+    {
+      "rule": "A user direction decision must never be relabeled as proof that a claim is factually true."
+    }
+  ],
+  "statusWords": [
+    {
+      "word": "implemented",
+      "usageCondition": "Only when production code plus its passing contract tests plus the required production evidence exist; never for a plan, schema draft, or fixture."
+    },
+    {
+      "word": "verified",
+      "usageCondition": "Only when an implementation is demonstrated by referenced production code paths or release artifacts; the evidence type must be stated."
+    },
+    {
+      "word": "unproven",
+      "usageCondition": "Used for facts that lack evidence, especially Provider semantic quality, cognitive independence, and external value."
+    },
+    {
+      "word": "proposal_only",
+      "usageCondition": "Used for Provider, Host, Skill, and Agent Corrector outputs that may only propose and never mutate authority state."
+    },
+    {
+      "word": "read_only",
+      "usageCondition": "Used for surfaces (legacy Room/Pilot, MCP, History) that can only read, export, or recover and can never form canonical effects."
+    },
+    {
+      "word": "target_design",
+      "usageCondition": "Used for accepted plan content that is not yet implemented; it must never be described as a current capability."
+    },
+    {
+      "word": "legacy_compatibility",
+      "usageCondition": "Used for baseline data and surfaces retained only for migration, history, export, and recovery."
+    },
+    {
+      "word": "verified_present",
+      "usageCondition": "Code-fact conclusion of G0: the capability exists in the current tree with referenced paths, symbols, schemas, or tests."
+    },
+    {
+      "word": "verified_multiple",
+      "usageCondition": "Code-fact conclusion of G0: multiple distinct implementations or partial facts exist; each sub-fact must be enumerated with its own evidence."
+    },
+    {
+      "word": "verified_absent",
+      "usageCondition": "Code-fact conclusion of G0: the capability does not exist in the current tree; used instead of leaving a fact unresolved."
+    },
+    {
+      "word": "implementation_gap",
+      "usageCondition": "A decided target capability that current code lacks; it must name the gate where it will be implemented."
+    },
+    {
+      "word": "not_established",
+      "usageCondition": "For questions outside this restructure: Provider semantic accuracy, cognitive independence, external user value, adoption, market value."
+    }
+  ],
+  "forbiddenOverclaims": [
+    "Sestina validates that a suggestion is a theoretical contribution",
+    "the quoted span proves the conclusion",
+    "two models agreed, therefore the fact is more reliable",
+    "the user accepted it, therefore the fact is proven",
+    "the Receipt is the research result",
+    "Memory is Evidence",
+    "local means no network is ever used",
+    "explicit Skill invocation proves automatic discovery and correction",
+    "local-only implies absolute security",
+    "the desktop lifecycle is complete before its packaged production evidence exists"
+  ],
+  "forbiddenPlaceholderTokens": [
+    "TODO",
+    "TBD",
+    "PLACEHOLDER",
+    "TBC",
+    "待确认",
+    "待补",
+    "以后补",
+    "以后处理",
+    "后续补充",
+    "后续实现"
+  ],
+  "machineReadableRelations": [
+    { "subject": "memory", "relation": "never_equals", "object": "evidence" },
+    {
+      "subject": "provider-assessment",
+      "relation": "never_grants",
+      "object": "user-authority"
+    },
+    {
+      "subject": "transition-receipt",
+      "relation": "never_equals",
+      "object": "canonical-effect"
+    },
+    {
+      "subject": "context-projection-hash",
+      "relation": "binds",
+      "object": "manifest"
+    },
+    {
+      "subject": "project-state-revision",
+      "relation": "bounds",
+      "object": "manifest"
+    },
+    {
+      "subject": "record_only",
+      "relation": "writes",
+      "object": "transition-receipt"
+    },
+    { "subject": "review", "relation": "requires", "object": "user-authority" },
+    {
+      "subject": "evidence-threshold",
+      "relation": "constrains",
+      "object": "add_evidence"
+    },
+    { "subject": "room", "relation": "read_only_in", "object": "history" },
+    { "subject": "pilot", "relation": "read_only_in", "object": "history" }
+  ]
+}
