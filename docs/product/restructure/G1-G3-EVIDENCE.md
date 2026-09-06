@@ -153,7 +153,7 @@ and lack of retries in that test environment only. A socket-denial test runs
 preflight, migration, no-assessment canonical commit, projection and verified
 downgrade with every network connection forbidden. No real Provider is used.
 
-## Verification status at the implementation checkpoint
+## Completed verification and continuation boundary
 
 At `c9ed436`, the exact committed tree passed `pnpm verify:public` and native
 `pnpm verify:platform win32 x64`. The public gate includes production lint,
@@ -170,12 +170,45 @@ Windows artifact verification proved identical rebuilds and the existing
 offline lifecycle. The default remains schema 20; this is not Electron or
 target UI acceptance.
 
-The platform entry now also runs the full database foundation on each native
-runner. CI pins Node 24.13.0 to the immutable fixture toolchain and fetches the
-old source history on all platforms. The user authorized pushing only this
-implementation branch and dispatching the existing artifact matrix, without
-publishing a release. macOS arm64 and Linux x64 results are still pending;
-G1–G3 remain `verification_in_progress` until required native evidence closes.
+The final implementation tree is
+`e08c760e0adcf63c1ea54b22103b903b5e17ec83`. Its
+[CI run 34031380557](https://github.com/Roblis0n/Sestina/actions/runs/34031380557)
+completed successfully on 2026-09-06:
+
+| Native evidence | Result and scope |
+| --- | --- |
+| Shared Ubuntu public gate | PASS: complete `pnpm verify:public`, including the foundation, frozen inputs and all existing public checks. |
+| Windows x64 | PASS: 193 foundation assertions, deterministic archives, exact artifact contract and native offline lifecycle. |
+| macOS arm64 | PASS: the same foundation and platform entry on the actual macOS runner. |
+| Linux x64 | PASS: the same foundation and platform entry on the actual Linux runner. |
+
+All three lifecycle reports recorded zero network attempts. Windows DPAPI and
+macOS Keychain were available. The Linux runner had no Secret Service; its
+verified path is explicit secure-storage unavailability and offline operation,
+not a claim that live Linux keyring persistence was exercised. No secret-store
+implementation changes belong to G1–G3, so this does not block this scope.
+
+The platform entry runs the full database foundation on each native runner.
+CI pins Node 24.13.0 to the immutable fixture toolchain and fetches the old
+source history on all platforms. The user authorized pushing only this
+implementation branch and running the existing artifact matrix; no release
+was published. A local clean checkout of `e08c760` also passed the full public
+gate. After all native gates passed, the user requested fewer gates; the final
+status/documentation-only commit receives focused checks without repeating the
+already successful full matrix. Its runtime is identical to the verified tree.
+
+G1, G2 and G3 are `completed_and_verified`. There is no remaining blocker for
+this scope. G4–G13 remain `not_started`; their 15 domain and seven built-UI RED
+assertions are retained as executable continuation evidence, not repaired claims.
+
+| Implementation history | Evidence contribution |
+| --- | --- |
+| `0b8ef35`, `1def5da` | Behavioral and missing-schema RED tests committed before implementation; pinned synthetic old-code recipes. |
+| `2a76d15` | Opt-in schema, durable repositories, canonical UoW and copy migration foundation. |
+| `8363407` | Recovery, exact Manifest/proof relationships and fault-boundary repairs with discriminating regressions. |
+| `ba39528` | Independently rebuilt old release fixture and real source/tag mismatch downstream RED. |
+| `06602ff`, `c9ed436` | Separately committed saved-version-zero RED, followed by the strict durable-proof repair. |
+| `e08c760` | Native foundation in platform gates and synchronized architecture/privacy/recovery documentation; fully verified implementation tree. |
 
 An initial full public run passed production lint, types and all selected
 production regressions, then stopped at the repository shape gate because the

@@ -13,8 +13,8 @@ conflict, while current release documents continue to describe what `v0.2.0`
 actually ships. The accepted target is not implementation evidence.
 
 G0 is frozen in `docs/product/restructure/IMPLEMENTATION-DECISIONS.md`,
-`IMPLEMENTATION-STATUS.md`, and `contracts/`. The next dependency gate is G1;
-start it only as a separate scoped task and follow the G1-G13 dependency order.
+`IMPLEMENTATION-STATUS.md`, and `contracts/`. Read the status record for the
+current completed gates and execution entry; follow the G1-G13 dependency order.
 Do not pull UI, Electron, Agent Corrector, migration cutover, legacy-path
 removal, documentation claims, or release work ahead of their defined gates.
 Do not use external trial feedback, adoption, market evidence, or

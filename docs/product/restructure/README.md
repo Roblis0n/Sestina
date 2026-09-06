@@ -2,7 +2,7 @@
 title: Accepted post-0.2 product restructure authority
 authority_status: accepted_current_target
 accepted_at: 2026-09-01
-implementation_status: g0_completed
+implementation_status: g1_g3_completed
 baseline_release: v0.2.0
 baseline_commit: caf893db7928bab91c4098eb04a7e4a8d4c62ffe
 decision_owner: user
@@ -29,9 +29,10 @@ server preview.
   approval.
 - Statements inside that immutable artifact saying that the user still needs
   to approve the target are superseded by this acceptance record.
-- All `implementation_status: not_started` statements remain true. A plan,
-  schema draft, route map, test contract, or acceptance record is not
-  implementation evidence.
+- The plan's `implementation_status: not_started` statements describe the
+  accepted artifact at intake. Current execution evidence lives in
+  [`IMPLEMENTATION-STATUS.md`](IMPLEMENTATION-STATUS.md); acceptance alone is
+  not implementation evidence.
 - Shipped `v0.2.0` behavior, installation instructions, release artifacts, and
   limitations remain current release truth until the complete target passes
   its production and release gates.
@@ -139,18 +140,20 @@ code-fact checks are recorded in [`IMPLEMENTATION-DECISIONS.md`](IMPLEMENTATION-
 - verify Provider DNS/proxy/address controls, static asset path containment,
   and secure-store fallback behavior.
 
-The next dependency gate is **G1 — RED tests and immutable compatibility
-fixtures**. G1 is not started by the G0 commit and must be performed as a
-separate scoped task. Agent Corrector integration, Electron packaging, route
-replacement, documentation claims, and release work remain at their assigned
-downstream gates and must not be pulled forward.
+The user subsequently authorized G1–G3 together on `codex/post-0.2-g1-g3`,
+starting from G0 commit `a4889ee`. The opt-in schema-25 implementation and
+three-platform evidence are recorded in [G1–G3 evidence](G1-G3-EVIDENCE.md).
+G1–G3 are completed and verified. The exact following G4 entry is in
+[operations and continuation](G1-G3-OPERATIONS.md). G4–G13 remain unimplemented.
+Agent Corrector integration, Electron packaging, route replacement, final
+production cutover and release work retain their assigned downstream gates.
 
 ## Current release versus accepted target
 
 | Classification                  | Meaning                                                                                                                                                   |
 | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Current in v0.2.0**           | Behavior and artifacts demonstrably present at tag `v0.2.0` / commit `caf893d`                                                                            |
-| **Accepted target design**      | The complete plan set in this directory; approved but not implemented                                                                                     |
+| **Accepted target design**      | The complete approved plan set; gate-specific implementation evidence is tracked separately in the status record                                        |
 | **Legacy compatibility**        | Existing Room, Pilot, generic disposition, and related data retained only for migration, read-only history, export, and recovery where the plan specifies |
 | **Verified in a later release** | A target capability only after its implementation, migration, production UI, security, lifecycle, and release evidence all pass                           |
 | **Not established**             | Provider semantic accuracy, cognitive independence, external-user value, repeated-use value, adoption, and market value                                   |

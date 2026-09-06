@@ -1,8 +1,8 @@
 # Post-0.2 implementation status
 
 - **Status authority:** this record reports the boundary between the shipped
-  `v0.2.0` implementation, the completed G0 contract freeze, and work assigned
-  to downstream gates.
+  `v0.2.0` implementation, the completed G0 contract freeze, the authorized
+  opt-in G1–G3 foundation, and work assigned to downstream gates.
 - **Code-fact baseline:**
   `08bd5f29cd59e39f06a7de6d261aa84f73a5bc63`, whose product code is the
   `v0.2.0` release tree plus the accepted restructure authority.
@@ -50,7 +50,11 @@ review order without changing contract identifiers; tools must use the
 machine-readable `id` and `schemaVersion` fields rather than infer semantics
 from filenames.
 
-## 3. Current implementation versus accepted target
+## 3. Historical G0 code facts versus accepted target
+
+This section and the closed CV findings below preserve the G0 baseline audit.
+They do not describe the later opt-in implementation; section 5 and the linked
+execution evidence report that work without changing the frozen audit inputs.
 
 | Area                 | Baseline fact                                                                                                                       | G0 target decision                                                                                                   | Implementation status                                                               |
 | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
@@ -89,10 +93,17 @@ code-fact question; it does not claim the target capability is implemented.
 | Gate                                                | Status                   | Permitted result                                                                  |
 | --------------------------------------------------- | ------------------------ | --------------------------------------------------------------------------------- |
 | G0 — domain contract and terminology freeze         | `completed_and_verified` | The contracts in this directory are the implementation input for downstream work. |
-| G1 — RED tests and immutable compatibility fixtures | `verification_in_progress` | Authorized implementation on `codex/post-0.2-g1-g3`; see [execution evidence](G1-G3-EVIDENCE.md). |
-| G2 — schema and copy-on-write migration | `verification_in_progress` | Opt-in schema 25, staged migration, verified backups and explicit recovery are implemented; final public/platform gates remain. |
-| G3 — repositories, transaction and snapshots | `verification_in_progress` | Durable workflow repositories, canonical UoW, revision and deterministic read snapshots are implemented; final gates remain. |
+| G1 — RED tests and immutable compatibility fixtures | `completed_and_verified` | Actual behavioral RED entries, pinned old-code fixtures and native test environments are implemented; later-gate RED remains explicit in [execution evidence](G1-G3-EVIDENCE.md). |
+| G2 — schema and copy-on-write migration | `completed_and_verified` | Opt-in schema 25, verified copy migration and explicit recovery passed the public gate and native Windows x64, macOS arm64 and Linux x64 foundation/platform gates. |
+| G3 — repositories, transaction and snapshots | `completed_and_verified` | Durable repositories, unified canonical transaction, revision/command identity and snapshots passed fault, process-death, race and native platform evidence. |
 | G4–G13 | `not_started` | Full effect handlers, Provider orchestration, production interface and final cutover remain downstream. |
+
+Completion evidence is the implementation tree at
+`e08c760e0adcf63c1ea54b22103b903b5e17ec83`, verified on 2026-09-06 by
+[CI run 34031380557](https://github.com/Roblis0n/Sestina/actions/runs/34031380557)
+and the local checks documented in the execution record. No required G1–G3
+verification remains blocked. The final status-only update does not change
+that verified runtime. G4 begins at the [documented continuation](G1-G3-OPERATIONS.md).
 
 G0 changes no production schema, runtime data, UI route, Provider behavior,
 Electron lifecycle, legacy cutover, or release artifact. It creates an
@@ -100,18 +111,17 @@ executable specification and a verified baseline fact record only.
 
 ## 6. Claims that remain unavailable
 
-The following remain `not_established` and are not changed by G0:
+The following remain `not_established`:
 
 - Provider semantic accuracy or independence;
 - external-user value or repeated-use value;
 - adoption, market value, or commercial viability;
 - production readiness of the target Electron application;
-- correctness of migrations 021-025 before their implementation and fault
-  evidence;
+- final production data cutover and migration of real user projects;
 - production UI acceptance for the target task-first interface.
 
 The tables above describing the release are G0 baseline facts. The authorized
 G1–G3 execution begins at `a4889ee996064d95ee0a3fb470ee6ee12d3a91a3`;
-its current evidence is tracked separately below and in the execution record.
+its current evidence is tracked in section 5 and in the execution record.
 The shipped default continues to use schema 20. No production interface or
 release has been switched to the opt-in schema-25 foundation.
