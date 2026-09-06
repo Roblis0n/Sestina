@@ -262,6 +262,12 @@ export function parseKernelObjectRef(value: unknown): KernelObjectRef {
   }
   return freezeKernel(v as unknown as KernelObjectRef);
 }
+/** Version zero is a creation precondition, never a persisted result. */
+function parseSavedObjectRef(value: unknown): KernelObjectRef {
+  const ref = parseKernelObjectRef(value);
+  kernelInteger(ref.version);
+  return ref;
+}
 export interface KernelEffectDraft {
   readonly effectId: string;
   readonly effectKind: KernelEffectKind;
@@ -371,7 +377,7 @@ export function parseKernelReview(value: unknown): KernelReview {
     if (t.receiptId !== null) kernelId(t.receiptId, "rrcp_");
     kernelText(t.kind, 100);
     list(t.resultingObjects);
-    t.resultingObjects.forEach(parseKernelObjectRef);
+    t.resultingObjects.forEach(parseSavedObjectRef);
     if (!KERNEL_TERMINAL_STATES.includes(v.status as KernelReviewStatus))
       throw new KernelFault("invalid_record");
   } else if (["disposed", "committed"].includes(String(v.status)))
@@ -793,7 +799,7 @@ export function parseKernelReceipt(value: unknown): KernelReceipt {
   kernelInteger(v.afterProjectStateRevision);
   kernelTime(v.createdAt);
   list(v.resultingObjects);
-  v.resultingObjects.forEach(parseKernelObjectRef);
+  v.resultingObjects.forEach(parseSavedObjectRef);
   if (v.manifestId === null) {
     if (v.manifestIdentityHash !== null)
       throw new KernelFault("invalid_record");
@@ -849,7 +855,7 @@ export function parseKernelEvent(value: unknown): KernelEvent {
     v.changedObjectRefs,
     v.effectKind === "migration_baseline" ? 100_000 : 1000,
   );
-  v.changedObjectRefs.forEach(parseKernelObjectRef);
+  v.changedObjectRefs.forEach(parseSavedObjectRef);
   if (v.reviewId !== null) kernelId(v.reviewId, "rrvw_");
   if (v.compensatesReceiptId !== null)
     kernelId(v.compensatesReceiptId, "rrcp_");

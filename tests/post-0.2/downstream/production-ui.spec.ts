@@ -3,7 +3,7 @@ import { createResearchRoomServer } from "../../../apps/research-room/dist/serve
 import { productionUiProject } from "../ui-factory.js";
 
 for (const language of ["en", "zh-CN"] as const) for (const theme of ["light", "dark", "high_contrast"] as const) {
-  test(`P1-06 G7: primary navigation exposes four user tasks (${language}, ${theme}, 200% text)`, async ({ page }, info) => {
+  test(`P1-06 G7/G9: primary navigation exposes four user tasks (${language}, ${theme}, 200% text)`, async ({ page }, info) => {
     const fixture = await productionUiProject(theme === "high_contrast" ? "long" : "ready");
     const server = await createResearchRoomServer({ directoryPicker: { pick: async () => fixture.root }, languagePreferenceStore: { readLanguage: async () => language, writeLanguage: async () => {} } }).start();
     try {
@@ -23,7 +23,7 @@ for (const language of ["en", "zh-CN"] as const) for (const theme of ["light", "
     } finally { await server.close(); await fixture.cleanup(); }
   });
 }
-test("P1-04 G6/G8: the built Brief editor offers typed controls instead of editable JSON", async ({ page }, info) => {
+test("P1-04 G6/G9: the built Brief editor offers typed controls instead of editable JSON", async ({ page }, info) => {
   const fixture = await productionUiProject("ready"); const server = await createResearchRoomServer({ directoryPicker: { pick: async () => fixture.root }, languagePreferenceStore: { readLanguage: async () => "en", writeLanguage: async () => {} } }).start();
   try {
     await page.goto(server.origin); await page.getByRole("button", { name: "Select a folder and open" }).click();

@@ -118,6 +118,7 @@ These are public design and test records, not private reasoning:
 | An uncertain Provider attempt was described as failed | Preserve the attempt's uncertain fact and report assessment unavailable; a valid user outcome still commits through the same transaction. |
 | No-Provider Manifest recovery could lose explicit Issue/Evidence selection | Persist the selection and bind it into Manifest identity; validate its project and Memory eligibility against the current canonical snapshot. |
 | Canonical reference decoding admitted unknown kinds and mismatched prefixes | Strict kind/id decoding rejects malformed references while retaining genuine legacy Brief-version references. |
+| Receipt and revision-event decoders accepted version zero as a saved result | The separately committed RED tests in `06602ff` distinguish creation preconditions from durable results; Review terminal outcomes, Receipts and events now require saved versions at least one. |
 | Memory metadata/privacy writes had no individual interruption seam | Both writes have injected-failure tests proving the original body, metadata, privacy state, head and absent Receipt after rollback. |
 
 Actual process-death tests also cover backup/staging copy gaps, each schema
