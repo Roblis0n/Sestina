@@ -71,6 +71,9 @@ async function releaseFingerprint() {
   return JSON.stringify(records);
 }
 
+run("native G1–G3 database foundation", "node_modules/vitest/vitest.mjs", [
+  "run", "--config", "tests/post-0.2/vitest.foundation.config.ts",
+]);
 run("build public-preview artifact pass 1", "scripts/build-release.mjs");
 const first = await releaseFingerprint();
 run("build public-preview artifact pass 2", "scripts/build-release.mjs");
@@ -94,6 +97,7 @@ process.stdout.write(
     platform: process.platform,
     architecture: process.arch,
     deterministicRebuild: true,
+    kernelFoundation: true,
     lifecycle: true,
   })}\n`,
 );

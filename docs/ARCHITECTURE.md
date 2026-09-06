@@ -54,3 +54,20 @@ automatic retry or fallback.
 
 For enforceable import rules, see
 [dependency and authority boundaries](architecture/01-DEPENDENCY-RULES.md).
+
+## Opt-in post-0.2 persistence foundation
+
+G1–G3 add schema 25 behind explicit Core entry points. Existing production opens
+still use schema 20, and the old runtime refuses a target database as too new.
+`ResearchUnitOfWork.kernel` extends the same SQLite transaction and repositories:
+canonical objects, state head/event, terminal Review, Receipt, command identity
+and derived outbox commit together. Draft Reviews, Provider attempts, assessments,
+corrections and Manifests are durable workflow records and do not themselves
+advance research state. Receipt and revision Trace are proofs of resulting objects.
+
+Single-transaction reads produce validated canonical snapshots; context and
+search/attention/Brief-file projections have explicit policy/source revisions.
+Core owns the copied migration, maintenance fence, verified backup and explicit
+recovery orchestration. No new renderer, transport or model write path is added.
+The six complete effect handlers and Provider orchestration remain G4/G5 work.
+See [operations and the exact G4 continuation](product/restructure/G1-G3-OPERATIONS.md).

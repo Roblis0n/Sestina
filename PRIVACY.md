@@ -62,6 +62,24 @@ bindings, RI-50 remains locally operable through draft, failure/partial records,
 manual disclosure, and user Resolution, while real two-Provider evidence stays
 `blocked_missing_user_config`.
 
+## Opt-in post-0.2 storage foundation
+
+The G1–G3 development path uses schema 25 and is not connected to the shipped
+Research Room or its Provider send path. Unlike the legacy workflows above,
+its persistent Context Manifest stores the exact prepared request body locally
+so that restart can recover the confirmed bytes. A no-Provider Manifest has no
+request body. Treat the target database and any copies of it as sensitive
+research material; a full database copy can contain that prepared context.
+Receipt/Trace projections and migration journals contain references and hashes,
+not copied request bodies, authentication headers, raw Provider output or hidden
+reasoning. No startup, migration or workflow recovery automatically sends data.
+
+The new privacy ledger and managed-copy inventory record what is known. They do
+not claim that manual or Provider-side copies were deleted. A new Forget blocks
+downgrade to a pre-migration backup that could restore the forgotten body; full
+copy cleanup and the new Memory interface remain at G7. See the
+[foundation operation and recovery boundaries](docs/product/restructure/G1-G3-OPERATIONS.md).
+
 ## Currently unavailable model paths
 
 There is no formal local-model runtime. Sestina does not claim that a model ran offline when no such runtime exists.

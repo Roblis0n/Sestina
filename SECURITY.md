@@ -33,3 +33,20 @@ stdout/stderr 或隐私截图。
 - Automatic telemetry, automatic crash upload, session replay, background content logging, and automatic upload are disabled. The package gate rejects known automatic telemetry/crash-upload SDKs and uninstall lifecycle scripts.
 
 See [PRIVACY.md](PRIVACY.md), [the local-first guarantee](docs/security/LOCAL-FIRST-GUARANTEE.md), [the data-flow inventory](docs/security/DATA-FLOW.md), and [backup and restore](docs/recovery/BACKUP-RESTORE.md).
+
+## Opt-in schema-25 development boundary
+
+G1–G3 add a local persistence foundation, with no production HTTP/IPC command
+or automatic migration cutover. The new Manifest stores a prepared request body
+inside the target database for exact recovery; this differs from the legacy
+payload-retention statements above. Secrets, authentication headers, raw Provider
+responses and hidden reasoning remain outside its structured record contract.
+
+The target requires one canonical transaction owner, live user authorization,
+project/version binding, immutable proof records and read-only legacy tables.
+Staged migration validates the source, backup and target before a journaled
+switch. Incomplete operations fence ordinary writes; unknown replacements or WAL
+data are preserved and refused. These checks do not grant user authority or prove
+Provider semantics. Electron IPC, connect-time Provider security and three-platform
+release verification remain downstream; see the
+[implemented foundation and evidence](docs/product/restructure/G1-G3-EVIDENCE.md).

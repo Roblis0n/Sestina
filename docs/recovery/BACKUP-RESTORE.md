@@ -2,6 +2,13 @@
 
 Sestina recovery is local and model-free. A managed backup is a complete, verified pair: the SQLite project state plus the active `research-brief.yaml` projection.
 
+This page describes the shipped schema-20 commands. The opt-in G1–G3 schema-25
+foundation has a separate copied-migration journal and explicit recovery/old-backup
+restore entry, documented in [foundation operations](../product/restructure/G1-G3-OPERATIONS.md).
+Its durable Manifest can contain a prepared request body, so full target database
+copies are sensitive research material. Do not apply the legacy payload-exclusion
+statement below to a complete target database copy or use legacy writers on it.
+
 Schema 17 stores RI-49 Appeal statements, attempts, strict normalized
 assessments, deterministic comparisons, user Resolutions, transitions, and
 Receipt lineage inside the same SQLite project state, so a verified managed

@@ -20,7 +20,7 @@ jobs:
           run_install: false
       - uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: "24.13.0"
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm verify:public
@@ -47,13 +47,15 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@v6
         with:
           version: 11.16.0
           run_install: false
       - uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: "24.13.0"
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm verify:platform ${{ matrix.expected-os }} ${{ matrix.expected-arch }}

@@ -41,3 +41,24 @@ external opinions retain source, capture time, and exposure disclosure and are
 always marked non-verifiable for mutual blindness. Cross-project Room reads,
 events, imports, search, and deep links fail closed. See
 [the RI-50 architecture contract](../architecture/04-MUTUALLY-BLIND-BOUNDED-DELIBERATION-ROOMS.md).
+
+## Opt-in G1–G3 foundation data flow
+
+This development path is separate from the shipped production privacy manifest.
+Explicit Core migration reads a verified source snapshot, writes a verified
+prebackup and staging copy, validates canonical/legacy bindings, then performs a
+journaled pair switch under maintenance. Recovery is explicit and local.
+
+Kernel workflow transactions persist Review drafts, exact prepared Manifests,
+attempt facts and immutable assessments/corrections in the target database.
+Selected context and exact request bytes are therefore retained locally for
+recovery; a no-Provider Manifest stores no body. Canonical transactions persist
+the approved object results and their revision/Receipt/Trace together. The
+Receipt and journal do not duplicate request text. Derived projections retain
+their source revision and never become authority.
+
+None of these paths sends data or grants a Provider, host or saved hash user
+authority. The new Provider send implementation and production UI are downstream.
+Known managed copies and privacy redactions are recorded; unobserved external
+copies remain unknown. See [foundation operations](../product/restructure/G1-G3-OPERATIONS.md)
+for the exact API and backup/Forget boundary.

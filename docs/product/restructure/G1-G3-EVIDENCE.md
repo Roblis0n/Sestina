@@ -155,15 +155,31 @@ downgrade with every network connection forbidden. No real Provider is used.
 
 ## Verification status at the implementation checkpoint
 
-The complete foundation command, G0 contract validation, target schema
-reproduction, production source lint and Core dependency typecheck have passed.
-Downstream domain and built UI assertions have been run and remain RED for the
-observed reasons above. Final public/platform verification and the remaining
-boundary audit are still in progress; G1–G3 are not yet marked completed.
+At `c9ed436`, the exact committed tree passed `pnpm verify:public` and native
+`pnpm verify:platform win32 x64`. The public gate includes production lint,
+all package typechecks, 330 production regressions, all 10 G0 contract/state
+files, fixture/schema reproduction, discovery, 193 foundation assertions,
+documentation, repository, architecture, privacy and public history checks.
+A broader research/storage run passed 520 assertions; its three existing
+child-process entrypoints are dispatched and checked by parent tests, not
+counted as standalone passes. All new foundation tests run without skips.
+
+The independent downstream runs report 15 domain and seven built UI failures,
+with no pending or expected-failure wrappers. Their owners remain G4–G13.
+Windows artifact verification proved identical rebuilds and the existing
+offline lifecycle. The default remains schema 20; this is not Electron or
+target UI acceptance.
+
+The platform entry now also runs the full database foundation on each native
+runner. CI pins Node 24.13.0 to the immutable fixture toolchain and fetches the
+old source history on all platforms. The user authorized pushing only this
+implementation branch and dispatching the existing artifact matrix, without
+publishing a release. macOS arm64 and Linux x64 results are still pending;
+G1–G3 remain `verification_in_progress` until required native evidence closes.
 
 An initial full public run passed production lint, types and all selected
 production regressions, then stopped at the repository shape gate because the
 current working directory already contains ignored `spikes/` material. That
-unrelated material is preserved. Final repository/history and platform gates
-will run against the exact committed tree in an isolated verification checkout;
+unrelated material is preserved. Repository/history and Windows platform gates
+passed against the exact committed tree in an isolated verification checkout;
 the check itself is not weakened or bypassed.
