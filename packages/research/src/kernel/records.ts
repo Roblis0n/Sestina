@@ -231,6 +231,35 @@ export function parseKernelObjectRef(value: unknown): KernelObjectRef {
   kernelText(v.kind, 80);
   kernelText(v.id, 160);
   kernelInteger(v.version, 0);
+  const prefixes: Readonly<Record<string, ResearchIdPrefix>> = {
+    project: "rprj_",
+    artifact: "rart_",
+    revision: "rrev_",
+    brief: "rbrf_",
+    brief_version: "rbrf_",
+    decision: "rdec_",
+    issue: "riss_",
+    episode: "repi_",
+    snapshot: "rsnp_",
+    claim: "rclm_",
+    evidence: "revd_",
+    mechanism: "rmec_",
+    delta: "rdlt_",
+    memory: "rmem_",
+  };
+  if (
+    v.kind === "claim_evidence_link" ||
+    v.kind === "mechanism_evidence_link"
+  ) {
+    const parts = v.id.split(":");
+    if (parts.length !== 2) throw new KernelFault("invalid_record");
+    kernelId(parts[0], v.kind === "claim_evidence_link" ? "rclm_" : "rmec_");
+    kernelId(parts[1], "revd_");
+  } else {
+    const prefix = prefixes[v.kind];
+    if (!prefix) throw new KernelFault("invalid_record");
+    kernelId(v.id, prefix);
+  }
   return freezeKernel(v as unknown as KernelObjectRef);
 }
 export interface KernelEffectDraft {
@@ -485,6 +514,11 @@ export interface KernelManifest {
   readonly exactRequestBody: string | null;
   readonly exactRequestHash: string | null;
   readonly exactRequestBytes: number;
+  readonly contextSelection: {
+    readonly evidenceIds: readonly string[];
+    /** null applies the policy's open-Issue selection; [] selects none. */
+    readonly issueIds: readonly string[] | null;
+  };
   readonly selectedMemory: readonly (KernelObjectRef & {
     readonly contentHash: string;
   })[];
@@ -528,6 +562,7 @@ export function parseKernelManifest(value: unknown): KernelManifest {
     "exactRequestBody",
     "exactRequestHash",
     "exactRequestBytes",
+    "contextSelection",
     "selectedMemory",
     "excludedFields",
     "limitations",
@@ -592,6 +627,23 @@ export function parseKernelManifest(value: unknown): KernelManifest {
       kernelBytesHash(v.exactRequestBody) !== v.exactRequestHash ||
       Buffer.byteLength(v.exactRequestBody) !== v.exactRequestBytes
     )
+      throw new KernelFault("invalid_record");
+  }
+  const selection = kernelRecord(v.contextSelection, [
+    "evidenceIds",
+    "issueIds",
+  ]);
+  for (const [key, prefix] of [
+    ["evidenceIds", "revd_"],
+    ["issueIds", "riss_"],
+  ] as const) {
+    const selected = selection[key];
+    if (key === "issueIds" && selected === null) continue;
+    list(selected, 1000);
+    selected.forEach((id) => {
+      kernelId(id, prefix);
+    });
+    if (new Set(selected).size !== selected.length)
       throw new KernelFault("invalid_record");
   }
   list(v.selectedMemory, 64);
@@ -689,6 +741,9 @@ export interface KernelReceipt {
   readonly revisionEventId: string;
   readonly resultingObjects: readonly KernelObjectRef[];
   readonly assessmentAvailability: KernelAssessment["availability"];
+  readonly manifestId: string | null;
+  readonly manifestIdentityHash: string | null;
+  readonly assessmentAttemptId: string | null;
   readonly receiptHash: string;
   readonly createdAt: string;
 }
@@ -718,6 +773,9 @@ export function parseKernelReceipt(value: unknown): KernelReceipt {
     "revisionEventId",
     "resultingObjects",
     "assessmentAvailability",
+    "manifestId",
+    "manifestIdentityHash",
+    "assessmentAttemptId",
     "receiptHash",
     "createdAt",
   ]);
@@ -736,6 +794,19 @@ export function parseKernelReceipt(value: unknown): KernelReceipt {
   kernelTime(v.createdAt);
   list(v.resultingObjects);
   v.resultingObjects.forEach(parseKernelObjectRef);
+  if (v.manifestId === null) {
+    if (v.manifestIdentityHash !== null)
+      throw new KernelFault("invalid_record");
+  } else {
+    kernelId(v.manifestId, "rman_");
+    kernelSha(v.manifestIdentityHash);
+  }
+  if (v.assessmentAttemptId !== null) kernelId(v.assessmentAttemptId, "rpat_");
+  if (
+    v.reviewId === null &&
+    (v.manifestId !== null || v.assessmentAttemptId !== null)
+  )
+    throw new KernelFault("invalid_record");
   if (
     v.afterProjectStateRevision !== v.beforeProjectStateRevision + 1 ||
     !KERNEL_CANONICAL_CHANGES.includes(v.effectKind as KernelCanonicalChange) ||

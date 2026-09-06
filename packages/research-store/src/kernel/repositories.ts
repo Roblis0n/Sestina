@@ -27,6 +27,8 @@ import { withTransaction, type StorageDatabase } from "@sestina/storage";
 import {
   decodeKernelJson,
   readKernelHead,
+  readKernelSnapshot,
+  projectKernelContext,
   validateKernelChain,
 } from "./state.js";
 
@@ -155,8 +157,19 @@ export function validateKernelRelations(
       throw new KernelFault("corrupt_state");
     if (p.reviewId) {
       const r = reviews.find((r) => r.id === p.reviewId);
+      const m = manifests.find((m) => m.id === p.manifestId);
+      const a = attempts.find((a) => a.id === p.assessmentAttemptId);
       if (
         r?.terminalOutcome?.receiptId !== p.id ||
+        r.manifestId !== p.manifestId ||
+        (m?.identityHash ?? null) !== p.manifestIdentityHash ||
+        (r.attemptIds.at(-1) ?? null) !== p.assessmentAttemptId ||
+        (a?.assessment?.availability ??
+          (a?.status === "failed"
+            ? "failed"
+            : a
+              ? "unavailable"
+              : "not_requested")) !== p.assessmentAvailability ||
         kernelHash(r.terminalOutcome.resultingObjects) !==
           kernelHash(p.resultingObjects)
       )
@@ -236,7 +249,9 @@ function decode<T extends Item>(
     ("baseProjectStateRevision" in value &&
       value.baseProjectStateRevision !== row.base_revision) ||
     ("reviewId" in value && value.reviewId !== row.review_id) ||
-    ("manifestId" in value && value.manifestId !== row.manifest_id)
+    ("manifestId" in value &&
+      descriptor.table !== "research_transition_receipts" &&
+      value.manifestId !== row.manifest_id)
   )
     throw new KernelFault("corrupt_state");
   const columns: Record<string, string> = {
@@ -553,6 +568,19 @@ export function createKernelRepositories(
             readKernelHead(db, m.projectId).revision
         )
           throw new KernelFault("stale_revision");
+        // Persist every explicit choice needed after restart. Full request
+        // preparation/send-time identity revalidation belongs to the G5 Kernel.
+        projectKernelContext(
+          readKernelSnapshot(db, m.projectId),
+          requireReview(m.projectId, m.reviewId).suggestion,
+          {
+            evidenceIds: m.contextSelection.evidenceIds,
+            ...(m.contextSelection.issueIds === null
+              ? {}
+              : { issueIds: m.contextSelection.issueIds }),
+            memory: m.selectedMemory,
+          },
+        );
         db.run(
           "INSERT INTO context_manifests(manifest_id,project_id,review_id,base_revision,status,version,identity_hash,created_at,updated_at,data) VALUES(?,?,?,?,?,?,?,?,?,?)",
           m.id,

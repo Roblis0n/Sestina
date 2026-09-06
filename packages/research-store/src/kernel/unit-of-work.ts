@@ -363,7 +363,8 @@ export function createKernelUnitOfWork(
                 memory.data.state === "active" ? revision : null,
                 ref.version,
               );
-              if (memory.data.state === "forgotten")
+              options.faultInjection?.("memory_metadata");
+              if (memory.data.state === "forgotten") {
                 db.run(
                   "INSERT INTO research_privacy_redactions(redaction_id,project_id,object_kind,object_id,source_revision,created_at,data) VALUES(?,?,'memory',?,?,?,?)",
                   `rapc_${kernelHash({ commandId: command.authorityCommandId, objectId: ref.id }).slice(0, 26).toUpperCase()}`,
@@ -379,6 +380,8 @@ export function createKernelUnitOfWork(
                     backupCopyCoverage: "requires_inventory_review",
                   }),
                 );
+                options.faultInjection?.("privacy_redaction");
+              }
             }
             const recordOnly = ["record_only", "record_only_outcome"].includes(
               command.effectKind,
@@ -436,7 +439,16 @@ export function createKernelUnitOfWork(
               : undefined;
             const availability: KernelAssessment["availability"] =
               attempt?.assessment?.availability ??
-              (attempt ? "failed" : "not_requested");
+              (attempt?.status === "failed"
+                ? "failed"
+                : attempt
+                  ? "unavailable"
+                  : "not_requested");
+            const manifest = review?.manifestId
+              ? repos.manifests.getById(command.projectId, review.manifestId)
+              : undefined;
+            if (review?.manifestId && !manifest)
+              throw new KernelFault("relation_mismatch");
             const body: Omit<KernelReceipt, "receiptHash"> = {
               schemaVersion: "2.0.0",
               id: command.receiptId,
@@ -454,6 +466,9 @@ export function createKernelUnitOfWork(
               revisionEventId: command.eventId,
               resultingObjects: changed,
               assessmentAvailability: availability,
+              manifestId: manifest?.id ?? null,
+              manifestIdentityHash: manifest?.identityHash ?? null,
+              assessmentAttemptId: attempt?.id ?? null,
               createdAt: command.createdAt,
             };
             const output = parseKernelReceipt({

@@ -44,6 +44,8 @@ const stages = [
 export type KernelMigrationStage = (typeof stages)[number];
 export type KernelMigrationFaultPoint =
   | "before_backup"
+  | "backup_database_copied"
+  | "staging_database_copied"
   | "backup_verified"
   | "copied"
   | `migration_${21 | 22 | 23 | 24 | 25}`
@@ -52,9 +54,14 @@ export type KernelMigrationFaultPoint =
   | "validated"
   | "before_swap"
   | "old_moved"
+  | "old_database_moved"
   | "database_installed"
   | "brief_installed"
-  | "before_completion";
+  | "before_completion"
+  | "restore_prepared"
+  | "restore_database_moved"
+  | "restore_database_installed"
+  | "restore_before_completion";
 export class KernelMigrationError extends Error {
   constructor(
     readonly code:
@@ -524,6 +531,7 @@ export async function migrateKernelProject(
       await options.faultInjection?.("before_backup");
       const input = await fingerprint(p.data);
       await durableWrite(join(backup, DB), input.database, true);
+      await options.faultInjection?.("backup_database_copied");
       if (input.wal)
         await durableWrite(join(backup, `${DB}-wal`), input.wal, true);
       if (input.brief)
@@ -541,6 +549,7 @@ export async function migrateKernelProject(
       await saveJournal(p.journal, journal);
       await options.faultInjection?.("backup_verified");
       await copyFile(join(backup, DB), join(stage, DB));
+      await options.faultInjection?.("staging_database_copied");
       if (input.brief) await copyFile(join(backup, BRIEF), join(stage, BRIEF));
       journal.stage = "copied";
       await saveJournal(p.journal, journal);
@@ -605,8 +614,10 @@ export async function migrateKernelProject(
       // Journal intent precedes every pair replacement. Ordinary writable
       // opens refuse any nonterminal journal, so no half-pair can be selected.
       for (const name of [DB, `${DB}-wal`, `${DB}-shm`, BRIEF])
-        if (await exists(join(p.data, name)))
+        if (await exists(join(p.data, name))) {
           await rename(join(p.data, name), join(original, name));
+          if (name === DB) await options.faultInjection?.("old_database_moved");
+        }
       journal.swapProgress = "old_moved";
       await saveJournal(p.journal, journal);
       await options.faultInjection?.("old_moved");
@@ -656,7 +667,10 @@ export async function migrateKernelProject(
   })) as { stage: "swapped"; runId: string; projectId: string };
 }
 
-export async function recoverKernelMigration(projectRoot: string): Promise<{
+export async function recoverKernelMigration(
+  projectRoot: string,
+  faultInjection?: (point: KernelMigrationFaultPoint) => void | Promise<void>,
+): Promise<{
   readonly stage: "swapped" | "rolled_back";
   readonly runId: string;
 }> {
@@ -666,6 +680,18 @@ export async function recoverKernelMigration(projectRoot: string): Promise<{
     const run = join(p.runs, j.runId);
     const info = await lstat(run);
     if (!info.isDirectory() || info.isSymbolicLink()) fail("recovery_required");
+    // The target and verified backup are checkpointed. Only the recorded
+    // source WAL beside that same source (or while moving it) is recognized.
+    // Check before opening SQLite: opening can silently ignore an invalid WAL.
+    const wal = await file(`${p.database}-wal`, true);
+    if (wal && wal.length > 0) {
+      if (
+        sha(wal) !== j.sourceWalHash ||
+        ((await exists(p.database)) &&
+          sha(required(await file(p.database))) !== j.sourceDatabaseHash)
+      )
+        fail("recovery_required");
+    }
     if (
       j.intent === "upgrade" &&
       j.targetDatabaseHash &&
@@ -731,9 +757,12 @@ export async function recoverKernelMigration(projectRoot: string): Promise<{
     const quarantine = join(recovery, "replaced");
     await mkdir(quarantine);
     for (const name of [DB, `${DB}-wal`, `${DB}-shm`, BRIEF])
-      if (await exists(join(p.data, name)))
+      if (await exists(join(p.data, name))) {
         await rename(join(p.data, name), join(quarantine, name));
+        if (name === DB) await faultInjection?.("restore_database_moved");
+      }
     await rename(join(recovery, DB), p.database);
+    await faultInjection?.("restore_database_installed");
     if (j.backupBriefHash) await rename(join(recovery, BRIEF), p.brief);
     const restored = await validateLegacy(
       p.database,
@@ -744,6 +773,7 @@ export async function recoverKernelMigration(projectRoot: string): Promise<{
       restored.sourceSchema !== j.sourceSchema
     )
       fail("recovery_required");
+    await faultInjection?.("restore_before_completion");
     j.stage = "rolled_back";
     j.failureCode = null;
     await saveJournal(p.journal, j);
@@ -804,6 +834,7 @@ export async function openKernelProject(
 /** Explicit local maintenance action; restores an immutable old pair, never reverse SQL. */
 export async function restoreKernelPreMigrationBackup(
   projectRoot: string,
+  faultInjection?: (point: KernelMigrationFaultPoint) => void | Promise<void>,
 ): Promise<{ readonly stage: "rolled_back"; readonly runId: string }> {
   await guarded(projectRoot, async (p) => {
     const j = await readJournal(p.journal);
@@ -831,7 +862,8 @@ export async function restoreKernelPreMigrationBackup(
       current.close();
     }
   });
-  const restored = await recoverKernelMigration(projectRoot);
+  await faultInjection?.("restore_prepared");
+  const restored = await recoverKernelMigration(projectRoot, faultInjection);
   if (restored.stage !== "rolled_back") fail("recovery_required");
   return { stage: "rolled_back", runId: restored.runId };
 }

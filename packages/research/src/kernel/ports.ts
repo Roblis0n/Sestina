@@ -61,6 +61,8 @@ export interface KernelCanonicalCommand {
 }
 export type KernelWritePoint =
   | "object"
+  | "memory_metadata"
+  | "privacy_redaction"
   | "review_terminal"
   | "revision_event"
   | "revision_head"
