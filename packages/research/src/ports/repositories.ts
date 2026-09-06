@@ -204,5 +204,6 @@ export interface ResearchRepositories extends ArgumentGraphRepositories {
 
 export interface ResearchUnitOfWork {
   readonly repositories: ResearchRepositories;
+  readonly kernel?: import("../kernel/ports.js").KernelUnitOfWork;
   commit<T>(work: (repositories: ResearchRepositories) => ResearchResult<T>): ResearchResult<T>;
 }

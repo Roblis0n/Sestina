@@ -21,6 +21,9 @@ export type MigrationJournalStatus = "started" | "completed" | "failed";
 
 export interface MigrationRunnerOptions {
   backupDirectory?: string;
+  verifiedStagingCopy?: boolean;
+  /** Called after each durable migration, before starting the next one. */
+  onMigrationApplied?: (version: number) => void | Promise<void>;
 }
 
 export interface MigrationRunResult {
@@ -97,6 +100,11 @@ export class MigrationRunner {
   async run(): Promise<MigrationRunResult> {
     const db = this.db;
     db.assertWritable();
+    if (this.migrations.some((m) => m.name === "021-project-state-revisions") && !this.options.verifiedStagingCopy) {
+      const journal = db.get("SELECT name FROM sqlite_schema WHERE type='table' AND name='migrations'");
+      const count = journal ? (db.get<{ n: number }>("SELECT count(*) n FROM migrations")?.n ?? 0) : 0;
+      if (count > 0) throw new SestinaError(SestinaErrorCode.migration_failed, "Kernel upgrades require a verified staging copy");
+    }
 
     // Migrations run under the common maintenance fence (docs/17 §3.2):
     // migrations, restore and retention all share one cross-process domain.
@@ -106,6 +114,7 @@ export class MigrationRunner {
       scope: "migrations",
       ownerId: `runtime-${RUNTIME_VERSION}`,
     });
+    db.maintenanceOwned = true;
     try {
       bootstrapJournal(db);
       const sorted = [...this.migrations].sort((a, b) => a.version - b.version);
@@ -227,6 +236,7 @@ export class MigrationRunner {
             { version: migration.version, name: migration.name },
           );
         }
+        await this.options.onMigrationApplied?.(migration.version);
       }
 
       return {
@@ -236,6 +246,7 @@ export class MigrationRunner {
         databaseVersion: Math.max(completedMax, targetVersion),
       };
     } finally {
+      db.maintenanceOwned = false;
       guard.release();
     }
   }

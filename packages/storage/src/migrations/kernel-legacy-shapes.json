@@ -1,0 +1,11 @@
+{
+  "sourceCommit": "caf893db7928bab91c4098eb04a7e4a8d4c62ffe",
+  "algorithm": "sha256(JSON.stringify(SELECT type,name,tbl_name,sql FROM sqlite_schema ORDER BY name))",
+  "schemas": {
+    "16": "a12a16fb5aadad720488edc4a94b37b9925c13566243d1ab090b595592ee6f33",
+    "17": "0f584d8d5dd93e82642ed9751bf67cc2a6915668a085970a03fe97f350ffefa6",
+    "18": "2b4b14a93eb8f49f71c3cc3cef41861adba36854c6c0c734226855f963937a0a",
+    "19": "3418b58ba0b6a8fe8af1c955b1a3bcca5062a28567c0275bb5bceb91ced05032",
+    "20": "b6418942e500ddeabe03e75b4875522a90f160071d3474a520ed8e72319ffbae"
+  }
+}

@@ -1,0 +1,13 @@
+import { readFile, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
+import { createRequire } from "node:module";
+import { resolve, join } from "node:path";
+const root=resolve(import.meta.dirname,".."),require=createRequire(import.meta.url),sha=b=>createHash("sha256").update(b).digest("hex"),commit="caf893db7928bab91c4098eb04a7e4a8d4c62ffe";
+const paths=["scripts/materialize-post-0.2-legacy.mjs","scripts/materialize-post-0.2-states.mjs","scripts/materialize-post-0.2-volume.mjs","tests/post-0.2/legacy-driver.ts","tests/post-0.2/legacy-observer.ts","tests/post-0.2/legacy-volume-driver.ts","tests/post-0.2/factory.ts"];
+const inputs=[];for(const path of paths)inputs.push({path,sha256:sha(await readFile(join(root,path)))});
+const sourceLockSha256=sha(execFileSync("git",["show",`${commit}:pnpm-lock.yaml`],{cwd:root,windowsHide:true,maxBuffer:4*1024*1024}));
+const lock=join(root,"tests/post-0.2/legacy-toolchain-provenance.json");
+if(process.argv.includes("--freeze"))await writeFile(lock,JSON.stringify({sourceCommit:commit,sourceLockSha256,initialToolchain:{node:process.versions.node,sqlite:process.versions.sqlite,esbuild:require("esbuild/package.json").version,typescript:require("typescript/package.json").version},inputs},null,2)+"\n");
+const proof=JSON.parse(await readFile(lock,"utf8"));if(proof.sourceCommit!==commit||proof.sourceLockSha256!==sourceLockSha256||JSON.stringify(proof.inputs)!==JSON.stringify(inputs))throw Error("Old corpus generation inputs changed; preserve the frozen old-data semantics and review provenance before changing a recipe");
+console.log("Pinned old dependency lock and complete recipe inputs verified; initial toolchain is recorded, actual database hashes are rechecked by materialization.");

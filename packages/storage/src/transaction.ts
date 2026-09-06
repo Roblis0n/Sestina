@@ -1,5 +1,6 @@
 import { SestinaError, SestinaErrorCode } from "@sestina/schema";
 import { StorageDatabase, type QueryResult } from "./connection.js";
+import { withMaintenanceReadFence } from "./maintenance-domain.js";
 
 export interface StorageTransaction {
   readonly database: StorageDatabase;
@@ -74,6 +75,11 @@ export function withTransaction<T>(
   db: StorageDatabase,
   fn: (tx: StorageTransaction) => T,
 ): T {
+  if (!db.isTransaction && !db.maintenanceOwned) return withMaintenanceReadFence(db.path, () => runTransaction(db, fn));
+  return runTransaction(db, fn);
+}
+
+function runTransaction<T>(db: StorageDatabase, fn: (tx: StorageTransaction) => T): T {
   db.assertWritable();
   const tx = new TransactionView(db);
 
@@ -154,4 +160,15 @@ function safeRollback(ops: { rollback: () => void }): void {
 /** True while the connection holds any transaction (BEGIN or SAVEPOINT). */
 export function inWriteTransaction(db: StorageDatabase): boolean {
   return db.isTransaction;
+}
+
+/** One synchronous SQLite read snapshot, including read-only connections. */
+export function withReadSnapshot<T>(db: StorageDatabase, work: () => T): T {
+  if (db.isTransaction) return work();
+  db.raw.exec("BEGIN");
+  try {
+    const value = work();
+    if (isThenable(value)) throw new SestinaError(SestinaErrorCode.internal_error, "Snapshots must be synchronous");
+    db.raw.exec("COMMIT"); return value;
+  } catch (error) { if (inWriteTransaction(db)) db.raw.exec("ROLLBACK"); throw error; }
 }

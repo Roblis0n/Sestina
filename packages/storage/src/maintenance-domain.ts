@@ -40,6 +40,24 @@ export function maintenanceLockDbPath(databasePath: string): string {
   return join(maintenanceRootOf(databasePath), MAINTENANCE_LOCK_DB_NAME);
 }
 
+/** Shared process-level fence held throughout an ordinary write transaction. */
+export function withMaintenanceReadFence<T>(databasePath: string, work: () => T): T {
+  const path = maintenanceLockDbPath(databasePath);
+  let lock: DatabaseSync;
+  try {
+    lock = new DatabaseSync(path, { readOnly: true });
+    lock.exec("PRAGMA busy_timeout=1000");
+  } catch { throw new SestinaError(SestinaErrorCode.storage_busy, "Project maintenance boundary is unavailable"); }
+  try {
+    lock.exec("BEGIN");
+    lock.prepare("SELECT name FROM maintenance_holds LIMIT 1").get();
+    return work();
+  } catch (error) {
+    if (sqliteErrcode(error) === SQLITE_BUSY || sqliteErrcode(error) === SQLITE_LOCKED) throw new SestinaError(SestinaErrorCode.storage_busy, "Project is under maintenance");
+    throw error;
+  } finally { lock.close(); }
+}
+
 const BOOTSTRAP_SQL = `
 CREATE TABLE IF NOT EXISTS maintenance_holds (
   name TEXT PRIMARY KEY,

@@ -1,0 +1,45 @@
+{
+  "sourceCommit": "caf893db7928bab91c4098eb04a7e4a8d4c62ffe",
+  "sourceArchiveSha256": "3cca863d58020269a6715006a97001d85f3cb9e9ea6c3106cd9cbaf70f2343e0",
+  "recipeSha256": "949c95d02b08818018c6b4ad06c5448ce5678431976db20da61568530bdd4469",
+  "generatorSha256": "ea4f464b9de02b14f2f3848be2b4d7c025275de1c72194a1e85bc485ef5bbc31",
+  "evidenceClass": "synthetic_fixture",
+  "fixtures": [
+    {
+      "kind": "empty",
+      "schema": 20,
+      "projectId": "rprj_0000000000000000000000NNBH",
+      "databaseSha256": "30736cb8470656872805e011d99195d7fbbe66be9ef61b41a3d519053b28bc6e",
+      "briefSha256": null,
+      "expected": {
+        "decisionCount": 0,
+        "briefCount": 0,
+        "baselineEvents": 1
+      }
+    },
+    {
+      "kind": "long_brief",
+      "schema": 20,
+      "projectId": "rprj_0000000000000000000000NNBH",
+      "databaseSha256": "ac2dcfcd033aa602ac5bbbe4503597da6c87870e3833f9785304dd47c6672bdc",
+      "briefSha256": "1c7e0206344b179723f4e1464982079f0d5677b27fb585d48ff9510d5725bf1c",
+      "expected": {
+        "decisionCount": 0,
+        "briefCount": 1,
+        "baselineEvents": 1
+      }
+    },
+    {
+      "kind": "large_project",
+      "schema": 20,
+      "projectId": "rprj_0000000000000000000000NNBH",
+      "databaseSha256": "090c5a3de0f36f85a475553166b157648cd60d629a68616b89bdb8cd27ce9bd1",
+      "briefSha256": "5c970cf36dccd211dc7cfa9fb6d3ae5d90359fda0369b1cd5a4fd6caf69d7dad",
+      "expected": {
+        "decisionCount": 1000,
+        "briefCount": 1,
+        "baselineEvents": 1
+      }
+    }
+  ]
+}

@@ -39,11 +39,11 @@ export class SyntheticProvider implements ResearchRoomProvider {
 }
 
 /** Uses real Core + SQLite and emits a project usable by the built UI. */
-export async function syntheticProject(provider?: ResearchRoomProvider) {
+export async function syntheticProject(provider?: ResearchRoomProvider, timeoutMs?: number) {
   const root = await mkdtemp(join(tmpdir(), "sestina-g1-synthetic-"));
   const state = join(root, ".sestina"); await mkdir(state);
   const databasePath = join(state, "state.sqlite");
-  const core = value(await openSestina({ databasePath, researchRoomProvider: provider }));
+  const core = value(await openSestina({ databasePath, researchRoomProvider: provider, researchRoomProviderTimeoutMs: timeoutMs }));
   const project = value(core.initializeProject({ title: "G1 synthetic project", rootPath: ".", actor: USER }));
   const artifact = value(core.createArtifactWithInitialRevision({ projectId: project.id, actor: USER, kind: "research_note", relativePath: "synthetic.md", content: "Synthetic observational result.", mediaType: "text/markdown" }));
   value(core.activateBrief({ projectId: project.id, actor: USER, projectQuestion: "How should an observational association be reported?", currentStage: "revision", currentTask: "Retain limitations.", targetArtifacts: [artifact.artifact.id],

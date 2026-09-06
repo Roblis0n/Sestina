@@ -1,0 +1,756 @@
+{
+  "sourceCommit": "caf893db7928bab91c4098eb04a7e4a8d4c62ffe",
+  "observation": "Pinned public return values; original assertions executed; old parsers and repositories persist the samples. Pilot synthetic ID ranges are spaced by 1000 to avoid overlapping event IDs in the original unit-only fixture.",
+  "recipes": [
+    {
+      "path": "packages/research/test/correction-appeal.test.ts",
+      "sha256": "725473947a1b27ffabd90e5982342b15f9430b473f8d9a1eb1b63dde3f915cc9"
+    },
+    {
+      "path": "packages/research/test/deliberation-room.test.ts",
+      "sha256": "11d17aecbb7d626019806522249b158d862f2bed14396bd2d4c239f04f2a7d58"
+    },
+    {
+      "path": "packages/research/test/closed-external-app-pilot.test.ts",
+      "sha256": "584cbb040b3c72d3d7997081590397a4250b536dfc626fb95e8d1318027c1d7f"
+    }
+  ],
+  "observerSha256": "f53d9898816ae6330c0828d824fa46263912836c3b7f2fd3ed5227e31edbcdf9",
+  "fixtures": [
+    {
+      "key": "correction-appeal-appeal_record_only-none",
+      "schema": 20,
+      "projectId": "rprj_000000000000000000000004S5",
+      "objectId": "rapl_000000000000000000000004SC",
+      "status": "appeal_record_only",
+      "databaseSha256": "2fc17e15c37eafedfffdb612431b3794c9b7e22ff488ba5be6fcb52342b45707",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "orphan"
+      }
+    },
+    {
+      "key": "correction-appeal-awaiting_send_confirmation-prepared",
+      "schema": 20,
+      "projectId": "rprj_0000000000000000000000052H",
+      "objectId": "rapl_0000000000000000000000052R",
+      "status": "awaiting_send_confirmation",
+      "databaseSha256": "8665c575dc288a85fd2dd253f9b5739a6aa02cab7db3a86d14723c10e82f82dd",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "orphan"
+      }
+    },
+    {
+      "key": "correction-appeal-cancelled-cancelled",
+      "schema": 20,
+      "projectId": "rprj_0000000000000000000000052H",
+      "objectId": "rapl_0000000000000000000000052R",
+      "status": "cancelled",
+      "databaseSha256": "e552b65788316b5ae3c5b91b3610532caa98cb00086cf0d4c78f4510bd384178",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "orphan"
+      }
+    },
+    {
+      "key": "correction-appeal-draft-none",
+      "schema": 20,
+      "projectId": "rprj_000000000000000000000004QK",
+      "objectId": "rapl_000000000000000000000004QT",
+      "status": "draft",
+      "databaseSha256": "c8ae0df597f572f8831b3f59f20bf694855da32abc89c3e04d8d57a74bca8a01",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "orphan"
+      }
+    },
+    {
+      "key": "correction-appeal-provider_failed-failed",
+      "schema": 20,
+      "projectId": "rprj_000000000000000000000005BX",
+      "objectId": "rapl_000000000000000000000005C4",
+      "status": "provider_failed",
+      "databaseSha256": "00ab49aaad50c736dd8337fbaba2e6f5cfa21829f073c2265506c2cffe557007",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "orphan"
+      }
+    },
+    {
+      "key": "correction-appeal-provider_failed-unknown",
+      "schema": 20,
+      "projectId": "rprj_0000000000000000000000052H",
+      "objectId": "rapl_0000000000000000000000052R",
+      "status": "provider_failed",
+      "databaseSha256": "231a7c86650a93add8384878e04d452ecf7569c5f6423e407c07e55236626777",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "orphan"
+      }
+    },
+    {
+      "key": "correction-appeal-recorded-none",
+      "schema": 20,
+      "projectId": "rprj_000000000000000000000004S5",
+      "objectId": "rapl_000000000000000000000004SC",
+      "status": "recorded",
+      "databaseSha256": "158a301379d3c5f8f26c3e876dfda6d0e606987500793dc1bf34250ef1cbc4f2",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "orphan"
+      }
+    },
+    {
+      "key": "correction-appeal-resolved-none",
+      "schema": 20,
+      "projectId": "rprj_000000000000000000000004S5",
+      "objectId": "rapl_000000000000000000000004SC",
+      "status": "resolved",
+      "databaseSha256": "d1839507da059c3e088a27cee40403b9eda9bc8b26b61d1840a99d66e05d471c",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "orphan"
+      }
+    },
+    {
+      "key": "correction-appeal-second_opinion_ready-completed",
+      "schema": 20,
+      "projectId": "rprj_0000000000000000000000052H",
+      "objectId": "rapl_0000000000000000000000052R",
+      "status": "second_opinion_ready",
+      "databaseSha256": "cf5b8e2c4ea7835a3f484357e11ba921e76d1924d2385bcad2fbb15032173380",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "orphan"
+      }
+    },
+    {
+      "key": "correction-appeal-second_opinion_running-running",
+      "schema": 20,
+      "projectId": "rprj_0000000000000000000000052H",
+      "objectId": "rapl_0000000000000000000000052R",
+      "status": "second_opinion_running",
+      "databaseSha256": "0c2ecf6d7db5e312323a0d7770c3e8a3367acd17469a1f684f6d5827e9be430e",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "orphan"
+      }
+    },
+    {
+      "key": "correction-appeal-stale_conflicted-running",
+      "schema": 20,
+      "projectId": "rprj_0000000000000000000000052H",
+      "objectId": "rapl_0000000000000000000000052R",
+      "status": "stale_conflicted",
+      "databaseSha256": "198d2b30bd67c4185c7b3a8e81297ecdde8f1496fd6fd72641b5f62f8993652c",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "orphan"
+      }
+    },
+    {
+      "key": "correction-appeal-waiting_user_resolution-completed",
+      "schema": 20,
+      "projectId": "rprj_0000000000000000000000052H",
+      "objectId": "rapl_0000000000000000000000052R",
+      "status": "waiting_user_resolution",
+      "databaseSha256": "433a641f5433be1e7f1b9c980016dfa215a8fba997fb84eb648cbceef58f8779",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "orphan"
+      }
+    },
+    {
+      "key": "deliberation-room-awaiting_manifest_confirmation-none",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000001GTH",
+      "objectId": "rdlr_00000000000000000000001GTN",
+      "status": "awaiting_manifest_confirmation",
+      "databaseSha256": "650f7b4eba882612b12adb4fda4d2fb6d1a7c9c749a320b88efd10f9d94e2590",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "deliberation-room-blind_round_running-completed-running",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000001GTH",
+      "objectId": "rdlr_00000000000000000000001GTN",
+      "status": "blind_round_running",
+      "databaseSha256": "9633addd9c8847fd76685ea29387fed6ee832f8c42db5eac6f382d6f95dd554b",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "deliberation-room-blind_round_running-failed-running",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000001N75",
+      "objectId": "rdlr_00000000000000000000001N79",
+      "status": "blind_round_running",
+      "databaseSha256": "f6362f3acce2f6d25329c3390aeb42b951ea7821c72f611589d8d3693c718381",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "deliberation-room-blind_round_running-running-running",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000001GTH",
+      "objectId": "rdlr_00000000000000000000001GTN",
+      "status": "blind_round_running",
+      "databaseSha256": "85e6192d5cf8aa8b11aa12097ded05c6790c984ae05534ec93efb2cbb247c170",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "deliberation-room-challenge_prepared-completed-completed",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000001KR9",
+      "objectId": "rdlr_00000000000000000000001KRD",
+      "status": "challenge_prepared",
+      "databaseSha256": "34e08a5e668daf3c2088b8d424944ab4e7313139375e550bd4a0f8283d6ec8d9",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "deliberation-room-challenge_running-completed-completed",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000001KR9",
+      "objectId": "rdlr_00000000000000000000001KRD",
+      "status": "challenge_running",
+      "databaseSha256": "b937a5c2bad3a5f9d96d1fa616531bc7bc16bfc20a54e5ba33c340fa8fd1432e",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "deliberation-room-difference_review-completed-completed",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000001GTH",
+      "objectId": "rdlr_00000000000000000000001GTN",
+      "status": "difference_review",
+      "databaseSha256": "b05859bdcee606d2482b238e0cc772fc9a1883601fd319230e152744504861ae",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "deliberation-room-difference_review-completed-failed",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000001NEZ",
+      "objectId": "rdlr_00000000000000000000001NF3",
+      "status": "difference_review",
+      "databaseSha256": "3ef548e1a4e1d95439271189c81a162442d5facdb7bb3bc1b0485f72004cb6e0",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "deliberation-room-draft-none",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000001GTH",
+      "objectId": "rdlr_00000000000000000000001GTN",
+      "status": "draft",
+      "databaseSha256": "397d88d5c51d8f378c6ab32e44635723a6fb107a0307559971dcf8479c3b5496",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "deliberation-room-failed-failed-failed",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000001N75",
+      "objectId": "rdlr_00000000000000000000001N79",
+      "status": "failed",
+      "databaseSha256": "6c17f86709e81ff745d831b6ee0e0862fdc610825ca9f91ba0dc47feba382b4c",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "deliberation-room-partial-completed-failed",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000001MQH",
+      "objectId": "rdlr_00000000000000000000001MQN",
+      "status": "partial",
+      "databaseSha256": "5213178e588feafb04f6720df8f11d1f582c46338879fbe2c0aa353f6c34156f",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "deliberation-room-resolved-completed-completed",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000001PP1",
+      "objectId": "rdlr_00000000000000000000001PP5",
+      "status": "resolved",
+      "databaseSha256": "104d40cc95cd5a18ffd3f6a19bc6894330a0afd0c40b8261e85d4a9a7367d943",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "deliberation-room-retry_prepared-completed-failed",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000001NEZ",
+      "objectId": "rdlr_00000000000000000000001NF3",
+      "status": "retry_prepared",
+      "databaseSha256": "1c09b8f15252afd0dbc3ea5fbd7db3a0d500a707a16cb24fc6eb86d6c0d229cd",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "deliberation-room-retry_running-completed-failed",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000001NEZ",
+      "objectId": "rdlr_00000000000000000000001NF3",
+      "status": "retry_running",
+      "databaseSha256": "ec20dbc0c66be986f4cb6ac3aa01d9639acd301b37e34a5448f3046c6b3c92f0",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "deliberation-room-reveal_ready-completed-completed",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000001GTH",
+      "objectId": "rdlr_00000000000000000000001GTN",
+      "status": "reveal_ready",
+      "databaseSha256": "d0f7439c3ea5b56accd7d72bbe19cf3f84b0e788970cfc0d555cb80ec796ab2d",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "deliberation-room-reveal_ready-completed-failed",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000001MQH",
+      "objectId": "rdlr_00000000000000000000001MQN",
+      "status": "reveal_ready",
+      "databaseSha256": "161c7797fdd2d0d5c1d1210eac840aa97d553260983099ba94e5722aa72280e5",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "deliberation-room-waiting_user_resolution-completed-completed",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000001KR9",
+      "objectId": "rdlr_00000000000000000000001KRD",
+      "status": "waiting_user_resolution",
+      "databaseSha256": "b933fb8404b4c4696d232a966814d08c1e6f016ec0fbf2326ccc03dc3a08dc73",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "closed-external-app-pilot-blocked_host_unavailable-none",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000000001",
+      "objectId": "rpil_000000000000000000000031N1",
+      "status": "blocked_host_unavailable",
+      "databaseSha256": "50f2c192c0886f50e62bbd736666df81eb84da4c9a5e3265b9564bd0f6fb29b4",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "closed-external-app-pilot-cancelled-cancelled",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000000001",
+      "objectId": "rpil_000000000000000000000031N1",
+      "status": "cancelled",
+      "databaseSha256": "040dd52bc8003df2d761d1c52781fb4b4b3e3e1bed506cba8b82cb6acfc89c76",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "closed-external-app-pilot-candidate_confirmation_required-completed",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000000001",
+      "objectId": "rpil_000000000000000000000031N1",
+      "status": "candidate_confirmation_required",
+      "databaseSha256": "8b3138625ab3b0684828d3c39b03b9aa7b2824840eed797451fa25ed94d24aa0",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "closed-external-app-pilot-candidate_received-completed",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000000001",
+      "objectId": "rpil_000000000000000000000031N1",
+      "status": "candidate_received",
+      "databaseSha256": "957019171149b2d6e08a8dbf90493e888b2f976ddced445823e2c352abf82523",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "closed-external-app-pilot-closed-completed-completed",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000000001",
+      "objectId": "rpil_000000000000000000000031N1",
+      "status": "closed",
+      "databaseSha256": "172729e9df0115b8b344725fc69f4bf50d8e9b3cdfcc3fcb165aeeaee52c1657",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "closed-external-app-pilot-context_confirmation_required-completed-prepared",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000000001",
+      "objectId": "rpil_000000000000000000000031N1",
+      "status": "context_confirmation_required",
+      "databaseSha256": "f249264e6e3ed047d5f5b4466b51306a27aa91bc32f2fbeb3a695037da3f5980",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "closed-external-app-pilot-context_confirmation_required-prepared",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000000001",
+      "objectId": "rpil_000000000000000000000031N1",
+      "status": "context_confirmation_required",
+      "databaseSha256": "3b92968475637f6c8ff1802baeaef4a1f55ce1964daf2a86a1b7f3cf681f3d75",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "closed-external-app-pilot-context_confirmed-completed-confirmed",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000000001",
+      "objectId": "rpil_000000000000000000000031N1",
+      "status": "context_confirmed",
+      "databaseSha256": "b803c3005253a256fdc101126ad1d8e5b1810ac1a510ae857fd868657f4fd332",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "closed-external-app-pilot-context_confirmed-confirmed",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000000001",
+      "objectId": "rpil_000000000000000000000031N1",
+      "status": "context_confirmed",
+      "databaseSha256": "119544e2c2b170bf7ef355cf5d7b9a1267ee853341953d97cef8de1edd4cd186",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "closed-external-app-pilot-continuity_check_ready-completed",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000000001",
+      "objectId": "rpil_000000000000000000000031N1",
+      "status": "continuity_check_ready",
+      "databaseSha256": "f080589bda391b2e965a3cdbc758a90e1632a4d7b32e743b7ffc9d53d966e5c6",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "closed-external-app-pilot-continuity_check_running-completed-running",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000000001",
+      "objectId": "rpil_000000000000000000000031N1",
+      "status": "continuity_check_running",
+      "databaseSha256": "e77bb38b38c769bc16e3bcea79bbbf4a2386f1facb9cc415e1b324d7088f7776",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "closed-external-app-pilot-continuity_verified-completed-completed",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000000001",
+      "objectId": "rpil_000000000000000000000031N1",
+      "status": "continuity_verified",
+      "databaseSha256": "87749dca9f28d908613c5bfaa84fbd98db62aa0b840586082bb8f0ecee1f18e8",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "closed-external-app-pilot-draft-none",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000000001",
+      "objectId": "rpil_000000000000000000000031N1",
+      "status": "draft",
+      "databaseSha256": "028dbac5d3342e6e500c0e362b7cf53f549faf22e8b8a4a2955a0fb55ac996bc",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "closed-external-app-pilot-interrupted_unknown-unknown",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000000001",
+      "objectId": "rpil_000000000000000000000031N1",
+      "status": "interrupted_unknown",
+      "databaseSha256": "ec97ed7c1251a0b7c306e4c741eb14af4827d45e9cb7b9324580f87f729ed5f3",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "closed-external-app-pilot-launching-completed-launching",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000000001",
+      "objectId": "rpil_000000000000000000000031N1",
+      "status": "launching",
+      "databaseSha256": "52e6ed36257428aee84f5653434bbc9e94b47e4438333015415049c8d4df0a4c",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "closed-external-app-pilot-launching-launching",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000000001",
+      "objectId": "rpil_000000000000000000000031N1",
+      "status": "launching",
+      "databaseSha256": "657ec88e25c319a83a258e0c8a0d133b22348946f26c57f63f7ec792311a9522",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "closed-external-app-pilot-preflight_ready-none",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000000001",
+      "objectId": "rpil_000000000000000000000031N1",
+      "status": "preflight_ready",
+      "databaseSha256": "982deed40d8a40a3eb5aee649e0532c4d4a057a64c8de588ac60144b7fed9e3c",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "closed-external-app-pilot-review_required-completed",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000000001",
+      "objectId": "rpil_000000000000000000000031N1",
+      "status": "review_required",
+      "databaseSha256": "6c06c4f9c8dbb9a9875458a14cccb6dc9218d1462300b3294d122ad393d6fb72",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "closed-external-app-pilot-running-running",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000000001",
+      "objectId": "rpil_000000000000000000000031N1",
+      "status": "running",
+      "databaseSha256": "85f3538c67a7ec0a18251725203d93645c08794c0dd691007db3d72f1e310c7e",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    },
+    {
+      "key": "closed-external-app-pilot-user_disposition_required-completed",
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000000001",
+      "objectId": "rpil_000000000000000000000031N1",
+      "status": "user_disposition_required",
+      "databaseSha256": "1900e50390dff55e14845b9dbe09173e0ef53d7e33d7d9bb37a81ca790e2e124",
+      "expected": {
+        "authority": "history_only",
+        "sourcePreserved": true,
+        "baselineEvents": 1,
+        "newDecisionOrEvidence": 0,
+        "classification": "legacy_status_preserved"
+      }
+    }
+  ]
+}

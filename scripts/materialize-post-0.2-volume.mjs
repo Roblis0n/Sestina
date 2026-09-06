@@ -1,0 +1,14 @@
+import { build } from "esbuild";
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
+const root=resolve(import.meta.dirname,".."),output=resolve(process.argv[2]??".tmp/post-0.2-volume"),old=join(output,"source"),sha=v=>createHash("sha256").update(v).digest("hex");
+await mkdir(old,{recursive:true});
+const commit="caf893db7928bab91c4098eb04a7e4a8d4c62ffe",archive=execFileSync("git",["archive",commit,"packages","tsconfig.base.json"],{cwd:root,windowsHide:true,maxBuffer:32*1024*1024});await writeFile(join(output,"source.tar"),archive);execFileSync("tar",["-xf",join(output,"source.tar"),"-C",old],{windowsHide:true});
+const entry=join(root,"tests/post-0.2/legacy-volume-driver.ts"),bundle=join(output,"volume.mjs");
+await build({entryPoints:[entry],outfile:bundle,bundle:true,platform:"node",format:"esm",target:"node24",banner:{js:'import {createRequire} from "node:module";const require=createRequire(import.meta.url);'},nodePaths:[join(root,"node_modules"),...(await readdir(join(root,"packages"))).map(n=>join(root,"packages",n,"node_modules"))],plugins:[{name:"pinned-old-public-entries",setup(b){b.onResolve({filter:/^@sestina\//},async({path})=>{const name=path.slice(9);if(!/^[a-z-]+$/.test(name))throw Error("private import");const pkg=JSON.parse(await readFile(join(old,"packages",name,"package.json"),"utf8"));return{path:resolve(old,"packages",name,pkg.exports["."])};});b.onResolve({filter:/^legacy-scenario$/},()=>({path:join(old,"packages/research-store/test/fixtures.ts")}));}}]});
+execFileSync(process.execPath,[bundle,output],{cwd:root,windowsHide:true,stdio:"inherit"});
+const proof={sourceCommit:commit,sourceArchiveSha256:sha(archive),recipeSha256:sha(await readFile(entry)),generatorSha256:sha(await readFile(import.meta.filename)),evidenceClass:"synthetic_fixture",fixtures:JSON.parse(await readFile(join(output,"volume-hashes.json"),"utf8"))};
+const lock=join(root,"tests/post-0.2/legacy-volume-provenance.json");if(process.argv.includes("--freeze"))await writeFile(lock,JSON.stringify(proof,null,2)+"\n");else if(JSON.stringify(proof)!==JSON.stringify(JSON.parse(await readFile(lock,"utf8"))))throw Error("Pinned volume corpus changed");
+console.log("Verified pinned empty, long Brief and 1000-decision projects.");

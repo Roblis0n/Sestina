@@ -89,6 +89,7 @@ export async function exportProject(db: StorageDatabase, options: ExportOptions)
     scope: "exports",
     ownerId: "exports",
   });
+  db.maintenanceOwned = true;
   try {
     try {
       mkdirSync(stagingDir, { recursive: true });
@@ -253,6 +254,7 @@ export async function exportProject(db: StorageDatabase, options: ExportOptions)
     rmSync(stagingDir, { recursive: true, force: true });
     throw err;
   } finally {
+    db.maintenanceOwned = false;
     guard.release();
   }
 }

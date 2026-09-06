@@ -61,7 +61,11 @@
     "demo:offline": "pnpm --filter @sestina/cli build && node scripts/run-offline-demos.mjs",
     "verify:no-network": "node scripts/verify-no-network.mjs && node scripts/verify-research-room-no-network.mjs",
     "verify:pilot-no-network": "node scripts/verify-pilot-no-network.mjs",
-    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm verify:no-network && pnpm test:e2e:ri40 && pnpm test:e2e:ri41 && pnpm test:e2e:ri43 && pnpm test:e2e:ri48 && pnpm test:e2e:ui02 && pnpm test:e2e:ui03 && pnpm test:e2e:ui04 && pnpm test:e2e:ri49 && pnpm test:e2e:ri50 && pnpm test:e2e:ri51 && pnpm test:e2e:ri52 && pnpm docs:check && pnpm repo:check && pnpm verify:architecture && pnpm verify:repository && pnpm verify:public-history && pnpm verify:package && pnpm demo:offline"
+    "verify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm verify:no-network && pnpm test:e2e:ri40 && pnpm test:e2e:ri41 && pnpm test:e2e:ri43 && pnpm test:e2e:ri48 && pnpm test:e2e:ui02 && pnpm test:e2e:ui03 && pnpm test:e2e:ui04 && pnpm test:e2e:ri49 && pnpm test:e2e:ri50 && pnpm test:e2e:ri51 && pnpm test:e2e:ri52 && pnpm docs:check && pnpm repo:check && pnpm verify:architecture && pnpm verify:repository && pnpm verify:public-history && pnpm verify:package && pnpm demo:offline",
+    "test:post-0.2:foundation": "node node_modules/vitest/vitest.mjs run --config tests/post-0.2/vitest.foundation.config.ts",
+    "test:post-0.2:downstream": "node node_modules/vitest/vitest.mjs run --config tests/post-0.2/vitest.downstream.config.ts",
+    "test:post-0.2:ui-downstream": "node scripts/build-research-room.mjs && node node_modules/@playwright/test/cli.js test --config tests/post-0.2/playwright.downstream.config.ts",
+    "verify:post-0.2:discovery": "node scripts/verify-post-0.2-discovery.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

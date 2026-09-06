@@ -31,6 +31,9 @@ run("production-source lint", eslint, [
   "apps/research-room/src/server.ts",
   "apps/research-room/client/src",
   "packages/core/src",
+  "packages/research/src",
+  "packages/research-store/src",
+  "packages/storage/src",
   "packages/pilot/src",
   "packages/schema/src",
   "--max-warnings",
@@ -40,6 +43,8 @@ run("production-source lint", eslint, [
 for (const project of [
   "packages/schema/tsconfig.json",
   "packages/storage/tsconfig.json",
+  "packages/research/tsconfig.json",
+  "packages/research-store/tsconfig.json",
   "packages/secrets/tsconfig.json",
   "packages/core/tsconfig.json",
   "packages/pilot/tsconfig.json",
@@ -80,6 +85,12 @@ run("public-preview, resilience, privacy, and authority tests", vitest, [
   "--maxWorkers=1",
   "--no-file-parallelism",
 ]);
+
+run("G0 frozen contracts", resolve(root, "scripts/verify-post-0.2-contracts.mjs"));
+run("Pinned legacy source and recipe provenance", resolve(root, "scripts/verify-post-0.2-toolchain.mjs"));
+run("G1 downstream discovery and immutable corpus declarations", resolve(root, "scripts/verify-post-0.2-discovery.mjs"));
+run("Schema 021–025 deterministic structure", resolve(root, "scripts/verify-post-0.2-schema.mjs"));
+run("G1–G3 foundation regression (downstream RED contracts have independent commands)", vitest, ["run", "--config", "tests/post-0.2/vitest.foundation.config.ts"]);
 
 for (const script of [
   "scripts/build-release.mjs",

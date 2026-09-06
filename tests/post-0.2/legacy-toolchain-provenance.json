@@ -1,0 +1,40 @@
+{
+  "sourceCommit": "caf893db7928bab91c4098eb04a7e4a8d4c62ffe",
+  "sourceLockSha256": "a6b1f3857bee6fe8ace5353d6b6870dd94c85802a36005bce9aabcef520a162a",
+  "initialToolchain": {
+    "node": "24.13.0",
+    "sqlite": "3.50.4",
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3"
+  },
+  "inputs": [
+    {
+      "path": "scripts/materialize-post-0.2-legacy.mjs",
+      "sha256": "0d536b12a412e6cfd066f3149015144d1cdb9c84397e2a975bfc000cf5446d03"
+    },
+    {
+      "path": "scripts/materialize-post-0.2-states.mjs",
+      "sha256": "702b701f18002f7c3c757da24347bca9d263436379b402f532ea48a753eb1e99"
+    },
+    {
+      "path": "scripts/materialize-post-0.2-volume.mjs",
+      "sha256": "ea4f464b9de02b14f2f3848be2b4d7c025275de1c72194a1e85bc485ef5bbc31"
+    },
+    {
+      "path": "tests/post-0.2/legacy-driver.ts",
+      "sha256": "b8994f1218b5e9ef9f983c91cc3b0b1c2a6fa13693d549e8f517fb759dc5e661"
+    },
+    {
+      "path": "tests/post-0.2/legacy-observer.ts",
+      "sha256": "f53d9898816ae6330c0828d824fa46263912836c3b7f2fd3ed5227e31edbcdf9"
+    },
+    {
+      "path": "tests/post-0.2/legacy-volume-driver.ts",
+      "sha256": "949c95d02b08818018c6b4ad06c5448ce5678431976db20da61568530bdd4469"
+    },
+    {
+      "path": "tests/post-0.2/factory.ts",
+      "sha256": "312c28c374ab1705a467115f404a6dd926dca72414fea6b921ca16ac2698fb5f"
+    }
+  ]
+}

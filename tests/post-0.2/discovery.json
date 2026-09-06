@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "1.0.0",
+  "implementationBaseline": "a4889ee996064d95ee0a3fb470ee6ee12d3a91a3",
+  "legacySourceCommit": "caf893db7928bab91c4098eb04a7e4a8d4c62ffe",
+  "foundationCommand": "pnpm test:post-0.2:foundation",
+  "downstreamCommand": "pnpm test:post-0.2:downstream",
+  "productionUiCommand": "pnpm test:post-0.2:ui-downstream",
+  "downstreamPolicy": "These executable tests intentionally exit nonzero for G4–G13 behavior absent from the current production interface. They are not included in foundation PASS claims and never use expected-failure wrappers.",
+  "findings": [
+    { "id": "P0-01", "gates": ["G4", "G5"], "file": "tests/post-0.2/downstream/findings.test.ts", "assertion": "generic", "oldBehavior": "Generic acceptance records a receipt without a typed result; B record_only does not invalidate A outbound confirmation." },
+    { "id": "P1-01", "gates": ["G4", "G5"], "file": "tests/post-0.2/downstream/findings.test.ts", "assertion": "unavailable assessment", "oldBehavior": "Unavailable/failed/invalid assessment blocks a user direction change." },
+    { "id": "P1-02", "gates": ["G5"], "file": "tests/post-0.2/downstream/findings.test.ts", "assertion": "unrelated rationale", "oldBehavior": "Bound valid protocol with unsupported rationale is labeled semantic_ready." },
+    { "id": "P1-03", "gates": ["G4", "G5"], "file": "tests/post-0.2/downstream/findings.test.ts", "assertion": "unavailable assessment", "oldBehavior": "Repeated synthetic zero-network text cannot receive a positive user disposition." },
+    { "id": "P1-04", "gates": ["G6", "G8"], "file": "tests/post-0.2/downstream/production-ui.spec.ts", "assertion": "typed controls", "oldBehavior": "Built Brief editor exposes five editable JSON fields." },
+    { "id": "P1-05", "gates": ["G5"], "file": "tests/post-0.2/downstream/findings.test.ts", "assertion": "survives a restart", "oldBehavior": "Shipped interactive Review draft is process-only; target opt-in durable stages are separately GREEN." },
+    { "id": "P1-06", "gates": ["G7", "G8"], "file": "tests/post-0.2/downstream/production-ui.spec.ts", "assertion": "primary navigation", "oldBehavior": "Twelve primary entries remain visible in both languages and all three themes." },
+    { "id": "P2-01", "gates": ["G9"], "file": "tests/post-0.2/downstream/remaining-findings.test.ts", "assertion": "interpretation challenge", "oldBehavior": "Legacy resolution completes without a unified canonical Review effect reference." },
+    { "id": "P2-02", "gates": ["G12"], "file": "tests/post-0.2/downstream/remaining-findings.test.ts", "assertion": "bundled Electron", "oldBehavior": "Current production package entry is a Node server and has no bundled Electron runtime declaration." }
+  ],
+  "immutableRecipes": ["tests/post-0.2/legacy-provenance.json", "tests/post-0.2/legacy-states-provenance.json", "tests/post-0.2/legacy-volume-provenance.json"],
+  "foundationEvidence": ["atomic-boundary", "schema", "migration", "migration-boundaries", "strict-boundaries", "legacy-states", "legacy-volume", "kernel-unit-of-work", "workflow", "corrupt-workflow", "context-boundary", "process-crash", "process-race", "revision-matrix", "brief-transaction", "downgrade", "network-boundary"]
+}

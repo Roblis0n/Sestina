@@ -534,7 +534,10 @@ export type {
 } from "./ports/repositories.js";
 
 import type { ResearchIdPrefix } from "./identity/research-id.js";
+export * from "./kernel/records.js";
+export type { KernelPageRequest, KernelPage, KernelReader, KernelRepository, KernelRepositories, KernelCanonicalCommand, KernelWritePoint, KernelUnitOfWorkOptions, KernelUnitOfWork } from "./kernel/ports.js";
 
 export interface IdFactory {
   create(prefix: ResearchIdPrefix): string;
 }
+export { KERNEL_BRIEF_SECTIONS,parseKernelBriefMetadata,parseKernelBriefMetadataRecord,type KernelBriefMetadata,type KernelBriefMetadataRecord } from "./kernel/brief-metadata.js";

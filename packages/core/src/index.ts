@@ -51,6 +51,7 @@ export type {
   DeliberationResolutionKind,
   DeliberationRoom,
 } from "@sestina/research";
+export { previewKernelMigration, migrateKernelProject, recoverKernelMigration, restoreKernelPreMigrationBackup, openKernelProject, KernelMigrationError, type KernelMigrationOptions, type KernelMigrationPreview, type KernelMigrationFaultPoint } from "./kernel-migration.js";
 export {
   compileCorrectionAppealSecondOpinionPrompt,
   compileDeliberationParticipantPrompt,

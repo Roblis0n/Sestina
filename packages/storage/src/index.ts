@@ -1,4 +1,5 @@
 // Connection and pragmas
+export { KERNEL_MIGRATIONS, KERNEL_SCHEMA_VERSION, KERNEL_CANONICAL_TABLES, KERNEL_WORKFLOW_TABLES, KERNEL_LEGACY_TABLES, hasKernelSchema } from "./kernel-schema.js";
 export {
   openDatabase,
   StorageDatabase,
@@ -25,6 +26,7 @@ export {
 // Transactions
 export {
   withTransaction,
+  withReadSnapshot,
   inWriteTransaction,
   createTransactionView,
   type StorageTransaction,
@@ -229,3 +231,4 @@ export type {
 } from "./repositories/usage.js";
 export type { CursorInput, Page } from "./repositories/shared.js";
 export { keysetPage } from "./repositories/shared.js";
+export { verifyKernelLegacyShape, verifyKernelTargetShape, kernelTableFingerprint } from "./kernel-legacy.js";

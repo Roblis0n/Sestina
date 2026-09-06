@@ -89,8 +89,10 @@ code-fact question; it does not claim the target capability is implemented.
 | Gate                                                | Status                   | Permitted result                                                                  |
 | --------------------------------------------------- | ------------------------ | --------------------------------------------------------------------------------- |
 | G0 — domain contract and terminology freeze         | `completed_and_verified` | The contracts in this directory are the implementation input for downstream work. |
-| G1 — RED tests and immutable compatibility fixtures | `not_started`            | May begin only as a separate scoped task using the frozen G0 contracts.           |
-| G2-G13                                              | `not_started`            | Must follow the dependency order in plan `14`; none is pulled into this commit.   |
+| G1 — RED tests and immutable compatibility fixtures | `verification_in_progress` | Authorized implementation on `codex/post-0.2-g1-g3`; see [execution evidence](G1-G3-EVIDENCE.md). |
+| G2 — schema and copy-on-write migration | `verification_in_progress` | Opt-in schema 25, staged migration, verified backups and explicit recovery are implemented; final public/platform gates remain. |
+| G3 — repositories, transaction and snapshots | `verification_in_progress` | Durable workflow repositories, canonical UoW, revision and deterministic read snapshots are implemented; final gates remain. |
+| G4–G13 | `not_started` | Full effect handlers, Provider orchestration, production interface and final cutover remain downstream. |
 
 G0 changes no production schema, runtime data, UI route, Provider behavior,
 Electron lifecycle, legacy cutover, or release artifact. It creates an
@@ -108,4 +110,8 @@ The following remain `not_established` and are not changed by G0:
   evidence;
 - production UI acceptance for the target task-first interface.
 
-The next dependency gate is G1. This record does not start G1.
+The tables above describing the release are G0 baseline facts. The authorized
+G1–G3 execution begins at `a4889ee996064d95ee0a3fb470ee6ee12d3a91a3`;
+its current evidence is tracked separately below and in the execution record.
+The shipped default continues to use schema 20. No production interface or
+release has been switched to the opt-in schema-25 foundation.

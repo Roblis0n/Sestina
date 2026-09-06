@@ -43,7 +43,6 @@ export function writeResult<T>(
   work: () => ResearchResult<T>,
 ): ResearchResult<T> {
   try {
-    if (db.isTransaction) return work();
     return withTransaction(db, () => {
       const result = work();
       if (!result.ok) throw new DomainFailure(result.error);

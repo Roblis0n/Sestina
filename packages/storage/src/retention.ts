@@ -265,6 +265,7 @@ export async function applyRetentionPreview(
     ownerId: "retention",
     busyTimeoutMs: options.busyTimeoutMs,
   });
+  db.maintenanceOwned = true;
   try {
     const exportDeletions: { exportId: string; dir: string }[] = [];
     const result = withTransaction(db, (tx) => {
@@ -475,6 +476,7 @@ export async function applyRetentionPreview(
     }
     return result;
   } finally {
+    db.maintenanceOwned = false;
     guard.release();
   }
 }

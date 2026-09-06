@@ -224,9 +224,13 @@ result.
 - No weakening of contract requirements to make verification pass, and no
   fabricated code evidence.
 
-## 14. Still unimplemented but decided
+## 14. Unimplemented at the G0 freeze, but decided
 
-Everything below is accepted target design, not current capability:
+Everything below records the accepted target design as it stood at G0. For
+the subsequent G1–G3 implementation and verified boundary, consult
+[IMPLEMENTATION-STATUS.md](IMPLEMENTATION-STATUS.md) and
+[G1-G3-EVIDENCE.md](G1-G3-EVIDENCE.md). This historical list is not a new
+approval requirement and does not override the authorized implementation.
 
 - Persistent Review aggregate, attempts, corrections, and Manifests (G2/G5).
 - `projectStateRevision` head/event chain and snapshot-bound projections (G2/G3).

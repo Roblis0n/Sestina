@@ -46,7 +46,91 @@ directories. They are not committed as project state. A normal materialization
 verifies the lock and refuses an occupied output database; `--freeze` is only
 for the initial, reviewed fixture recipe, not a runtime migration operation.
 
-## Status
+## Implemented foundation and public design record
 
-G1 is in progress. G2 and G3 implementation and validation are not yet complete.
-This record will be updated with actual evidence, not inferred completion.
+All new production paths are opt-in through `openKernelProject` and
+`migrateKernelProject` in the public Core package. The released default
+`openSestina` / migration manifest remains schema 20 until the later cutover.
+No production interface, Provider orchestration or six effect handler has
+been substituted in this change.
+
+| User consequence / invariant | Persisted fact and owner | Failure boundary / executable evidence |
+| --- | --- | --- |
+| A rejected transaction cannot leave an apparently accepted object | Existing SQLite transaction plus `ResearchUnitOfWork.kernel`; object, event, head, terminal Review, Receipt, command identity and projection outbox are one commit | Real repository rollback at all nine seams, hard process death, nested failure, command replay and uncertain-commit lookup |
+| A workflow attempt cannot become research authority | Review drafts, attempts, exact Manifests and immutable assessments/corrections persist separately; workflow write mode cannot acquire canonical access | `workflow`, `revision-matrix`, `corrupt-workflow`, all twelve durable Review stages in `process-crash` |
+| Two competing approvals cannot produce two revisions of the same base | `BEGIN IMMEDIATE`, expected project revision, object versions, immutable command identity, separate live Review/governance authorization callbacks | Two real worker processes released at a barrier; exactly one commits, the other returns `stale_revision` with changed objects |
+| A displayed projection cannot mix two project states | One SQLite read snapshot validates head, hash chain and canonical rows; deterministic policy selects bounded context; views carry source revision | Interleaved second-connection commit; forged snapshot / unknown selection rejection; derived rebuild failure and stale hiding |
+| Failed upgrade must preserve the old project | Core maintenance lease, read-only preflight, immutable prebackup, staged schema 21–25 and backfill, full validation, external journal and pair switch | Schema 16–20, individual durable migration seams, hard-kill switch seams, unknown/corrupt/future/partial inputs, unknown replacement and tampered backup rejection |
+| Restoring old data cannot resurrect a new forget | Downgrade restores only the verified old pair; post-migration privacy redactions deny that downgrade; there is no reverse migration | `downgrade`, Memory `forget`, and zero-socket restore scenario |
+
+Schema 021 adds project heads/events and migration provenance. 022 adds
+versioned Reviews, attempts and immutable correction records. 023 binds exact
+Context Manifests, Receipts and command identities. 024 records Brief section
+coverage, legacy mappings, Memory confirmation revisions and Resume metadata.
+025 adds derived projection state/outbox and privacy/copy inventory metadata,
+and freezes legacy write tables. SQL foreign keys, checks and uniqueness are
+supplemented by strict record and cross-record validation before writable open.
+Both old and target schema structures have reproducible structure fingerprints;
+these check schema compatibility, never user authority or semantic truth.
+
+The Brief database aggregate and its coverage metadata update together. The
+on-disk Brief is explicitly a derived file with a verified source revision;
+after a canonical change a known older file is reported `rebuilding` and is
+never a write basis. Unknown file contents fail closed. The later Brief/UI
+gate owns automatic publication of a rebuilt user-facing file.
+
+Migration preflight enumerates every old table, row count, exact content
+fingerprint and canonical/history/derived/maintenance disposition. Staging
+validation compares every preserved table with that inventory. Legacy
+accepted/modified receipts become historical disposed Reviews with
+`legacy_record_only_unresolved_effect`, not invented Decision or Evidence.
+Direction changes and rollback retain original Brief/provenance. The project
+gets exactly one real revision-1 baseline, not an invented historical sequence.
+
+The expanded old corpus adds all observed Appeal/Room/Pilot state combinations
+and empty, long Brief and 1,000-Decision projects. `legacy-states-provenance.json`
+records exact old test source hashes and the observer recipe. The observer
+executes old production public functions and the original old assertions;
+only synthetic Pilot input ID ranges are spaced to remove overlapping IDs in
+the old unit-only fixture. One declared Appeal waiting state has no old public
+transition helper and is explicitly a synthetic serialized input verified by
+the exact old decoder and repository. It is not claimed as an observed flow.
+`legacy-volume-provenance.json` separately freezes old-source volume recipes.
+Normal tests independently regenerate and verify all locked samples.
+
+## Executable entries and evidence boundary
+
+- `pnpm test:post-0.2:foundation` runs the real database foundation regression.
+- `pnpm test:post-0.2:downstream` intentionally exits nonzero for later target
+  behavior. Actual Provider timeout, user-skip persistence, legacy resolution
+  and release-entry declarations supplement the original eight failures.
+- `pnpm test:post-0.2:ui-downstream` builds the real client/server, starts that
+  bundle against synthetic projects, and exercises language, three themes,
+  keyboard, long text and 200% text. Current failures are twelve primary
+  entries instead of four and five editable JSON fields instead of typed
+  controls. These are observed target gaps, not production UI acceptance.
+- `pnpm verify:post-0.2:discovery` validates the nine-finding map and rejects
+  skip/todo/expected-failure wrappers. It does not convert downstream RED to PASS.
+- `pnpm verify:public` now includes the frozen G0 inputs, foundation regression,
+  schema reproduction and discovery, in addition to all existing gates.
+
+The controlled loopback TCP fixture covers reset and timeout after body write,
+redirect, invalid JSON and oversize response. Its capture proves exact bytes
+and lack of retries in that test environment only. A socket-denial test runs
+preflight, migration, no-assessment canonical commit, projection and verified
+downgrade with every network connection forbidden. No real Provider is used.
+
+## Verification status at the implementation checkpoint
+
+The complete foundation command, G0 contract validation, target schema
+reproduction, production source lint and Core dependency typecheck have passed.
+Downstream domain and built UI assertions have been run and remain RED for the
+observed reasons above. Final public/platform verification and the remaining
+boundary audit are still in progress; G1–G3 are not yet marked completed.
+
+An initial full public run passed production lint, types and all selected
+production regressions, then stopped at the repository shape gate because the
+current working directory already contains ignored `spikes/` material. That
+unrelated material is preserved. Final repository/history and platform gates
+will run against the exact committed tree in an isolated verification checkout;
+the check itself is not weakened or bypassed.
