@@ -1,0 +1,78 @@
+{
+  "sourceCommit": "caf893db7928bab91c4098eb04a7e4a8d4c62ffe",
+  "sourceArchiveSha256": "3cca863d58020269a6715006a97001d85f3cb9e9ea6c3106cd9cbaf70f2343e0",
+  "recipeSha256": "b8994f1218b5e9ef9f983c91cc3b0b1c2a6fa13693d549e8f517fb759dc5e661",
+  "evidenceClass": "synthetic_fixture",
+  "fixtures": [
+    {
+      "schema": 16,
+      "projectId": "rprj_00000000000000000000000FM1",
+      "databaseSha256": "5ef1a261c13b558ddd3689671d7bc8ee15e17e288f2bf4f840508003f45a9f41",
+      "briefSha256": "d6ff0dd6dc130f91257221ece5943c0ccdd2780d76011e91adba771fa0158ece",
+      "expected": {
+        "accepted": "legacy_record_only_unresolved_effect",
+        "modified_accepted": "legacy_record_only_unresolved_effect",
+        "newDecisions": 0,
+        "newEvidence": 0,
+        "migrationBaselineEvents": 1,
+        "memoryStatesPreserved": false
+      }
+    },
+    {
+      "schema": 17,
+      "projectId": "rprj_00000000000000000000000FM1",
+      "databaseSha256": "d8a67256e5d418d9a3d09bf3ee56fbceed61c6cb30c56cbe49e1a0fa63aba4d8",
+      "briefSha256": "d6ff0dd6dc130f91257221ece5943c0ccdd2780d76011e91adba771fa0158ece",
+      "expected": {
+        "accepted": "legacy_record_only_unresolved_effect",
+        "modified_accepted": "legacy_record_only_unresolved_effect",
+        "newDecisions": 0,
+        "newEvidence": 0,
+        "migrationBaselineEvents": 1,
+        "memoryStatesPreserved": false
+      }
+    },
+    {
+      "schema": 18,
+      "projectId": "rprj_00000000000000000000000FM1",
+      "databaseSha256": "038ebe5df472264868e107cc27b499d2090fc562b1b9eda38ba4dcc1c66bf826",
+      "briefSha256": "d6ff0dd6dc130f91257221ece5943c0ccdd2780d76011e91adba771fa0158ece",
+      "expected": {
+        "accepted": "legacy_record_only_unresolved_effect",
+        "modified_accepted": "legacy_record_only_unresolved_effect",
+        "newDecisions": 0,
+        "newEvidence": 0,
+        "migrationBaselineEvents": 1,
+        "memoryStatesPreserved": false
+      }
+    },
+    {
+      "schema": 19,
+      "projectId": "rprj_00000000000000000000000FM1",
+      "databaseSha256": "272c7c4188bf93f95cfcdcf17cc4d15d94980a2d14a677e6dd02d34e5e79ea0e",
+      "briefSha256": "d6ff0dd6dc130f91257221ece5943c0ccdd2780d76011e91adba771fa0158ece",
+      "expected": {
+        "accepted": "legacy_record_only_unresolved_effect",
+        "modified_accepted": "legacy_record_only_unresolved_effect",
+        "newDecisions": 0,
+        "newEvidence": 0,
+        "migrationBaselineEvents": 1,
+        "memoryStatesPreserved": true
+      }
+    },
+    {
+      "schema": 20,
+      "projectId": "rprj_00000000000000000000000FM1",
+      "databaseSha256": "4491ec4d34efd250d73e8274bb795bc79fe6bceeee44f4adbbdb6567a50e89f9",
+      "briefSha256": "d6ff0dd6dc130f91257221ece5943c0ccdd2780d76011e91adba771fa0158ece",
+      "expected": {
+        "accepted": "legacy_record_only_unresolved_effect",
+        "modified_accepted": "legacy_record_only_unresolved_effect",
+        "newDecisions": 0,
+        "newEvidence": 0,
+        "migrationBaselineEvents": 1,
+        "memoryStatesPreserved": true
+      }
+    }
+  ]
+}
