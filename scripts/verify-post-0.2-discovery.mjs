@@ -53,6 +53,14 @@ for (const name of index.foundationEvidence) {
   if (!source.includes("expect("))
     throw Error(`Missing foundation evidence: ${name}`);
 }
+const releaseProof = JSON.parse(await read(index.immutableReleaseRecipe));
+if (
+  releaseProof.sourceCommit !== index.legacySourceCommit ||
+  releaseProof.evidenceClass !== "rebuilt_legacy_release_fixture" ||
+  releaseProof.semantics.databaseSchema !== 20 ||
+  releaseProof.semantics.downloadedReleaseBytesClaimed !== false
+)
+  throw Error("Invalid pinned legacy release declaration");
 const actualFoundation = (
   await readdir(join(root, "tests/post-0.2/foundation"))
 )

@@ -88,6 +88,7 @@ run("public-preview, resilience, privacy, and authority tests", vitest, [
 
 run("G0 frozen contracts", resolve(root, "scripts/verify-post-0.2-contracts.mjs"));
 run("Pinned legacy source and recipe provenance", resolve(root, "scripts/verify-post-0.2-toolchain.mjs"));
+run("Pinned old release fixture provenance", resolve(root, "scripts/materialize-post-0.2-release.mjs"), ["--verify-inputs"]);
 run("G1 downstream discovery and immutable corpus declarations", resolve(root, "scripts/verify-post-0.2-discovery.mjs"));
 run("Schema 021–025 deterministic structure", resolve(root, "scripts/verify-post-0.2-schema.mjs"));
 run("G1–G3 foundation regression (downstream RED contracts have independent commands)", vitest, ["run", "--config", "tests/post-0.2/vitest.foundation.config.ts"]);

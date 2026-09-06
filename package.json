@@ -65,7 +65,8 @@
     "test:post-0.2:foundation": "node node_modules/vitest/vitest.mjs run --config tests/post-0.2/vitest.foundation.config.ts",
     "test:post-0.2:downstream": "node node_modules/vitest/vitest.mjs run --config tests/post-0.2/vitest.downstream.config.ts",
     "test:post-0.2:ui-downstream": "node scripts/build-research-room.mjs && node node_modules/@playwright/test/cli.js test --config tests/post-0.2/playwright.downstream.config.ts",
-    "verify:post-0.2:discovery": "node scripts/verify-post-0.2-discovery.mjs"
+    "verify:post-0.2:discovery": "node scripts/verify-post-0.2-discovery.mjs",
+    "test:post-0.2:legacy-release": "node scripts/materialize-post-0.2-release.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

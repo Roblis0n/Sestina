@@ -1,0 +1,41 @@
+{
+  "sourceCommit": "caf893db7928bab91c4098eb04a7e4a8d4c62ffe",
+  "sourceArchiveSha256": "0470dd02ce5927a9a9b2c255d8ad6f7906b906501ab45b471977844054a93bb2",
+  "recipeSha256": "3edc73efb2d68073a9428612a2483e332631911456d028e6435c99816cdcadd0",
+  "evidenceClass": "rebuilt_legacy_release_fixture",
+  "platform": "win32",
+  "architecture": "x64",
+  "toolchain": {
+    "node": "24.13.0",
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3"
+  },
+  "semantics": {
+    "product": "local_loopback_preview",
+    "databaseSchema": 20,
+    "electron": false,
+    "downloadedReleaseBytesClaimed": false
+  },
+  "files": [
+    {
+      "file": "SHA256SUMS",
+      "bytes": 311,
+      "sha256": "2fd794647824d2d0f2cc0099ccb77f9311a313dbdd61ec7cc3449ed19069a8a6"
+    },
+    {
+      "file": "release-manifest.json",
+      "bytes": 5447,
+      "sha256": "c0b6b6f35c88e7388a07829c6ab1f5bc717b0b9824b6b4a5109699167564d2e6"
+    },
+    {
+      "file": "sestina-research-room-0.2.0-windows-x64.tar.gz",
+      "bytes": 2270471,
+      "sha256": "e385533531ce4bc9c9001028aa9f7682d10b8cc0cf3ea9f800f2dcc377114cc7"
+    },
+    {
+      "file": "sestina-research-room-0.2.0-windows-x64.zip",
+      "bytes": 12645547,
+      "sha256": "93a4b62ce6290f563acfaa4632125beb30a8bd5c959e0ffd6c8ca05dcca0832e"
+    }
+  ]
+}

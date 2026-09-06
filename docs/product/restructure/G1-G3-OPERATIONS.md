@@ -6,6 +6,28 @@ Research Room, migrate a user's project automatically, or publish a new release.
 Use synthetic disposable projects for development. Completion evidence belongs
 in [G1–G3 evidence](G1-G3-EVIDENCE.md) and [gate status](IMPLEMENTATION-STATUS.md).
 
+## Reproducing the old release fixture
+
+Create a detached source worktree at the exact release commit under this
+checkout's ignored `.tmp/` area, and install the dependencies declared by that
+old checkout. For example, use `git worktree add --detach
+.tmp/g1-legacy-release-source caf893db7928bab91c4098eb04a7e4a8d4c62ffe`.
+All Sestina dependency links must resolve inside that old worktree; the recipe
+checks them before building. The recorded Node/esbuild/TypeScript versions and
+the old dependency lock identify the reproduction environment.
+
+Run `pnpm test:post-0.2:legacy-release .tmp/g1-legacy-release-source`. This runs
+the old build script twice, verifies deterministic archives, and compares every
+release file against `legacy-release-provenance.json`. Keep generated archives
+and databases ignored. The public gate uses `--verify-inputs` to check the pinned
+full source archive and complete recipe without requiring a second installed
+checkout on every runner. `--freeze` was used only for the initial reviewed
+declaration; it must not be used to conceal changed source or toolchain results.
+
+The recorded fixture was rebuilt and reproduced on Windows x64. It represents
+exact old code with synthetic/no project data. It is not a downloaded release,
+and its hashes do not claim equivalence to the original GitHub Release assets.
+
 ## Migration and recovery entry points
 
 The public `@sestina/core` package exports the following operations. No operation

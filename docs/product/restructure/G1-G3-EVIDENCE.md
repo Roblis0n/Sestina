@@ -56,7 +56,7 @@ been substituted in this change.
 
 | User consequence / invariant | Persisted fact and owner | Failure boundary / executable evidence |
 | --- | --- | --- |
-| A rejected transaction cannot leave an apparently accepted object | Existing SQLite transaction plus `ResearchUnitOfWork.kernel`; object, event, head, terminal Review, Receipt, command identity and projection outbox are one commit | Real repository rollback at all nine seams, hard process death, nested failure, command replay and uncertain-commit lookup |
+| A rejected transaction cannot leave an apparently accepted object | Existing SQLite transaction plus `ResearchUnitOfWork.kernel`; object, event, head, terminal Review, Receipt, command identity and projection outbox are one commit | Real repository rollback at each canonical write plus Memory metadata/privacy writes, hard process death, nested failure, command replay and uncertain-commit lookup |
 | A workflow attempt cannot become research authority | Review drafts, attempts, exact Manifests and immutable assessments/corrections persist separately; workflow write mode cannot acquire canonical access | `workflow`, `revision-matrix`, `corrupt-workflow`, all twelve durable Review stages in `process-crash` |
 | Two competing approvals cannot produce two revisions of the same base | `BEGIN IMMEDIATE`, expected project revision, object versions, immutable command identity, separate live Review/governance authorization callbacks | Two real worker processes released at a barrier; exactly one commits, the other returns `stale_revision` with changed objects |
 | A displayed projection cannot mix two project states | One SQLite read snapshot validates head, hash chain and canonical rows; deterministic policy selects bounded context; views carry source revision | Interleaved second-connection commit; forged snapshot / unknown selection rejection; derived rebuild failure and stale hiding |
@@ -98,6 +98,35 @@ the exact old decoder and repository. It is not claimed as an observed flow.
 `legacy-volume-provenance.json` separately freezes old-source volume recipes.
 Normal tests independently regenerate and verify all locked samples.
 
+The release corpus uses a separate, exact `caf893d` source worktree. The old
+`build-release.mjs` executes without changes; every Sestina dependency resolves
+inside that old source. Two builds created identical Windows x64 archives, then
+a separate normal reproduction matched the frozen full-source/recipe/archive
+hashes in `legacy-release-provenance.json`. This is a rebuilt old-code fixture,
+not a claim about downloaded GitHub Release bytes. The production tag verifier
+also has an executable downstream RED: it currently accepts a schema-valid
+manifest whose source commit does not match `v0.2.0`. G10/G12 own closing it.
+
+## Boundary audit after the initial implementation
+
+These are public design and test records, not private reasoning:
+
+| Observed failure before repair | Repair and executable discriminator |
+| --- | --- |
+| Recovery accepted or quarantined an unrecorded WAL after a partial switch | Check recorded source-WAL identity before opening SQLite or moving files; both partial-target and complete-target cases reject and preserve unknown bytes. |
+| A Receipt did not directly bind its Manifest identity | The immutable Receipt stores Manifest id/hash and assessment attempt id; writable open validates the same relationships without copying outbound content. |
+| An uncertain Provider attempt was described as failed | Preserve the attempt's uncertain fact and report assessment unavailable; a valid user outcome still commits through the same transaction. |
+| No-Provider Manifest recovery could lose explicit Issue/Evidence selection | Persist the selection and bind it into Manifest identity; validate its project and Memory eligibility against the current canonical snapshot. |
+| Canonical reference decoding admitted unknown kinds and mismatched prefixes | Strict kind/id decoding rejects malformed references while retaining genuine legacy Brief-version references. |
+| Memory metadata/privacy writes had no individual interruption seam | Both writes have injected-failure tests proving the original body, metadata, privacy state, head and absent Receipt after rollback. |
+
+Actual process-death tests also cover backup/staging copy gaps, each schema
+advance, every switch/restore rename boundary and all twelve persisted Review
+states. OS-enforced read-only directory tests prove the old project remains
+readable and unchanged. These extend the initial failing nested-transaction,
+schema, Brief binding, large-baseline and no-op privacy regressions retained in
+the foundation suite.
+
 ## Executable entries and evidence boundary
 
 - `pnpm test:post-0.2:foundation` runs the real database foundation regression.
@@ -113,6 +142,9 @@ Normal tests independently regenerate and verify all locked samples.
   skip/todo/expected-failure wrappers. It does not convert downstream RED to PASS.
 - `pnpm verify:public` now includes the frozen G0 inputs, foundation regression,
   schema reproduction and discovery, in addition to all existing gates.
+- `pnpm test:post-0.2:legacy-release <pinned-source-worktree>` reproduces the
+  immutable old release fixture. Setup and maintenance APIs are documented in
+  [operations and G4 continuation](G1-G3-OPERATIONS.md).
 
 The controlled loopback TCP fixture covers reset and timeout after body write,
 redirect, invalid JSON and oversize response. Its capture proves exact bytes

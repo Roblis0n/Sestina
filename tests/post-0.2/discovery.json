@@ -37,7 +37,7 @@
     },
     {
       "id": "P1-04",
-      "gates": ["G6", "G8"],
+      "gates": ["G6", "G9"],
       "file": "tests/post-0.2/downstream/production-ui.spec.ts",
       "assertion": "typed controls",
       "oldBehavior": "Built Brief editor exposes five editable JSON fields."
@@ -51,24 +51,24 @@
     },
     {
       "id": "P1-06",
-      "gates": ["G7", "G8"],
+      "gates": ["G7", "G9"],
       "file": "tests/post-0.2/downstream/production-ui.spec.ts",
       "assertion": "primary navigation",
       "oldBehavior": "Twelve primary entries remain visible in both languages and all three themes."
     },
     {
       "id": "P2-01",
-      "gates": ["G9"],
+      "gates": ["G7"],
       "file": "tests/post-0.2/downstream/remaining-findings.test.ts",
       "assertion": "interpretation challenge",
       "oldBehavior": "Legacy resolution completes without a unified canonical Review effect reference."
     },
     {
       "id": "P2-02",
-      "gates": ["G12"],
+      "gates": ["G10", "G12"],
       "file": "tests/post-0.2/downstream/remaining-findings.test.ts",
       "assertion": "bundled Electron",
-      "oldBehavior": "Current production package entry is a Node server and has no bundled Electron runtime declaration."
+      "oldBehavior": "The package has no Electron runtime; the real tag verifier accepts a valid manifest whose source commit is unrelated to the tag."
     }
   ],
   "immutableRecipes": [
@@ -106,5 +106,6 @@
     "object-family",
     "readonly-project",
     "restore-crash"
-  ]
+  ],
+  "immutableReleaseRecipe": "tests/post-0.2/legacy-release-provenance.json"
 }
