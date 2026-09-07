@@ -224,7 +224,9 @@ test("G6 built application: competing Brief drafts recover a three-way conflict 
     await page.getByRole("heading",{name:"比较版本",exact:true}).scrollIntoViewIfNeeded();
     await expect(page.locator(".brief-diff pre").filter({hasText:"候选 A：保留观察性限制。"})).toBeVisible();
     await expect(page.locator(".brief-diff pre").filter({hasText:"候选 B：补充来源范围。"})).toBeVisible();
-    await page.screenshot({path:info.outputPath("brief-three-way-conflict.png")});
+    await expect(page.getByText("关联研究对象",{exact:true})).toBeVisible();
+    await expect(page.getByText("objectReferences",{exact:true})).toHaveCount(0);
+    await page.getByRole("heading",{name:"比较版本",exact:true}).locator("..").screenshot({path:info.outputPath("brief-three-way-conflict.png")});
     await page.getByRole("combobox",{name:"选择采用的内容",exact:true}).selectOption("candidate");
     await page.getByRole("button",{name:"将选择应用到草稿",exact:true}).click();
     await page.getByRole("button",{name:"保存草稿",exact:true}).click();

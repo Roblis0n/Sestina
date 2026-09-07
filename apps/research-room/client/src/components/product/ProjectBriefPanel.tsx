@@ -118,7 +118,7 @@ export function ProjectBriefPanel({
   candidate?: KernelReviewDto;
 }) {
   const en = language === "en",
-    label = (key: string) => labels[key]?.[en ? 1 : 0] ?? key;
+    label = (key: string) => key === "objectReferences" ? (en ? "Related research objects" : "关联研究对象") : labels[key]?.[en ? 1 : 0] ?? key;
   const [view, setView] = useState<BriefViewDto>();
   const [fields, setFields] = useState<BriefFieldsDto>();
   const [editing, setEditing] = useState(false);

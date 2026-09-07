@@ -2,7 +2,7 @@
 
 This private workspace package owns Sestina's host-neutral research-integrity instructions and deterministic Codex artifacts.
 
-- `canonical/research-integrity.md` is the only hand-maintained Skill body.
+- `canonical/research-integrity.md` and `canonical/agent-corrector/` are the hand-maintained sources for the two Skill families.
 - `pnpm --filter @sestina/skills generate` refreshes the Codex host copy and the TypeScript constants consumed by the CLI.
 - `pnpm --filter @sestina/skills check` is read-only and fails when a generated artifact drifts.
 - The generated Skill contains no project Brief, project path, account, secret, benchmark, or provider data.

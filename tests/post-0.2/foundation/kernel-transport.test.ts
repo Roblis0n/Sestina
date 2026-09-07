@@ -70,7 +70,9 @@ async function transport(mode: string) {
     providerId: "synthetic",
     model: "fixture",
     baseUrl: `http://127.0.0.1:${address.port}`,
-    timeoutMs: 150,
+    // The non-timeout cases must reach the responder even under a loaded gate.
+    // Only the deliberately silent responder tests the configured deadline.
+    timeoutMs: mode === "timeout" ? 1000 : 5000,
     locality: "local" as const,
     generation: 1,
   };
