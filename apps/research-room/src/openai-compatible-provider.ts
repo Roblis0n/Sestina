@@ -14,6 +14,32 @@ import {
   type ResearchRoomSemanticProviderBinding,
 } from "@sestina/core";
 import type { ProviderRuntimeSnapshot } from "./provider-settings.js";
+import type { KernelProvider } from "@sestina/core";
+
+/** Uses the same bounded transport as the legacy adapter, with Kernel-owned bytes. */
+export function createKernelOpenAICompatibleProvider(snapshot: ProviderRuntimeSnapshot, fetchImplementation: typeof fetch = fetch): KernelProvider {
+  return Object.freeze({
+    identity: Object.freeze({ id: snapshot.config.providerId, family: "openai_compatible", model: snapshot.config.model,
+      origin: new URL(snapshot.config.baseUrl).origin, locality: snapshot.config.locality,
+      configGeneration: snapshot.config.generation, serializerVersion: "1.0.0" }),
+    maxOutputTokens: snapshot.config.maxOutputTokens ?? 1024,
+    timeoutMs: snapshot.config.timeoutMs,
+    async send(body: string, signal: AbortSignal) {
+      if (signal.aborted) throw new OpenAICompatibleProviderError("provider_aborted");
+      if (Buffer.byteLength(body) > 1_048_576) throw new OpenAICompatibleProviderError("provider_invalid_request");
+      const response = await fetchImplementation(`${snapshot.config.baseUrl}/chat/completions`, {
+        method: "POST", body, signal, redirect: "error",
+        headers: { accept: "application/json", "content-type": "application/json", ...(snapshot.apiKey === undefined ? {} : { authorization: `Bearer ${snapshot.apiKey}` }) },
+      });
+      if (!response.ok) { await response.body?.cancel(); throw new OpenAICompatibleProviderError("provider_http_error"); }
+      const raw = await readBoundedBody(response, 524_288);
+      let content: string | undefined;
+      try { content = extractAssistantContent(JSON.parse(raw)); } catch { throw new OpenAICompatibleProviderError("provider_invalid_response"); }
+      if (!content || Buffer.byteLength(content) > 262_144) throw new OpenAICompatibleProviderError("provider_invalid_response");
+      return content;
+    },
+  });
+}
 
 export type OpenAICompatibleProviderErrorCode =
   | "provider_invalid_request"

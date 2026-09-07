@@ -16,7 +16,8 @@ export type KernelFaultCode =
   | "illegal_transition"
   | "relation_mismatch"
   | "storage_unavailable"
-  | "commit_uncertain";
+  | "commit_uncertain"
+  | "already_resolved";
 export class KernelFault extends Error {
   constructor(
     readonly code: KernelFaultCode,
@@ -274,6 +275,15 @@ export interface KernelEffectDraft {
   readonly previewHash: string;
   readonly baseProjectStateRevision: number;
   readonly objectVersions: readonly KernelObjectRef[];
+  /** Absent only in pre-G4 foundation/history records; never executable then. */
+  readonly payload?: KernelJson;
+  readonly preview?: KernelJson;
+  readonly authorityCommandId?: string;
+  readonly allocatedIds?: readonly string[];
+  readonly preparedAt?: string;
+  readonly actorId?: string;
+  readonly invalidated?: boolean;
+  readonly compensatesReceiptId?: string;
 }
 export interface KernelReview {
   readonly schemaVersion: "2.0.0";
@@ -356,15 +366,32 @@ export function parseKernelReview(value: unknown): KernelReview {
       "previewHash",
       "baseProjectStateRevision",
       "objectVersions",
+      "payload", "preview", "authorityCommandId", "allocatedIds", "preparedAt", "actorId", "invalidated", "compensatesReceiptId",
     ]);
     kernelText(d.effectId, 160);
     kernelSha(d.previewHash);
     kernelInteger(d.baseProjectStateRevision);
     list(d.objectVersions);
     d.objectVersions.forEach(parseKernelObjectRef);
+    if (d.invalidated !== undefined && typeof d.invalidated !== "boolean") throw new KernelFault("invalid_record");
+    if (d.payload !== undefined || d.preview !== undefined) {
+      kernelText(d.authorityCommandId, 160);
+      kernelTime(d.preparedAt);
+      kernelText(d.actorId, 128);
+      list(d.allocatedIds, 128);
+      d.allocatedIds.forEach((id) => { kernelText(id, 160); });
+      if (!d.payload || typeof d.payload !== "object" || Array.isArray(d.payload)) throw new KernelFault("invalid_record");
+      const payload = kernelRecord(d.payload, Object.keys(d.payload));
+      if (d.compensatesReceiptId !== undefined) kernelId(d.compensatesReceiptId, "rrcp_");
+      const preview = kernelRecord(d.preview, ["payload", "baseProjectStateRevision", "objects", "unchangedObjects", "compensation", "rollbackMode", "compensatesReceiptId", "affectedReviews", "affectedManifests"]);
+      if (preview.compensatesReceiptId !== (d.compensatesReceiptId ?? undefined)) throw new KernelFault("invalid_record");
+      if (payload.kind !== d.effectKind || preview.baseProjectStateRevision !== d.baseProjectStateRevision ||
+        kernelHash(preview.payload) !== kernelHash(payload) || kernelHash(preview) !== d.previewHash)
+        throw new KernelFault("invalid_record");
+    }
     if (
       !KERNEL_EFFECT_KINDS.includes(d.effectKind as KernelEffectKind) ||
-      d.baseProjectStateRevision !== v.baseProjectStateRevision
+      (d.baseProjectStateRevision !== v.baseProjectStateRevision && d.invalidated !== true)
     )
       throw new KernelFault("invalid_record");
   }
@@ -395,6 +422,41 @@ export interface KernelAssessment {
   readonly claimFieldsParsed: boolean;
   readonly semanticCorrectness: "unproven";
   readonly publicSummary: string;
+  readonly envelope?: ProviderAssessmentEnvelope;
+}
+export interface ProviderAssessmentEnvelope {
+  readonly schemaVersion: "2.0.0";
+  readonly request_binding_valid: boolean;
+  readonly response_schema_valid: boolean;
+  readonly quoted_span_integrity_valid: boolean;
+  readonly provider_assessment_available: boolean;
+  readonly assessmentId?: string;
+  readonly reviewId?: string;
+  readonly manifestId?: string;
+  readonly providerIdentity?: NonNullable<KernelManifest["provider"]>;
+  readonly receivedAt?: string;
+  readonly authorityClass?: "model_proposed_assessment";
+  readonly canMutateAuthority?: false;
+  readonly assessment?: StructuredProviderAssessment;
+}
+export interface StructuredProviderAssessment {
+  readonly findings: readonly { kind: string; severity: "info" | "warning" | "critical"; publicRationale: string; minimalCorrection: string; unknowns: readonly string[]; sourceSpans: readonly { quote: string }[]; authorityClass: "model_proposed_assessment" }[];
+  readonly argumentDelta: { status: "substantive" | "no_substantive_delta" | "unknown"; summary: string; sourceSpans: readonly { quote: string }[] };
+}
+export function parseStructuredProviderAssessment(input: unknown): StructuredProviderAssessment {
+  const v = kernelRecord(input, ["findings", "argumentDelta"]);
+  const spans = (input: unknown) => { list(input, 64); for (const item of input) { const s = kernelRecord(item, ["quote"]); kernelText(s.quote, 4096); } };
+  list(v.findings, 64);
+  for (const item of v.findings) {
+    const f = kernelRecord(item, ["kind", "severity", "publicRationale", "minimalCorrection", "unknowns", "sourceSpans", "authorityClass"]);
+    kernelText(f.kind, 128); kernelText(f.publicRationale, 8192); kernelText(f.minimalCorrection, 8192);
+    if (!["info", "warning", "critical"].includes(String(f.severity)) || f.authorityClass !== "model_proposed_assessment") throw new KernelFault("invalid_record");
+    list(f.unknowns, 64); f.unknowns.forEach((x) => { kernelText(x, 4096); }); spans(f.sourceSpans);
+  }
+  const delta = kernelRecord(v.argumentDelta, ["status", "summary", "sourceSpans"]);
+  if (!["substantive", "no_substantive_delta", "unknown"].includes(String(delta.status))) throw new KernelFault("invalid_record");
+  kernelText(delta.summary, 8192); spans(delta.sourceSpans);
+  return freezeKernel(v as unknown as StructuredProviderAssessment);
 }
 export function parseKernelAssessment(value: unknown): KernelAssessment {
   const v = kernelRecord(value, [
@@ -405,6 +467,7 @@ export function parseKernelAssessment(value: unknown): KernelAssessment {
     "claimFieldsParsed",
     "semanticCorrectness",
     "publicSummary",
+    "envelope",
   ]);
   if (
     !["not_requested", "unavailable", "failed", "received"].includes(
@@ -425,6 +488,22 @@ export function parseKernelAssessment(value: unknown): KernelAssessment {
     )
       throw new KernelFault("invalid_record");
   kernelText(v.publicSummary, 8192);
+  if (v.envelope !== undefined) {
+    const e = kernelRecord(v.envelope, ["schemaVersion", "request_binding_valid", "response_schema_valid", "quoted_span_integrity_valid", "provider_assessment_available", "assessmentId", "reviewId", "manifestId", "providerIdentity", "receivedAt", "authorityClass", "canMutateAuthority", "assessment"]);
+    if ([e.assessmentId, e.reviewId, e.manifestId, e.providerIdentity, e.receivedAt, e.authorityClass, e.canMutateAuthority].some((x) => x !== undefined)) {
+      kernelId(e.assessmentId, "rpat_"); kernelId(e.reviewId, "rrvw_"); kernelId(e.manifestId, "rman_"); kernelTime(e.receivedAt);
+      if (e.authorityClass !== "model_proposed_assessment" || e.canMutateAuthority !== false) throw new KernelFault("invalid_record");
+      const provider = kernelRecord(e.providerIdentity, ["id", "family", "model", "origin", "locality", "configGeneration", "serializerVersion"]);
+      for (const key of ["id", "family", "model", "origin", "serializerVersion"]) kernelText(provider[key]); kernelInteger(provider.configGeneration);
+      if (!["local", "external"].includes(String(provider.locality))) throw new KernelFault("invalid_record");
+    }
+    if (e.assessment !== undefined) parseStructuredProviderAssessment(e.assessment);
+    schema(e.schemaVersion);
+    for (const key of ["request_binding_valid", "response_schema_valid", "quoted_span_integrity_valid", "provider_assessment_available"])
+      if (typeof e[key] !== "boolean") throw new KernelFault("invalid_record");
+    if (e.request_binding_valid !== v.requestBound || e.response_schema_valid !== v.schemaValidated || e.quoted_span_integrity_valid !== v.quotesLocated ||
+      (e.provider_assessment_available && (v.availability !== "received" || !v.claimFieldsParsed))) throw new KernelFault("invalid_record");
+  }
   return freezeKernel(v as unknown as KernelAssessment);
 }
 export interface KernelAttempt {
@@ -483,7 +562,8 @@ export function parseKernelAttempt(value: unknown): KernelAttempt {
   )
     throw new KernelFault("invalid_record");
   if (v.assessment !== null) {
-    parseKernelAssessment(v.assessment);
+    const assessment = parseKernelAssessment(v.assessment);
+    if (assessment.envelope?.assessmentId !== undefined && (assessment.envelope.assessmentId !== v.id || assessment.envelope.reviewId !== v.reviewId || assessment.envelope.manifestId !== v.manifestId)) throw new KernelFault("relation_mismatch");
     if (
       kernelHash(v.assessment) !== v.assessmentHash ||
       v.status !== "completed"
@@ -750,6 +830,18 @@ export interface KernelReceipt {
   readonly manifestId: string | null;
   readonly manifestIdentityHash: string | null;
   readonly assessmentAttemptId: string | null;
+  readonly recordOnlyOutcome?: string;
+  readonly assessmentFacts?: {
+    readonly assessmentRequested: boolean;
+    readonly availability: "available" | "not_requested" | "failed" | "timeout" | "invalid_response" | "cancelled" | "uncertain";
+    readonly request_binding_valid: boolean;
+    readonly response_schema_valid: boolean;
+    readonly quoted_span_integrity_valid: boolean;
+    readonly provider_assessment_available: boolean;
+    readonly networkUsed: boolean;
+    readonly exactRequestHash: string | null;
+    readonly providerIdentity: KernelManifest["provider"];
+  };
   readonly receiptHash: string;
   readonly createdAt: string;
 }
@@ -782,6 +874,8 @@ export function parseKernelReceipt(value: unknown): KernelReceipt {
     "manifestId",
     "manifestIdentityHash",
     "assessmentAttemptId",
+    "recordOnlyOutcome",
+    "assessmentFacts",
     "receiptHash",
     "createdAt",
   ]);
@@ -808,6 +902,14 @@ export function parseKernelReceipt(value: unknown): KernelReceipt {
     kernelSha(v.manifestIdentityHash);
   }
   if (v.assessmentAttemptId !== null) kernelId(v.assessmentAttemptId, "rpat_");
+  if (v.recordOnlyOutcome !== undefined && (v.effectKind !== "record_only" || typeof v.recordOnlyOutcome !== "string" || !["rejected", "deferred", "reference_only", "assessment_disputed"].includes(v.recordOnlyOutcome))) throw new KernelFault("invalid_record");
+  if (v.assessmentFacts !== undefined) {
+    const facts = kernelRecord(v.assessmentFacts, ["assessmentRequested", "availability", "request_binding_valid", "response_schema_valid", "quoted_span_integrity_valid", "provider_assessment_available", "networkUsed", "exactRequestHash", "providerIdentity"]);
+    for (const key of ["assessmentRequested", "request_binding_valid", "response_schema_valid", "quoted_span_integrity_valid", "provider_assessment_available", "networkUsed"]) if (typeof facts[key] !== "boolean") throw new KernelFault("invalid_record");
+    if (!["available", "not_requested", "failed", "timeout", "invalid_response", "cancelled", "uncertain"].includes(String(facts.availability))) throw new KernelFault("invalid_record");
+    if (facts.exactRequestHash !== null) kernelSha(facts.exactRequestHash);
+    if (facts.providerIdentity !== null) { const provider = kernelRecord(facts.providerIdentity, ["id", "family", "model", "origin", "locality", "configGeneration", "serializerVersion"]); for (const key of ["id", "family", "model", "origin", "serializerVersion"]) kernelText(provider[key]); kernelInteger(provider.configGeneration); }
+  }
   if (
     v.reviewId === null &&
     (v.manifestId !== null || v.assessmentAttemptId !== null)

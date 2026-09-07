@@ -17,6 +17,8 @@ export interface ArgumentEvidence {
   readonly state: EvidenceState; readonly inferenceCapacity: InferenceCapacity;
   readonly artifactId?: string; readonly revisionId?: string; readonly contentVersionHash?: string;
   readonly source: ResearchSource; readonly version: EntityVersion;
+  /** Old records may lack this; new Kernel evidence requires an inspectable citation. */
+  readonly provenance?: { readonly citation: string; readonly locator?: string };
 }
 export type Evidence = ArgumentEvidence;
 
@@ -26,7 +28,14 @@ export function parseArgumentEvidence(input: unknown): ResearchResult<ArgumentEv
   let artifactId: string | undefined; let revisionId: string | undefined;
   if (input.artifactId !== undefined || input.revisionId !== undefined) { const artifact = parseResearchIdFor(input.artifactId, "rart_"); const revision = parseResearchIdFor(input.revisionId, "rrev_"); if (!artifact.ok || !revision.ok) return err(researchError("invalid_argument_evidence")); artifactId = artifact.value.id; revisionId = revision.value.id; }
   let contentVersionHash: string | undefined; if (input.contentVersionHash !== undefined) { if (typeof input.contentVersionHash !== "string" || !/^[0-9a-f]{64}$/.test(input.contentVersionHash)) return err(researchError("invalid_argument_evidence")); contentVersionHash = input.contentVersionHash; }
+  let provenance: ArgumentEvidence["provenance"];
+  if (input.provenance !== undefined) {
+    const p = input.provenance;
+    if (!isRecord(p) || Object.keys(p).some((k) => !["citation", "locator"].includes(k)) || !isNonBlankString(p.citation) || p.citation.length > 8192 ||
+      (p.locator !== undefined && (!isNonBlankString(p.locator) || p.locator.length > 4096))) return err(researchError("invalid_argument_evidence"));
+    provenance = { citation: p.citation.trim(), ...(p.locator === undefined ? {} : { locator: p.locator.trim() }) };
+  }
   if (!id.ok || !project.ok || !source.ok || !version.ok || (input.kind === "artifact_span" && (artifactId === undefined || revisionId === undefined || contentVersionHash === undefined))) return err(researchError("invalid_argument_evidence"));
-  return ok(cloneFrozen({ id: id.value.id, projectId: project.value.id, kind: input.kind as EvidenceKind, summary: input.summary.trim(), state: input.state as EvidenceState, inferenceCapacity: input.inferenceCapacity as InferenceCapacity, ...(artifactId ? { artifactId, revisionId, ...(contentVersionHash ? { contentVersionHash } : {}) } : {}), source: source.value, version: version.value }));
+  return ok(cloneFrozen({ id: id.value.id, projectId: project.value.id, kind: input.kind as EvidenceKind, summary: input.summary.trim(), state: input.state as EvidenceState, inferenceCapacity: input.inferenceCapacity as InferenceCapacity, ...(artifactId ? { artifactId, revisionId, ...(contentVersionHash ? { contentVersionHash } : {}) } : {}), ...(provenance ? { provenance } : {}), source: source.value, version: version.value }));
 }
 export const parseEvidence = parseArgumentEvidence;

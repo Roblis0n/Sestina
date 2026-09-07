@@ -1,45 +1,47 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { openSestina } from "@sestina/core";
-import { openDatabase } from "@sestina/storage";
-import { SyntheticProvider, syntheticProject, USER, value } from "../factory.js";
-
-const states: Awaited<ReturnType<typeof syntheticProject>>[] = [];
-async function fixture(provider?: SyntheticProvider) { const s = await syntheticProject(provider); states.push(s); return s; }
-async function analyze(s: Awaited<ReturnType<typeof fixture>>) { const p = s.prepare(); return value(await s.core.analyzeResearchRoomSuggestion({ reviewId: p.reviewId, confirmationNonce: p.confirmationNonce, manifestHash: p.manifestHash })); }
+import { readKernelSnapshot } from "@sestina/research-store";
+import { KernelApplicationApi } from "../../../apps/research-room/src/kernel-api.js";
+import { applicationFixture, ApplicationProvider, session, ready, commit } from "../application-fixtures.js";
+const states: Awaited<ReturnType<typeof applicationFixture>>[] = [];
+async function fixture(provider?: ApplicationProvider) { const f = await applicationFixture(provider); states.push(f); return f; }
+async function assess(f: Awaited<ReturnType<typeof applicationFixture>>) {
+  const draft = f.kernel.createReview("Synthetic optional assessment", session);
+  const p = await f.kernel.prepareManifest(draft.id, draft.version, {}, true, session);
+  let r = await f.kernel.confirmManifest(draft.id, p.review.version, p.manifest.identityHash, session);
+  r = f.kernel.prepareAttempt(r.id, r.version, session); await f.kernel.startAttempt(r.id, r.version, p.manifest.identityHash, session);
+  return f.kernel.readReview(r.id, session);
+}
 afterEach(async () => { for (const s of states.splice(0)) await s.cleanup(); });
-
-describe("accepted target / downstream RED / no expected-failure masking", () => {
+describe("accepted target / G4-G5 closed through persistent application entry", () => {
   it.each(["accepted", "modified_accepted"] as const)("P0-01 G4: generic %s cannot substitute a receipt for a typed object effect", async (disposition) => {
-    const s = await fixture(new SyntheticProvider()); const r = await analyze(s);
-    const result = s.core.commitResearchRoomDisposition({ projectId: s.projectId, reviewId: r.reviewId, authorityNonce: r.authorityNonce, expectedStateBinding: r.stateBinding, disposition, reason: "Synthetic user choice", actor: USER, modifiedProposal: "Bound the synthetic claim." });
-    expect(result.ok, "Generic acceptance has no typed target; it must fail instead of recording an apparent research result.").toBe(false);
+    const f = await fixture(); f.kernel.close(); const api = new KernelApplicationApi({});
+    try { await api.open({ projectPath: f.root });
+      await expect(api.execute({ projectId: f.projectId, action: "commit", disposition, actor: { kind: "user" }, modifiedProposal: "Bound the synthetic claim" }), "Generic acceptance has no typed target; it must fail instead of recording an apparent research result.").rejects.toThrow("invalid_record");
+    } finally { api.close(); }
   });
   it.each([undefined, "failure", "invalid"] as const)("P1-01/P1-03 G4: unavailable assessment (%s) cannot veto a user decision", async (mode) => {
-    const s = await fixture(mode === undefined ? undefined : new SyntheticProvider(mode)); const r = await analyze(s);
-    const result = s.core.commitResearchRoomDisposition({ projectId: s.projectId, reviewId: r.reviewId, authorityNonce: r.authorityNonce, expectedStateBinding: r.stateBinding, disposition: "direction_changed", redirectQuestion: "Which synthetic limitation needs investigation?", reason: "The user changes research direction independently of an assessment.", actor: USER });
-    expect(result.ok, "A valid user direction change is blocked only because the Provider is unavailable.").toBe(true);
+    const f = await fixture(mode === undefined ? undefined : new ApplicationProvider(mode));
+    const r = mode === undefined ? await ready(f) : (await assess(f)).review;
+    const brief = readKernelSnapshot(f.kernel.database, f.projectId).state.objects.find((o) => o.kind === "brief")!;
+    const receipt = commit(f, r, { kind: "formal_direction_change", targetId: brief.id, expectedVersion: brief.version, baseVersionId: brief.data.currentVersionId, newQuestion: "Which synthetic limitation needs investigation?", impactSummary: "Pending context changes", reason: "User changes direction independently of an assessment" });
+    expect(receipt.resultingObjects.some((o) => o.id === brief.id), "A valid user direction change is blocked only because the Provider is unavailable.").toBe(true);
+    expect(JSON.stringify(readKernelSnapshot(f.kernel.database, f.projectId).state)).toContain("Which synthetic limitation needs investigation?");
   });
   it("P0-01 G5: B record-only invalidates A's earlier outbound confirmation", async () => {
-    const provider = new SyntheticProvider(); const s = await fixture(provider); const a = s.prepare(); const b = await analyze(s);
-    value(s.core.commitResearchRoomDisposition({ projectId: s.projectId, reviewId: b.reviewId, authorityNonce: b.authorityNonce, expectedStateBinding: b.stateBinding, disposition: "deferred", reason: "Record this outcome.", actor: USER }));
-    const calls = provider.calls.length;
-    const result = await s.core.analyzeResearchRoomSuggestion({ reviewId: a.reviewId, confirmationNonce: a.confirmationNonce, manifestHash: a.manifestHash });
-    expect({ accepted: result.ok, additionalSends: provider.calls.length - calls }, "Review history changed the snapshot; old consent must permit zero sends.").toEqual({ accepted: false, additionalSends: 0 });
+    const provider = new ApplicationProvider(), f = await fixture(provider), a = f.kernel.createReview("A", session);
+    const p = await f.kernel.prepareManifest(a.id, a.version, {}, true, session);
+    let r = await f.kernel.confirmManifest(a.id, p.review.version, p.manifest.identityHash, session); r = f.kernel.prepareAttempt(a.id, r.version, session);
+    commit(f, await ready(f), { kind: "record_only", outcome: "deferred", reason: "Record B" }); const calls = provider.calls.length;
+    await expect(f.kernel.startAttempt(a.id, r.version, p.manifest.identityHash, session)).rejects.toThrow("stale_revision");
+    expect({ accepted: f.kernel.readReview(a.id, session).review.status !== "stale", additionalSends: provider.calls.length - calls }, "Review history changed the snapshot; old consent must permit zero sends.").toEqual({ accepted: false, additionalSends: 0 });
   });
   it("P1-02 G5: valid protocol plus unrelated rationale is not semantic readiness", async () => {
-    const s = await fixture(new SyntheticProvider()); const r = await analyze(s);
-    expect(r.providerStatus, "Schema and quote checks cannot certify semantic correctness.").not.toBe("semantic_ready");
+    const f = await fixture(new ApplicationProvider()), r = await assess(f), a = r.attempts[0]!.assessment!;
+    expect(a.semanticCorrectness, "Schema and quote checks cannot certify semantic correctness.").not.toBe("semantic_ready");
+    expect(a.semanticCorrectness).toBe("unproven"); expect(a.envelope!.response_schema_valid).toBe(true); expect(a.publicSummary).toContain("moon");
   });
   it("P1-05 G5: prepared interactive Review survives a restart", async () => {
-    const s = await fixture(); const p = s.prepare(); s.core.close();
-    const reopened = value(await openSestina({ databasePath: s.databasePath }));
-    try {
-      const db = await openDatabase({ path: s.databasePath, readOnly: true });
-      try {
-        const tables = db.all<{ name: string }>("SELECT name FROM sqlite_schema WHERE type='table'");
-        // Inventory assertion is a real absence result, not a missing-table exception.
-        expect(tables.map((x) => x.name), `Prepared ${p.reviewId} is lost when the in-memory map exits.`).toContain("research_reviews");
-      } finally { db.close(); }
-    } finally { reopened.close(); }
+    const f = await fixture(), a = f.kernel.createReview("Persistent suggestion", session), p = await f.kernel.prepareManifest(a.id, a.version, {}, false, session);
+    await f.restart(); expect(f.kernel.readReview(a.id, session).review).toEqual(p.review); expect(f.kernel.inspectManifest(a.id, session)).toEqual(p.manifest);
   });
 });

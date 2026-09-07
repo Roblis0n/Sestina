@@ -2,9 +2,9 @@ import { build } from "esbuild";
 import { spawn } from "node:child_process";
 import { readFile,readdir } from "node:fs/promises";
 import { resolve,join } from "node:path";
-export async function buildProcessDriver(directory:string){
+export async function buildProcessDriver(directory:string, source = "tests/post-0.2/process-driver.ts"){
  const root=resolve("."),entry=join(directory,"process-driver.mjs");
- await build({entryPoints:[resolve("tests/post-0.2/process-driver.ts")],outfile:entry,bundle:true,platform:"node",format:"esm",target:"node24",banner:{js:'import { createRequire } from "node:module"; const require = createRequire(import.meta.url);'},nodePaths:[join(root,"node_modules"),...(await readdir(join(root,"packages"))).map(n=>join(root,"packages",n,"node_modules"))],plugins:[{name:"public-entries",setup(b){b.onResolve({filter:/^@sestina\//},async({path})=>{const name=path.slice(9);const pkg=JSON.parse(await readFile(join(root,"packages",name,"package.json"),"utf8"));return{path:resolve(root,"packages",name,pkg.exports["."])};});}}]});return entry;
+ await build({entryPoints:[resolve(source)],outfile:entry,bundle:true,platform:"node",format:"esm",target:"node24",banner:{js:'import { createRequire } from "node:module"; const require = createRequire(import.meta.url);'},nodePaths:[join(root,"node_modules"),...(await readdir(join(root,"packages"))).map(n=>join(root,"packages",n,"node_modules"))],plugins:[{name:"public-entries",setup(b){b.onResolve({filter:/^@sestina\//},async({path})=>{const name=path.slice(9);const pkg=JSON.parse(await readFile(join(root,"packages",name,"package.json"),"utf8"));return{path:resolve(root,"packages",name,pkg.exports["."])};});}}]});return entry;
 }
 export async function killAtCheckpoint(entry:string,args:string[]){
  const child=spawn(process.execPath,[entry,...args],{windowsHide:true,stdio:["ignore","pipe","pipe"]});let out="",err="";

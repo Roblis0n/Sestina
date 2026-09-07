@@ -33,6 +33,46 @@
   "transitions": [
     {
       "from": "draft",
+      "to": "stale",
+      "command": "mark_stale",
+      "initiator": "Kernel derived check",
+      "requiresUserAdjudication": false,
+      "precondition": "base revision changed before preparation; no network or canonical write"
+    },
+    {
+      "from": "manifest_prepared",
+      "to": "stale",
+      "command": "mark_stale",
+      "initiator": "Kernel derived check",
+      "requiresUserAdjudication": false,
+      "precondition": "confirmation revalidation found a changed identity; no network or canonical write"
+    },
+    {
+      "from": "provider_attempt_prepared",
+      "to": "stale",
+      "command": "mark_stale",
+      "initiator": "Kernel derived check",
+      "requiresUserAdjudication": false,
+      "precondition": "send-time revalidation failed or the user requested a rebuilt Manifest; the unsent prepared attempt is cancelled in the same workflow transaction"
+    },
+    {
+      "from": "provider_attempt_failed",
+      "to": "stale",
+      "command": "rebuild_manifest",
+      "initiator": "user",
+      "requiresUserAdjudication": false,
+      "precondition": "explicit retry or local no-send preparation; old attempt remains immutable; a new confirmation is required"
+    },
+    {
+      "from": "provider_attempt_uncertain",
+      "to": "stale",
+      "command": "rebuild_manifest",
+      "initiator": "user",
+      "requiresUserAdjudication": false,
+      "precondition": "explicit retry or local no-send preparation; uncertain attempt is never resumed; a new confirmation is required"
+    },
+    {
+      "from": "draft",
       "to": "manifest_prepared",
       "command": "prepare_manifest",
       "initiator": "user",
@@ -233,6 +273,38 @@
       "initiator": "user",
       "requiresUserAdjudication": false,
       "precondition": "attempt not started"
+    },
+    {
+      "from": "provider_attempt_failed",
+      "to": "cancelled",
+      "command": "cancel_review",
+      "initiator": "user",
+      "requiresUserAdjudication": false,
+      "precondition": "explicit user cancellation; preserve all original attempts and assessments; no canonical revision"
+    },
+    {
+      "from": "provider_attempt_uncertain",
+      "to": "cancelled",
+      "command": "cancel_review",
+      "initiator": "user",
+      "requiresUserAdjudication": false,
+      "precondition": "explicit user cancellation; preserve all original attempts and assessments; no canonical revision"
+    },
+    {
+      "from": "assessment_recorded",
+      "to": "cancelled",
+      "command": "cancel_review",
+      "initiator": "user",
+      "requiresUserAdjudication": false,
+      "precondition": "explicit user cancellation; preserve all original attempts and assessments; no canonical revision"
+    },
+    {
+      "from": "stale",
+      "to": "cancelled",
+      "command": "cancel_review",
+      "initiator": "user",
+      "requiresUserAdjudication": false,
+      "precondition": "explicit user cancellation; preserve all original attempts and assessments; no canonical revision"
     }
   ],
   "illegalTransitions": [
@@ -296,7 +368,11 @@
       "reason": "only the user can commit a canonical effect"
     }
   ],
-  "terminalStates": ["committed", "disposed", "cancelled"],
+  "terminalStates": [
+    "committed",
+    "disposed",
+    "cancelled"
+  ],
   "terminalTraceability": "Terminal states remain fully traceable: every committed/disposed Review keeps its immutable Receipt, revision event, resulting object references, and correction history readable in History and Search. Terminal states are never deleted or re-opened; corrections and compensations create new work objects that reference the original Review.",
   "recoverySemantics": "Each persisted state recovers on restart with no automatic network behavior: running attempts recover as provider_attempt_uncertain; confirmed Manifests never auto-send; effect drafts re-preview after a fresh revision check; commit idempotency is resolved by authorityCommandId lookup against Receipt/resulting object.",
   "correctionSemantics": "Corrections are appended Review child records referencing the immutable original assessment. A correction can only end in a typed effect through the same commit path; it never forms a second Resolution truth.",

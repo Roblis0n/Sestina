@@ -251,6 +251,7 @@ export function createKernelUnitOfWork(
               )
                 throw new KernelFault("illegal_transition");
               const draft = review.effectDraft;
+              if (draft?.invalidated) throw new KernelFault("stale_object");
               if (
                 draft?.effectId !== command.effectId ||
                 draft.previewHash !== command.previewHash ||
@@ -386,6 +387,9 @@ export function createKernelUnitOfWork(
             const recordOnly = ["record_only", "record_only_outcome"].includes(
               command.effectKind,
             );
+            const recordOnlyOutcome = recordOnly && review?.effectDraft?.payload && typeof review.effectDraft.payload === "object" && "outcome" in review.effectDraft.payload
+              ? review.effectDraft.payload.outcome : undefined;
+            if (recordOnlyOutcome !== undefined && (typeof recordOnlyOutcome !== "string" || !["rejected", "deferred", "reference_only", "assessment_disputed"].includes(recordOnlyOutcome))) throw new KernelFault("invalid_record");
             if (review)
               repos.reviews.compareAndSwap(
                 {
@@ -393,7 +397,7 @@ export function createKernelUnitOfWork(
                   status: recordOnly ? "disposed" : "committed",
                   terminalOutcome: {
                     receiptId: command.receiptId,
-                    kind: command.effectKind,
+                    kind: recordOnlyOutcome ?? command.effectKind,
                     resultingObjects: changed,
                   },
                   version: review.version + 1,
@@ -434,9 +438,10 @@ export function createKernelUnitOfWork(
               throw new KernelFault("stale_revision");
             options.faultInjection?.("revision_head");
             const lastAttemptId = review?.attemptIds.at(-1);
-            const attempt = lastAttemptId
+            const lastAttempt = lastAttemptId
               ? repos.attempts.getById(command.projectId, lastAttemptId)
               : undefined;
+            const attempt = lastAttempt?.manifestId === review?.manifestId ? lastAttempt : undefined;
             const availability: KernelAssessment["availability"] =
               attempt?.assessment?.availability ??
               (attempt?.status === "failed"
@@ -469,6 +474,18 @@ export function createKernelUnitOfWork(
               manifestId: manifest?.id ?? null,
               manifestIdentityHash: manifest?.identityHash ?? null,
               assessmentAttemptId: attempt?.id ?? null,
+              ...(recordOnlyOutcome ? { recordOnlyOutcome } : {}),
+              ...(review?.effectDraft?.payload ? { assessmentFacts: {
+                assessmentRequested: manifest?.provider !== null && manifest?.provider !== undefined,
+                availability: !attempt ? "not_requested" as const : attempt.status === "uncertain" ? "uncertain" as const : attempt.status === "cancelled" ? "cancelled" as const : attempt.failureCode === "provider_timeout" ? "timeout" as const : attempt.status === "failed" ? "failed" as const : attempt.assessment?.schemaValidated ? "available" as const : "invalid_response" as const,
+                request_binding_valid: attempt?.assessment?.requestBound ?? false,
+                response_schema_valid: attempt?.assessment?.schemaValidated ?? false,
+                quoted_span_integrity_valid: attempt?.assessment?.quotesLocated ?? false,
+                provider_assessment_available: attempt?.assessment?.envelope?.provider_assessment_available ?? false,
+                networkUsed: !!attempt && !["prepared", "cancelled"].includes(attempt.status),
+                exactRequestHash: manifest?.exactRequestHash ?? null,
+                providerIdentity: manifest?.provider ?? null,
+              } } : {}),
               createdAt: command.createdAt,
             };
             const output = parseKernelReceipt({

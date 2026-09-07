@@ -111,9 +111,8 @@ executing repository work or advancing the revision again. Conflicting reuse fai
 `projectKernelContext` computes a deterministic, bounded policy-1 projection from
 that snapshot. Explicit Issue/Evidence selection and Memory identity/version/hash
 are durable Manifest inputs; a no-Provider Manifest retains them too. A projection
-hash is an identity check, not semantic validation. G5 still owns preparing the
-actual Provider request and comparing all four identity layers immediately before
-any send. A saved confirmation never causes a send on startup.
+hash is an identity check, not semantic validation. The G5 application service prepares the actual Provider request and compares
+all four identity layers immediately before any send. A saved confirmation never causes a send on startup.
 
 `recoverKernelWorkflows` changes interrupted running attempts to uncertain once,
 without research revision changes or network activity. Derived views carry their
@@ -121,25 +120,66 @@ source revision; failed or stale rebuilds are reported as rebuilding and cannot
 change canonical state. A known older Brief file is likewise a derived cache;
 unknown content fails validation. G6 owns publication of the rebuilt Brief file.
 
-## Exact G4 continuation
+## Persistent application entry (G4/G5)
 
-Start from [effect contract 01](contracts/01-canonical-effects.json),
-[revision contract 03](contracts/03-project-state-revision.json) and the G4 step
-in plan 14. Implement the six typed effect handlers in the Kernel over the
-existing domain constructors and `ResearchUnitOfWork.kernel.commitCanonical`.
-Do not add another store, transaction owner, Receipt-only acceptance path, or
-Provider prerequisite for a legitimate user choice.
+Open an already migrated synthetic or explicitly opted-in target through
+`openResearchDeliberationKernel` from `@sestina/core`. Its trusted
+`resolveUser` callback accepts only the local application's live capability;
+never construct this callback from request fields. The service owns every
+transition and invokes the existing canonical UoW. It has no pending/analyzed
+business-state Map.
 
-Persist an explicit effect draft and object versions in the Review, produce a
-user-inspectable preview from one snapshot, obtain live user authority, and commit
-the exact approved result. Keep `record_only` distinct from object-creating
-acceptance. Reuse the existing Brief aggregate and canonical `argument_evidence`
-repository. Full semantic validation of each effect's business fields, application
-service wiring and user-facing error projection are G4 work, not G3 completion.
+The existing local HTTP session gate protects `POST /api/kernel/open`
+(`projectPath`) and `POST /api/kernel/reviews`. The latter requires the current
+`projectId`, an `action`, and for updates the `reviewId` and
+`expectedVersion`. The opt-in legacy `/api/reviews/*` POST family delegates
+to this same typed dispatcher. A generic accepted/modified-accepted payload
+cannot write a Receipt. The schema-20 default is not switched.
 
-Run `pnpm test:post-0.2:foundation` and `pnpm verify:public` as regression gates.
-Use `pnpm test:post-0.2:downstream` and its discovery mapping to turn the G4 generic
-acceptance/Provider-veto assertions GREEN as the real production entry adopts the
-Kernel. Keep G5–G13 gaps explicit until their own implementations pass. In
-particular, Provider orchestration, task-first UI, Electron and final production
-cutover are not supplied by this foundation.
+| Action | Persistent result and next step |
+| --- | --- |
+| create / edit / read / list | Saved suggestion, version, project revision and allowed next actions. Editing is limited to drafts. Terminal continuation creates a new Review referencing the original. |
+| prepare_manifest / manifest | Exact protected request body, hash and bytes, selected context and Memory, limitations, policy/schema and Provider generation. Ordinary Review reads omit the body; the explicit Manifest inspection returns it. |
+| confirm_manifest | Requires exact identity and explicit confirmed=true; mismatches save stale state before returning the reason. |
+| skip_assessment | New local no-send snapshot; preserved old attempts are not reused as current assessment. |
+| prepare_attempt / start_attempt | Monotonic attempt ordinal; start requires explicit confirmed=true and a freshly checked Manifest. Running is committed before network I/O. No retry or resume occurs implicitly. |
+| cancel_attempt / cancel | Running results become uncertain before cancellation; nonterminal cancellation preserves history and does not advance the project revision. |
+| prepare_effect / commit | Strict six-kind payload, stable allocated result identities, exact before/after preview and versions. Commit requires confirmed=true, previewHash and authorityCommandId. |
+| lookup | Resolve a lost response by authorityCommandId; return the original Receipt without another write. |
+| prepare_compensation | receiptId plus an explicit legal forward payload creates a new Review and preview; the normal user-confirmed commit remains required. |
+| append_correction | reviewId/version, attemptId, originalAssessmentHash and public reason append an immutable correction plus a new source-linked draft; the original assessment remains unchanged. |
+
+A Review DTO exposes durable workflow state, version, current project revision,
+all attempts and corrections, Manifest metadata and allowed next actions.
+Stale/conflict responses require rebuilding and confirming; they never merge or
+rebase automatically. Opening/restarting performs recovery only, with zero sends.
+
+## Exact G6 continuation
+
+G6 starts after the G4/G5 completion recorded in
+[implementation status](IMPLEMENTATION-STATUS.md). Read plan 14's G6 entry and
+[Progressive Research Brief](Sestina-v0.2.0-完整重构计划集/05-PROGRESSIVE-RESEARCH-BRIEF.md),
+then extend the existing Brief metadata and the six handlers in
+`packages/core/src/kernel-effects.ts`. Reuse the service in
+`packages/core/src/kernel-application.ts` and the actual application dispatcher
+in `apps/research-room/src/kernel-api.ts`; do not add another authority or store.
+
+The minimal next increment is section state, typed form DTOs and relationship
+picker queries so the user can supply question/task without JSON or object IDs.
+Carry missing coverage and limitations into the existing Manifest projection;
+preserve field diff, version history and conflict confirmation. G6 owns the
+rebuilt derived Brief file publication. The canonical Evidence write remains
+`argument_evidence`; picker choices become typed effect references.
+
+Retain the existing G6 UI RED mapping. Every subsequent UI change must be
+operated and visually inspected in the real built Research Room: Chinese and
+English; light, dark and high-contrast; supported desktop widths; long text;
+keyboard/focus and 200% text; affected loading, empty, error, stale, uncertain,
+success and restart states. Source review or generated snapshots alone do not
+constitute visual acceptance. G4/G5 changed no renderer and therefore make no
+new visual acceptance claim.
+
+G7–G13, task-first route cutover, Electron and final migration/release remain
+outside this handoff. Run affected tests during G6 and one final public gate;
+reuse established platform evidence unless a concrete platform change requires
+new native verification.

@@ -120,6 +120,7 @@ export function validateKernelRelations(
       m.provider === null
     )
       throw new KernelFault("corrupt_state");
+    if (a.assessment?.envelope?.providerIdentity && kernelHash(a.assessment.envelope.providerIdentity) !== kernelHash(m.provider)) throw new KernelFault("corrupt_state");
   }
   for (const c of corrections) {
     const a = attempts.find((a) => a.id === c.attemptId);
@@ -159,11 +160,12 @@ export function validateKernelRelations(
       const r = reviews.find((r) => r.id === p.reviewId);
       const m = manifests.find((m) => m.id === p.manifestId);
       const a = attempts.find((a) => a.id === p.assessmentAttemptId);
+      const currentAttempt = attempts.find((a) => a.id === r?.attemptIds.at(-1) && a.manifestId === p.manifestId);
       if (
         r?.terminalOutcome?.receiptId !== p.id ||
         r.manifestId !== p.manifestId ||
         (m?.identityHash ?? null) !== p.manifestIdentityHash ||
-        (r.attemptIds.at(-1) ?? null) !== p.assessmentAttemptId ||
+        (currentAttempt?.id ?? null) !== p.assessmentAttemptId ||
         (a?.assessment?.availability ??
           (a?.status === "failed"
             ? "failed"
@@ -331,8 +333,8 @@ function reader<T extends Item>(
 const transitions: Readonly<
   Record<KernelReview["status"], readonly KernelReview["status"][]>
 > = {
-  draft: ["manifest_prepared", "cancelled"],
-  manifest_prepared: ["manifest_confirmed", "cancelled"],
+  draft: ["manifest_prepared", "cancelled", "stale"],
+  manifest_prepared: ["manifest_confirmed", "cancelled", "stale"],
   manifest_confirmed: [
     "provider_attempt_prepared",
     "stale",
@@ -340,20 +342,22 @@ const transitions: Readonly<
     "disposed",
     "cancelled",
   ],
-  provider_attempt_prepared: ["provider_attempt_running", "cancelled"],
+  provider_attempt_prepared: ["provider_attempt_running", "cancelled", "stale"],
   provider_attempt_running: [
     "assessment_recorded",
     "provider_attempt_failed",
     "provider_attempt_uncertain",
   ],
   provider_attempt_uncertain: [
+    "cancelled",
+    "stale",
     "provider_attempt_prepared",
     "committed",
     "disposed",
   ],
-  provider_attempt_failed: ["manifest_confirmed", "committed", "disposed"],
-  assessment_recorded: ["stale", "committed", "disposed"],
-  stale: ["manifest_prepared"],
+  provider_attempt_failed: ["manifest_confirmed", "committed", "disposed", "stale", "cancelled"],
+  assessment_recorded: ["stale", "committed", "disposed", "cancelled"],
+  stale: ["manifest_prepared", "cancelled"],
   disposed: [],
   committed: [],
   cancelled: [],
@@ -532,7 +536,9 @@ export function createKernelRepositories(
           r.effectDraft &&
           kernelHash(r.effectDraft) !== kernelHash(old.effectDraft) &&
           r.baseProjectStateRevision !==
-            readKernelHead(db, r.projectId).revision
+            readKernelHead(db, r.projectId).revision &&
+          !(r.status === "stale" && r.effectDraft.invalidated === true && old.effectDraft &&
+            kernelHash({ ...r.effectDraft, invalidated: false }) === kernelHash({ ...old.effectDraft, invalidated: false }))
         )
           throw new KernelFault("stale_revision");
         reviewRelations(r);
@@ -686,6 +692,7 @@ export function createKernelRepositories(
       const a = parseKernelAttempt(input);
       return write(a.projectId, () => {
         const old = next(a, expectedVersion, attempts.getById);
+        if (a.assessment?.envelope?.providerIdentity && kernelHash(a.assessment.envelope.providerIdentity) !== kernelHash(manifests.getById(a.projectId, a.manifestId)?.provider ?? null)) throw new KernelFault("relation_mismatch");
         const allowed: Record<KernelAttempt["status"], readonly string[]> = {
           prepared: ["running", "cancelled"],
           running: ["completed", "failed", "uncertain", "cancelled"],

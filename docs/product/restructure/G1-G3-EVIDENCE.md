@@ -216,3 +216,40 @@ current working directory already contains ignored `spikes/` material. That
 unrelated material is preserved. Repository/history and Windows platform gates
 passed against the exact committed tree in an isolated verification checkout;
 the check itself is not weakened or bypassed.
+
+## G4–G5 execution evidence (current implementation)
+
+G4/G5 work continues on `codex/post-0.2-g4-g5` from the verified G1–G3
+completion `ae9a916deaa3c643f388ebda5ee4f2de1e044984`. The initial behavior RED
+commit is `21abc0b`; failures came from the existing record decoders rejecting
+persisted effect payloads and independent assessment facts. Additional focused
+RED runs exposed lost provenance, missing target CAS, stale cancellation,
+mislabelled compensation, escaped quote matching, ignored cancellation, and
+known failures misreported as uncertain. Each was corrected before its focused
+entry passed. Immutable G1 old-code recipes and release samples are unchanged.
+
+| User invariant | Implementation and executable evidence |
+| --- | --- |
+| A confirmed effect changes the named real object, or explicitly records no object change | `kernel-effects.ts` uses existing domain constructors and repositories. `kernel-effect-matrix.test.ts` covers all six effects across absent, skipped, successful, invalid, timeout and uncertain assessment paths. `kernel-evidence-links.test.ts` exercises the canonical Evidence plus both relation families. |
+| Only a live user session can approve this preview | `kernel-application.ts` resolves an opaque capability through the trusted application session; payload actor labels never resolve authority. `kernel-http.test.ts` exercises actual authenticated HTTP and rejection of generic acceptance. |
+| Object, terminal, event, head, command and Receipt stay atomic | The existing G3 UoW remains the transaction owner. The effect matrix injects failures at each canonical write boundary, including rollback of direction-change invalidations. Workflow integration covers conflict preservation, supersession, resolution, compensation and lost-response lookup. |
+| A restart never sends or guesses the outcome | The actual application subprocess is killed after durable running and before a response. `kernel-application-crash.test.ts` reopens as uncertain with zero sends. Provider-boundary tests cover failed response persistence and immutable correction children. |
+| The approved bytes are the sent bytes | `kernel-transport.test.ts` runs the production adapter against synthetic loopback TCP fixtures: exact body, disconnect, timeout, redirect refusal, invalid/oversized response and zero connections after revision/configuration drift. |
+| Assessment facts never assert semantic correctness | The four independent flags, Provider identity and bounded structured opinion survive restart. Substantive remains a Provider label. Quotes are matched to selected text, not JSON keys; neither valid syntax nor quote location creates support. |
+
+The two existing downstream domain entries `findings.test.ts` (8 assertions)
+and `availability.test.ts` (4 assertions) now use the real persistent application
+path and pass. Their original behavior claims remain; positive generic
+acceptance cases now supply an explicit typed effect. Both files are also in
+the foundation gate, so these repaired contracts cannot silently regress.
+The three domain assertions in `remaining-findings.test.ts` remain assigned to
+G7/G10/G12; seven built-UI assertions remain assigned to G6/G7/G9. Their prior
+RED evidence is reused; unrelated later-gate failures were not rerun.
+
+No renderer, layout, route UI, native dependency, installer, migration switch,
+release tag or publication changes are part of G4/G5. Actual built-server
+verification remains in the public gate; the previous three-platform artifact
+matrix is not repeated. No real Provider or user project is used.
+
+The final integrated public-gate result is recorded here after execution;
+G4/G5 are not yet claimed complete by this evidence entry.

@@ -96,14 +96,17 @@ code-fact question; it does not claim the target capability is implemented.
 | G1 — RED tests and immutable compatibility fixtures | `completed_and_verified` | Actual behavioral RED entries, pinned old-code fixtures and native test environments are implemented; later-gate RED remains explicit in [execution evidence](G1-G3-EVIDENCE.md). |
 | G2 — schema and copy-on-write migration | `completed_and_verified` | Opt-in schema 25, verified copy migration and explicit recovery passed the public gate and native Windows x64, macOS arm64 and Linux x64 foundation/platform gates. |
 | G3 — repositories, transaction and snapshots | `completed_and_verified` | Durable repositories, unified canonical transaction, revision/command identity and snapshots passed fault, process-death, race and native platform evidence. |
-| G4–G13 | `not_started` | Full effect handlers, Provider orchestration, production interface and final cutover remain downstream. |
+| G4 — typed effects and user Authority | `in_progress` | Six handlers and application integration implemented; final integrated public verification pending. |
+| G5 — persistent Review and Provider attempts | `in_progress` | Persistent orchestration and production adapter integrated; final integrated public verification pending. |
+| G6–G13 | `not_started` | Progressive forms, remaining domains, production interface and final cutover remain downstream. |
 
 Completion evidence is the implementation tree at
 `e08c760e0adcf63c1ea54b22103b903b5e17ec83`, verified on 2026-09-06 by
 [CI run 34031380557](https://github.com/Roblis0n/Sestina/actions/runs/34031380557)
 and the local checks documented in the execution record. No required G1–G3
 verification remains blocked. The final status-only update does not change
-that verified runtime. G4 begins at the [documented continuation](G1-G3-OPERATIONS.md).
+that verified runtime. The current G4/G5 application entry and G6 continuation are in the
+[operations record](G1-G3-OPERATIONS.md).
 
 G0 changes no production schema, runtime data, UI route, Provider behavior,
 Electron lifecycle, legacy cutover, or release artifact. It creates an

@@ -30,6 +30,10 @@ import {
   type CodexHostInspection,
 } from "@sestina/mcp";
 import { isAppLanguage, type LanguagePreferenceStore } from "./language-preferences.js";
+import { KernelFault } from "@sestina/core";
+import { KernelApplicationFault, type KernelProvider } from "@sestina/core";
+import { KernelApplicationApi } from "./kernel-api.js";
+import { createKernelOpenAICompatibleProvider } from "./openai-compatible-provider.js";
 import { createOpenAICompatibleDeliberationParticipant, createOpenAICompatibleProvider, createOpenAICompatibleSecondOpinionProvider, OpenAICompatibleProviderError, testOpenAICompatibleProviderConnection } from "./openai-compatible-provider.js";
 import { OPENAI_COMPATIBLE_API_KEY_REF, ProviderSettingsError, SECOND_OPINION_OPENAI_COMPATIBLE_API_KEY_REF, type ProviderConfigurationService, type SaveOpenAICompatibleProviderInput } from "./provider-settings.js";
 
@@ -62,6 +66,7 @@ export interface ClosedExternalAppHostRuntime {
 }
 
 export interface ResearchRoomServerOptions {
+  readonly kernelProvider?: () => Promise<KernelProvider | undefined>;
   readonly host?: string;
   readonly port?: number;
   readonly provider?: ResearchRoomProvider;
@@ -279,6 +284,7 @@ export class ResearchRoomHttpApplication {
   #pickerAbort: AbortController | undefined;
   #pendingInitialization: PendingProjectInitialization | undefined;
   readonly #pilotAbort = new Map<string, AbortController>();
+  readonly #kernelApi: KernelApplicationApi;
 
   constructor(
     private readonly provider?: ResearchRoomProvider,
@@ -293,9 +299,18 @@ export class ResearchRoomHttpApplication {
     private readonly secondOpinionProviderConfigurationService?: ProviderConfigurationService,
     private readonly clientAssetRoot = DEFAULT_CLIENT_ASSET_ROOT,
     private readonly closedExternalAppHostRuntime: ClosedExternalAppHostRuntime = createProductionClosedExternalAppHostRuntime(),
-  ) {}
+    kernelProvider?: () => Promise<KernelProvider | undefined>,
+  ) {
+    this.#kernelApi = new KernelApplicationApi({ timeoutMs: providerTimeoutMs,
+      provider: kernelProvider ?? (async () => {
+        const snapshot = await this.providerConfigurationService?.loadRuntimeSnapshot();
+        return snapshot ? createKernelOpenAICompatibleProvider(snapshot) : undefined;
+      }),
+    });
+  }
 
   close(): void {
+    this.#kernelApi.close();
     this.#pickerAbort?.abort(); this.#pickerAbort = undefined;
     for (const controller of this.#pilotAbort.values()) controller.abort();
     this.#pilotAbort.clear(); this.#pendingInitialization = undefined; this.#opened?.core.close(); this.#opened = undefined; this.#recoveryRoot = undefined;
@@ -565,6 +580,7 @@ export class ResearchRoomHttpApplication {
   }
 
   private async openProject(input: unknown): Promise<ProjectOpenResult> {
+    this.#kernelApi.close();
     if (!isRecord(input)) throw new HttpProblem(400, "invalid_input", "Choose a local project directory.");
     const projectPath = text(input.projectPath, 16_384);
     if (projectPath === undefined) throw new HttpProblem(400, "invalid_input", "Choose a local project directory.");
@@ -930,6 +946,13 @@ export class ResearchRoomHttpApplication {
       }
 
       if (request.method === "POST" || request.method === "DELETE") this.authorize(request);
+      if (request.method === "POST" && url.pathname === "/api/kernel/open") {
+        this.#opened?.core.close(); this.#opened = undefined;
+        json(response, 200, { ok: true, value: await this.#kernelApi.open(await readBody(request)) }); return;
+      }
+      if (request.method === "POST" && (url.pathname === "/api/kernel/reviews" || (this.#kernelApi.active && url.pathname.startsWith("/api/reviews/")))) {
+        json(response, 200, { ok: true, value: await this.#kernelApi.execute(await readBody(request)) }); return;
+      }
       if (request.method === "POST" && url.pathname === "/api/preferences/language") { json(response, 200, { ok: true, value: await this.setLanguagePreference(await readBody(request)) }); return; }
       await this.requireLanguagePreference();
       if (request.method === "GET" && url.pathname === "/api/provider") { json(response, 200, { ok: true, value: await this.providerStatus() }); return; }
@@ -1354,6 +1377,11 @@ export class ResearchRoomHttpApplication {
       }
       throw new HttpProblem(404, "not_found", "The local endpoint was not found.");
     } catch (error) {
+      if (error instanceof KernelFault) {
+        const status = error.code === "authority_required" ? 403 : error.code === "invalid_record" ? 400 : 409;
+        json(response, status, { ok: false, error: { code: error.code, changedObjects: error.changedObjects,
+          ...(error instanceof KernelApplicationFault ? { staleReasons: error.reasons } : {}) } }); return;
+      }
       const problem = publicError(error); json(response, problem.status, problem.body);
     }
   }
@@ -1377,6 +1405,7 @@ export function createResearchRoomServer(options: ResearchRoomServerOptions = {}
     options.secondOpinionProviderConfigurationService,
     options.clientAssetRoot,
     options.closedExternalAppHostRuntime,
+    options.kernelProvider,
   );
   const server = createServer((request, response) => { void application.handle(request, response); });
   server.on("clientError", (_error, socket) => { socket.end("HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n"); });

@@ -1,5 +1,5 @@
 import { it, expect } from "vitest";
-import { parseKernelReview, parseKernelAssessment, kernelHash } from "@sestina/research";
+import { parseKernelReview, parseKernelAssessment, parseArgumentEvidence, kernelHash } from "@sestina/research";
 import { draft, ids, at } from "../kernel-fixtures.js";
 
 it("G4: a saved effect retains its exact payload and inspectable preview after decoding", () => {
@@ -10,6 +10,14 @@ it("G4: a saved effect retains its exact payload and inspectable preview after d
     baseProjectStateRevision: 1, objectVersions: [], payload: preview.payload, preview,
     authorityCommandId: ids.create("rpev_"), allocatedIds: [], preparedAt: at, actorId: "synthetic-owner" };
   expect(parseKernelReview({ ...review, effectDraft }).effectDraft).toEqual(effectDraft);
+});
+
+it("G4: evidence retains its stated provenance instead of silently discarding it", () => {
+  const provenance = { citation: "Synthetic laboratory record A", locator: "observation 3" };
+  const parsed = parseArgumentEvidence({ id: ids.create("revd_"), projectId: ids.create("rprj_"), kind: "literature_source",
+    summary: "Synthetic observation only.", state: "current", inferenceCapacity: "descriptive", provenance,
+    source: { actor: { kind: "user", actorId: "synthetic-owner" }, authority: "user_recorded", recordedAt: at }, version: 1 });
+  expect(parsed.ok && JSON.parse(JSON.stringify(parsed.value)).provenance).toEqual(provenance);
 });
 
 it("G5: protocol integrity fields survive independently without semantic promotion", () => {

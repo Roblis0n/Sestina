@@ -247,3 +247,48 @@ approval requirement and does not override the authorized implementation.
   (G10).
 - Connect-time Provider DNS/address pinning and explicit proxy policy (G10).
 - Legacy active-path removal and final consistency proof (G13).
+
+## G4–G5 integration clarification: derived invalidation
+
+The actual application A/B and configuration-change tests exposed a conflict:
+contract 04 requires stale identity to be saved before any network connection,
+while contract 02 and the G3 repository omitted `prepared -> stale` and the
+failed/uncertain rebuild entries. The omission returned `illegal_transition`
+and rolled back the stale marker. Contract 02 now enumerates these derived
+invalidation/rebuild transitions. Prepared attempts are cancelled atomically;
+running attempts still require a recorded uncertain/failure outcome first.
+This adds no Authority, terminal reopening or automatic send. The discriminating
+tests are in `tests/post-0.2/foundation/kernel-application.test.ts`.
+
+New canonical creations have entity version 1 even when domain construction
+includes proposal and user-acceptance transitions before the first save.
+Brief proposals and confirmation likewise form one persisted aggregate update,
+advancing its version once. These operations reuse the existing constructors;
+the single G3 commit remains the owner of object versions and project revisions.
+
+Cancellation of failed, uncertain, assessed and stale nonterminal Reviews is
+now explicitly enumerated in contract 02, following plan 04's user-cancellation
+rule. It changes only workflow state; running I/O first becomes uncertain,
+and terminal records remain immutable. The stale-cancellation regression
+previously returned `illegal_transition` for this legal user action.
+
+G4/G5 public design decisions:
+
+- Kernel allocates result IDs and nested Brief IDs before confirmation. Drafts
+  retain payload, object versions, exact preview, command identity and actor
+  binding. Invalidated drafts retain user work but cannot be committed.
+- Compensation is explicit, linked to the old Receipt, and uses a new Review
+  with one of the same six legal effects. Ordinary continuation is not labelled
+  compensation. Previews report `compensating_only` or `no_content_change`;
+  they never promise deletion or revision rollback.
+- New Evidence records require citation/locator provenance, with kind, recorder
+  and time supplied by the canonical record and its user source. Initial links
+  remain unproven/disputed/stale; no Provider result promotes support.
+- A Receipt's assessment facts refer to its current Manifest. Earlier attempts
+  remain immutable Review history; a subsequent local no-send snapshot does not
+  borrow an earlier assessment or its request binding.
+- Only AbortControllers and the opaque local session capability live in process
+  memory. Running attempts are durable before network I/O; recovery never sends.
+  Known protocol/transport failures and uncertain delivery remain distinct.
+- New application services use the schema-25 opt-in entry. Default schema-20
+  historical behavior remains isolated until the scheduled production cutover.

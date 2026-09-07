@@ -1,5 +1,9 @@
 export { openSestina, SestinaCore } from "./sestina-core.js";
 export { RandomIdFactory, SystemClock } from "./id-factory.js";
+export { ResearchDeliberationKernel, openResearchDeliberationKernel, KernelApplicationFault, serializeKernelProviderRequest, decodeProviderAssessment,
+  type KernelApplicationOptions, type KernelProvider } from "./kernel-application.js";
+export { parseCanonicalEffect, type CanonicalEffectPayload } from "./kernel-effects.js";
+export { KernelFault, kernelRecord, kernelText, kernelInteger } from "@sestina/research";
 export type { BriefProjectionPublication, BriefProjectionPublisher, CoreBriefMutation, CoreBriefState, CoreDatabaseDiagnostics, CoreReviewSummary, DeterministicReviewResult, EpisodeIntegritySummary, OpenSestinaOptions } from "./sestina-core.js";
 export type {
   AnalyzedResearchRoomReview,
