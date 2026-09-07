@@ -282,3 +282,107 @@ binding tests additionally reproduced an Issue preview accepting a foreign
 project's target, and a partial Evidence binding being silently discarded by
 the reusable legacy decoder. The typed boundary now rejects both before preview
 confirmation. These fixes affect the new effect parser/builder only.
+
+## G6/G7 application, privacy and visual evidence
+
+The G6/G7 branch is `codex/post-0.2-g6-g7`, based on G4/G5 completion
+`7a8a3cb`. Implementation commit `f17fd7f6fc4012ca674d16a9fc312a13736458dc`
+adds the real application paths; `4714bb20fed6a79f0f4fa773b05b1f4090230d17`
+fixes conflict-field copy and separates transport response tests from the
+deliberately silent timeout fixture. Both retain the existing Kernel, canonical
+transaction, persistent Review and authenticated application dispatcher.
+
+| User result / invariant | Executable evidence in `tests/post-0.2/foundation/` |
+| --- | --- |
+| A question or task starts a native Brief; 13 fields retain provided, intentionally empty and missing states. Typed thresholds do not invent legacy meaning. | `progressive-brief.test.ts` |
+| Current-project object selection and effect-scoped Coverage use one snapshot; stored Manifest and exact request bind the same complete Coverage. | `progressive-brief.test.ts`, `brief-coverage-binding.test.ts` |
+| Candidates survive reload; an intervening commit requires three-way choices and a fresh unchecked preview confirmation. | `production-ui.spec.ts`, `production-workflows.spec.ts` |
+| Derived Brief publication is recoverable and cannot overwrite unknown files or become a second source of truth. Missing-file repair explicitly validates the migrated database. | `brief-publication.test.ts`, `brief-repair-http.test.ts`, `production-workflows.spec.ts` |
+| Original assessments and Findings remain immutable; four correction actions create linked work. A second opinion is isolated and optional; only the child's canonical result closes the correction. | `review-correction.test.ts`, `correction-finding-path.test.ts`, `production-workflows.spec.ts` |
+| Memory source, expiry, sensitivity and send policy are enforced before selection. Recall never implies selection or Evidence. | `kernel-memory.test.ts`, `memory-source-lifecycle.test.ts` |
+| Forget removes controlled local bodies without changing historical hashes; failures roll back the canonical privacy transaction, while later filesystem failures retain resumable cleanup and do not restore text. | `privacy-transaction.test.ts`, `legacy-memory-forget.test.ts`, `privacy-maintenance.test.ts` |
+| Managed backups can be deleted or explicitly retained with restore blocked. Unknown copies are reported as blocked, never overwritten or counted as removed. | `privacy-maintenance.test.ts`, `downgrade.test.ts`, `production-workflows.spec.ts` |
+| Draft bridge capability is separate, expiring and revocable, including uploads in progress; wrong project, oversized content and old tokens cannot create drafts. | `host-draft-intake.test.ts` |
+| Old Appeal, Room and Pilot states retain read/export and idempotent source-linked conversion; old writes are rejected by the application server. | `legacy-states.test.ts`, `production-workflows.spec.ts` |
+
+The fixture source, Schema and hashes remain pinned to old code. All 49 existing
+legacy-state samples were also exercised through the actual application API;
+the new HTTP assertions use the already verified complete sample cache. The
+optional cache setting does not weaken hash verification or mutate those files.
+Agent Corrector's bounded generator checks, companion handoff and negative
+authority tests passed; no model-quality evaluation was substituted for them.
+
+Behavioral failures were observed before the affected implementations: native
+minimal Brief creation, incomplete Coverage accepted as bound context, missing
+derived-file recovery, historical body retention after Forget, and application
+Receipt loss after reload. Their fixed assertions exercise canonical objects,
+actual persisted state or real application requests rather than test-only
+helpers. The G1 discovery now closes P1-04 through the typed built editor and
+P2-01 through Finding selection and the linked correction result. P1-06 remains
+G9 RED; P2-02 remains G10/G12 RED. Their independent commands and assertions are
+retained and were not rerun as unrelated failures.
+
+### Built interface and running motion
+
+The existing Product Design review workflow and motion references were applied
+to the actual built Research Room. Manual browser operation covered typed Brief,
+Decision, Evidence and Issue commits, saved results after server restart,
+context use/Forget and the context drawer. The built browser suite operated 12
+complete scenarios, all passing, including Chinese/English with light, dark and
+high-contrast themes, desktop widths, 200% text, keyboard/focus, long content and
+22-entry pagination. It also operated correction/second-opinion unavailability,
+uncertain recovery without resending, Host enable/revoke, historical export and
+conversion, missing-file repair, and competing Brief candidates. Actual rendered
+screens were inspected, including empty, error, stale, uncertain and saved states.
+
+Observed visual defects were fixed in the affected components: drawer height
+and scrolling, duplicated context introduction, confirmation focus after Forget,
+the creation form remaining open after save, 200% header-button overflow, and an
+internal reference-field label in the three-way comparison. The latter's final
+focused built-browser run passed after the copy repair. The conflict screenshot
+now captures the full comparison section rather than only its heading. Key
+screens are retained as local test output, not committed research or build state.
+
+The drawer was operated through opening, closing, rapid reversal and Escape.
+Live browser frame samples observed translation approaching zero over roughly
+212 ms and opacity reaching one, followed by a stable end state. Reduced-motion
+operation had zero transition duration and retained keyboard/focus behavior.
+There is no claim of 60 fps or general performance improvement. No extra motion
+framework, simulated success or automatic network retry was introduced.
+
+Copy now distinguishes saved drafts, saved research changes, uncertain sending
+and retained backups. For example, `ledger_only` is presented as “尚无模型评估” /
+“No model assessment”; `objectReferences` is “关联研究对象” / “Related research
+objects”. Backup retention explicitly says that forgotten content may remain in
+those files and that restoration is blocked. Provider-received content and manual
+exports remain outside the controlled local cleanup boundary.
+
+### Integrated verification
+
+The first full public run passed 331 selected production regressions and 340 of
+342 foundation assertions, then stopped on two real-transport cases whose shared
+150 ms fixture deadline expired before the loopback server observed a body.
+The same eight transport assertions passed in isolation. The fixture now uses
+a distinct bounded deadline for its intentionally silent responder and allows
+the response-content cases to reach the responder under load. Exact bytes,
+one send, terminal status, restart without resending, and zero sockets for stale
+bindings remain asserted. This is a failure-driven rerun, not a weakened gate.
+
+Final `pnpm verify:public` passed with exit code 0 on 2026-09-07 at
+`4714bb20fed6a79f0f4fa773b05b1f4090230d17`, using the existing clean verification
+checkout. It passed 331 production regressions in 40 files, 342 foundation and
+application assertions in 46 files, all 10 G0 contract/state inputs, immutable
+fixture/discovery/Schema checks, production lint/types, repository, documentation,
+architecture and public-history checks. No tests in those full runs were skipped.
+The separate 12-scenario built-interface suite passed; the final copy-only repair
+also passed a rebuilt focused conflict scenario. Final status/evidence prose
+receives only documentation and contract/status checks.
+
+Affected native file publication, privacy cleanup and restore refusal were tested
+on Windows x64 with synthetic projects and real database/filesystem operations.
+No installer, native dependency, Electron assembly, release archive or published
+artifact changed; the previously verified three-platform release matrix was not
+repeated. No real Provider or user research project was used. G6 and G7 are
+`completed_and_verified`, with no remaining scope blocker. G8–G13 remain
+unimplemented; the exact G8 entry is in
+[operations](G1-G3-OPERATIONS.md#exact-g8-continuation).

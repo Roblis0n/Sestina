@@ -99,8 +99,8 @@ code-fact question; it does not claim the target capability is implemented.
 | G3 — repositories, transaction and snapshots | `completed_and_verified` | Durable repositories, unified canonical transaction, revision/command identity and snapshots passed fault, process-death, race and native platform evidence. |
 | G4 — typed effects and user Authority | `completed_and_verified` | Six real canonical effects, bound previews, live user authority, compensation and actual application entry passed the effect, conflict and rollback matrix. |
 | G5 — persistent Review and Provider attempts | `completed_and_verified` | Durable Review lifecycle, exact confirmed outbound bytes, attempt recovery, independent assessment facts and authenticated application/API integration passed the final public gate. |
-| G6 — progressive Brief and object operations | `in_progress` | Implementation and affected application/visual checks are present; final integrated public verification is pending. |
-| G7 — correction, Memory, Host and historical paths | `in_progress` | Unified application paths and targeted checks are present; final integrated public verification is pending. |
+| G6 — progressive Brief and object operations | `completed_and_verified` | Minimal native Brief, typed fields and references, shared Coverage, durable candidates, conflict confirmation, actual object forms and derived-file repair passed application, built-interface and final public verification. |
+| G7 — correction, Memory, Host and historical paths | `completed_and_verified` | Linked correction and optional isolated assessment, Memory governance and resumable copy handling, draft-only Host/Skill intake and historical read/export/conversion passed application, privacy, recovery, visual and final public verification. |
 | G8–G13 | `not_started` | Derived projections, global interface replacement, Electron and final cutover remain downstream. |
 
 Completion evidence is the implementation tree at
@@ -122,6 +122,20 @@ The 12 G4/G5 domain RED assertions now pass through the real persistent entry
 and are included in the foundation gate. G6+ RED remains explicitly assigned;
 no target UI, Electron or final cutover is claimed. There is no remaining
 G4/G5 verification blocker. G6 starts at the [exact continuation](G1-G3-OPERATIONS.md).
+
+G6/G7 completion is the implementation tree at
+`4714bb20fed6a79f0f4fa773b05b1f4090230d17` on `codex/post-0.2-g6-g7`,
+based on G4/G5 completion `7a8a3cb`. On 2026-09-07 the final
+`pnpm verify:public` passed with exit code 0: 331 production regressions,
+342 foundation/application assertions, all 10 contract/state inputs, and all
+remaining public checks. The 12 built-interface scenarios passed; the final
+conflict-copy repair additionally passed its focused rebuilt browser scenario.
+Manual operation and actual rendered-state/motion inspection are recorded in
+[execution evidence](G1-G3-EVIDENCE.md#g6g7-application-privacy-and-visual-evidence).
+No G6/G7 scope or verification blocker remains. Final completion prose is checked
+with document and contract/status checks without rerunning the verified runtime.
+G8 begins at [derived projections and recovery consistency](G1-G3-OPERATIONS.md#exact-g8-continuation).
+The default interface and production data have not been cut over.
 
 G0 changes no production schema, runtime data, UI route, Provider behavior,
 Electron lifecycle, legacy cutover, or release artifact. It creates an
