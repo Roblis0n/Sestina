@@ -1,6 +1,7 @@
 import {
   KernelFault,
   KERNEL_TERMINAL_STATES,
+  KERNEL_BRIEF_SECTIONS,
   kernelRecord,
   kernelText,
   kernelInteger,
@@ -10,6 +11,8 @@ import {
   manifestIdentity,
   freezeKernel,
   parseStructuredProviderAssessment,
+  parseReviewDraftEnvelope,
+  parseResearchArtifact,
   type KernelReview,
   type KernelManifest,
   type KernelAttempt,
@@ -30,11 +33,15 @@ import {
   recoverKernelWorkflows,
   readKernelBriefMetadata,
   writeKernelBriefMetadata,
-  type KernelProjectionSelection,
+  readKernelLegacyRecord,
 } from "@sestina/research-store";
 import type { StorageDatabase } from "@sestina/storage";
 import { RandomIdFactory, SystemClock } from "./id-factory.js";
 import { openKernelProject } from "./kernel-migration.js";
+import { projectBrief, briefRelationships, briefCoverage, briefFieldDiff, kernelObjectLabels, projectReviewContext, type KernelReviewContextSelection } from "./kernel-brief.js";
+import { projectMemory, projectMemorySource, buildMemoryChange, assertMemorySelection } from "./kernel-memory.js";
+import { publishKernelBriefFile } from "./kernel-brief-publisher.js";
+import { inspectKernelPrivacyCopies, cleanupKernelPrivacyCopies, kernelPrivacyCleanupStatus } from "./kernel-privacy-maintenance.js";
 import {
   buildCanonicalEffect,
   parseCanonicalEffect,
@@ -52,6 +59,7 @@ export interface KernelApplicationOptions {
   /** Only the local application's session gate supplies this callback; never request data. */
   readonly resolveUser: (capability: unknown) => ResearchActor | undefined;
   readonly provider?: () => Promise<KernelProvider | undefined>;
+  readonly secondOpinionProvider?: () => Promise<KernelProvider | undefined>;
   readonly timeoutMs?: number;
   readonly idFactory?: IdFactory;
   readonly clock?: Clock;
@@ -233,6 +241,10 @@ export class ResearchDeliberationKernel {
           user.actorId === c.actor.actorId
         );
       },
+      authorizeGovernance: c => {
+        const user = options.resolveUser(c.authorityCapability);
+        return user?.kind === "user" && c.actor.kind === "user" && user.actorId === c.actor.actorId && ["memory_governance_change","privacy_redaction"].includes(c.effectKind);
+      },
       ...(options.faultInjection
         ? { faultInjection: options.faultInjection }
         : {}),
@@ -346,7 +358,7 @@ export class ResearchDeliberationKernel {
         return freezeKernel({
           review,
           projectStateRevision: head.revision,
-          staleReasons: stale ? ["project_revision_changed"] : [],
+          staleReasons: [...new Set([...(stale ? ["project_revision_changed"] : []), ...(review.staleReason ? review.staleReason.split(",") : [])])],
           attempts,
           corrections: this.all(repos.corrections).filter(
             (c) => c.reviewId === review.id,
@@ -362,6 +374,107 @@ export class ResearchDeliberationKernel {
         });
       }),
     );
+  }
+  brief(capability: unknown) {
+    this.user(capability);
+    return value(this.#uow.workflow(() => {
+      const snapshot = readKernelSnapshot(this.database, this.projectId);
+      return { ...projectBrief(snapshot), coverage: {
+        patch_brief: briefCoverage(snapshot, "patch_brief", "Inspect the Brief change"),
+        formal_direction_change: briefCoverage(snapshot, "formal_direction_change", "Inspect the research direction change"),
+      }, fileProjection: this.database.get<{status: string; source_revision: number}>("SELECT status,source_revision FROM research_projection_metadata WHERE project_id=? AND projection_kind='brief_file'", this.projectId) ?? null };
+    }));
+  }
+  publishBrief(capability: unknown) { this.user(capability); return publishKernelBriefFile(this.database, this.projectId); }
+  privacyStatus(capability: unknown) { this.user(capability); return kernelPrivacyCleanupStatus(this.database, this.projectId); }
+  privacyCopyPreview(capability: unknown) { this.user(capability); return inspectKernelPrivacyCopies(this.database, this.projectId); }
+  cleanupPrivacy(planHash: string, resume: boolean, capability: unknown, copyAction: "delete" | "retire" = "delete") { this.user(capability); kernelText(planHash, 64); return cleanupKernelPrivacyCopies(this.database, this.projectId, planHash, resume, undefined, copyAction); }
+  memory(capability: unknown) { this.user(capability); const snapshot = readKernelSnapshot(this.database,this.projectId); return { projectStateRevision:snapshot.head.revision,items:projectMemory(snapshot,this.now()) }; }
+  recallMemory(trigger: string, objectIds: readonly string[], capability: unknown) {
+    this.user(capability);
+    if(!["add_context","review_target","brief_workset","resume"].includes(trigger) || objectIds.length>64)throw new KernelFault("invalid_record");
+    const snapshot=readKernelSnapshot(this.database,this.projectId);
+    if(objectIds.some(id=>!snapshot.state.objects.some(o=>o.id===id)))throw new KernelFault("relation_mismatch");
+    return projectMemory(snapshot,this.now()).filter(p=>p.recallEligible&&(trigger==="add_context"||trigger==="resume"||p.item.state!=="forgotten"&&(p.item.source.kind==="project_object"&&objectIds.includes(p.item.source.objectId)||"refs" in p.item.content&&p.item.content.refs.some(r=>objectIds.includes(r.id))))).map(p=>({...p,recallTrigger:trigger,selected:false}));
+  }
+  governMemory(commandId: string, expectedRevision: number, input: unknown, capability: unknown) {
+    const actor=this.user(capability);kernelText(commandId,160);kernelInteger(expectedRevision);
+    const previewHash=kernelHash({input,expectedRevision});
+    const prior=value(this.#uow.lookupCommand(this.projectId,commandId));
+    if(prior){if(prior.previewHash!==previewHash)throw new KernelFault("idempotency_conflict");return prior;}
+    const snapshot=readKernelSnapshot(this.database,this.projectId);
+    if(snapshot.head.revision!==expectedRevision)throw new KernelFault("stale_revision");
+    const at=this.now(), built=buildMemoryChange(snapshot,input,actor,at,this.#ids);
+    const receipt = value(this.#uow.commitCanonical({ projectId:this.projectId,authorityCommandId:commandId,reviewId:null,expectedReviewVersion:null,expectedProjectStateRevision:expectedRevision,
+      effectId:this.#ids.create("rpev_"),effectKind:built.after.state==="forgotten"?"privacy_redaction":"memory_governance_change",previewHash,objectVersions:built.objectVersions,actor,authorityCapability:capability,publicReason:built.publicReason,
+      receiptId:this.#ids.create("rrcp_"),eventId:this.#ids.create("rpev_"),createdAt:at,
+    }, repos => { const result=built.before?repos.workingMemory.compareAndSwap(built.after,built.before.version):repos.workingMemory.create(built.after);if(!result.ok)throw new KernelFault("invalid_record"); }));
+    if (built.after.state === "forgotten") {
+      for (const [id, controller] of this.#active) {
+        if (this.#uow.repositories.attempts.getById(this.projectId,id)?.failureCode === "memory_forgotten") controller.abort("memory_forgotten");
+      }
+    }
+    return receipt;
+  }
+  memorySource(input: unknown, capability: unknown) { this.user(capability); return projectMemorySource(readKernelSnapshot(this.database, this.projectId), input); }
+  relationships(input: unknown, capability: unknown) {
+    this.user(capability);
+    return briefRelationships(readKernelSnapshot(this.database, this.projectId), input);
+  }
+  artifactContext(input: unknown, capability: unknown) {
+    this.user(capability);
+    const ref = kernelRecord(input, ["id", "version"]); kernelText(ref.id, 160); kernelInteger(ref.version);
+    const snapshot = readKernelSnapshot(this.database, this.projectId);
+    const object = snapshot.state.objects.find(o => o.kind === "artifact" && o.id === ref.id);
+    if (object?.version !== ref.version) throw new KernelFault("stale_object");
+    const parsed = parseResearchArtifact(object.data);
+    if (!parsed.ok || parsed.value.tombstone) throw new KernelFault("relation_mismatch");
+    const artifact = parsed.value, revision = artifact.revisions.find(v => v.id === artifact.activeRevisionId);
+    if (!revision) throw new KernelFault("relation_mismatch");
+    let root = revision;
+    const seen = new Set<string>();
+    while (root.parentRevisionId) { if (seen.has(root.id)) throw new KernelFault("corrupt_state"); seen.add(root.id); const parent = artifact.revisions.find(v => v.id === root.parentRevisionId); if (!parent) throw new KernelFault("corrupt_state"); root = parent; }
+    return { projectStateRevision: snapshot.head.revision, artifactId: artifact.id, artifactVersion: artifact.version, title: artifact.title, revisionId: revision.id, contentHash: revision.content.contentHash, lineageRootRevisionId: root.id };
+  }
+  legacyHistory(sourceKind: string, page: { limit: number; cursor?: string }, capability: unknown) {
+    this.user(capability);
+    if (!["research_room_receipts", "correction_appeals", "deliberation_rooms", "closed_external_app_pilots"].includes(sourceKind)) throw new KernelFault("invalid_record");
+    kernelInteger(page.limit);
+    if (page.limit < 1 || page.limit > 50) throw new KernelFault("invalid_record");
+    if (page.cursor !== undefined) kernelText(page.cursor, 160);
+    return value(this.#uow.workflow(() => {
+      const rows = this.database.all<{ source_id: string }>("SELECT source_id FROM research_legacy_mappings WHERE project_id=? AND source_kind=? AND source_id>? ORDER BY source_id LIMIT ?", this.projectId, sourceKind, page.cursor ?? "", page.limit + 1);
+      return { items: rows.slice(0, page.limit).map(row => readKernelLegacyRecord(this.database, this.projectId, sourceKind, row.source_id)), ...(rows.length > page.limit ? { nextCursor: requireKernelValue(rows[page.limit - 1]).source_id } : {}) };
+    }));
+  }
+  convertLegacy(sourceKind: string, sourceId: string, suggestion: string, capability: unknown) {
+    this.user(capability); kernelText(suggestion, 65536);
+    return value(this.#uow.workflow(() => {
+      const original = readKernelLegacyRecord(this.database, this.projectId, sourceKind, sourceId);
+      if (!original) throw new KernelFault("relation_mismatch");
+      const source = { kind: "legacy_workflow" as const, id: `${sourceKind}:${sourceId}` };
+      const existing = this.all(this.#uow.repositories.reviews).find(r => r.source.kind === source.kind && r.source.id === source.id);
+      if (existing) {
+        if (existing.suggestion !== suggestion) throw new KernelFault("idempotency_conflict");
+        return existing;
+      }
+      return this.createDraft(suggestion, source);
+    }));
+  }
+  coverage(id: string, effectKind: import("@sestina/research").KernelEffectKind, targets: readonly string[], capability: unknown) {
+    this.user(capability);
+    return value(this.#uow.workflow(() => briefCoverage(readKernelSnapshot(this.database, this.projectId), effectKind, this.review(id).suggestion, targets)));
+  }
+  briefConflict(id: string, capability: unknown) {
+    this.user(capability);
+    return value(this.#uow.workflow(() => {
+      const review = this.review(id), payload = parseCanonicalEffect(review.effectDraft?.payload);
+      if (payload.kind !== "patch_brief" && payload.kind !== "formal_direction_change") throw new KernelFault("invalid_record");
+      if (payload.kind === "patch_brief" && payload.mode === "initialize") throw new KernelFault("illegal_transition");
+      const current = projectBrief(readKernelSnapshot(this.database, this.projectId));
+      const base = requireKernelValue(current.brief?.versions.find(v => v.id === payload.baseVersionId));
+      return { ...current, review, fields: briefFieldDiff(base, requireKernelValue(current.active), payload.kind === "patch_brief" ? payload.changes : { projectQuestion: payload.newQuestion }) };
+    }));
   }
   inspectManifest(id: string, capability: unknown) {
     this.user(capability);
@@ -404,12 +517,14 @@ export class ResearchDeliberationKernel {
     originalAssessmentHash: string,
     reason: string,
     capability: unknown,
+    detail: { requestedCorrection: "withdraw" | "qualify" | "replace" | "request_more_context"; findingIndex?: number } = { requestedCorrection: "qualify" },
   ) {
     this.user(capability);
     kernelText(reason, 8192);
     return value(
       this.#uow.workflow((repos) => {
-        this.review(id, expected);
+        const original = this.review(id, expected);
+        const review = this.createDraft(original.suggestion, { kind: "review", id });
         const correction = repos.corrections.create({
           schemaVersion: "2.0.0",
           id: this.#ids.create("rapc_"),
@@ -418,20 +533,67 @@ export class ResearchDeliberationKernel {
           attemptId,
           originalAssessmentHash,
           publicReason: reason,
+          continuationReviewId: review.id,
+          requestedCorrection: detail.requestedCorrection,
+          ...(detail.findingIndex === undefined ? {} : { findingIndex: detail.findingIndex }),
           version: 1,
           createdAt: this.now(),
         });
-        const review = this.createDraft(reason, { kind: "review", id });
         return { correction, review };
       }),
     );
+  }
+  private correctionFor(id: string) { return this.all(this.#uow.repositories.corrections).find(c => c.continuationReviewId === id); }
+  private async providerFor(id: string): Promise<KernelProvider | undefined> {
+    const correction = this.correctionFor(id);
+    if (!correction) return this.options.provider?.();
+    const provider = await this.options.secondOpinionProvider?.();
+    if (!provider) throw new KernelApplicationFault("invalid_record", ["second_opinion_not_configured"]);
+    const attempt = requireKernelValue(this.#uow.repositories.attempts.getById(this.projectId, correction.attemptId));
+    const original = requireKernelValue(this.#uow.repositories.manifests.getById(this.projectId, attempt.manifestId)?.provider);
+    if (original.origin === provider.identity.origin && original.model === provider.identity.model && original.family === provider.identity.family)
+      throw new KernelApplicationFault("invalid_record", ["second_opinion_same_runtime"]);
+    return provider;
+  }
+  correctionHistory(id: string, capability: unknown) {
+    this.user(capability); this.review(id);
+    return value(this.#uow.workflow(() => this.all(this.#uow.repositories.corrections).filter(c => c.reviewId === id || c.continuationReviewId === id).map(c => {
+      const review = c.continuationReviewId ? this.review(c.continuationReviewId) : null;
+      const original = requireKernelValue(this.#uow.repositories.attempts.getById(this.projectId,c.attemptId));
+      const second = review?.attemptIds.map(a => requireKernelValue(this.#uow.repositories.attempts.getById(this.projectId,a))).findLast(a => a.status === "completed") ?? null;
+      const originalProvider = this.#uow.repositories.manifests.getById(this.projectId,original.manifestId)?.provider;
+      const secondProvider = second ? this.#uow.repositories.manifests.getById(this.projectId,second.manifestId)?.provider : null;
+      return { correction: c, review, originalAssessment: original.assessment, originalAssessmentHash: original.assessmentHash,
+        secondAssessment: second?.assessment ?? null, originalProvider, secondProvider,
+        status: review?.status === "committed" || review?.status === "disposed" ? "closed" : review?.status ?? "recorded",
+        runtimeDistinct: !!(secondProvider && originalProvider && (secondProvider.origin !== originalProvider.origin || secondProvider.model !== originalProvider.model || secondProvider.family !== originalProvider.family)),
+        contextIsolated: !!secondProvider, cognitiveIndependence: "unproven", originalAssessmentExcludedFields: ["verdict","publicRationale","confidence","rawResponse"],
+        comparison: original.assessment?.envelope?.provider_assessment_available && second?.assessment?.envelope?.provider_assessment_available ? "opinions_available_for_user_comparison" : "insufficient_for_comparison",
+        comparisonFacts: { originalFindings: original.assessment?.envelope?.assessment?.findings.length ?? null, secondFindings: second?.assessment?.envelope?.assessment?.findings.length ?? null, originalProtocolValid: original.assessment?.envelope?.response_schema_valid ?? false, secondProtocolValid: second?.assessment?.envelope?.response_schema_valid ?? false }, canonicalAuthority: false,
+      };
+    })));
   }
   /** Host capability is draft-only; this path never resolves a user session. */
   createHostDraft(suggestion: string, hostId: string) {
     kernelText(hostId, 160);
     return this.createDraft(suggestion, { kind: "host", id: hostId });
   }
-  private createDraft(suggestion: string, source: KernelReview["source"]) {
+  importReviewEnvelope(input:unknown,connectionId:string) {
+    const envelope=parseReviewDraftEnvelope(input);kernelText(connectionId,160);
+    if(envelope.projectId!==this.projectId)throw new KernelFault("relation_mismatch");
+    const identity=kernelHash({projectId:this.projectId,hostId:envelope.source.hostId,invocationId:envelope.source.invocationId});
+    return value(this.#uow.workflow(repos=>{
+      const old=this.all(repos.reviews).find(r=>r.source.kind==="host"&&r.source.id===identity);
+      if(old){if(old.intake?.envelope.envelopeHash!==envelope.envelopeHash)throw new KernelFault("idempotency_conflict");return old;}
+      return this.createDraft(envelope.suggestion,{kind:"host",id:identity},{envelope,connectionId,authority:"draft_only",fileAccess:"not_read"});
+    }));
+  }
+  hostDraftStatus(connectionId:string,invocationId:string) {
+    kernelText(connectionId,160);kernelText(invocationId,128);
+    const review=this.all(this.#uow.repositories.reviews).find(r=>r.intake?.connectionId===connectionId&&r.intake.envelope.source.invocationId===invocationId);
+    return review?{reviewId:review.id,status:review.status,version:review.version}:null;
+  }
+  private createDraft(suggestion: string, source: KernelReview["source"], intake?: KernelReview["intake"]) {
     if (this.#closed) throw new KernelFault("storage_unavailable");
     kernelText(suggestion, 65536);
     return value(
@@ -441,6 +603,7 @@ export class ResearchDeliberationKernel {
           id: this.#ids.create("rrvw_"),
           projectId: this.projectId,
           source,
+          ...(intake ? { intake } : {}),
           suggestion: suggestion.normalize("NFC"),
           suggestionHash: kernelBytesHash(suggestion.normalize("NFC")),
           requestedTarget: null,
@@ -476,12 +639,12 @@ export class ResearchDeliberationKernel {
   async prepareManifest(
     id: string,
     expected: number,
-    selection: KernelProjectionSelection,
+    selection: KernelReviewContextSelection,
     useProvider: boolean,
     capability: unknown,
   ) {
     this.user(capability);
-    const provider = useProvider ? await this.options.provider?.() : undefined;
+    const provider = useProvider ? await this.providerFor(id) : undefined;
     if (useProvider && !provider)
       throw new KernelApplicationFault("invalid_record", [
         "provider_unavailable",
@@ -514,7 +677,8 @@ export class ResearchDeliberationKernel {
               old.version,
             );
         }
-        const context = projectKernelContext(snapshot, r.suggestion, selection);
+        const context = projectReviewContext(snapshot, r.suggestion, selection, !!this.correctionFor(r.id));
+        assertMemorySelection(snapshot, selection.memory ?? [], this.now(), provider?.identity.locality);
         const body = provider
           ? serializeKernelProviderRequest(context, provider)
           : null;
@@ -534,6 +698,8 @@ export class ResearchDeliberationKernel {
           exactRequestHash: body === null ? null : kernelBytesHash(body),
           exactRequestBytes: body === null ? 0 : Buffer.byteLength(body),
           contextSelection: {
+            coverageScope: context.projection.coverageScope,
+            briefCoverage: context.projection.briefCoverage,
             evidenceIds: selection.evidenceIds ?? [],
             issueIds: selection.issueIds ?? null,
           },
@@ -608,18 +774,20 @@ export class ResearchDeliberationKernel {
       (!provider || kernelHash(provider.identity) !== kernelHash(m.provider))
     )
       reasons.push("provider_generation_changed");
-    if (m.contextProjectionPolicyVersion !== "1.0.0")
+    if (m.contextProjectionPolicyVersion !== "1.1.0")
       reasons.push("projection_policy_changed");
     if (m.contextProjectionSchemaVersion !== "1.0.0")
       reasons.push("schema_changed");
     try {
-      const context = projectKernelContext(snapshot, r.suggestion, {
+      assertMemorySelection(snapshot, m.selectedMemory, this.now(), provider?.identity.locality);
+      const context = projectReviewContext(snapshot, r.suggestion, {
+        coverageScope: m.contextSelection.coverageScope,
         evidenceIds: m.contextSelection.evidenceIds,
         ...(m.contextSelection.issueIds === null
           ? {}
           : { issueIds: m.contextSelection.issueIds }),
         memory: m.selectedMemory,
-      });
+      }, !!this.correctionFor(r.id));
       if (context.contextProjectionHash !== m.contextProjectionHash)
         reasons.push("target_version_changed");
       if (provider && m.provider) {
@@ -660,7 +828,7 @@ export class ResearchDeliberationKernel {
           )
         : undefined;
     const provider = old?.provider
-      ? await this.options.provider?.()
+      ? await this.providerFor(id)
       : undefined;
     this.user(capability);
     const outcome = value(
@@ -707,7 +875,7 @@ export class ResearchDeliberationKernel {
       throw new KernelApplicationFault("stale_revision", outcome.reasons);
     return requireKernelValue(outcome.review);
   }
-  async skipAssessment(id: string, expected: number, capability: unknown) {
+  async skipAssessment(id: string, expected: number, capability: unknown, selection?: KernelReviewContextSelection) {
     this.user(capability);
     const r = this.review(id, expected);
     const old = r.manifestId
@@ -716,15 +884,16 @@ export class ResearchDeliberationKernel {
     const prepared = await this.prepareManifest(
       id,
       expected,
-      old
+      selection ?? (old
         ? {
+            coverageScope: old.contextSelection.coverageScope,
             evidenceIds: old.contextSelection.evidenceIds,
             ...(old.contextSelection.issueIds === null
               ? {}
               : { issueIds: old.contextSelection.issueIds }),
             memory: old.selectedMemory,
           }
-        : {},
+        : {}),
       false,
       capability,
     );
@@ -786,7 +955,7 @@ export class ResearchDeliberationKernel {
     capability: unknown,
   ) {
     this.user(capability);
-    const provider = await this.options.provider?.();
+    const provider = await this.providerFor(id);
     this.user(capability);
     const prepared = value(
       this.#uow.workflow((repos) => {
@@ -1114,6 +1283,7 @@ export class ResearchDeliberationKernel {
           payload: parsed,
           baseProjectStateRevision: snapshot.head.revision,
           objects: built.objects,
+          objectLabels: kernelObjectLabels(snapshot),
           unchangedObjects: built.unchangedObjects,
           compensation:
             "Create a new Review and confirm a forward effect; original history and revisions are immutable.",
@@ -1275,6 +1445,17 @@ export class ResearchDeliberationKernel {
         built.apply(repos);
         for (const mutation of built.mutations)
           if (mutation.kind === "brief") {
+            if (!mutation.before) {
+              const active = requireKernelValue(mutation.after.versions.at(-1));
+              const progressive = requireKernelValue(active.progressive);
+              writeKernelBriefMetadata(this.database, { projectId: this.projectId, briefId: mutation.after.id, version: 1, metadata: {
+                schemaVersion: "2.0.0", legacySchemaVersion: null, legacyPayloadHash: null, currentVersionId: active.id,
+                versions: [{ versionId: active.id, sections: Object.fromEntries(KERNEL_BRIEF_SECTIONS.map(key => {
+                  const s = progressive.sections[key]; return [key, { state: s.status, ...(s.status === "intentionally_empty" ? { publicReason: s.publicReason } : {}) }];
+                })), decisionLinks: [], evidenceThreshold: {kind: "user_typed_rules", rules: progressive.evidenceThresholds.map(effectJson), interpretation: "not_inferred", quality: "unproven"}, limitations: [] }],
+              } }, 0);
+              continue;
+            }
             const old = requireKernelValue(
               readKernelBriefMetadata(
                 this.database,
@@ -1295,6 +1476,14 @@ export class ResearchDeliberationKernel {
                     {
                       ...requireKernelValue(old.metadata.versions.at(-1)),
                       versionId: mutation.after.currentVersionId,
+                      ...(mutation.after.versions.at(-1)?.progressive ? {
+                        sections: Object.fromEntries(Object.keys(requireKernelValue(old.metadata.versions.at(-1)).sections).map(key => {
+                          const state = requireKernelValue(mutation.after.versions.at(-1)?.progressive?.sections[key as keyof NonNullable<typeof mutation.after.versions[number]["progressive"]>["sections"]]);
+                          return [key, { state: state.status, ...(state.status === "intentionally_empty" ? { publicReason: state.publicReason } : {}) }];
+                        })),
+                        evidenceThreshold: { kind: "user_typed_rules" as const, rules: requireKernelValue(mutation.after.versions.at(-1)?.progressive).evidenceThresholds.map(effectJson), interpretation: "not_inferred" as const, quality: "unproven" as const },
+                        limitations: [],
+                      } : {}),
                     },
                   ],
                 },

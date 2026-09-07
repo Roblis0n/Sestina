@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { BRIEF_SECTIONS } from "../brief/brief-sections.js";
+import {parseReviewIntake,type ReviewIntake} from "./review-intake.js";
 import {
   parseResearchIdFor,
   type ResearchIdPrefix,
@@ -290,9 +292,10 @@ export interface KernelReview {
   readonly id: string;
   readonly projectId: string;
   readonly source: {
-    readonly kind: "user" | "host" | "legacy_receipt" | "review";
+    readonly kind: "user" | "host" | "legacy_receipt" | "legacy_workflow" | "review";
     readonly id: string | null;
   };
+  readonly intake?:ReviewIntake;
   readonly suggestion: string;
   readonly suggestionHash: string;
   readonly requestedTarget: KernelObjectRef | null;
@@ -317,6 +320,7 @@ export function parseKernelReview(value: unknown): KernelReview {
     "id",
     "projectId",
     "source",
+    "intake",
     "suggestion",
     "suggestionHash",
     "requestedTarget",
@@ -339,8 +343,9 @@ export function parseKernelReview(value: unknown): KernelReview {
   if (v.suggestionHash !== kernelBytesHash(v.suggestion.normalize("NFC")))
     throw new KernelFault("invalid_record");
   const source = kernelRecord(v.source, ["kind", "id"]);
+  if(v.intake!==undefined){const intake=parseReviewIntake(v.intake);if(intake.envelope.projectId!==v.projectId||source.kind!=="host")throw new KernelFault("relation_mismatch");}
   if (
-    !["user", "host", "legacy_receipt", "review"].includes(String(source.kind))
+    !["user", "host", "legacy_receipt", "legacy_workflow", "review"].includes(String(source.kind))
   )
     throw new KernelFault("invalid_record");
   if (source.id !== null) kernelText(source.id, 160);
@@ -383,7 +388,12 @@ export function parseKernelReview(value: unknown): KernelReview {
       if (!d.payload || typeof d.payload !== "object" || Array.isArray(d.payload)) throw new KernelFault("invalid_record");
       const payload = kernelRecord(d.payload, Object.keys(d.payload));
       if (d.compensatesReceiptId !== undefined) kernelId(d.compensatesReceiptId, "rrcp_");
-      const preview = kernelRecord(d.preview, ["payload", "baseProjectStateRevision", "objects", "unchangedObjects", "compensation", "rollbackMode", "compensatesReceiptId", "affectedReviews", "affectedManifests"]);
+      const preview = kernelRecord(d.preview, ["objectLabels", "payload", "baseProjectStateRevision", "objects", "unchangedObjects", "compensation", "rollbackMode", "compensatesReceiptId", "affectedReviews", "affectedManifests"]);
+      if (preview.objectLabels !== undefined) {
+        const labels = kernelRecord(preview.objectLabels, Object.keys(preview.objectLabels as object));
+        if (Object.keys(labels).length > 100000) throw new KernelFault("invalid_record");
+        for (const [id, text] of Object.entries(labels)) { kernelText(id, 160); kernelText(text, 65536); }
+      }
       if (preview.compensatesReceiptId !== (d.compensatesReceiptId ?? undefined)) throw new KernelFault("invalid_record");
       if (payload.kind !== d.effectKind || preview.baseProjectStateRevision !== d.baseProjectStateRevision ||
         kernelHash(preview.payload) !== kernelHash(payload) || kernelHash(preview) !== d.previewHash)
@@ -507,6 +517,7 @@ export function parseKernelAssessment(value: unknown): KernelAssessment {
   return freezeKernel(v as unknown as KernelAssessment);
 }
 export interface KernelAttempt {
+  readonly bodyRedaction?: { readonly redactionId: string; readonly originalRecordHash: string };
   readonly schemaVersion: "2.0.0";
   readonly id: string;
   readonly projectId: string;
@@ -525,6 +536,7 @@ export interface KernelAttempt {
 }
 export function parseKernelAttempt(value: unknown): KernelAttempt {
   const v = kernelRecord(value, [
+    "bodyRedaction",
     "schemaVersion",
     "id",
     "projectId",
@@ -565,7 +577,7 @@ export function parseKernelAttempt(value: unknown): KernelAttempt {
     const assessment = parseKernelAssessment(v.assessment);
     if (assessment.envelope?.assessmentId !== undefined && (assessment.envelope.assessmentId !== v.id || assessment.envelope.reviewId !== v.reviewId || assessment.envelope.manifestId !== v.manifestId)) throw new KernelFault("relation_mismatch");
     if (
-      kernelHash(v.assessment) !== v.assessmentHash ||
+      (v.bodyRedaction === undefined && kernelHash(v.assessment) !== v.assessmentHash) ||
       v.status !== "completed"
     )
       throw new KernelFault("invalid_record");
@@ -577,9 +589,29 @@ export function parseKernelAttempt(value: unknown): KernelAttempt {
       !/^[a-z][a-z0-9_]{0,79}$/.test(v.failureCode))
   )
     throw new KernelFault("invalid_record");
+  if (v.bodyRedaction !== undefined) {
+    parseBodyRedaction(v.bodyRedaction);
+    if (v.assessment !== null && (v.assessment as KernelAssessment).publicSummary !== "Local assessment body removed by user Forget." || (v.assessment as KernelAssessment | null)?.envelope?.assessment !== undefined) throw new KernelFault("invalid_record");
+  }
   return freezeKernel(v as unknown as KernelAttempt);
 }
+function parseBodyRedaction(input: unknown): void {
+  const r = kernelRecord(input, ["redactionId", "originalRecordHash"]);
+  kernelId(r.redactionId, "rapc_"); kernelSha(r.originalRecordHash);
+}
+export interface KernelCoverageScope {
+  readonly effectKind: KernelEffectKind | null;
+  readonly targetKinds: readonly string[];
+}
+export function parseKernelCoverageScope(value: unknown): KernelCoverageScope {
+  const scope = kernelRecord(value, ["effectKind", "targetKinds"]);
+  if (scope.effectKind !== null && (typeof scope.effectKind !== "string" || !["record_only", "create_decision", "add_evidence", "create_or_resolve_issue", "patch_brief", "formal_direction_change"].includes(scope.effectKind))) throw new KernelFault("invalid_record");
+  list(scope.targetKinds, 5);
+  if (scope.targetKinds.some(kind => typeof kind !== "string" || !["artifact", "decision", "evidence", "issue", "brief"].includes(kind)) || new Set(scope.targetKinds).size !== scope.targetKinds.length) throw new KernelFault("invalid_record");
+  return freezeKernel(scope as unknown as KernelCoverageScope);
+}
 export interface KernelManifest {
+  readonly bodyRedaction?: { readonly redactionId: string; readonly originalRecordHash: string };
   readonly schemaVersion: "2.0.0";
   readonly id: string;
   readonly projectId: string;
@@ -601,6 +633,15 @@ export interface KernelManifest {
   readonly exactRequestHash: string | null;
   readonly exactRequestBytes: number;
   readonly contextSelection: {
+    readonly coverageScope?: KernelCoverageScope;
+    readonly briefCoverage?: readonly {
+      readonly section: string;
+      readonly status: "sufficient" | "limited" | "not_applicable";
+      readonly reason: string;
+      readonly requiredForEffectKinds: readonly KernelEffectKind[];
+      readonly canSkip: true;
+      readonly authorityBlocked: false;
+    }[];
     readonly evidenceIds: readonly string[];
     /** null applies the policy's open-Issue selection; [] selects none. */
     readonly issueIds: readonly string[] | null;
@@ -636,6 +677,7 @@ export function manifestIdentity(
 }
 export function parseKernelManifest(value: unknown): KernelManifest {
   const v = kernelRecord(value, [
+    "bodyRedaction",
     "schemaVersion",
     "id",
     "projectId",
@@ -707,18 +749,36 @@ export function parseKernelManifest(value: unknown): KernelManifest {
       u.password
     )
       throw new KernelFault("invalid_record");
-    kernelText(v.exactRequestBody, 2_097_152);
+    if (v.bodyRedaction === undefined) kernelText(v.exactRequestBody, 2_097_152);
     kernelInteger(v.exactRequestBytes);
     if (
-      kernelBytesHash(v.exactRequestBody) !== v.exactRequestHash ||
-      Buffer.byteLength(v.exactRequestBody) !== v.exactRequestBytes
+      v.bodyRedaction === undefined && (kernelBytesHash(v.exactRequestBody as string) !== v.exactRequestHash ||
+      Buffer.byteLength(v.exactRequestBody as string) !== v.exactRequestBytes)
     )
       throw new KernelFault("invalid_record");
   }
   const selection = kernelRecord(v.contextSelection, [
+    "briefCoverage",
+    "coverageScope",
     "evidenceIds",
     "issueIds",
   ]);
+  if (selection.coverageScope !== undefined) parseKernelCoverageScope(selection.coverageScope);
+  if(v.contextProjectionPolicyVersion === "1.1.0" && selection.briefCoverage === undefined) throw new KernelFault("invalid_record");
+  if (selection.briefCoverage !== undefined) {
+    list(selection.briefCoverage, 13);
+    if(selection.briefCoverage.length!==BRIEF_SECTIONS.length) throw new KernelFault("invalid_record");
+    const sections = new Set<string>();
+    for (const raw of selection.briefCoverage) {
+      const row = kernelRecord(raw, ["section", "status", "reason", "requiredForEffectKinds", "canSkip", "authorityBlocked"]);
+      kernelText(row.section, 80); kernelText(row.reason, 160);
+      if(!(BRIEF_SECTIONS as readonly string[]).includes(row.section)) throw new KernelFault("invalid_record");
+      if (sections.has(row.section) || !["sufficient", "limited", "not_applicable"].includes(row.status as string) || row.canSkip !== true || row.authorityBlocked !== false) throw new KernelFault("invalid_record");
+      sections.add(row.section);
+      list(row.requiredForEffectKinds, 6);
+      for (const effectKind of row.requiredForEffectKinds) parseKernelCoverageScope({effectKind, targetKinds:[]});
+    }
+  }
   for (const [key, prefix] of [
     ["evidenceIds", "revd_"],
     ["issueIds", "riss_"],
@@ -749,9 +809,15 @@ export function parseKernelManifest(value: unknown): KernelManifest {
     !["prepared", "confirmed", "sent", "stale", "cancelled"].includes(
       String(v.status),
     ) ||
-    manifestIdentity(v as unknown as KernelManifest) !== v.identityHash
+    (v.bodyRedaction === undefined && manifestIdentity(v as unknown as KernelManifest) !== v.identityHash)
   )
     throw new KernelFault("invalid_record");
+  if (v.bodyRedaction !== undefined) {
+    parseBodyRedaction(v.bodyRedaction);
+    kernelSha(v.identityHash);
+    if (v.exactRequestBody !== null) throw new KernelFault("invalid_record");
+    if (v.provider !== null) kernelSha(v.exactRequestHash);
+  }
   return freezeKernel(v as unknown as KernelManifest);
 }
 export interface KernelCorrection {
@@ -762,6 +828,9 @@ export interface KernelCorrection {
   readonly attemptId: string;
   readonly originalAssessmentHash: string;
   readonly publicReason: string;
+  readonly continuationReviewId?: string;
+  readonly requestedCorrection?: "withdraw" | "qualify" | "replace" | "request_more_context";
+  readonly findingIndex?: number;
   readonly version: 1;
   readonly createdAt: string;
 }
@@ -776,6 +845,7 @@ export function parseKernelCorrection(value: unknown): KernelCorrection {
     "publicReason",
     "version",
     "createdAt",
+    "continuationReviewId", "requestedCorrection", "findingIndex",
   ]);
   schema(v.schemaVersion);
   kernelId(v.id, "rapc_");
@@ -785,6 +855,11 @@ export function parseKernelCorrection(value: unknown): KernelCorrection {
   kernelSha(v.originalAssessmentHash);
   kernelText(v.publicReason, 8192);
   kernelTime(v.createdAt);
+  if (v.continuationReviewId !== undefined) {
+    kernelId(v.continuationReviewId, "rrvw_");
+    if (!["withdraw", "qualify", "replace", "request_more_context"].includes(String(v.requestedCorrection))) throw new KernelFault("invalid_record");
+  } else if (v.requestedCorrection !== undefined || v.findingIndex !== undefined) throw new KernelFault("invalid_record");
+  if (v.findingIndex !== undefined) kernelInteger(v.findingIndex, 0);
   if (v.version !== 1) throw new KernelFault("invalid_record");
   return freezeKernel(v as unknown as KernelCorrection);
 }

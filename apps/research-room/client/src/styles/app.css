@@ -55,7 +55,8 @@ pre { max-height: 22rem; overflow: auto; padding: var(--space-3); border: 1px so
 .app-chrome__status-copy small { overflow: hidden; color: var(--text-muted); text-overflow: ellipsis; white-space: nowrap; }
 .app-chrome__actions { width: 100%; min-width: 0; max-width: 100%; justify-content: flex-end; justify-self: stretch; }
 .app-chrome__actions > * { min-width: 0; max-width: 100%; }
-.app-chrome__actions .button { min-height: 2.25rem; padding-inline: var(--space-2); white-space: nowrap; font-size: var(--text-sm); }
+.app-chrome__actions .button { min-height: 2.25rem; padding-inline: var(--space-2); white-space: normal; font-size: var(--text-sm); }
+.app-chrome__actions .button > span { min-width: 0; overflow-wrap: anywhere; }
 .language-switch { border-right: 1px solid var(--border-subtle); padding-right: var(--space-2); }
 .language-switch button { border: 0; padding: var(--space-1); color: var(--text-secondary); background: transparent; }
 .language-switch button[aria-pressed="true"] { color: var(--text-primary); font-weight: 700; text-decoration: underline; text-underline-offset: 0.3rem; }

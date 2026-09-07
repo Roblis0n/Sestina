@@ -292,3 +292,26 @@ G4/G5 public design decisions:
   Known protocol/transport failures and uncertain delivery remain distinct.
 - New application services use the schema-25 opt-in entry. Default schema-20
   historical behavior remains isolated until the scheduled production cutover.
+
+
+## G6/G7 implementation decisions
+
+The existing six effects, canonical UoW, durable Review/attempt lifecycle and
+single-read snapshots remain the only implementation foundations. The following
+details reconcile concrete first-use and privacy behavior with the frozen input:
+
+| User consequence | Required invariant and owner | Executable evidence |
+| --- | --- | --- |
+| Start with a question or task, without invented content | `patch_brief mode=initialize` requires absence of a Brief, allocates its IDs in Kernel, and commits version 1 with Review/Receipt/revision. Existing Brief changes still require exact base versions. Contract 01 records this first-use exception. | `foundation/progressive-brief.test.ts` |
+| See the same missing context before and during assessment | Policy 1.1 binds typed Coverage and scope into the single projection, durable Manifest and exact bytes. All 13 field identities are validated; coverage cannot veto user Authority. Older policies are read-only until rebuilt and confirmed. Contract 04 records the binding. | `foundation/brief-coverage-binding.test.ts` |
+| Recover a saved Brief after publication failure | Database state wins. Known old/current/pending hashes support repair; explicit missing-file recovery validates the schema-25 database and completed migration before atomic no-replace installation. Unknown files remain untouched. | `foundation/brief-publication.test.ts`, `foundation/brief-repair-http.test.ts` |
+| Dispute an assessment without changing history | Correction and linked Review are saved together; original assessment/Finding remains immutable. Closure is derived from the child effect. Second runtime identity and context isolation are facts, never proof of independent judgment. | `foundation/review-correction.test.ts`, `foundation/correction-finding-path.test.ts` |
+| Forget without later body resurrection | User-authorized privacy transaction tombstones Memory and redacts linked local bodies with before/after hash proof. Receipt/event hashes and terminal outcomes remain unchanged. Contract 02 makes this narrow body exception explicit. | `foundation/privacy-transaction.test.ts`, `foundation/legacy-memory-forget.test.ts` |
+| Decide what happens to old backups | Explicit hash-bound inventory supports deletion or retention with restore disabled. Failures preserve a resumable cleanup record; no failure rolls back the tombstone. Unverifiable copies stay blocked. | `foundation/privacy-maintenance.test.ts` |
+| Keep Host suggestions without granting permission | Project-bound envelope/call identity persists one draft. Temporary capability grants only draft submission and own status; no file reads, Provider calls, Memory selection or commits. | `foundation/host-draft-intake.test.ts` |
+
+Native progressive Brief metadata has null legacy Schema/hash instead of invented
+provenance. Migrated versions keep their original mappings; typed thresholds use
+canonical Evidence kinds and inference capacities, distinct from support status.
+Contract 05 documents this compatibility detail. The release baseline, immutable
+old-fixture recipes and schema-20 default remain unchanged.

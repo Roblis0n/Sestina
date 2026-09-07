@@ -99,7 +99,9 @@ code-fact question; it does not claim the target capability is implemented.
 | G3 — repositories, transaction and snapshots | `completed_and_verified` | Durable repositories, unified canonical transaction, revision/command identity and snapshots passed fault, process-death, race and native platform evidence. |
 | G4 — typed effects and user Authority | `completed_and_verified` | Six real canonical effects, bound previews, live user authority, compensation and actual application entry passed the effect, conflict and rollback matrix. |
 | G5 — persistent Review and Provider attempts | `completed_and_verified` | Durable Review lifecycle, exact confirmed outbound bytes, attempt recovery, independent assessment facts and authenticated application/API integration passed the final public gate. |
-| G6–G13 | `not_started` | Progressive forms, remaining domains, production interface and final cutover remain downstream. |
+| G6 — progressive Brief and object operations | `in_progress` | Implementation and affected application/visual checks are present; final integrated public verification is pending. |
+| G7 — correction, Memory, Host and historical paths | `in_progress` | Unified application paths and targeted checks are present; final integrated public verification is pending. |
+| G8–G13 | `not_started` | Derived projections, global interface replacement, Electron and final cutover remain downstream. |
 
 Completion evidence is the implementation tree at
 `e08c760e0adcf63c1ea54b22103b903b5e17ec83`, verified on 2026-09-06 by

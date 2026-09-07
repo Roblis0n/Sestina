@@ -158,5 +158,8 @@
       "compatibilityWindow": "Generic disposition commands are removed from the CLI together with the server APIs; deterministic review run keeps its checker-only scope.",
       "migrationGate": "CLI commands map to the same effect handlers; no CLI-only bypass of Review or Authority is introduced."
     }
-  ]
+  ],
+  "g6MetadataCompatibility": "Native progressive Brief versions have no invented legacy Schema/hash: both are null. Migrated versions retain the verified old schema/hash and legacy_text_rule threshold mapping. New typed thresholds are user_typed_rules and never inferred from free text.",
+  "g7HistoricalBoundary": "On the explicitly enabled persistent application path, old Appeal/Room/Pilot mutations return legacy_workflow_read_only. Project-bound history, child attempts/events, failures and Receipt links remain readable and exportable. Explicit conversion is idempotent by source kind/id and produces only a source-linked Review draft; changed duplicate input conflicts.",
+  "g7ControlledCopies": "Forget tombstones current context before copy cleanup. Verified managed backups may be deleted or retained with restore disabled after explicit user review. Cleanup progress and chosen copy action are durable. Unverifiable or unrelated managed paths remain blocked and cannot be represented as fully cleaned. Old backups cannot restore forgotten content through Kernel or legacy recovery."
 }

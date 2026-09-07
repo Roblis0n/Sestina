@@ -28,6 +28,7 @@ import {
 } from "@sestina/research-store";
 import { KernelFault, kernelCanonicalJson } from "@sestina/research";
 import { openSestina } from "./sestina-core.js";
+import { publishKernelBriefFile } from "./kernel-brief-publisher.js";
 
 const DB = "state.sqlite";
 const BRIEF = "research-brief.yaml";
@@ -779,6 +780,24 @@ export async function recoverKernelMigration(
     await saveJournal(p.journal, j);
     return { stage: "rolled_back" as const, runId: j.runId };
   })) as { stage: "swapped" | "rolled_back"; runId: string };
+}
+
+/** Explicit repair of an absent derived file; existing unknown files are never overwritten. */
+export async function repairMissingKernelBrief(projectRoot: string) {
+  const p=await paths(projectRoot);
+  const guard=await MaintenanceGuard.acquire({databasePath:p.database,scope:"restore",ownerId:"kernel-brief-repair"});
+  let db:StorageDatabase | undefined;
+  try {
+    if(await exists(p.brief)) fail("source_changed");
+    const journal=await readJournal(p.journal);
+    if(journal?.stage!=="swapped") fail("recovery_required");
+    const inspected=await openDatabase({path:p.database,readOnly:true,migrate:false});
+    try {validateKernelDatabase(inspected,journal.projectId,undefined,true);} finally {inspected.close();}
+    db=await openDatabase({path:p.database,migrate:false});
+    db.maintenanceOwned=true;
+    validateKernelDatabase(db,journal.projectId,undefined,true);
+    return publishKernelBriefFile(db,journal.projectId,undefined,true);
+  } finally {db?.close();guard.release();}
 }
 
 export async function openKernelProject(

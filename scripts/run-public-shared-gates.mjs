@@ -91,7 +91,7 @@ run("Pinned legacy source and recipe provenance", resolve(root, "scripts/verify-
 run("Pinned old release fixture provenance", resolve(root, "scripts/materialize-post-0.2-release.mjs"), ["--verify-inputs"]);
 run("G1 downstream discovery and immutable corpus declarations", resolve(root, "scripts/verify-post-0.2-discovery.mjs"));
 run("Schema 021–025 deterministic structure", resolve(root, "scripts/verify-post-0.2-schema.mjs"));
-run("G1–G5 foundation and closed application contracts (G6+ RED has independent commands)", vitest, ["run", "--config", "tests/post-0.2/vitest.foundation.config.ts"]);
+run("G1–G7 foundation and closed application contracts (G9+ RED has independent commands)", vitest, ["run", "--config", "tests/post-0.2/vitest.foundation.config.ts"]);
 
 for (const script of [
   "scripts/build-release.mjs",

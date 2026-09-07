@@ -390,5 +390,17 @@
     "ordinal": "Provider attempts are append-only with strictly increasing ordinals per Review",
     "uncertainty": "provider_attempt_uncertain means the request may have been sent; the system never resends automatically and never claims certainty it does not have",
     "manifestBinding": "every attempt references exactly one confirmed Manifest identity; retry requires a new Manifest confirmation"
-  }
+  },
+  "g7CorrectionBinding": {
+    "actions": [
+      "withdraw",
+      "qualify",
+      "replace",
+      "request_more_context"
+    ],
+    "source": "Original Review, attempt, assessment hash and optional Finding index are immutable references. A new child Review and correction record are saved together.",
+    "closure": "Computed from the continuation Review committed/disposed result, never a separate Resolution write.",
+    "secondOpinion": "Optional distinct origin/model/family runtime. Configuration generation alone is not independence. New request excludes original verdict, rationale, confidence and prior outcome summaries. Cognitive independence remains unproven."
+  },
+  "privacyBodyException": "An explicit user Forget may redact tracked local request and assessment bodies, including legacy workflow child bodies. Original identity/assessment hashes, protocol facts, Receipt/event links and terminal outcomes remain unchanged. A same-transaction redaction ledger binds the original record hash, replacement hash and privacy revision; no ordinary repository update may perform this exception. Partial filesystem cleanup never restores body content."
 }

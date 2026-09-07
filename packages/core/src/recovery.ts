@@ -523,7 +523,9 @@ export async function createPreUpgradeProjectStateBackup(options: ProjectRecover
 
 export async function previewProjectStateRestore(options: PreviewProjectStateRestoreOptions): Promise<CoreResult<ProjectStateRestorePreview>> {
   try {
-    const paths = await pathsFor(options.projectRoot); const bundle = await validateBundle(paths, options.backupId);
+    const paths = await pathsFor(options.projectRoot);
+    await assertLegacyRecoveryTarget(paths);
+    const bundle = await validateBundle(paths, options.backupId);
     return coreOk(Object.freeze({
       backupId: bundle.manifest.backupId, kind: bundle.manifest.kind, projectId: bundle.manifest.projectId,
       createdAt: bundle.manifest.createdAt, databaseIntegrity: "ok" as const, briefBinding: "matched" as const,
@@ -534,6 +536,27 @@ export async function previewProjectStateRestore(options: PreviewProjectStateRes
       confirmationRequired: true as const, networkUsed: false as const,
     }));
   } catch (error) { return resultFor(error); }
+}
+
+/** Read-only reuse of the existing strict bundle validator for controlled-copy cleanup. */
+export async function verifyManagedRecoveryBundle(projectRoot: string, backupId: string) {
+  const bundle = await validateBundle(await pathsFor(projectRoot), backupId);
+  return { projectId: bundle.manifest.projectId, backupId: bundle.manifest.backupId };
+}
+
+async function assertLegacyRecoveryTarget(paths: ProjectPaths): Promise<void> {
+  // A corrupt target must not bypass the post-migration privacy ledger by being
+  // treated as an ordinary legacy recovery case. Use Kernel recovery instead.
+  try {
+    const journalPath = join(paths.dataRoot, ".kernel-migration.json");
+    const stat = await lstat(journalPath);
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > MAX_MANIFEST_BYTES) fail("state_conflict");
+    const journal = JSON.parse(await readFile(journalPath, "utf8")) as { stage?: string };
+    if (journal.stage !== "rolled_back") fail("state_conflict");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  if ((await inspectCurrent(paths)).schema.status === "too_new") fail("state_conflict");
 }
 
 async function preserveForensic(paths: ProjectPaths): Promise<string> {
@@ -581,6 +604,7 @@ export async function restoreProjectState(options: RestoreProjectStateOptions): 
     guard = await MaintenanceGuard.acquire({ databasePath: paths.databasePath, ownerId: `core-restore-${process.pid}`, scope: "restore", busyTimeoutMs: options.maintenanceBusyTimeoutMs });
     const locked = await validateBundle(paths, options.backupId);
     if (locked.manifestBytes !== initial.manifestBytes) fail("state_conflict");
+    await assertLegacyRecoveryTarget(paths);
 
     let preRestoreBackupId: string; let forensicCopyPreserved = false;
     const current = await inspectCurrent(paths);

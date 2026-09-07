@@ -73,6 +73,25 @@ function validInput(ids = new SequenceIdFactory(500)): ResearchBriefInput {
 }
 
 describe("versioned Research Brief", () => {
+  it("G6: explicit progressive fields allow a question without invented task, stage or delta", () => {
+    const base = validInput();
+    const input = { ...base, currentTask: "", currentStage: "", expectedDeltas: [],
+      progressive: { schemaVersion: "2.0.0", sections: Object.fromEntries([
+        "projectQuestion", "currentTask", "currentStage", "targetArtifacts", "fixedDecisions",
+        "allowedChanges", "forbiddenChanges", "expectedDeltas", "evidenceBoundaries", "explicitNonGoals",
+        "knownUnknowns", "evidenceThresholds", "acceptedDecisions",
+      ].map(key => [key, { status: key === "projectQuestion" ? "provided" : "not_provided" }])),
+      knownUnknowns: [], evidenceThresholds: [], acceptedDecisions: [] },
+      targetArtifacts: [], fixedDecisions: [], allowedChanges: [], forbiddenChanges: [], evidenceBoundaries: [], explicitNonGoals: [],
+    };
+    const result = createResearchBrief(input as unknown as ResearchBriefInput, ports());
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error(result.error.code);
+    expect(result.value.versions[0]).toMatchObject({ currentTask: "", currentStage: "", expectedDeltas: [], progressive: input.progressive });
+    expect(createResearchBrief({ ...input, projectQuestion: "" } as unknown as ResearchBriefInput, ports()).ok).toBe(false);
+    const contradictory = { ...input, currentTask: "Unacknowledged inferred task" };
+    expect(createResearchBrief(contradictory as unknown as ResearchBriefInput, ports()).ok).toBe(false);
+  });
   it("creates an immutable active v1 with structured scope and expected delta", () => {
     const result = createResearchBrief(validInput(), ports());
     expect(result.ok).toBe(true);

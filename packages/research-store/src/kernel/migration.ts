@@ -33,6 +33,7 @@ import {
   validateKernelChain,
 } from "./state.js";
 import { validateKernelRelations } from "./repositories.js";
+import { validateLegacyRedaction } from "./privacy.js";
 
 function required<T>(item: T | undefined): T {
   if (item === undefined) throw new KernelFault("corrupt_state");
@@ -603,7 +604,7 @@ export function validateKernelDatabase(
         projectId,
         row.source_id,
       );
-      if (!old || kernelBytesHash(old.data) !== row.source_hash)
+      if (!old || kernelBytesHash(old.data) !== row.source_hash && !validateLegacyRedaction(db, projectId, row.source_kind, row.source_id, old.data, row.source_hash))
         throw new KernelFault("corrupt_state");
     }
     if (
@@ -615,11 +616,11 @@ export function validateKernelDatabase(
         projectId,
       );
       const known = cached
-        ? (decodeKernelJson(cached.data) as { contentHash?: unknown })
+        ? (decodeKernelJson(cached.data) as { contentHash?: unknown; pendingContentHash?: unknown })
         : undefined;
       if (
         !allowVerifiedCachedBrief ||
-        known?.contentHash !== kernelBytesHash(briefDocument)
+        ![known?.contentHash, known?.pendingContentHash].includes(kernelBytesHash(briefDocument))
       )
         throw new KernelFault("relation_mismatch");
     }

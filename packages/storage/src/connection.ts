@@ -2,7 +2,7 @@ import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { DatabaseSync, constants, type StatementSync } from "node:sqlite";
 import { statSync, existsSync, readFileSync } from "node:fs";
-import { KERNEL_CANONICAL_TABLES, KERNEL_WORKFLOW_TABLES } from "./kernel-schema.js";
+import { KERNEL_CANONICAL_TABLES, KERNEL_WORKFLOW_TABLES, KERNEL_LEGACY_TABLES } from "./kernel-schema.js";
 import { SestinaError, SestinaErrorCode } from "@sestina/schema";
 import { applySecurityPragmas, DEFAULT_BUSY_TIMEOUT_MS } from "./pragmas.js";
 import { mapSqliteError, sqliteErrcode, SQLITE_ERROR, SQLITE_CORRUPT, SQLITE_NOTADB } from "./errors.js";
@@ -71,7 +71,7 @@ export class StorageDatabase {
   private kernelPolicy = false;
   /** Set only by the owner of the external maintenance guard. */
   maintenanceOwned = false;
-  private kernelMode: "none" | "workflow" | "canonical" | "migration" = "none";
+  private kernelMode: "none" | "workflow" | "canonical" | "migration" | "privacy" = "none";
   private readonly fileIdentity: string;
 
   constructor(path: string, raw: DatabaseSync, readOnly: boolean) {
@@ -95,7 +95,25 @@ export class StorageDatabase {
     } finally { this.kernelMode = before; this.refreshKernelAuthorizer(); }
   }
 
-  enableKernelWriteBoundary(): void { this.kernelPolicy = true; this.refreshKernelAuthorizer(); }
+  enableKernelWriteBoundary(): void { if (!this.readOnly) this.rawDb.exec("PRAGMA secure_delete=ON"); this.kernelPolicy = true; this.refreshKernelAuthorizer(); }
+  /** Reclaim free pages and truncate old WAL frames after committed privacy erasure. */
+  purgeKernelFreePages(): void {
+    if (!this.kernelPolicy || this.readOnly || this.isTransaction || !this.maintenanceOwned || this.kernelMode !== "none") throw new SestinaError(SestinaErrorCode.database_readonly, "Privacy compaction requires exclusive maintenance ownership");
+    this.kernelMode = "migration"; this.refreshKernelAuthorizer();
+    try {
+      this.rawDb.exec("PRAGMA secure_delete=ON");
+      this.rawDb.exec("VACUUM");
+      const result = this.rawDb.prepare("PRAGMA wal_checkpoint(TRUNCATE)").get() as { busy: number };
+      if (result.busy !== 0) throw new SestinaError(SestinaErrorCode.storage_busy, "Privacy checkpoint is waiting for readers");
+    } finally { this.kernelMode = "none"; this.refreshKernelAuthorizer(); }
+  }
+  /** Narrow body erasure capability, available only inside an authorized canonical transaction. */
+  withKernelPrivacyRedaction<T>(work: () => T): T {
+    if (!this.isTransaction || this.kernelMode !== "canonical") throw new SestinaError(SestinaErrorCode.database_readonly, "Privacy erasure requires the canonical transaction");
+    this.kernelMode = "privacy"; this.refreshKernelAuthorizer();
+    try { const result = work(); if (result && typeof result === "object" && "then" in result) throw new SestinaError(SestinaErrorCode.internal_error, "Privacy erasure must be synchronous"); return result; }
+    finally { this.kernelMode = "canonical"; this.refreshKernelAuthorizer(); }
+  }
   get isKernelCanonicalWrite(): boolean { return this.kernelMode === "canonical" || this.kernelMode === "migration"; }
   private refreshKernelAuthorizer(): void {
     if (!this.kernelPolicy) return;
@@ -106,9 +124,18 @@ export class StorageDatabase {
       if (this.kernelMode === "migration") return constants.SQLITE_OK;
       if ([constants.SQLITE_SELECT, constants.SQLITE_READ, constants.SQLITE_FUNCTION, constants.SQLITE_TRANSACTION, constants.SQLITE_SAVEPOINT, constants.SQLITE_RECURSIVE].includes(action)) return constants.SQLITE_OK;
       if ([constants.SQLITE_INSERT, constants.SQLITE_UPDATE, constants.SQLITE_DELETE].includes(action)) {
+        if (this.kernelMode === "privacy") {
+          // Trigger definitions are restored in this same transaction. No legacy
+          // object insertion, deletion or column mutation is granted.
+          if (["sqlite_master", "sqlite_schema"].includes(table ?? "")) return constants.SQLITE_OK;
+          return action === constants.SQLITE_UPDATE && argument === "data" && [...KERNEL_LEGACY_TABLES, "research_provider_attempts"].includes(table ?? "") ? constants.SQLITE_OK : constants.SQLITE_DENY;
+        }
         const workflow = (KERNEL_WORKFLOW_TABLES as readonly string[]).includes(table ?? "") && table !== "research_projection_outbox";
         const canonical = (KERNEL_CANONICAL_TABLES as readonly string[]).includes(table ?? "") || table === "research_projection_outbox";
         return this.kernelMode === "canonical" && (canonical || workflow) || this.kernelMode === "workflow" && workflow ? constants.SQLITE_OK : constants.SQLITE_DENY;
+      }
+      if (this.kernelMode === "privacy" && [constants.SQLITE_CREATE_TRIGGER, constants.SQLITE_DROP_TRIGGER].includes(action)) {
+        return table === "kernel_attempt_terminal" || table === "trg_closed_external_app_pilot_events_no_update" || KERNEL_LEGACY_TABLES.some(t => table === `kernel_legacy_${t}_update`) ? constants.SQLITE_OK : constants.SQLITE_DENY;
       }
       // PRAGMA integrity/foreign-key diagnostics are reads; setters, ATTACH,
       // schema mutation and writable_schema are never exposed by this mode.

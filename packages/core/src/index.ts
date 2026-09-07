@@ -55,7 +55,7 @@ export type {
   DeliberationResolutionKind,
   DeliberationRoom,
 } from "@sestina/research";
-export { previewKernelMigration, migrateKernelProject, recoverKernelMigration, restoreKernelPreMigrationBackup, openKernelProject, KernelMigrationError, type KernelMigrationOptions, type KernelMigrationPreview, type KernelMigrationFaultPoint } from "./kernel-migration.js";
+export { previewKernelMigration, migrateKernelProject, recoverKernelMigration, restoreKernelPreMigrationBackup, repairMissingKernelBrief, openKernelProject, KernelMigrationError, type KernelMigrationOptions, type KernelMigrationPreview, type KernelMigrationFaultPoint } from "./kernel-migration.js";
 export {
   compileCorrectionAppealSecondOpinionPrompt,
   compileDeliberationParticipantPrompt,
@@ -79,6 +79,7 @@ export { coreErr, coreOk } from "./errors.js";
 export type { CoreError, CoreErrorCode, CoreResult } from "./errors.js";
 export { getPrivacyManifest } from "./privacy.js";
 export type { PrivacyDataFlow, PrivacyManifest } from "./privacy.js";
+export type { CopyFile, CleanupPlan } from "./kernel-privacy-maintenance.js";
 export { getReleaseIdentity, RELEASE_IDENTITY } from "./release-identity.js";
 export type { ReleaseIdentity } from "@sestina/schema";
 export { createPreUpgradeProjectStateBackup, createProjectStateBackup, inspectProjectRecovery, previewProjectStateRestore, ProjectRecoveryConfirmationService, restoreProjectState } from "./recovery.js";

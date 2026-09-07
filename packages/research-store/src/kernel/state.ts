@@ -461,6 +461,13 @@ export function projectKernelContext(
     const versions = o.data.versions as readonly Record<string, KernelJson>[];
     const current = versions.find((v) => v.id === o.data.currentVersionId);
     if (!current) throw new KernelFault("corrupt_state");
+    if (current.progressive) {
+      const p = current.progressive as { sections: Record<string, { status: string }> };
+      for (const [field, state] of Object.entries(p.sections)) {
+        const limitation = `Brief ${field}: not_provided.`;
+        if (state.status === "not_provided" && !limitations.includes(limitation)) limitations.push(limitation);
+      }
+    }
     return Object.fromEntries(
       [
         "id",
@@ -475,6 +482,7 @@ export function projectKernelContext(
         "expectedDeltas",
         "evidenceBoundaries",
         "explicitNonGoals",
+        "progressive",
       ]
         .filter((k) => current[k] !== undefined)
         .map((k) => [k, current[k]]),

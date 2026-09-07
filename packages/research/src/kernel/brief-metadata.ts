@@ -24,8 +24,8 @@ export const KERNEL_BRIEF_SECTIONS = [
 ] as const;
 export interface KernelBriefMetadata {
   readonly schemaVersion: "2.0.0";
-  readonly legacySchemaVersion: "1.0.0";
-  readonly legacyPayloadHash: string;
+  readonly legacySchemaVersion: "1.0.0" | null;
+  readonly legacyPayloadHash: string | null;
   readonly currentVersionId: string;
   readonly versions: readonly {
     readonly versionId: string;
@@ -45,7 +45,7 @@ export interface KernelBriefMetadata {
         "unambiguous_existing_decision" | "legacy_constraint_not_promoted";
     }[];
     readonly evidenceThreshold: {
-      readonly kind: "legacy_text_rule";
+      readonly kind: "legacy_text_rule" | "user_typed_rules";
       readonly rules: readonly KernelJson[];
       readonly interpretation: "not_inferred";
       readonly quality: "unproven";
@@ -67,9 +67,10 @@ export function parseKernelBriefMetadata(input: unknown): KernelBriefMetadata {
         ? "future_schema"
         : "invalid_record",
     );
-  if (m.legacySchemaVersion !== "1.0.0")
+  if (m.legacySchemaVersion !== "1.0.0" && m.legacySchemaVersion !== null)
     throw new KernelFault("invalid_record");
-  kernelSha(m.legacyPayloadHash);
+  if (m.legacySchemaVersion === null) { if (m.legacyPayloadHash !== null) throw new KernelFault("invalid_record"); }
+  else kernelSha(m.legacyPayloadHash);
   kernelId(m.currentVersionId, "rbrf_");
   if (
     !Array.isArray(m.versions) ||
@@ -134,7 +135,7 @@ export function parseKernelBriefMetadata(input: unknown): KernelBriefMetadata {
       "quality",
     ]);
     if (
-      t.kind !== "legacy_text_rule" ||
+      !["legacy_text_rule", "user_typed_rules"].includes(String(t.kind)) ||
       t.interpretation !== "not_inferred" ||
       t.quality !== "unproven" ||
       !Array.isArray(t.rules)

@@ -74,5 +74,26 @@
     "schema_changed",
     "migration_rebind_required"
   ],
-  "snapshotRule": "Projection reads and send-time revalidation each run inside one SQLite read snapshot; mixed-version reads across repositories are forbidden and fail closed."
+  "snapshotRule": "Projection reads and send-time revalidation each run inside one SQLite read snapshot; mixed-version reads across repositories are forbidden and fail closed.",
+  "g6CoverageBinding": {
+    "policyVersion": "1.1.0",
+    "scope": "Persist effectKind and targetKinds. The Kernel computes all 13 known Brief-section rows from one snapshot; UI surfaces display only applicable rows.",
+    "rowFields": [
+      "section",
+      "status",
+      "reason",
+      "requiredForEffectKinds",
+      "canSkip",
+      "authorityBlocked"
+    ],
+    "statuses": [
+      "sufficient",
+      "limited",
+      "not_applicable"
+    ],
+    "identity": "Coverage rows and scope are durable contextSelection inputs covered by manifestIdentity, projection hash and exact request hash. No-send snapshots retain them without request bytes.",
+    "authority": "canSkip=true and authorityBlocked=false. Coverage is neither a score nor a substitute for effect business validation.",
+    "compatibility": "Older policy-1.0 records remain readable. They require rebuilding and explicit confirmation before sending under the new policy."
+  },
+  "privacyBodyException": "User-authorized Forget removes the local exact request body while preserving original hash/bytes/identity and appending hash-bound redaction proof. Redacted or stale records cannot send. Managed copies require explicit deletion or retention with restore disabled; remote and external copies cannot be recalled."
 }

@@ -23,8 +23,9 @@ import { BriefSetup } from "../screens/BriefSetup.js";
 import { LanguageScreen } from "../screens/LanguageScreen.js";
 import { ProjectShell } from "../screens/ProjectShell.js";
 import { StartCenter } from "../screens/StartCenter.js";
+import { KernelProjectWorkspace } from "../screens/KernelProjectWorkspace.js";
 
-type Phase = "boot" | "language" | "start" | "brief" | "shell" | "fatal";
+type Phase = "boot" | "language" | "start" | "brief" | "shell" | "fatal" | "kernel";
 type RuntimeState = "ready" | "analyzing" | "cancel_requested" | "degraded" | "invalid_response" | "offline" | "committed";
 
 interface Notice {
@@ -80,6 +81,7 @@ export function App() {
     const [providerStatus, secondOpinionProviderStatus] = await Promise.all([researchRoomApi.provider(), researchRoomApi.secondOpinionProvider()]);
     setProvider(providerStatus);
     setSecondOpinionProvider(secondOpinionProviderStatus);
+    if (window.location.pathname === "/project/kernel") { setPhase("kernel"); return; }
     if (!initialStatus.projectOpen) {
       setPhase("start"); setRuntime("ready"); setRecoveryAvailable(initialStatus.recoveryRequired);
       if (initialStatus.recoveryRequired) { setRecoveryOpen(true); showNotice(activeLanguage === "en" ? "The selected project requires recovery before it can open." : "所选项目需要先完成恢复才能打开。", "warning"); }
@@ -260,7 +262,8 @@ export function App() {
       <div className="live-region" role="status" aria-live="polite" data-tone={notice?.tone ?? "ready"}>{notice ? <><span>{notice.message}</span><button type="button" aria-label={language === "en" ? "Dismiss notification" : "关闭通知"} onClick={() => { setNotice(undefined); }}>×</button></> : null}</div>
       {phase === "boot" ? <main className="boot-screen"><img className="sestina-logo sestina-logo--boot" src="/sestina-logo.png" alt="Sestina" width="1024" height="1024" draggable={false} /><p>Starting the local Research Room…</p></main> : null}
     {phase === "language" ? <LanguageScreen busy={busy} onChoose={(next) => void chooseLanguage(next)} /> : null}
-    {phase === "start" && status ? <StartCenter language={language} directoryPickerAvailable={status.directoryPickerAvailable} busy={busy} onPreviewNative={previewNative} onCancelNative={cancelNative} onOpenManual={openManual} onInitializeNative={initializeNative} onOpened={(value) => void opened(value)} onNotice={showNotice} /> : null}
+    {phase === "start" && status ? <><StartCenter language={language} directoryPickerAvailable={status.directoryPickerAvailable} busy={busy} onPreviewNative={previewNative} onCancelNative={cancelNative} onOpenManual={openManual} onInitializeNative={initializeNative} onOpened={(value) => void opened(value)} onNotice={showNotice} /><button className="button" onClick={()=>{window.history.replaceState({},"","/project/kernel");setPhase("kernel");}}>{language==="en"?"Open a migrated project":"打开已迁移项目"}</button></> : null}
+    {phase === "kernel" ? <KernelProjectWorkspace language={language} onBack={()=>{window.history.replaceState({},"","/");setPhase("start");}}/> : null}
     {phase === "brief" && openedProject ? <BriefSetup language={language} projectTitle={openedProject.title} busy={busy} onActivate={activateBrief} onActivated={activated} onError={(message) => { showNotice(message, "danger"); }} /> : null}
     {phase === "shell" && state ? <ProjectShell language={language} state={state} provider={provider} busy={busy} prepared={prepared} analyzed={analyzed} inspectorOpen={inspectorOpen} inspectorSelection={inspectorSelection} onInspector={(open, selection) => { setInspectorOpen(open); if (selection) setInspectorSelection(selection); }} onSwitchProject={() => { setPrepared(undefined); setAnalyzed(undefined); setInspectorOpen(false); setInspectorSelection(undefined); setRecoveryOpen(false); setRecoveryAvailable(false); setState(undefined); window.history.replaceState({}, "", "/"); setPhase("start"); }} onPrepared={setPrepared} onAnalyzed={setAnalyzed} onPrepare={prepareReview} onAnalyze={analyzeReview} onCancel={cancelReview} onCommit={commitDisposition} onCommitted={committed} onDownload={downloadReceipt} onRollback={rollbackReceipt} onRuntime={setRuntime} onNotice={showNotice} onError={handleFailure} onAuthorityChanged={async () => { await refreshState(); }} /> : null}
     {phase === "fatal" ? <main id="main-content" className="fatal-screen"><StatusBadge tone="danger">{t(language, "offline")}</StatusBadge><h1>{t(language, "service_unavailable")}</h1><p>{t(language, "recovery_hint")}</p><button type="button" onClick={() => { window.location.reload(); }}>{t(language, "retry")}</button></main> : null}

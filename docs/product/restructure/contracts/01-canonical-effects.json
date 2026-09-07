@@ -144,16 +144,16 @@
       "userVisibleName": "Patch the research Brief",
       "userVisibleNameZh": "修改研究简报",
       "authority": "user_recorded constraint change; user_only commit",
-      "input": "typed field patch against the active Brief version plus public reason; diff is computed by the Kernel",
+      "input": "Typed field patch against the active Brief version plus public reason; when no Brief exists, mode=initialize supplies the first typed fields. The Kernel computes the diff and allocates every object identity.",
       "preconditions": [
         "patch is typed and validated field-by-field",
-        "active Brief version is the base version; no silent rebase"
+        "For an existing Brief, its active version is the base version; no silent rebase. Initialization requires no Brief aggregate in the current project snapshot, and a nonempty question or current task."
       ],
       "revisionPreconditions": [
         "baseProjectStateRevision equals the current head at commit",
-        "active Brief version unchanged since preview; otherwise the diff is recomputed and re-confirmed"
+        "The active Brief version, or the absence of a Brief for initialization, is unchanged since preview; otherwise the candidate requires a new preview and user confirmation."
       ],
-      "mutationTargets": "new Brief version superseding the active version, Review terminal state, revision head/event, Receipt",
+      "mutationTargets": "New Brief aggregate/version 1 for initialization, otherwise a new version superseding the active version; Review terminal state, revision head/event and Receipt in the same transaction",
       "receiptRequirements": [
         "Receipt references the new Brief version id/number and before/after revision"
       ],
@@ -193,5 +193,32 @@
       "externalDirectCallable": false,
       "resultingObject": "new ResearchBrief version superseding the prior question"
     }
-  ]
+  ],
+  "progressiveBriefImplementation": {
+    "gate": "G6",
+    "schemaVersion": "2.0.0",
+    "sections": [
+      "projectQuestion",
+      "currentTask",
+      "currentStage",
+      "targetArtifacts",
+      "fixedDecisions",
+      "allowedChanges",
+      "forbiddenChanges",
+      "expectedDeltas",
+      "evidenceBoundaries",
+      "explicitNonGoals",
+      "acceptedDecisions",
+      "knownUnknowns",
+      "evidenceThresholds"
+    ],
+    "states": [
+      "not_provided",
+      "intentionally_empty",
+      "provided"
+    ],
+    "emptyReason": "intentionally_empty requires a public reason; not_provided never means unrestricted",
+    "threshold": "minimumSourceClass reuses canonical EvidenceKind; acceptedInferenceCapacity reuses canonical InferenceCapacity. Neither is provenance or support status.",
+    "publication": "Database state is canonical. A failed derived Brief publication is repairable; only verified previous/current/pending content may be replaced. Explicit repair of a missing file requires a validated schema-25 database and completed migration binding; atomic no-replace installation cannot overwrite unknown content."
+  }
 }

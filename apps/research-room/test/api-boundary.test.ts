@@ -279,3 +279,9 @@ describe("Research Room typed API boundary", () => {
     expect(block).not.toContain("rgba(");
   });
 });
+
+it("preserves safe Kernel conflict reasons instead of reporting malformed transport", () => {
+  let caught: unknown;
+  try { decodeApiEnvelope({ok:false,error:{code:"stale_revision",changedObjects:[{kind:"brief",id:"synthetic-brief",version:2}],staleReasons:["provider_generation_changed"]}}, value=>value); } catch(error) { caught=error; }
+  expect(caught).toMatchObject({code:"stale_revision", reasons:["provider_generation_changed"], changedObjects:[{kind:"brief",id:"synthetic-brief",version:2}]});
+});

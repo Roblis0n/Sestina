@@ -1,0 +1,6 @@
+interface:
+  display_name: "Agent Corrector"
+  short_description: "Proportionate single-agent task correction"
+  default_prompt: "Use $agent-corrector to complete this task without drifting from its outcome, scope, decisions, evidence, or completion criteria."
+policy:
+  allow_implicit_invocation: true

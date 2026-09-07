@@ -24,6 +24,7 @@ import {
   type KernelRepositories,
 } from "@sestina/research";
 import { withTransaction, type StorageDatabase } from "@sestina/storage";
+import { validateKernelBodyRedaction } from "./privacy.js";
 import {
   decodeKernelJson,
   readKernelHead,
@@ -234,11 +235,13 @@ function checkedPage(
   return { limit: request.limit, after };
 }
 function decode<T extends Item>(
+  db: StorageDatabase,
   descriptor: Descriptor<T>,
   row: Record<string, unknown>,
   projectId: string,
 ): T {
   const value = descriptor.parse(decodeKernelJson(row.data));
+  validateKernelBodyRedaction(db, projectId, descriptor.table, value);
   if (
     value.projectId !== projectId ||
     value.id !== row[descriptor.id] ||
@@ -295,7 +298,7 @@ function reader<T extends Item>(
         projectId,
         id,
       );
-      return row ? decode(descriptor, row, projectId) : undefined;
+      return row ? decode(db, descriptor, row, projectId) : undefined;
     },
     listByProject(projectId: string, page: KernelPageRequest): KernelPage<T> {
       const { limit, after } = checkedPage(projectId, descriptor.table, page);
@@ -309,7 +312,7 @@ function reader<T extends Item>(
       );
       const items = rows
         .slice(0, limit)
-        .map((row) => decode(descriptor, row, projectId));
+        .map((row) => decode(db, descriptor, row, projectId));
       const last = items.at(-1);
       const nextCursor =
         rows.length > limit && last
@@ -524,6 +527,7 @@ export function createKernelRepositories(
           throw new KernelFault("authority_required");
         if (
           kernelHash(old.source) !== kernelHash(r.source) ||
+          kernelHash(old.intake ?? null) !== kernelHash(r.intake ?? null) ||
           (old.suggestionHash !== r.suggestionHash && old.status !== "draft")
         )
           throw new KernelFault("invalid_record");
@@ -745,6 +749,11 @@ export function createKernelRepositories(
           const old = initial(c, corrections.getById);
           if (old) return old;
           const attempt = attempts.getById(c.projectId, c.attemptId);
+          if (c.continuationReviewId) {
+            const child = reviews.getById(c.projectId, c.continuationReviewId);
+            if (child?.source.kind !== "review" || child.source.id !== c.reviewId || child.status !== "draft") throw new KernelFault("relation_mismatch");
+            if (c.findingIndex !== undefined && !attempt?.assessment?.envelope?.assessment?.findings[c.findingIndex]) throw new KernelFault("relation_mismatch");
+          }
           if (
             attempt?.reviewId !== c.reviewId ||
             attempt.assessmentHash !== c.originalAssessmentHash ||
@@ -780,3 +789,4 @@ export function createKernelRepositories(
     }),
   });
 }
+

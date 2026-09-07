@@ -541,3 +541,5 @@ export interface IdFactory {
   create(prefix: ResearchIdPrefix): string;
 }
 export { KERNEL_BRIEF_SECTIONS,parseKernelBriefMetadata,parseKernelBriefMetadataRecord,type KernelBriefMetadata,type KernelBriefMetadataRecord } from "./kernel/brief-metadata.js";
+export { BRIEF_SECTIONS, parseProgressiveBrief, type BriefSection, type BriefSectionState, type ProgressiveBrief, type KnownUnknown, type EvidenceThreshold } from "./brief/progressive-brief.js";
+export {parseReviewDraftEnvelope,reviewEnvelopeHash,type ReviewDraftEnvelope,type ReviewIntake} from "./kernel/review-intake.js";

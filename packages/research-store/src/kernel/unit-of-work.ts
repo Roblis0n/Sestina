@@ -29,6 +29,7 @@ import {
   type StorageDatabase,
 } from "@sestina/storage";
 import { createKernelRepositories } from "./repositories.js";
+import { redactKernelMemoryCopies } from "./privacy.js";
 import {
   appendKernelEvent,
   changedKernelObjects,
@@ -382,6 +383,7 @@ export function createKernelUnitOfWork(
                   }),
                 );
                 options.faultInjection?.("privacy_redaction");
+                redactKernelMemoryCopies(db, command.projectId, ref.id, revision, command.createdAt, command.authorityCommandId, () => { options.faultInjection?.("privacy_copy"); });
               }
             }
             const recordOnly = ["record_only", "record_only_outcome"].includes(

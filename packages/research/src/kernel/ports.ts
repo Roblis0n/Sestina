@@ -63,6 +63,7 @@ export type KernelWritePoint =
   | "object"
   | "memory_metadata"
   | "privacy_redaction"
+  | "privacy_copy"
   | "review_terminal"
   | "revision_event"
   | "revision_head"

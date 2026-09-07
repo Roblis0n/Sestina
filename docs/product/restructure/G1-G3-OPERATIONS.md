@@ -118,7 +118,7 @@ all four identity layers immediately before any send. A saved confirmation never
 without research revision changes or network activity. Derived views carry their
 source revision; failed or stale rebuilds are reported as rebuilding and cannot
 change canonical state. A known older Brief file is likewise a derived cache;
-unknown content fails validation. G6 owns publication of the rebuilt Brief file.
+unknown content fails validation. The G6 publisher updates the file only from validated database state.
 
 ## Persistent application entry (G4/G5)
 
@@ -156,32 +156,69 @@ The semantic next step `continue_review` maps to `create` with `sourceReviewId`;
 Stale/conflict responses require rebuilding and confirming; they never merge or
 rebase automatically. Opening/restarting performs recovery only, with zero sends.
 
-## Exact G6 continuation
+## G6/G7 application entry
 
-G6 starts after the G4/G5 completion recorded in
-[implementation status](IMPLEMENTATION-STATUS.md). Read plan 14's G6 entry and
-[Progressive Research Brief](Sestina-v0.2.0-完整重构计划集/05-PROGRESSIVE-RESEARCH-BRIEF.md),
-then extend the existing Brief metadata and the six handlers in
-`packages/core/src/kernel-effects.ts`. Reuse the service in
-`packages/core/src/kernel-application.ts` and the actual application dispatcher
-in `apps/research-room/src/kernel-api.ts`; do not add another authority or store.
+The explicit `/project/kernel` workspace exposes typed Brief editing, object
+selection, durable candidates, three-way conflict comparison, real effect forms,
+correction history, contextual Memory drawers, draft connections and historical
+workflow conversion. The default schema-20 workspace is not cut over.
 
-The minimal next increment is section state, typed form DTOs and relationship
-picker queries so the user can supply question/task without JSON or object IDs.
-Carry missing coverage and limitations into the existing Manifest projection;
-preserve field diff, version history and conflict confirmation. G6 owns the
-rebuilt derived Brief file publication. The canonical Evidence write remains
-`argument_evidence`; picker choices become typed effect references.
+Additional session-protected dispatcher actions:
 
-Retain the existing G6 UI RED mapping. Every subsequent UI change must be
-operated and visually inspected in the real built Research Room: Chinese and
-English; light, dark and high-contrast; supported desktop widths; long text;
-keyboard/focus and 200% text; affected loading, empty, error, stale, uncertain,
-success and restart states. Source review or generated snapshots alone do not
-constitute visual acceptance. G4/G5 changed no renderer and therefore make no
-new visual acceptance claim.
+| Actions | Behavior |
+| --- | --- |
+| brief / relationships / artifact_context / coverage / brief_conflict | Single-snapshot typed fields, project-scoped paginated objects and source versions, shared Coverage and base/current/candidate differences. |
+| publish_brief | Rebuild the derived file from canonical state; cannot overwrite unknown content. |
+| append_correction / correction_history | Four correction actions with optional Finding index; immutable original and source-linked child. Only its confirmed effect closes the correction. |
+| memory / memory_source / recall_memory / govern_memory | Four user states over the six internal states; real source/expiry/policy checks, explicit recall and selection. Governance uses the canonical transaction and command identity. |
+| privacy_copy_preview / privacy_cleanup / privacy_status | Verified copy inventory, explicit `copyAction=delete` or `retire`, resumable cleanup and honest retained/removed status. No automatic deletion. |
+| import_envelope / enable_host_bridge / revoke_host_bridge | One durable draft path; separate loopback capability expires after ten minutes and on project close. Rotation/revocation blocks old tokens, including uploads in progress. |
+| legacy_history / convert_legacy | Full read-only records and child attempts/events; export in the UI; idempotent conversion with immutable source. No new authority is inferred. |
 
-G7–G13, task-first route cutover, Electron and final migration/release remain
-outside this handoff. Run affected tests during G6 and one final public gate;
-reuse established platform evidence unless a concrete platform change requires
-new native verification.
+If an otherwise valid migrated project is missing its derived Brief file,
+`POST /api/kernel/repair-brief` requires the application session, projectPath
+and explicit confirmed=true. The open-project recovery control exposes this
+action. It validates the completed migration and canonical database, creates only
+the missing file, and leaves unknown/corrupt existing files untouched.
+
+Memory Forget prevents current body reuse before filesystem cleanup. Deletion
+removes verified managed files; retention keeps backup bytes with restore blocked
+and explicit risk acknowledgment. Temporary Brief publication files and current
+database old pages are removed in either mode. Unverified or unrelated paths
+remain listed as blocked; this never means complete deletion. Provider-received
+content, clipboard and manual exports are outside local control. Legacy and
+Kernel restoration reject old backups that could resurrect forgotten content.
+
+The integrated companion Skill is based on local branch `codex/agent-corrector`
+at `74c62c5f4ab22cc8267a4edc74cfaa34b078a3a8`, adapted to the accepted draft-only
+handoff. Generated canonical/host/TypeScript content is checked by the existing
+generator and bounded tests. No large model evaluation or independent-supervision
+claim is implied.
+
+## Exact G8 continuation
+
+After G6/G7 completion in [implementation status](IMPLEMENTATION-STATUS.md), start
+at plan 14's **G8 — Derived projections and recovery consistency**. Reuse
+`readKernelSnapshot`, the revision/outbox metadata and persistent Review/Receipt
+repositories. Build Today, Project relationships, Search, Attention, Resume,
+History and Receipt-detail projections from canonical state plus Review history;
+every view must carry its source revision. Rebuild after migration and verify
+event/head/Review/Manifest bindings during recovery. Projection corruption must
+lead to diagnostics/rebuild, never canonical writes or stale-index authority.
+Prove consistent commit/compensation/restart/restore surfaces and the 1,000-object
+case. Do not add another transaction, Review state machine or Authority policy.
+
+G9 owns global navigation and final route replacement. P1-06 remains RED there;
+G10/G12 own the remaining Electron/release RED. Electron assembly, final migration
+switch and publication are outside this implementation.
+
+Every later UI increment must use Product Design's actual built-interface review,
+operate core flows, and inspect affected Chinese/English, light/dark/high-contrast,
+desktop widths, long text/lists, keyboard/focus and 200% text states. Check loading,
+empty, error, conflict, stale, uncertain, success and restart where affected.
+Reuse existing motion tokens: input/focus is immediate, drawer movement is brief,
+interruptible and removed under reduced motion. Inspect running transitions, not
+just static screenshots. Copy states the real result and next action in natural,
+short language; internal names stay in technical details. Source review and
+generated images alone do not constitute acceptance. Run affected checks during
+iteration and one final public gate, without repeating unrelated platform audits.

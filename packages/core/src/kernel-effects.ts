@@ -15,6 +15,7 @@ import {
   parseResearchIssue,
   parseResearchBrief,
   createBriefChangeProposal,
+  createResearchBrief,
   confirmBriefChangeProposal,
   parseArgumentEvidence,
   parseClaimEvidenceLink,
@@ -35,6 +36,7 @@ import {
   type DecisionStatus,
   type ResearchIssueInput,
   type BriefChangeSet,
+  type ResearchBriefVersionFields,
 } from "@sestina/research";
 import { type KernelSnapshot } from "@sestina/research-store";
 export type CanonicalEffectPayload =
@@ -103,6 +105,13 @@ export type CanonicalEffectPayload =
     }
   | {
       kind: "patch_brief";
+      mode: "initialize";
+      fields: ResearchBriefVersionFields;
+      reason: string;
+    }
+  | {
+      kind: "patch_brief";
+      mode?: "patch";
       targetId: string;
       expectedVersion: number;
       baseVersionId: string;
@@ -153,7 +162,7 @@ export function parseCanonicalEffect(input: unknown): CanonicalEffectPayload {
       "expectedVersion",
       "resolutionEvidenceId",
     ],
-    patch_brief: ["targetId", "expectedVersion", "baseVersionId", "changes"],
+    patch_brief: (input as Record<string, unknown>).mode === "initialize" ? ["mode", "fields"] : ["mode", "targetId", "expectedVersion", "baseVersionId", "changes"],
     formal_direction_change: [
       "targetId",
       "expectedVersion",
@@ -279,7 +288,7 @@ export function parseCanonicalEffect(input: unknown): CanonicalEffectPayload {
     else throw new KernelFault("invalid_record");
   }
   if (
-    kind === "patch_brief" ||
+    (kind === "patch_brief" && v.mode !== "initialize") ||
     kind === "formal_direction_change" ||
     v.mode === "transition" ||
     v.mode === "resolve"
@@ -287,7 +296,12 @@ export function parseCanonicalEffect(input: unknown): CanonicalEffectPayload {
     kernelText(v.targetId, 160);
     kernelInteger(v.expectedVersion);
   }
-  if (kind === "patch_brief") {
+  if (kind === "patch_brief" && v.mode === "initialize") {
+    const fields = kernelRecord(v.fields, ["projectQuestion", "currentStage", "currentTask", "targetArtifacts", "fixedDecisions", "allowedChanges", "forbiddenChanges", "expectedDeltas", "evidenceBoundaries", "explicitNonGoals", "progressive"]);
+    if (!fields.progressive) throw new KernelFault("invalid_record");
+  }
+  if (kind === "patch_brief" && v.mode !== "initialize") {
+    if (v.mode !== undefined && v.mode !== "patch") throw new KernelFault("invalid_record");
     const changes = kernelRecord(v.changes, [
       "currentStage",
       "currentTask",
@@ -298,6 +312,7 @@ export function parseCanonicalEffect(input: unknown): CanonicalEffectPayload {
       "expectedDeltas",
       "evidenceBoundaries",
       "explicitNonGoals",
+      "progressive",
     ]);
     if (Object.keys(changes).length === 0)
       throw new KernelFault("invalid_record");
@@ -428,7 +443,7 @@ type Mutation =
     }
   | {
       kind: "brief";
-      before: ResearchBrief;
+      before: ResearchBrief | null;
       after: ResearchBrief;
     }
   | {
@@ -723,6 +738,26 @@ export function buildCanonicalEffect(input: {
         ),
       });
     }
+  } else if (p.kind === "patch_brief" && p.mode === "initialize") {
+    if (snapshot.state.objects.some(o => o.kind === "brief")) throw new KernelFault("illegal_transition");
+    let cursor = 0;
+    const fields = { ...p.fields };
+    for (const key of ["fixedDecisions", "expectedDeltas", "evidenceBoundaries"] as const) {
+      Object.assign(fields, { [key]: fields[key].map(item => { if (item.id) throw new KernelFault("invalid_record"); return { ...item, id: idFor("rbrf_", cursor++) }; }) });
+    }
+    const after = unwrapKernelDomain(createResearchBrief({ ...fields, projectId, source }, { clock, idFactory: { create: () => idFor("rbrf_", cursor++) } }));
+    const active = requireKernelValue(after.versions[0]);
+    for (const id of active.targetArtifacts) bind("artifact", id);
+    for (const rule of [...active.allowedChanges, ...active.forbiddenChanges, ...[...active.fixedDecisions, ...active.expectedDeltas, ...active.evidenceBoundaries].map(item => item.scope)]) {
+      if (rule.target.kind !== "project_path") bind("artifact", rule.target.artifactId);
+    }
+    for (const boundary of active.evidenceBoundaries) for (const id of boundary.allowedSourceIds ?? []) bind("evidence", id);
+    for (const ref of [...(active.progressive?.objectReferences ?? []), ...(active.progressive?.acceptedDecisions ?? []), ...(active.progressive?.knownUnknowns ?? []).flatMap(item => item.relatedObjectRefs)]) {
+      const object = bind(ref.kind, ref.id, ref.version);
+      if (ref.kind === "decision" && active.progressive?.acceptedDecisions.some(item => item.id === ref.id) && !["accepted", "frozen"].includes(typeof object.data.status === "string" ? object.data.status : "")) throw new KernelFault("relation_mismatch");
+      if (ref.kind === "evidence" && object.data.state !== "current") throw new KernelFault("relation_mismatch");
+    }
+    mutations.push({ kind: "brief", before: null, after });
   } else if (p.kind === "patch_brief" || p.kind === "formal_direction_change") {
     const before = unwrapKernelDomain(
       parseResearchBrief(bind("brief", p.targetId, p.expectedVersion).data),
@@ -733,7 +768,7 @@ export function buildCanonicalEffect(input: {
     const changes: BriefChangeSet =
       p.kind === "patch_brief"
         ? { ...p.changes }
-        : { projectQuestion: p.newQuestion };
+        : { projectQuestion: p.newQuestion, ...(active.progressive ? { progressive: { ...active.progressive, sections: { ...active.progressive.sections, projectQuestion: { status: "provided" as const } } } } : {}) };
     if (p.kind === "patch_brief") {
       let nextId = 2;
       for (const field of [
@@ -765,11 +800,16 @@ export function buildCanonicalEffect(input: {
           bind("artifact", rule.target.artifactId);
       for (const boundary of changes.evidenceBoundaries ?? [])
         for (const id of boundary.allowedSourceIds ?? []) bind("evidence", id);
+      for (const ref of [ ...(changes.progressive?.objectReferences ?? []), ...(changes.progressive?.acceptedDecisions ?? []), ...(changes.progressive?.knownUnknowns ?? []).flatMap(u => u.relatedObjectRefs) ]) {
+        const object = bind(ref.kind, ref.id, ref.version);
+        if (ref.kind === "decision" && changes.progressive?.acceptedDecisions.some(r => r.id === ref.id) && !["accepted", "frozen"].includes(typeof object.data.status === "string" ? object.data.status : "")) throw new KernelFault("relation_mismatch");
+        if (ref.kind === "evidence" && object.data.state !== "current") throw new KernelFault("relation_mismatch");
+      }
     }
     if (
       Object.entries(changes).every(
         ([k, v]) =>
-          kernelHash(v) === kernelHash(active[k as keyof typeof active]),
+          kernelHash(v) === kernelHash(active[k as keyof typeof active] ?? null),
       )
     )
       throw new KernelFault("invalid_record");
@@ -850,7 +890,7 @@ export function buildCanonicalEffect(input: {
           );
         else if (m.kind === "brief")
           unwrapKernelDomain(
-            repos.briefs.compareAndSwap(m.after, m.before.version),
+            m.before ? repos.briefs.compareAndSwap(m.after, m.before.version) : repos.briefs.create(m.after),
           );
         else if (m.kind === "evidence")
           unwrapKernelDomain(repos.argumentEvidence.create(m.after));
@@ -864,3 +904,4 @@ export function buildCanonicalEffect(input: {
 export function effectJson(value: unknown): KernelJson {
   return JSON.parse(JSON.stringify(value)) as KernelJson;
 }
+

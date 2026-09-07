@@ -15,6 +15,7 @@ import { parseEvidenceBoundaryRule, type EvidenceBoundaryRule } from "./evidence
 import { parseExpectedDelta, type ExpectedDelta } from "./expected-delta.js";
 import { parseResearchStage, type ResearchStage } from "./research-stage.js";
 import { findScopeRuleConflict, parseScopeRule, type ScopeRule } from "./scope-rule.js";
+import { parseProgressiveBrief, type ProgressiveBrief } from "./progressive-brief.js";
 
 export interface BriefConstraint {
   readonly id: string;
@@ -24,7 +25,7 @@ export interface BriefConstraint {
 
 export interface ResearchBriefVersionFields {
   readonly projectQuestion: string;
-  readonly currentStage: ResearchStage;
+  readonly currentStage: ResearchStage | "";
   readonly currentTask: string;
   readonly targetArtifacts: readonly string[];
   readonly fixedDecisions: readonly BriefConstraint[];
@@ -33,6 +34,7 @@ export interface ResearchBriefVersionFields {
   readonly expectedDeltas: readonly ExpectedDelta[];
   readonly evidenceBoundaries: readonly EvidenceBoundaryRule[];
   readonly explicitNonGoals: readonly string[];
+  readonly progressive?: ProgressiveBrief;
 }
 
 export interface ResearchBriefInput extends ResearchBriefVersionFields {
@@ -65,7 +67,7 @@ export interface ResearchBrief {
 
 const FIELD_NAMES: readonly (keyof ResearchBriefVersionFields)[] = [
   "projectQuestion", "currentStage", "currentTask", "targetArtifacts", "fixedDecisions",
-  "allowedChanges", "forbiddenChanges", "expectedDeltas", "evidenceBoundaries", "explicitNonGoals",
+  "allowedChanges", "forbiddenChanges", "expectedDeltas", "evidenceBoundaries", "explicitNonGoals", "progressive",
 ];
 
 function parseStringList(value: unknown, allowEmpty: boolean): ResearchResult<readonly string[]> {
@@ -94,8 +96,14 @@ function parseArray<T>(value: unknown, parser: (item: unknown) => ResearchResult
 }
 
 function parseVersionFields(input: unknown): ResearchResult<ResearchBriefVersionFields> {
-  if (!isRecord(input) || !isNonBlankString(input.projectQuestion) || !isNonBlankString(input.currentTask)) return err(researchError("invalid_research_brief"));
-  const stage = parseResearchStage(input.currentStage); if (!stage.ok) return stage;
+  if (!isRecord(input)) return err(researchError("invalid_research_brief"));
+  let progressive: ProgressiveBrief | undefined;
+  if (input.progressive !== undefined) {
+    try { progressive = parseProgressiveBrief(input.progressive, input); }
+    catch { return err(researchError("invalid_research_brief")); }
+    if (typeof input.projectQuestion !== "string" || typeof input.currentTask !== "string" || (!input.projectQuestion.trim() && !input.currentTask.trim())) return err(researchError("invalid_research_brief"));
+  } else if (!isNonBlankString(input.projectQuestion) || !isNonBlankString(input.currentTask)) return err(researchError("invalid_research_brief"));
+  const stage = progressive && input.currentStage === "" ? ok("" as const) : parseResearchStage(input.currentStage); if (!stage.ok) return stage;
   if (!Array.isArray(input.targetArtifacts)) return err(researchError("invalid_research_brief"));
   const targetArtifacts: string[] = [];
   for (const item of input.targetArtifacts) { const id = parseResearchIdFor(item, "rart_"); if (!id.ok || targetArtifacts.includes(id.value.id)) return err(researchError("invalid_research_brief")); targetArtifacts.push(id.value.id); }
@@ -105,10 +113,10 @@ function parseVersionFields(input: unknown): ResearchResult<ResearchBriefVersion
   const conflict = findScopeRuleConflict(allowedChanges.value, forbiddenChanges.value); if (!conflict.ok) return conflict;
   if (conflict.value) return err(researchError("scope_rule_conflict"));
   const expectedDeltas = parseArray(input.expectedDeltas, parseExpectedDelta); if (!expectedDeltas.ok) return expectedDeltas;
-  if (expectedDeltas.value.length === 0) return err(researchError("invalid_research_brief"));
+  if (!progressive && expectedDeltas.value.length === 0) return err(researchError("invalid_research_brief"));
   const evidenceBoundaries = parseArray(input.evidenceBoundaries, parseEvidenceBoundaryRule); if (!evidenceBoundaries.ok) return evidenceBoundaries;
   const explicitNonGoals = parseStringList(input.explicitNonGoals, true); if (!explicitNonGoals.ok) return explicitNonGoals;
-  return ok(cloneFrozen({ projectQuestion: input.projectQuestion.trim(), currentStage: stage.value, currentTask: input.currentTask.trim(), targetArtifacts, fixedDecisions: fixedDecisions.value, allowedChanges: allowedChanges.value, forbiddenChanges: forbiddenChanges.value, expectedDeltas: expectedDeltas.value, evidenceBoundaries: evidenceBoundaries.value, explicitNonGoals: explicitNonGoals.value }));
+  return ok(cloneFrozen({ projectQuestion: input.projectQuestion.trim(), currentStage: stage.value, currentTask: input.currentTask.trim(), targetArtifacts, fixedDecisions: fixedDecisions.value, allowedChanges: allowedChanges.value, forbiddenChanges: forbiddenChanges.value, expectedDeltas: expectedDeltas.value, evidenceBoundaries: evidenceBoundaries.value, explicitNonGoals: explicitNonGoals.value, ...(progressive ? { progressive } : {}) }));
 }
 
 export function parseResearchBriefVersion(input: unknown): ResearchResult<ResearchBriefVersion> {

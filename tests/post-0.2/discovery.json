@@ -5,7 +5,7 @@
   "foundationCommand": "pnpm test:post-0.2:foundation",
   "downstreamCommand": "pnpm test:post-0.2:downstream",
   "productionUiCommand": "pnpm test:post-0.2:ui-downstream",
-  "downstreamPolicy": "G4/G5 findings and availability entries are closed through the persistent application path and included in the foundation gate. G6+ domain and built-UI entries remain independent executable RED contracts, without failure masking.",
+  "downstreamPolicy": "G4-G7 findings are closed through the persistent application path and built UI. G9 navigation and G10/G12 release findings remain independent executable RED contracts without failure masking.",
   "findings": [
     {
       "id": "P0-01",
@@ -49,10 +49,9 @@
     {
       "id": "P1-04",
       "gates": [
-        "G6",
-        "G9"
+        "G6"
       ],
-      "file": "tests/post-0.2/downstream/production-ui.spec.ts",
+      "file": "tests/post-0.2/foundation/production-ui.spec.ts",
       "assertion": "typed controls",
       "oldBehavior": "Built Brief editor exposes five editable JSON fields."
     },
@@ -68,7 +67,6 @@
     {
       "id": "P1-06",
       "gates": [
-        "G7",
         "G9"
       ],
       "file": "tests/post-0.2/downstream/production-ui.spec.ts",
@@ -80,7 +78,7 @@
       "gates": [
         "G7"
       ],
-      "file": "tests/post-0.2/downstream/remaining-findings.test.ts",
+      "file": "tests/post-0.2/foundation/correction-finding-path.test.ts",
       "assertion": "interpretation challenge",
       "oldBehavior": "Legacy resolution completes without a unified canonical Review effect reference."
     },
@@ -115,33 +113,46 @@
     }
   ],
   "foundationEvidence": [
+    "agent-corrector-companion",
     "application-records",
     "atomic-boundary",
+    "brief-coverage-binding",
+    "brief-publication",
+    "brief-repair-http",
     "brief-transaction",
     "context-boundary",
+    "correction-finding-path",
     "corrupt-workflow",
     "domain-boundary",
     "downgrade",
+    "host-draft-intake",
     "kernel-application",
     "kernel-application-crash",
     "kernel-boundaries",
     "kernel-effect-matrix",
     "kernel-evidence-links",
     "kernel-http",
+    "kernel-memory",
     "kernel-provider-boundaries",
     "kernel-transport",
     "kernel-unit-of-work",
     "kernel-workflow-integration",
+    "legacy-memory-forget",
     "legacy-states",
     "legacy-volume",
+    "memory-source-lifecycle",
     "migration",
     "migration-boundaries",
     "network-boundary",
     "object-family",
+    "privacy-maintenance",
+    "privacy-transaction",
     "process-crash",
     "process-race",
+    "progressive-brief",
     "readonly-project",
     "restore-crash",
+    "review-correction",
     "revision-matrix",
     "schema",
     "strict-boundaries",
@@ -151,5 +162,6 @@
   "closedDownstreamFiles": [
     "tests/post-0.2/downstream/findings.test.ts",
     "tests/post-0.2/downstream/availability.test.ts"
-  ]
+  ],
+  "foundationUiCommand": "pnpm test:post-0.2:ui-foundation"
 }

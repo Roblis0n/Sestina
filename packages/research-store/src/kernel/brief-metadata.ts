@@ -40,9 +40,9 @@ export function writeKernelBriefMetadata(
   if (!db.isKernelCanonicalWrite || !db.isTransaction)
     throw new KernelFault("authority_required");
   const next = parseKernelBriefMetadataRecord(input);
-  kernelInteger(expectedVersion);
+  kernelInteger(expectedVersion, 0);
   const old = readKernelBriefMetadata(db, next.projectId, next.briefId);
-  if (old?.version !== expectedVersion || next.version !== expectedVersion + 1)
+  if ((old?.version ?? 0) !== expectedVersion || next.version !== expectedVersion + 1)
     throw new KernelFault("stale_object");
   const row = db.get<{ data: string }>(
     "SELECT data FROM research_briefs WHERE project_id=? AND brief_id=?",
@@ -60,13 +60,18 @@ export function writeKernelBriefMetadata(
       kernelHash(next.metadata.versions.map((v) => v.versionId))
   )
     throw new KernelFault("relation_mismatch");
-  if (
+  if (old && (
     next.metadata.legacyPayloadHash !== old.metadata.legacyPayloadHash ||
     kernelHash(
       next.metadata.versions.slice(0, old.metadata.versions.length),
     ) !== kernelHash(old.metadata.versions)
-  )
+  ))
     throw new KernelFault("illegal_transition");
+  if (!old) {
+    if (next.metadata.legacySchemaVersion !== null || next.metadata.versions.length !== 1) throw new KernelFault("invalid_record");
+    db.run("INSERT INTO research_brief_metadata(project_id,brief_id,version,data) VALUES(?,?,?,?)", next.projectId, next.briefId, next.version, kernelCanonicalJson(next.metadata));
+    return next;
+  }
   const changed = db.run(
     "UPDATE research_brief_metadata SET version=?,data=? WHERE project_id=? AND brief_id=? AND version=?",
     next.version,

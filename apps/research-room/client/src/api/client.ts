@@ -111,7 +111,7 @@ interface RequestOptions {
 export class ResearchRoomApiError extends Error {
   readonly code: string;
   readonly recoverable: boolean;
-  constructor(code: string, message: string, recoverable = true) {
+  constructor(code: string, message: string, recoverable = true, readonly reasons: readonly string[] = [], readonly changedObjects: readonly {kind:string; id:string; version:number}[] = []) {
     super(message);
     this.name = "ResearchRoomApiError";
     this.code = code;
@@ -523,6 +523,16 @@ export class ResearchRoomApi {
       throw toApiError(error);
     }
   }
+  async kernelOpen(projectPath: string) {
+    return this.request("/api/kernel/open", decodeLocalJson, { method: "POST", mutation: true, body: { projectPath } });
+  }
+  async kernelSession() { return this.request("/api/kernel/status", decodeLocalJson); }
+  async repairKernelBrief(projectPath: string) {
+    return this.request("/api/kernel/repair-brief",decodeLocalJson,{method:"POST",mutation:true,body:{projectPath,confirmed:true}});
+  }
+  async kernel<T>(projectId: string, action: string, body: Record<string, unknown>, decode: (v: unknown) => T): Promise<T> {
+    return this.request("/api/kernel/reviews", decode, { method: "POST", mutation: true, body: { action, projectId, ...body } });
+  }
 
   private async request<T>(path: string, decode: (value: unknown) => T, options: RequestOptions = {}): Promise<T> {
     if (options.mutation && !this.#sessionToken) throw new ResearchRoomApiError("session_unavailable", "The local session is unavailable.");
@@ -545,7 +555,7 @@ export class ResearchRoomApi {
       try {
         return decodeApiEnvelope(body, decode);
       } catch (error) {
-        if (error instanceof ApiPayloadError) throw new ResearchRoomApiError(error.code, error.message, error.code !== "invalid_payload");
+        if (error instanceof ApiPayloadError) throw new ResearchRoomApiError(error.code, error.message, error.code !== "invalid_payload", error.reasons, error.changedObjects);
         throw error;
       }
     } catch (error) {
@@ -567,3 +577,4 @@ export class ResearchRoomApi {
 }
 
 export const researchRoomApi = new ResearchRoomApi();
+import { decodeLocalJson } from "./kernel-dto.js";

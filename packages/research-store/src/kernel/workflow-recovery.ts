@@ -13,6 +13,7 @@ import {
   type StorageDatabase,
 } from "@sestina/storage";
 import { createKernelRepositories } from "./repositories.js";
+import { validateLegacyRedaction } from "./privacy.js";
 import {
   decodeKernelJson,
   readKernelHead,
@@ -184,12 +185,23 @@ export function readKernelLegacyRecord(
     projectId,
     sourceId,
   );
-  if (row && kernelBytesHash(row.data) !== row.source_hash)
+  if (row && kernelBytesHash(row.data) !== row.source_hash && !validateLegacyRedaction(db, projectId, sourceKind, sourceId, row.data, row.source_hash))
     throw new KernelFault("corrupt_state");
+  const children = sourceKind === "closed_external_app_pilots" ? [
+    ...db.all<{id: string; status: string; failure_code: string | null; data: string}>("SELECT attempt_id id,status,failure_code,data FROM closed_external_app_pilot_attempts WHERE project_id=? AND pilot_id=? ORDER BY ordinal,attempt_id", projectId,sourceId).map(child => ({ ...child, table: "closed_external_app_pilot_attempts" })),
+    ...db.all<{id: string; status: string; data: string}>("SELECT event_id id,to_status status,data FROM closed_external_app_pilot_events WHERE project_id=? AND pilot_id=? ORDER BY event_index,event_id", projectId,sourceId).map(child => ({ ...child, table: "closed_external_app_pilot_events" })),
+  ].map(child => {
+    const data = decodeKernelJson(child.data);
+    if (data && typeof data === "object" && !Array.isArray(data) && "bodyAvailable" in data && data.bodyAvailable === false) {
+      if (!("originalRecordHash" in data) || typeof data.originalRecordHash !== "string" || !validateLegacyRedaction(db,projectId,child.table,child.id,child.data,data.originalRecordHash)) throw new KernelFault("corrupt_state");
+    }
+    return { ...child, data };
+  }) : [];
   return row
     ? {
         sourceKind,
         sourceId,
+        children,
         classification: row.classification,
         canonicalAuthority: false as const,
         legacyPayload: decodeKernelJson(row.data),

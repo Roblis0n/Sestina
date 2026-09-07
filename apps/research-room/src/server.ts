@@ -306,6 +306,10 @@ export class ResearchRoomHttpApplication {
         const snapshot = await this.providerConfigurationService?.loadRuntimeSnapshot();
         return snapshot ? createKernelOpenAICompatibleProvider(snapshot) : undefined;
       }),
+      secondOpinionProvider: async () => {
+        const snapshot = await this.secondOpinionProviderConfigurationService?.loadRuntimeSnapshot();
+        return snapshot ? createKernelOpenAICompatibleProvider(snapshot) : undefined;
+      },
     });
   }
 
@@ -946,12 +950,19 @@ export class ResearchRoomHttpApplication {
       }
 
       if (request.method === "POST" || request.method === "DELETE") this.authorize(request);
+      if (request.method === "GET" && url.pathname === "/api/kernel/status") { json(response, 200, { ok: true, value: this.#kernelApi.status() }); return; }
       if (request.method === "POST" && url.pathname === "/api/kernel/open") {
         this.#opened?.core.close(); this.#opened = undefined;
         json(response, 200, { ok: true, value: await this.#kernelApi.open(await readBody(request)) }); return;
       }
+      if (request.method === "POST" && url.pathname === "/api/kernel/repair-brief") {
+        json(response, 200, { ok: true, value: await this.#kernelApi.repairBrief(await readBody(request)) }); return;
+      }
       if (request.method === "POST" && (url.pathname === "/api/kernel/reviews" || (this.#kernelApi.active && url.pathname.startsWith("/api/reviews/")))) {
         json(response, 200, { ok: true, value: await this.#kernelApi.execute(await readBody(request)) }); return;
+      }
+      if (this.#kernelApi.active && request.method !== "GET" && /^\/api\/(?:project\/(?:external-app-pilots|appeals|correction-appeals|deliberation-rooms)|(?:correction-appeals|deliberation-rooms))(?:\/|$)/u.test(url.pathname)) {
+        throw new HttpProblem(409, "legacy_workflow_read_only", "This historical workflow is read-only. Create a new review draft to continue.");
       }
       if (request.method === "POST" && url.pathname === "/api/preferences/language") { json(response, 200, { ok: true, value: await this.setLanguagePreference(await readBody(request)) }); return; }
       await this.requireLanguagePreference();

@@ -53,7 +53,7 @@ import type {
 
 export class ApiPayloadError extends Error {
   readonly code: string;
-  constructor(message: string, code = "invalid_payload") {
+  constructor(message: string, code = "invalid_payload", readonly reasons: readonly string[] = [], readonly changedObjects: readonly {kind:string; id:string; version:number}[] = []) {
     super(message);
     this.name = "ApiPayloadError";
     this.code = code;
@@ -130,8 +130,21 @@ export function decodeApiEnvelope<T>(value: unknown, decode: (input: unknown) =>
   if (envelope.ok === false) {
     exactKeys(envelope, ["error", "ok"], "API error envelope");
     const error = record(envelope.error, "API error");
-    exactKeys(error, ["code", "message"], "API error");
-    throw new ApiPayloadError(string(error.message, "API error message"), string(error.code, "API error code"));
+    allowedKeys(error, ["code", "message", "staleReasons", "changedObjects"], "API error");
+    const code = string(error.code, "API error code");
+    const reasons = error.staleReasons === undefined ? [] : array(error.staleReasons, "stale reasons").map(value => {
+      const reason = string(value, "stale reason");
+      if (!/^[a-z0-9_]{1,128}$/.test(reason)) fail("stale reason");
+      return reason;
+    });
+    const changedObjects = error.changedObjects === undefined ? [] : array(error.changedObjects, "changed objects").map(value => {
+      const ref = record(value, "changed object");
+      exactKeys(ref, ["kind", "id", "version"], "changed object");
+      if (typeof ref.version !== "number" || !Number.isSafeInteger(ref.version) || ref.version < 1) fail("changed object version");
+      return {kind:string(ref.kind,"object kind"), id:string(ref.id,"object id"), version:ref.version};
+    });
+    if (error.message === undefined && error.changedObjects === undefined) fail("API error message");
+    throw new ApiPayloadError(error.message === undefined ? code : string(error.message, "API error message"), code, reasons, changedObjects);
   }
   return fail("API envelope");
 }
