@@ -253,3 +253,11 @@ matrix is not repeated. No real Provider or user project is used.
 
 The final integrated public-gate result is recorded here after execution;
 G4/G5 are not yet claimed complete by this evidence entry.
+
+The integrated run also exposed an outdated exact-envelope assertion after the
+new identity/authority metadata was added. Its expected object now includes all
+new fields while retaining every original flag assertion. Final focused source
+binding tests additionally reproduced an Issue preview accepting a foreign
+project's target, and a partial Evidence binding being silently discarded by
+the reusable legacy decoder. The typed boundary now rejects both before preview
+confirmation. These fixes affect the new effect parser/builder only.

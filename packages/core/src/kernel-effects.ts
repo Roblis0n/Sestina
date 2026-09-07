@@ -236,8 +236,39 @@ export function parseCanonicalEffect(input: unknown): CanonicalEffectPayload {
     else throw new KernelFault("invalid_record");
   }
   if (kind === "create_or_resolve_issue") {
-    if (v.mode === "create") kernelRecord(v, [...common, "mode", "issue"]);
-    else if (v.mode === "resolve")
+    if (v.mode === "create") {
+      kernelRecord(v, [...common, "mode", "issue"]);
+      const issue = kernelRecord(v.issue, [
+        "kind",
+        "target",
+        "violatedCriterion",
+        "rationaleConcepts",
+        "summary",
+        "sourceArtifactId",
+        "sourceRevisionId",
+        "sourceRevisionContentHash",
+        "lineageRootRevisionId",
+      ]);
+      const target = kernelRecord(issue.target, [
+        "kind",
+        "artifactId",
+        "heading",
+        "blockId",
+        "relativePath",
+      ]);
+      const fields: Record<string, string[]> = {
+        artifact: ["artifactId"],
+        heading: ["artifactId", "heading"],
+        block: ["artifactId", "blockId"],
+        project_path: ["relativePath"],
+      };
+      if (
+        typeof target.kind !== "string" ||
+        !Object.hasOwn(fields, target.kind)
+      )
+        throw new KernelFault("invalid_record");
+      kernelRecord(target, ["kind", ...(fields[target.kind] ?? [])]);
+    } else if (v.mode === "resolve")
       kernelRecord(v, [
         ...common,
         "mode",
@@ -341,6 +372,17 @@ export function parseCanonicalEffect(input: unknown): CanonicalEffectPayload {
       "provenance",
     ]);
     kernelText(evidence.summary, 8192);
+    if (
+      [
+        evidence.artifactId,
+        evidence.revisionId,
+        evidence.contentVersionHash,
+      ].some((x) => x !== undefined)
+    ) {
+      kernelText(evidence.artifactId, 160);
+      kernelText(evidence.revisionId, 160);
+      kernelText(evidence.contentVersionHash, 64);
+    }
     const provenance = kernelRecord(evidence.provenance, [
       "citation",
       "locator",
@@ -622,6 +664,8 @@ export function buildCanonicalEffect(input: {
       ]);
       const revision = bind("revision", p.issue.sourceRevisionId).data;
       bind("artifact", p.issue.sourceArtifactId);
+      if (p.issue.target.kind !== "project_path")
+        bind("artifact", p.issue.target.artifactId);
       if (
         bind("revision", p.issue.lineageRootRevisionId).data.artifactId !==
         p.issue.sourceArtifactId

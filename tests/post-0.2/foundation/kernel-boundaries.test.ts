@@ -11,6 +11,52 @@ import {
   commit,
 } from "../application-fixtures.js";
 const fixtures: Awaited<ReturnType<typeof applicationFixture>>[] = [];
+it("G4 rejects a partial Evidence source binding instead of silently dropping its revision", () => {
+  expect(() =>
+    parseCanonicalEffect({
+      kind: "add_evidence",
+      evidence: {
+        kind: "literature_source",
+        summary: "Synthetic citation",
+        state: "current",
+        inferenceCapacity: "descriptive",
+        revisionId: "rrev_00000000000000000000000000",
+        provenance: { citation: "Synthetic source" },
+      },
+      links: [],
+      reason: "Record source",
+    }),
+  ).toThrow("invalid_record");
+});
+it("G4 Issue preview refuses a target from another project before offering user confirmation", async () => {
+  const f = await applicationFixture(),
+    other = await applicationFixture();
+  fixtures.push(f, other);
+  const r = await ready(f);
+  expect(() =>
+    f.kernel.prepareEffect(
+      r.id,
+      r.version,
+      {
+        kind: "create_or_resolve_issue",
+        mode: "create",
+        reason: "Investigate",
+        issue: {
+          kind: "evidence_boundary",
+          summary: "Synthetic issue",
+          target: { kind: "artifact", artifactId: other.artifact.artifact.id },
+          violatedCriterion: "Needs support",
+          rationaleConcepts: ["inference"],
+          sourceArtifactId: f.artifact.artifact.id,
+          sourceRevisionId: f.artifact.revision.id,
+          sourceRevisionContentHash: f.artifact.revision.content.contentHash,
+          lineageRootRevisionId: f.artifact.revision.id,
+        },
+      },
+      session,
+    ),
+  ).toThrow("relation_mismatch");
+});
 afterEach(async () => {
   for (const f of fixtures.splice(0)) await f.cleanup();
 });

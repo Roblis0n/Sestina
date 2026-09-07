@@ -296,5 +296,12 @@ it("G5: protocol-valid opinion does not acquire semantic correctness", async () 
     response_schema_valid: true,
     quoted_span_integrity_valid: true,
     provider_assessment_available: true,
+    assessmentId: r.attemptIds[0],
+    reviewId: r.id,
+    manifestId: p.manifest.id,
+    providerIdentity: provider.identity,
+    receivedAt: expect.any(String),
+    authorityClass: "model_proposed_assessment",
+    canMutateAuthority: false,
   });
 });
