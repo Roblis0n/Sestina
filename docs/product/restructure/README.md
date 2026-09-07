@@ -143,8 +143,11 @@ code-fact checks are recorded in [`IMPLEMENTATION-DECISIONS.md`](IMPLEMENTATION-
 The user subsequently authorized G1–G3 together on `codex/post-0.2-g1-g3`,
 starting from G0 commit `a4889ee`. The opt-in schema-25 implementation and
 three-platform evidence are recorded in [G1–G3 evidence](G1-G3-EVIDENCE.md).
-G1–G3 are completed and verified. The exact following G4 entry is in
-[operations and continuation](G1-G3-OPERATIONS.md). G4–G13 remain unimplemented.
+G1–G5 are completed and verified on the opt-in path. G4/G5 add the six typed
+user-confirmed effects and persistent Review/Provider application services; the
+final public gate passed at `85beaade435f8c5bf5eb52910a2017acbf43d98c`.
+The exact G6 entry is in [operations and continuation](G1-G3-OPERATIONS.md).
+G6–G13 remain unimplemented. The existing main interface is not switched.
 Agent Corrector integration, Electron packaging, route replacement, final
 production cutover and release work retain their assigned downstream gates.
 

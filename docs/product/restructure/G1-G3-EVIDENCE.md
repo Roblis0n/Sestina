@@ -198,7 +198,7 @@ status/documentation-only commit receives focused checks without repeating the
 already successful full matrix. Its runtime is identical to the verified tree.
 
 G1, G2 and G3 are `completed_and_verified`. There is no remaining blocker for
-this scope. G4–G13 remain `not_started`; their 15 domain and seven built-UI RED
+that G1–G3 scope. At that checkpoint G4–G13 were `not_started`; their 15 domain and seven built-UI RED
 assertions are retained as executable continuation evidence, not repaired claims.
 
 | Implementation history | Evidence contribution |
@@ -251,8 +251,29 @@ release tag or publication changes are part of G4/G5. Actual built-server
 verification remains in the public gate; the previous three-platform artifact
 matrix is not repeated. No real Provider or user project is used.
 
-The final integrated public-gate result is recorded here after execution;
-G4/G5 are not yet claimed complete by this evidence entry.
+The final integrated `pnpm verify:public` passed with exit code 0 on
+2026-09-07 at `85beaade435f8c5bf5eb52910a2017acbf43d98c`, in the existing
+clean verification checkout. It passed production lint/types, all 330 selected
+production regressions (including the real built Research Room entry), all 10
+G0 contract/state files, immutable recipe/schema/discovery checks, all 308
+foundation/application assertions in 33 files, documentation, repository,
+architecture and public-history checks. No test in these full runs was skipped.
+
+The first full integration attempt stopped at one exact-envelope expectation
+(305 other foundation assertions passed). After the fix and the discriminating
+source-binding regressions below, the final committed runtime passed the full
+gate. This was a failure-driven rerun, not an additional independent audit or
+platform matrix. Final completion/handoff prose receives only document and
+contract/status checks; the verified runtime is unchanged.
+
+G4 and G5 are `completed_and_verified`. There is no remaining scope blocker.
+The next gate is G6; no G6–G13 completion is claimed.
+
+| G4/G5 implementation history | Contribution |
+| --- | --- |
+| `21abc0b` | Persisted effect and independent assessment-fact behavior RED before implementation. |
+| `72eae64` | Typed six-effect Kernel, durable Review/attempt orchestration, exact-byte production adapter, session-protected application API and integrated executable coverage. |
+| `85beaad` | Explicit foreign-Issue-target and partial-Evidence-binding rejection, complete assessment-envelope expectation, and final fully verified runtime. |
 
 The integrated run also exposed an outdated exact-envelope assertion after the
 new identity/authority metadata was added. Its expected object now includes all

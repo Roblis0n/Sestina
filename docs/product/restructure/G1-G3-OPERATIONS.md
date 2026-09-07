@@ -87,7 +87,7 @@ Legacy Room/Pilot/Appeal writers are refused at both repository and SQL boundari
 The old records remain available through validated read-only compatibility views.
 
 `kernel.commitCanonical(command, synchronousRepositoryWork)` is the G3 primitive
-for one future Kernel command. The command binds the expected project revision,
+used by the G4/G5 application service for a Kernel command. The command binds the expected project revision,
 Review version, confirmed object versions, effect identity and preview hash.
 The Kernel's live local-session authorization callback defaults to deny; Memory,
 privacy and Episode governance use a separate callback. These callbacks are not
@@ -151,6 +151,8 @@ cannot write a Receipt. The schema-20 default is not switched.
 
 A Review DTO exposes durable workflow state, version, current project revision,
 all attempts and corrections, Manifest metadata and allowed next actions.
+The semantic next step `continue_review` maps to `create` with `sourceReviewId`;
+`rebuild_manifest` maps to `prepare_manifest` with fresh choices and version.
 Stale/conflict responses require rebuilding and confirming; they never merge or
 rebase automatically. Opening/restarting performs recovery only, with zero sends.
 
