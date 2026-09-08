@@ -29,6 +29,8 @@ run("production-source lint", eslint, [
   "apps/cli/src/main.ts",
   "apps/research-room/src/main.ts",
   "apps/research-room/src/server.ts",
+  "apps/research-room/src/kernel-api.ts",
+  "apps/research-room/shared",
   "apps/research-room/client/src",
   "packages/core/src",
   "packages/research/src",
@@ -86,12 +88,32 @@ run("public-preview, resilience, privacy, and authority tests", vitest, [
   "--no-file-parallelism",
 ]);
 
-run("G0 frozen contracts", resolve(root, "scripts/verify-post-0.2-contracts.mjs"));
-run("Pinned legacy source and recipe provenance", resolve(root, "scripts/verify-post-0.2-toolchain.mjs"));
-run("Pinned old release fixture provenance", resolve(root, "scripts/materialize-post-0.2-release.mjs"), ["--verify-inputs"]);
-run("G1 downstream discovery and immutable corpus declarations", resolve(root, "scripts/verify-post-0.2-discovery.mjs"));
-run("Schema 021–025 deterministic structure", resolve(root, "scripts/verify-post-0.2-schema.mjs"));
-run("G1–G7 foundation and closed application contracts (G9+ RED has independent commands)", vitest, ["run", "--config", "tests/post-0.2/vitest.foundation.config.ts"]);
+run(
+  "G0 frozen contracts",
+  resolve(root, "scripts/verify-post-0.2-contracts.mjs"),
+);
+run(
+  "Pinned legacy source and recipe provenance",
+  resolve(root, "scripts/verify-post-0.2-toolchain.mjs"),
+);
+run(
+  "Pinned old release fixture provenance",
+  resolve(root, "scripts/materialize-post-0.2-release.mjs"),
+  ["--verify-inputs"],
+);
+run(
+  "G1 downstream discovery and immutable corpus declarations",
+  resolve(root, "scripts/verify-post-0.2-discovery.mjs"),
+);
+run(
+  "Schema 021–025 deterministic structure",
+  resolve(root, "scripts/verify-post-0.2-schema.mjs"),
+);
+run(
+  "G1–G9 foundation and application contracts (G10/G12 RED has independent commands)",
+  vitest,
+  ["run", "--config", "tests/post-0.2/vitest.foundation.config.ts"],
+);
 
 for (const script of [
   "scripts/build-release.mjs",

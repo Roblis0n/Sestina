@@ -1,6 +1,6 @@
 import { requireLocalValue } from "../../api/kernel-dto.js";
 import { KernelMemoryDrawer } from "./KernelMemoryDrawer.js";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { researchRoomApi, ResearchRoomApiError } from "../../api/client.js";
 import {
   decodeBriefView,
@@ -111,34 +111,79 @@ export function ProjectBriefPanel({
   language,
   onReview,
   candidate,
+  initialEditing = false,
+  readOnly = false,
+  historyVersionId,
 }: {
   projectId: string;
   language: string;
   onReview: (r: KernelReviewDto) => void;
   candidate?: KernelReviewDto;
+  initialEditing?: boolean;
+  readOnly?: boolean;
+  historyVersionId?: string;
 }) {
   const en = language === "en",
-    label = (key: string) => key === "objectReferences" ? (en ? "Related research objects" : "关联研究对象") : labels[key]?.[en ? 1 : 0] ?? key;
+    label = (key: string) =>
+      key === "objectReferences"
+        ? en
+          ? "Related research objects"
+          : "关联研究对象"
+        : (labels[key]?.[en ? 1 : 0] ?? key);
   const [view, setView] = useState<BriefViewDto>();
   const [fields, setFields] = useState<BriefFieldsDto>();
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(initialEditing && !readOnly);
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [draft, setDraft] = useState<KernelReviewDto>();
   const [draftDirty, setDraftDirty] = useState(false);
+  const edits = useRef(0),
+    savedEdits = useRef(0),
+    saveCurrent = useRef<() => Promise<void>>(() =>
+      Promise.reject(new Error("editor_not_ready")),
+    );
+  useEffect(() => {
+    const unload = (event: BeforeUnloadEvent) => {
+      if (edits.current !== savedEdits.current) event.preventDefault();
+    };
+    const navigate = (event: Event) => {
+      if (edits.current === savedEdits.current) return;
+      event.preventDefault();
+      const detail = (
+        event as CustomEvent<{
+          save?: () => Promise<void>;
+          discard?: () => void;
+        }>
+      ).detail;
+      detail.save = async () => {
+        await saveCurrent.current();
+        if (edits.current !== savedEdits.current)
+          throw new Error("unsaved_draft");
+      };
+      detail.discard = () => {
+        savedEdits.current = edits.current;
+        setDraftDirty(false);
+      };
+    };
+    window.addEventListener("beforeunload", unload);
+    window.addEventListener("sestina-before-navigate", navigate);
+    return () => {
+      window.removeEventListener("beforeunload", unload);
+      window.removeEventListener("sestina-before-navigate", navigate);
+    };
+  }, []);
   const [base, setBase] = useState<BriefViewDto["brief"]>();
   const [notice, setNotice] = useState("");
-  const [conflict, setConflict] =
-    useState<
-      {
-        field: string;
-        base: LocalJson;
-        current: LocalJson;
-        candidate: LocalJson;
-        conflict: boolean;
-      }[]
-    >();
+  const [conflict, setConflict] = useState<
+    {
+      field: string;
+      base: LocalJson;
+      current: LocalJson;
+      candidate: LocalJson;
+      conflict: boolean;
+    }[]
+  >();
   const [choices, setChoices] = useState<
     Record<string, "current" | "candidate">
   >({});
@@ -152,17 +197,60 @@ export function ProjectBriefPanel({
       {},
       decodeBriefView,
     );
-    setView(v);
+    if (historyVersionId) {
+      const historical = v.brief?.versions.find(
+        (version) => version.id === historyVersionId,
+      );
+      if (!historical) throw new Error("invalid_history_version");
+      setView({ ...v, active: historical });
+    } else setView(v);
     return v;
   };
   useEffect(() => {
     void load()
       .then((v) => {
-        const payload = candidate?.effectDraft?.payload as unknown as { kind: string; mode?: string; fields?: BriefFieldsDto; changes?: Partial<BriefFieldsDto>; expectedVersion?: number; baseVersionId?: string; newQuestion?: string; reason?: string } | undefined;
-        const historical = v.brief?.versions.find(version => version.id === payload?.baseVersionId);
-        setBase(payload?.expectedVersion && v.brief ? { ...v.brief, version: payload.expectedVersion, currentVersionId: payload.baseVersionId ?? v.brief.currentVersionId } : v.brief);
-        setFields(payload?.mode === "initialize" && payload.fields ? structuredClone(payload.fields) : payload?.changes ? { ...initial({ ...v, active: historical ?? v.active }), ...structuredClone(payload.changes) } : initial(v));
-        if (candidate) { setDraft(candidate); setEditing(true); setReason(payload?.reason ?? candidate.suggestion); setDirection(payload?.kind === "formal_direction_change"); setNewQuestion(payload?.newQuestion ?? ""); }
+        const payload = candidate?.effectDraft?.payload as unknown as
+          | {
+              kind: string;
+              mode?: string;
+              fields?: BriefFieldsDto;
+              changes?: Partial<BriefFieldsDto>;
+              expectedVersion?: number;
+              baseVersionId?: string;
+              newQuestion?: string;
+              reason?: string;
+            }
+          | undefined;
+        const historical = v.brief?.versions.find(
+          (version) => version.id === payload?.baseVersionId,
+        );
+        setBase(
+          payload?.expectedVersion && v.brief
+            ? {
+                ...v.brief,
+                version: payload.expectedVersion,
+                currentVersionId:
+                  payload.baseVersionId ?? v.brief.currentVersionId,
+              }
+            : v.brief,
+        );
+        setFields(
+          payload?.mode === "initialize" && payload.fields
+            ? structuredClone(payload.fields)
+            : payload?.changes
+              ? {
+                  ...initial({ ...v, active: historical ?? v.active }),
+                  ...structuredClone(payload.changes),
+                }
+              : initial(v),
+        );
+        if (candidate) {
+          setDraft(candidate);
+          setEditing(true);
+          setReason(payload?.reason ?? candidate.suggestion);
+          setDirection(payload?.kind === "formal_direction_change");
+          setNewQuestion(payload?.newQuestion ?? "");
+        }
       })
       .catch(() => {
         setError(
@@ -490,6 +578,7 @@ export function ProjectBriefPanel({
     );
   };
   async function saveDraft() {
+    const submittedEdit = edits.current;
     if (!fields || !view) return;
     if (!fields.projectQuestion.trim() && !fields.currentTask.trim()) {
       setError(
@@ -517,14 +606,45 @@ export function ProjectBriefPanel({
       );
       return;
     }
-    for (const [key,state] of Object.entries(p.sections)) {
-      const contents = key in p ? p[key as keyof typeof p] : fields[key as keyof BriefFieldsDto];
-      if (state.status === "provided" && (typeof contents === "string" ? !contents.trim() : Array.isArray(contents) ? contents.length === 0 : contents === undefined)) { setError(`${label(key)}: ${en ? "provide information or choose another field state." : "请填写内容，或调整字段状态。"}`); return; }
+    for (const [key, state] of Object.entries(p.sections)) {
+      const contents =
+        key in p
+          ? p[key as keyof typeof p]
+          : fields[key as keyof BriefFieldsDto];
+      if (
+        state.status === "provided" &&
+        (typeof contents === "string"
+          ? !contents.trim()
+          : Array.isArray(contents)
+            ? contents.length === 0
+            : contents === undefined)
+      ) {
+        setError(
+          `${label(key)}: ${en ? "provide information or choose another field state." : "请填写内容，或调整字段状态。"}`,
+        );
+        return;
+      }
     }
     const referenced = new Set<string>();
-    const visit = (value: unknown): void => { if (typeof value === "string") referenced.add(value); else if (Array.isArray(value)) value.forEach(visit); else if (value && typeof value === "object") Object.entries(value).filter(([key]) => key !== "objectReferences").forEach(([,child])=>{ visit(child); }); };
+    const visit = (value: unknown): void => {
+      if (typeof value === "string") referenced.add(value);
+      else if (Array.isArray(value)) value.forEach(visit);
+      else if (value && typeof value === "object")
+        Object.entries(value)
+          .filter(([key]) => key !== "objectReferences")
+          .forEach(([, child]) => {
+            visit(child);
+          });
+    };
     visit(fields);
-    const progressive = { ...p, objectReferences: (p.objectReferences ?? view.objectVersions ?? []).filter(ref=>referenced.has(ref.id)) };
+    const progressive = {
+      ...p,
+      objectReferences: (
+        p.objectReferences ??
+        view.objectVersions ??
+        []
+      ).filter((ref) => referenced.has(ref.id)),
+    };
     let r = draft;
     if (!r || ["committed", "disposed", "cancelled"].includes(r.status))
       r = await researchRoomApi.kernel(
@@ -536,7 +656,16 @@ export function ProjectBriefPanel({
     r = await researchRoomApi.kernel(
       projectId,
       "skip_assessment",
-      { reviewId: r.id, expectedVersion: r.version, selection: { coverageScope: { effectKind: direction ? "formal_direction_change" : "patch_brief", targetKinds: [] } } },
+      {
+        reviewId: r.id,
+        expectedVersion: r.version,
+        selection: {
+          coverageScope: {
+            effectKind: direction ? "formal_direction_change" : "patch_brief",
+            targetKinds: [],
+          },
+        },
+      },
       decodeReview,
     );
     setDraft(r);
@@ -546,7 +675,12 @@ export function ProjectBriefPanel({
         .map((k) => [k, fields[k as keyof BriefFieldsDto]]),
     );
     const payload = !base
-      ? { kind: "patch_brief", mode: "initialize", fields: { ...fields, progressive }, reason }
+      ? {
+          kind: "patch_brief",
+          mode: "initialize",
+          fields: { ...fields, progressive },
+          reason,
+        }
       : direction
         ? {
             kind: "formal_direction_change",
@@ -572,13 +706,15 @@ export function ProjectBriefPanel({
       decodeReview,
     );
     setDraft(r);
-    setDraftDirty(false);
+    savedEdits.current = submittedEdit;
+    setDraftDirty(edits.current !== submittedEdit);
     setNotice(
       en
         ? "Draft saved. Review the changes before confirming."
         : "草稿已保存，请核对修改后再确认。",
     );
   }
+  saveCurrent.current = saveDraft;
   return (
     <section className="project-brief-panel" aria-busy={busy}>
       <header>
@@ -592,7 +728,7 @@ export function ProjectBriefPanel({
         </p>
         <div className="brief-actions">
           <Button
-            disabled={busy}
+            disabled={busy || readOnly || Boolean(historyVersionId)}
             onClick={() => {
               setEditing(!editing);
               setNotice("");
@@ -619,12 +755,65 @@ export function ProjectBriefPanel({
           </Button>
         </div>
       </header>
-      <KernelMemoryDrawer projectId={projectId} en={en}/>
-      <details><summary>{en ? "Context for reviewing this change" : "评估本次修改所需的上下文"}</summary>
-        <p>{en ? "These checks use the saved Brief. Missing context can limit an assessment; you can still make a valid change." : "以下检查使用已保存的简报。缺少上下文会限制评估，你仍然可以进行合法修改。"}</p>
-        <ul>{(view.coverage?.[direction ? "formal_direction_change" : "patch_brief"] ?? []).filter(row => row.status !== "not_applicable").map(row => <li key={row.section}>{label(row.section)}：{row.status === "limited" ? en ? "Not provided; you may add it or continue" : "未提供，可以补充，也可以先继续" : en ? "Provided or explicitly left empty" : "已填写或已说明为空"}</li>)}</ul>
+      <KernelMemoryDrawer projectId={projectId} en={en} />
+      <details>
+        <summary>
+          {en
+            ? "Context for reviewing this change"
+            : "评估本次修改所需的上下文"}
+        </summary>
+        <p>
+          {en
+            ? "These checks use the saved Brief. Missing context can limit an assessment; you can still make a valid change."
+            : "以下检查使用已保存的简报。缺少上下文会限制评估，你仍然可以进行合法修改。"}
+        </p>
+        <ul>
+          {(
+            view.coverage?.[
+              direction ? "formal_direction_change" : "patch_brief"
+            ] ?? []
+          )
+            .filter((row) => row.status !== "not_applicable")
+            .map((row) => (
+              <li key={row.section}>
+                {label(row.section)}：
+                {row.status === "limited"
+                  ? en
+                    ? "Not provided; you may add it or continue"
+                    : "未提供，可以补充，也可以先继续"
+                  : en
+                    ? "Provided or explicitly left empty"
+                    : "已填写或已说明为空"}
+              </li>
+            ))}
+        </ul>
       </details>
-      {view.fileProjection?.status !== "ready" || view.fileProjection.source_revision !== view.projectStateRevision ? <aside className="persistent-message"><p>{en ? "The project Brief is saved. Its local file needs refreshing from the saved version." : "项目简报已经保存，本地简报文件需要按已保存版本刷新。"}</p><Button disabled={busy} onClick={() => void run(async () => { await researchRoomApi.kernel(projectId, "publish_brief", {}, decodeLocalJson); await load(); })}>{en ? "Refresh local Brief file" : "刷新本地简报文件"}</Button></aside> : null}
+      {view.fileProjection?.status !== "ready" ||
+      view.fileProjection.source_revision !== view.projectStateRevision ? (
+        <aside className="persistent-message">
+          <p>
+            {en
+              ? "The project Brief is saved. Its local file needs refreshing from the saved version."
+              : "项目简报已经保存，本地简报文件需要按已保存版本刷新。"}
+          </p>
+          <Button
+            disabled={busy}
+            onClick={() =>
+              void run(async () => {
+                await researchRoomApi.kernel(
+                  projectId,
+                  "publish_brief",
+                  {},
+                  decodeLocalJson,
+                );
+                await load();
+              })
+            }
+          >
+            {en ? "Refresh local Brief file" : "刷新本地简报文件"}
+          </Button>
+        </aside>
+      ) : null}
       {error ? (
         <p role="alert" className="persistent-message">
           {error}
@@ -632,7 +821,13 @@ export function ProjectBriefPanel({
       ) : null}
       {notice ? <p role="status">{notice}</p> : null}
       {editing || !view.active ? (
-        <div className="brief-form" onChange={() => { setDraftDirty(true); }}>
+        <div
+          className="brief-form"
+          onChange={() => {
+            edits.current++;
+            setDraftDirty(true);
+          }}
+        >
           {Object.keys(labels).map((key) => {
             const s = p.sections[key] ?? { status: "not_provided" };
             return (
@@ -688,9 +883,13 @@ export function ProjectBriefPanel({
                           setFields((old) => ({
                             ...requireLocalValue(old),
                             progressive: {
-                              ...requireLocalValue(requireLocalValue(old).progressive),
+                              ...requireLocalValue(
+                                requireLocalValue(old).progressive,
+                              ),
                               sections: {
-                                ...requireLocalValue(requireLocalValue(old).progressive).sections,
+                                ...requireLocalValue(
+                                  requireLocalValue(old).progressive,
+                                ).sections,
                                 [key]: {
                                   status: "intentionally_empty",
                                   publicReason: e.target.value,
@@ -706,7 +905,11 @@ export function ProjectBriefPanel({
                     <label>
                       {label(key)}
                       <textarea
-                        value={key === "projectQuestion" ? fields.projectQuestion : fields.currentTask}
+                        value={
+                          key === "projectQuestion"
+                            ? fields.projectQuestion
+                            : fields.currentTask
+                        }
                         readOnly={key === "projectQuestion" && !!view.active}
                         onChange={(e) => {
                           change(key, e.target.value);
@@ -1155,13 +1358,25 @@ export function ProjectBriefPanel({
             <div key={key}>
               <dt>{label(key)}</dt>
               <dd>
-                {p.sections[key]?.status === "intentionally_empty"
-                  ? (p.sections[key] as { publicReason: string }).publicReason
-                  : p.sections[key]?.status === "provided"
-                    ? <pre>{readableKernelValue((key in p ? p[key as keyof typeof p] : fields[key as keyof BriefFieldsDto]) as unknown as LocalJson, en, view.objectLabels)}</pre>
-                    : en
-                      ? "Not provided"
-                      : "未提供"}
+                {p.sections[key]?.status === "intentionally_empty" ? (
+                  (p.sections[key] as { publicReason: string }).publicReason
+                ) : p.sections[key]?.status === "provided" ? (
+                  <pre>
+                    {readableKernelValue(
+                      (key in p
+                        ? p[key as keyof typeof p]
+                        : fields[
+                            key as keyof BriefFieldsDto
+                          ]) as unknown as LocalJson,
+                      en,
+                      view.objectLabels,
+                    )}
+                  </pre>
+                ) : en ? (
+                  "Not provided"
+                ) : (
+                  "未提供"
+                )}
               </dd>
             </div>
           ))}
@@ -1188,7 +1403,10 @@ export function ProjectBriefPanel({
                   "brief_conflict",
                   { reviewId: draft.id },
                   decodeLocalJson,
-                )) as unknown as { fields: NonNullable<typeof conflict>; projectStateRevision: number };
+                )) as unknown as {
+                  fields: NonNullable<typeof conflict>;
+                  projectStateRevision: number;
+                };
                 setConflict(c.fields);
                 setConflictRevision(c.projectStateRevision);
                 setChoices({});
@@ -1204,7 +1422,14 @@ export function ProjectBriefPanel({
           <h2>{en ? "Compare versions" : "比较版本"}</h2>
           {conflict.map((row) => (
             <fieldset key={row.field}>
-              <legend>{label(row.field.split(".").at(-1) ?? row.field)}{row.field.includes(".sections.") ? en ? " — field state" : " · 字段状态" : ""}</legend>
+              <legend>
+                {label(row.field.split(".").at(-1) ?? row.field)}
+                {row.field.includes(".sections.")
+                  ? en
+                    ? " — field state"
+                    : " · 字段状态"
+                  : ""}
+              </legend>
               <div className="brief-diff">
                 <div>
                   <strong>{en ? "Base" : "编辑时版本"}</strong>
@@ -1252,15 +1477,44 @@ export function ProjectBriefPanel({
             onClick={() =>
               void run(async () => {
                 const current = await load();
-                if(current.projectStateRevision !== conflictRevision) throw new ResearchRoomApiError("stale_revision","Compare the current version again");
+                if (current.projectStateRevision !== conflictRevision)
+                  throw new ResearchRoomApiError(
+                    "stale_revision",
+                    "Compare the current version again",
+                  );
                 setFields((old) => {
-                  const updated=structuredClone(requireLocalValue(old));
-                  for(const row of conflict) {
-                    const value=choices[row.field] === "current" ? row.current : row.candidate;
-                    const parts=row.field.split(".");
-                    if(parts.length === 1 && Object.hasOwn(labels,row.field)) Object.assign(updated,{[row.field]:value});
-                    else if(parts[0] === "progressive" && parts[1] === "sections" && parts[2] && Object.hasOwn(labels,parts[2])) Object.assign(requireLocalValue(updated.progressive).sections,{[parts[2]]:value});
-                    else if(parts[0] === "progressive" && parts.length === 2 && ["knownUnknowns","acceptedDecisions","evidenceThresholds","objectReferences"].includes(parts[1] ?? "")) Object.assign(requireLocalValue(updated.progressive),{[requireLocalValue(parts[1])]:value ?? []});
+                  const updated = structuredClone(requireLocalValue(old));
+                  for (const row of conflict) {
+                    const value =
+                      choices[row.field] === "current"
+                        ? row.current
+                        : row.candidate;
+                    const parts = row.field.split(".");
+                    if (parts.length === 1 && Object.hasOwn(labels, row.field))
+                      Object.assign(updated, { [row.field]: value });
+                    else if (
+                      parts[0] === "progressive" &&
+                      parts[1] === "sections" &&
+                      parts[2] &&
+                      Object.hasOwn(labels, parts[2])
+                    )
+                      Object.assign(
+                        requireLocalValue(updated.progressive).sections,
+                        { [parts[2]]: value },
+                      );
+                    else if (
+                      parts[0] === "progressive" &&
+                      parts.length === 2 &&
+                      [
+                        "knownUnknowns",
+                        "acceptedDecisions",
+                        "evidenceThresholds",
+                        "objectReferences",
+                      ].includes(parts[1] ?? "")
+                    )
+                      Object.assign(requireLocalValue(updated.progressive), {
+                        [requireLocalValue(parts[1])]: value ?? [],
+                      });
                     else throw new Error("invalid_payload");
                   }
                   return updated;
@@ -1294,6 +1548,11 @@ export function ProjectBriefPanel({
               <h3>
                 {en ? "Version" : "版本"} {v.versionNumber}
               </h3>
+              <a
+                href={`/project/state/brief/history/${encodeURIComponent(v.id)}`}
+              >
+                {en ? "Open this version" : "打开此版本"}
+              </a>
               <p>{v.projectQuestion || v.currentTask}</p>
               <time>
                 {new Date(v.createdAt).toLocaleString(en ? "en" : "zh-CN")}

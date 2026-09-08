@@ -1,14 +1,103 @@
 import type { LocalJson } from "../../api/kernel-dto.js";
 
 const terms: Record<string, [string, string]> = {
-  project: ["整个项目", "Whole project"], effectiveBriefVersionId: ["依据的简报版本", "Brief version in effect"], reopenConditions: ["重新考虑的条件", "When to reconsider"],
-  sourceArtifactId: ["来源产物", "Source artifact"], violatedCriterion: ["未满足的标准", "Unmet criterion"], rationaleConcepts: ["相关概念", "Related concepts"], resolutionEvidenceId: ["解决依据", "Resolution evidence"], resolutionReason: ["解决理由", "Resolution reason"],
-  argument_leap: ["论证跳跃", "Argument leap"], target_substitution: ["目标被替换", "Target substitution"], repeated_audit: ["重复审查", "Repeated audit"], pseudo_depth: ["缺少实质内容", "No substantive depth"], evidence_boundary: ["证据边界", "Evidence boundary"], scope_violation: ["超出范围", "Scope violation"], decision_violation: ["违背决定", "Decision violation"], factual_error: ["事实错误", "Factual error"], methodological: ["方法问题", "Methodological issue"], stale: ["需要重新核对", "Recheck required"], disputed: ["存在争议", "Disputed"],
-  draft: ["草稿已保存", "Draft saved"], committed: ["研究变更已保存", "Research change saved"], disposed: ["处置已保存", "Disposition saved"], manifest_prepared: ["待核对发送内容", "Check send content"], manifest_confirmed: ["内容已确认", "Content confirmed"], assessment_recorded: ["评估已保存", "Assessment saved"], provider_attempt_uncertain: ["外发结果不确定", "Send outcome uncertain"], provider_attempt_failed: ["评估未完成", "Assessment failed"], provider_attempt_running: ["请求进行中", "Request in progress"], provider_attempt_prepared: ["尚未发送", "Not sent"],
-  text: ["内容", "Content"], term: ["术语", "Term"], definition: ["含义", "Meaning"], objectReferences: ["关联对象版本", "Referenced object versions"], workset_changed: ["工作对象已变化", "Working objects changed"], source_version_changed: ["来源版本已变化", "Source version changed"], source_content_changed: ["来源内容已变化", "Source content changed"], source_unavailable: ["来源已不可用", "Source unavailable"],
-  revision: ["修改", "Revision"], question_formulation: ["形成问题", "Question formulation"], literature_review: ["文献梳理", "Literature review"], data_collection: ["收集资料", "Data collection"], analysis: ["分析", "Analysis"], writing: ["写作", "Writing"], review_response: ["回应评审", "Review response"],
-  artifactId: ["产物", "Artifact"], relatedObjectRefs: ["相关对象", "Related objects"], allowedSourceIds: ["允许的来源", "Allowed sources"], policy_text: ["政策文本", "Policy text"], user_decision: ["用户决定", "User decision"], system_check: ["系统检查", "System check"],
-  direct_user: ["用户手动加入", "Added by the user"], project_object: ["项目对象", "Project object"], policy: ["保留规则", "Retention policy"], until_unpinned: ["保留到主动停用", "Until you stop using it"], until_date: ["保留到指定日期", "Until the specified date"], expiresAt: ["到期时间", "Expires at"], current_episode: ["保留到本轮结束", "Until this episode ends"],
+  review: ["审议", "Review"],
+  receipt: ["凭证", "Receipt"],
+  episode: ["修订章节", "Episode"],
+  legacy: ["历史记录", "Historical record"],
+  correction: ["评估纠错", "Assessment correction"],
+  canonical: ["研究对象", "Research object"],
+  kernel_receipt: ["实际变更凭证", "Saved change receipt"],
+  review_correction: ["审议中的纠错", "Review correction"],
+  context_only: ["仅作上下文", "Context only"],
+  research_room_receipts: ["旧审议记录", "Previous reviews"],
+  correction_appeals: ["旧纠错记录", "Previous corrections"],
+  deliberation_rooms: ["旧会商记录", "Previous deliberation rooms"],
+  closed_external_app_pilots: ["旧宿主试运行记录", "Previous host pilots"],
+  research_object: [
+    "查看当前对象及来源",
+    "Inspect the current object and its source",
+  ],
+  saved_result: ["查看已保存的结果", "Inspect the saved result"],
+  open_issue: [
+    "此问题尚待处理；核对后可发起审议",
+    "This issue needs attention; inspect it before starting a review",
+  ],
+  recheck_context: [
+    "上下文已变化，请重新核对后继续",
+    "Context changed; recheck it before continuing",
+  ],
+  linked_correction: [
+    "查看原评估和后续处理",
+    "Inspect the original assessment and follow-up",
+  ],
+  historical_record_only: [
+    "仅保留历史，不代表新的研究结果",
+    "Historical record; no new research result",
+  ],
+  saved: ["已保存", "Saved"],
+  recorded: ["已记录", "Recorded"],
+  title: ["标题", "Title"],
+  content: ["正文", "Content"],
+  user: ["你保存的内容", "Saved by you"],
+  host: ["宿主提交的草稿", "Draft from a host"],
+  project: ["整个项目", "Whole project"],
+  effectiveBriefVersionId: ["依据的简报版本", "Brief version in effect"],
+  reopenConditions: ["重新考虑的条件", "When to reconsider"],
+  sourceArtifactId: ["来源产物", "Source artifact"],
+  violatedCriterion: ["未满足的标准", "Unmet criterion"],
+  rationaleConcepts: ["相关概念", "Related concepts"],
+  resolutionEvidenceId: ["解决依据", "Resolution evidence"],
+  resolutionReason: ["解决理由", "Resolution reason"],
+  argument_leap: ["论证跳跃", "Argument leap"],
+  target_substitution: ["目标被替换", "Target substitution"],
+  repeated_audit: ["重复审查", "Repeated audit"],
+  pseudo_depth: ["缺少实质内容", "No substantive depth"],
+  evidence_boundary: ["证据边界", "Evidence boundary"],
+  scope_violation: ["超出范围", "Scope violation"],
+  decision_violation: ["违背决定", "Decision violation"],
+  factual_error: ["事实错误", "Factual error"],
+  methodological: ["方法问题", "Methodological issue"],
+  stale: ["需要重新核对", "Recheck required"],
+  disputed: ["存在争议", "Disputed"],
+  draft: ["草稿已保存", "Draft saved"],
+  committed: ["研究变更已保存", "Research change saved"],
+  disposed: ["处置已保存", "Disposition saved"],
+  manifest_prepared: ["待核对发送内容", "Check send content"],
+  manifest_confirmed: ["内容已确认", "Content confirmed"],
+  assessment_recorded: ["评估已保存", "Assessment saved"],
+  provider_attempt_uncertain: ["外发结果不确定", "Send outcome uncertain"],
+  provider_attempt_failed: ["评估未完成", "Assessment failed"],
+  provider_attempt_running: ["请求进行中", "Request in progress"],
+  provider_attempt_prepared: ["尚未发送", "Not sent"],
+  text: ["内容", "Content"],
+  term: ["术语", "Term"],
+  definition: ["含义", "Meaning"],
+  objectReferences: ["关联对象版本", "Referenced object versions"],
+  workset_changed: ["工作对象已变化", "Working objects changed"],
+  source_version_changed: ["来源版本已变化", "Source version changed"],
+  source_content_changed: ["来源内容已变化", "Source content changed"],
+  source_unavailable: ["来源已不可用", "Source unavailable"],
+  revision: ["修改", "Revision"],
+  question_formulation: ["形成问题", "Question formulation"],
+  literature_review: ["文献梳理", "Literature review"],
+  data_collection: ["收集资料", "Data collection"],
+  analysis: ["分析", "Analysis"],
+  writing: ["写作", "Writing"],
+  review_response: ["回应评审", "Review response"],
+  artifactId: ["产物", "Artifact"],
+  relatedObjectRefs: ["相关对象", "Related objects"],
+  allowedSourceIds: ["允许的来源", "Allowed sources"],
+  policy_text: ["政策文本", "Policy text"],
+  user_decision: ["用户决定", "User decision"],
+  system_check: ["系统检查", "System check"],
+  direct_user: ["用户手动加入", "Added by the user"],
+  project_object: ["项目对象", "Project object"],
+  policy: ["保留规则", "Retention policy"],
+  until_unpinned: ["保留到主动停用", "Until you stop using it"],
+  until_date: ["保留到指定日期", "Until the specified date"],
+  expiresAt: ["到期时间", "Expires at"],
+  current_episode: ["保留到本轮结束", "Until this episode ends"],
   brief: ["研究简报", "Research Brief"],
   decision: ["决定", "Decision"],
   evidence: ["证据", "Evidence"],
@@ -76,6 +165,16 @@ const terms: Record<string, [string, string]> = {
   accepted: ["已接受", "Accepted"],
   proposed: ["待决定", "Proposed"],
   current: ["当前有效", "Current"],
+  active: ["进行中", "In progress"],
+  mechanism: ["机制", "Mechanism"],
+  claim_evidence_link: ["主张与证据的关系", "Claim–evidence relationship"],
+  mechanism_evidence_link: [
+    "机制与证据的关系",
+    "Mechanism–evidence relationship",
+  ],
+  snapshot: ["研究快照", "Research snapshot"],
+  delta: ["论证变化", "Argument change"],
+  project_path: ["项目相对路径", "Project-relative path"],
   withdrawn: ["已撤回", "Withdrawn"],
   superseded: ["已被替代", "Superseded"],
   open: ["待解决", "Open"],
@@ -98,7 +197,13 @@ export function kernelLabel(value: string, en: boolean): string {
   return terms[value]?.[en ? 1 : 0] ?? value;
 }
 const technical = new Set([
-  "fingerprint", "sourceRevisionId", "sourceRevisionContentHash", "lineageRootRevisionId", "contentVersionHash", "contentHash", "reopenHistory",
+  "fingerprint",
+  "sourceRevisionId",
+  "sourceRevisionContentHash",
+  "lineageRootRevisionId",
+  "contentVersionHash",
+  "contentHash",
+  "reopenHistory",
   "id",
   "projectId",
   "version",
@@ -113,9 +218,18 @@ const technical = new Set([
   "transitions",
   "proposals",
   "objectReferences",
-  "source", "actor", "actorId", "authority", "recordedAt", "createdByUserId",
+  "source",
+  "actor",
+  "actorId",
+  "authority",
+  "recordedAt",
+  "createdByUserId",
 ]);
-export function readableKernelValue(value: LocalJson, en: boolean, objectLabels: Record<string, string> = {}): string {
+export function readableKernelValue(
+  value: LocalJson,
+  en: boolean,
+  objectLabels: Record<string, string> = {},
+): string {
   if (value === null) return en ? "None" : "无";
   if (Array.isArray(value))
     return value.length
@@ -126,22 +240,47 @@ export function readableKernelValue(value: LocalJson, en: boolean, objectLabels:
   if (typeof value === "object") {
     // A Brief aggregate preview concerns the new active version, not every historical version.
     if (Array.isArray(value.versions))
-      return readableKernelValue(value.versions.at(-1) ?? null, en, objectLabels);
+      return readableKernelValue(
+        value.versions.at(-1) ?? null,
+        en,
+        objectLabels,
+      );
     return Object.entries(value)
       .filter(([key]) => !technical.has(key))
       .map(
-        ([key, v]) => `${kernelLabel(key, en)}: ${readableKernelValue(v, en, objectLabels)}`,
+        ([key, v]) =>
+          `${kernelLabel(key, en)}: ${readableKernelValue(v, en, objectLabels)}`,
       )
       .join("\n");
   }
-  return typeof value === "string" ? objectLabels[value] ?? (/^r[a-z]{3}_[0-9A-HJKMNP-TV-Z]{26}$/.test(value) ? en ? "Referenced project object (see technical details)" : "关联项目对象（可查看技术详情）" : kernelLabel(value, en)) : String(value);
+  return typeof value === "string"
+    ? (objectLabels[value] ??
+        (/^r[a-z]{3}_[0-9A-HJKMNP-TV-Z]{26}$/.test(value)
+          ? en
+            ? "Referenced project object (see technical details)"
+            : "关联项目对象（可查看技术详情）"
+          : kernelLabel(value, en)))
+    : String(value);
 }
 export function visibleKernelChanges(before: LocalJson, after: LocalJson) {
   const active = (input: LocalJson): Record<string, LocalJson> => {
-    if (input === null || typeof input !== "object" || Array.isArray(input)) return {};
-    if (Array.isArray(input.versions)) return active(input.versions.at(-1) ?? null);
+    if (input === null || typeof input !== "object" || Array.isArray(input))
+      return {};
+    if (Array.isArray(input.versions))
+      return active(input.versions.at(-1) ?? null);
     return input;
   };
-  const b = active(before), a = active(after);
-  return [...new Set([...Object.keys(b), ...Object.keys(a)])].filter(key => !technical.has(key) && JSON.stringify(b[key] ?? null) !== JSON.stringify(a[key] ?? null)).map(field => ({ field, before: b[field] ?? null, after: a[field] ?? null }));
+  const b = active(before),
+    a = active(after);
+  return [...new Set([...Object.keys(b), ...Object.keys(a)])]
+    .filter(
+      (key) =>
+        !technical.has(key) &&
+        JSON.stringify(b[key] ?? null) !== JSON.stringify(a[key] ?? null),
+    )
+    .map((field) => ({
+      field,
+      before: b[field] ?? null,
+      after: a[field] ?? null,
+    }));
 }

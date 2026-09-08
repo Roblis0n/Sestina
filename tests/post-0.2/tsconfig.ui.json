@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "@sestina/*": ["../../packages/*/src/index.ts"]
+    }
+  }
+}

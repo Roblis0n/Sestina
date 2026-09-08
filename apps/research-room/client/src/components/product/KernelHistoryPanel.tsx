@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { researchRoomApi } from "../../api/client.js";
 import {
   decodeLocalJson,
@@ -17,16 +17,37 @@ interface Historical {
   projection: LocalJson;
   children?: LocalJson[];
 }
+function historical(value: unknown): Historical {
+  const json = decodeLocalJson(value);
+  if (
+    !json ||
+    typeof json !== "object" ||
+    Array.isArray(json) ||
+    typeof json.sourceKind !== "string" ||
+    typeof json.sourceId !== "string" ||
+    typeof json.classification !== "string" ||
+    !("legacyPayload" in json) ||
+    !("projection" in json) ||
+    (json.children !== undefined && !Array.isArray(json.children))
+  )
+    throw new Error("Invalid historical record");
+  return json as unknown as Historical;
+}
 export function KernelHistoryPanel({
   projectId,
   en,
   onReview,
+  initialKind = "research_room_receipts",
+  recordId,
 }: {
   projectId: string;
   en: boolean;
   onReview: (review: KernelReviewDto) => void;
+  initialKind?: string;
+  recordId?: string;
 }) {
-  const [kind, setKind] = useState("research_room_receipts"),
+  const generation = useRef(0);
+  const [kind, setKind] = useState(initialKind),
     [items, setItems] = useState<Historical[]>([]),
     [cursor, setCursor] = useState<string>();
   const [suggestion, setSuggestion] = useState(""),
@@ -34,30 +55,53 @@ export function KernelHistoryPanel({
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   async function load(next?: string) {
+    const current = ++generation.current;
     setBusy(true);
     setError("");
     try {
-      const page = (await researchRoomApi.kernel(
+      const page = await researchRoomApi.kernel(
         projectId,
-        "legacy_history",
-        { sourceKind: kind, limit: 20, ...(next ? { cursor: next } : {}) },
+        recordId ? "legacy_detail" : "legacy_history",
+        recordId
+          ? { sourceKind: kind, sourceId: recordId }
+          : { sourceKind: kind, limit: 20, ...(next ? { cursor: next } : {}) },
         decodeLocalJson,
-      )) as unknown as { items: Historical[]; nextCursor?: string };
-      setItems(page.items);
-      setCursor(page.nextCursor);
+      );
+      if (current !== generation.current) return;
+      if (recordId) {
+        setItems([historical(page)]);
+        setCursor(undefined);
+      } else {
+        if (
+          !page ||
+          typeof page !== "object" ||
+          Array.isArray(page) ||
+          !Array.isArray(page.items) ||
+          (page.nextCursor != null && typeof page.nextCursor !== "string")
+        )
+          throw new Error("Invalid history page");
+        setItems(page.items.map(historical));
+        setCursor(
+          typeof page.nextCursor === "string" ? page.nextCursor : undefined,
+        );
+      }
     } catch {
+      if (current !== generation.current) return;
       setError(
         en ? "Historical records could not be read." : "未能读取历史记录。 ",
       );
     } finally {
-      setBusy(false);
+      if (current === generation.current) setBusy(false);
     }
   }
   useEffect(() => {
     setSelected(undefined);
     setSuggestion("");
     void load();
-  }, [kind, projectId]);
+    return () => {
+      generation.current++;
+    };
+  }, [kind, projectId, recordId]);
   return (
     <section>
       <h1>{en ? "Historical workflows" : "历史流程"}</h1>
@@ -99,8 +143,35 @@ export function KernelHistoryPanel({
             {en ? "Historical record" : "历史记录"} {i + 1}
           </h2>
           <pre>{readableKernelValue(item.legacyPayload, en)}</pre>
-          {item.children?.length ? <details><summary>{en ? "Attempts, failures and events" : "尝试、失败与事件"} ({item.children.length})</summary>{item.children.map((child,index)=><pre key={index}>{readableKernelValue(child,en)}</pre>)}</details> : null}
-          <Button onClick={() => { const url=URL.createObjectURL(new Blob([JSON.stringify(item,null,2)],{type:"application/json"})); const link=document.createElement("a"); link.href=url; link.download="sestina-historical-record.json"; link.click(); setTimeout(()=>{URL.revokeObjectURL(url);},1000); }}>{en ? "Export this historical record" : "导出这条历史记录"}</Button>
+          {item.children?.length ? (
+            <details>
+              <summary>
+                {en ? "Attempts, failures and events" : "尝试、失败与事件"} (
+                {item.children.length})
+              </summary>
+              {item.children.map((child, index) => (
+                <pre key={index}>{readableKernelValue(child, en)}</pre>
+              ))}
+            </details>
+          ) : null}
+          <Button
+            onClick={() => {
+              const url = URL.createObjectURL(
+                new Blob([JSON.stringify(item, null, 2)], {
+                  type: "application/json",
+                }),
+              );
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = "sestina-historical-record.json";
+              link.click();
+              setTimeout(() => {
+                URL.revokeObjectURL(url);
+              }, 1000);
+            }}
+          >
+            {en ? "Export this historical record" : "导出这条历史记录"}
+          </Button>
           <details>
             <summary>{en ? "Compatibility details" : "兼容详情"}</summary>
             <pre>{JSON.stringify(item.projection, null, 2)}</pre>

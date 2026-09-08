@@ -315,3 +315,26 @@ provenance. Migrated versions keep their original mappings; typed thresholds use
 canonical Evidence kinds and inference capacities, distinct from support status.
 Contract 05 documents this compatibility detail. The release baseline, immutable
 old-fixture recipes and schema-20 default remain unchanged.
+
+## G8/G9 implementation decisions
+
+The user-facing increment is one saved research journey across Today, Review,
+Project, Search and History. The Kernel still saves canonical state and workflow
+records; users still confirm every research change and exact outbound request.
+No new Authority, transaction state machine, automatic send or hidden reasoning
+store is introduced.
+
+| Requirement | Implementation and failure boundary |
+| --- | --- |
+| One source for all derived views | `readKernelWorkspaceSnapshot` captures validated canonical state, Review/attempt/Manifest/correction/Receipt/event records, privacy metadata and allowlisted legacy fields inside one SQLite read transaction. `projectKernelWorkspace` and `projectWorkspaceReview` only accept the captured immutable value. No I/O or authority capability enters these pure functions. |
+| Workflow, privacy and time identity | Workspace policy/schema 1 binds project ID, validated canonical content hash, workflow/legacy hash, privacy hash and next Memory expiry. One `evaluatedAt` is used throughout the read. Pagination additionally binds the query. Integer revision equality is never sufficient, including after restore. |
+| Safe disposable caches | The application calculates pages on demand. Existing optional projection metadata uses a format-1 envelope `{inputHash,payloadHash,payload}`. Old/unrecognised/damaged bytes are unavailable or rebuilding; explicit reconstruction uses current validated data and compares identity before publication. There is one bounded attempt, no busy retry. No schema migration or new table is needed; old migrations and immutable fixtures remain unchanged. Outbox/event records are never consumed or deleted. |
+| Large reads without duplicate work | Canonical/record validation and full hash checks remain. Snapshot assembly freezes newly owned containers around already validated immutable records, instead of cloning the whole project again. Read-only functions never advance the head. Performance evidence reports actual measured samples and environment, not a hardware-independent promise. |
+| Resource ownership | Opening/closing/switching/disposal invalidates a generation-scoped capability; late open closes its actual lease. Kernel close releases its database and aborts owned work even when persisting uncertainty fails. The next writable open recovers durable running attempts as uncertain, without sending. |
+| Transport-independent application port | `apps/research-room/shared/kernel-port.ts` is the client-safe command/session/transport contract. HTTP implements it through the existing service and session gate; G10 will supply main/preload transport. Server generation and project binding reject old sessions. Client generation, query sequence and cancellation reject late results. No raw research content is broadcast. |
+| Unsaved text | Server snapshot, base version and editing buffer are separate. Focus/read notifications cannot replace dirty text. Save captures the clicked text; later typing survives acknowledgment. Conflict preserves both versions. Leave offers save/discard/cancel. Privacy redaction clears affected buffers, including late save responses. Only saved records recover after crash; localStorage holds appearance/recent paths, never research draft bodies. |
+| Startup/recovery | Explicit create refuses an existing `.sestina`; read-only browsing grants no mutations. Migration confirmation binds inspected source hashes. Pre-migration restore preview binds the current database pair and verified backup; stale confirmation and post-migration Forget refuse restoration. Existing recovery and missing-Brief repair services preserve unknown files and failures. |
+| Content and old routes | React text rendering and bounded decoded JSON never interpret research content as code, HTML or Authority. Long Findings offer a short choice label and an inspectable full text. Old object links retain targets, composite relation identities remain navigable, old workflows remain source-labelled history, and candidate old creation routes return 410. |
+
+This is the explicit schema-25 browser candidate only. The shipped v0.2.0/schema-20
+default, official logo, Electron packaging and final cutover are not changed.

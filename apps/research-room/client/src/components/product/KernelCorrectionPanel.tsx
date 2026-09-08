@@ -51,7 +51,7 @@ export function KernelCorrectionPanel({
           {eligible.map((a) => (
             <option key={a.id} value={a.id}>
               {en ? "Attempt" : "尝试"} {a.ordinal}:{" "}
-              {a.assessment?.publicSummary}
+              {a.assessment?.publicSummary.slice(0, 160)}
             </option>
           ))}
         </select>
@@ -68,11 +68,25 @@ export function KernelCorrectionPanel({
             <option value="">{en ? "Whole assessment" : "整份评估"}</option>
             {attempt.assessment.envelope.assessment.findings.map((f, i) => (
               <option key={i} value={i}>
-                {f.publicRationale}
+                {f.publicRationale.length > 160
+                  ? `${f.publicRationale.slice(0, 160)}…`
+                  : f.publicRationale}
               </option>
             ))}
           </select>
         </label>
+      ) : null}
+      {finding !== "" &&
+      attempt?.assessment?.envelope?.assessment?.findings[Number(finding)] ? (
+        <details>
+          <summary>{en ? "Read the full finding" : "核对完整判断"}</summary>
+          <pre className="finding-full-text">
+            {
+              attempt.assessment.envelope.assessment.findings[Number(finding)]
+                ?.publicRationale
+            }
+          </pre>
+        </details>
       ) : null}
       <label>
         {en ? "Requested correction" : "希望如何纠正"}

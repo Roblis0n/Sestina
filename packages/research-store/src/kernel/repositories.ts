@@ -50,6 +50,14 @@ interface Descriptor<T extends Item> {
 export function validateKernelRelations(
   db: StorageDatabase,
   projectId: string,
+  captured?: {
+    reviews: readonly KernelReview[];
+    manifests: readonly KernelManifest[];
+    attempts: readonly KernelAttempt[];
+    receipts: readonly KernelReceipt[];
+    events: readonly KernelEvent[];
+    corrections: readonly KernelCorrection[];
+  },
 ): void {
   const repos = createKernelRepositories(db);
   const collect = <T>(repository: KernelReader<T>): T[] => {
@@ -65,12 +73,12 @@ export function validateKernelRelations(
     } while (cursor);
     return items;
   };
-  const reviews = collect(repos.reviews),
-    manifests = collect(repos.manifests),
-    attempts = collect(repos.attempts),
-    receipts = collect(repos.receipts),
-    events = collect(repos.events),
-    corrections = collect(repos.corrections);
+  const reviews = captured?.reviews ?? collect(repos.reviews),
+    manifests = captured?.manifests ?? collect(repos.manifests),
+    attempts = captured?.attempts ?? collect(repos.attempts),
+    receipts = captured?.receipts ?? collect(repos.receipts),
+    events = captured?.events ?? collect(repos.events),
+    corrections = captured?.corrections ?? collect(repos.corrections);
   const head = repos.heads.get(projectId);
   for (const r of reviews) {
     const children = attempts
@@ -121,7 +129,12 @@ export function validateKernelRelations(
       m.provider === null
     )
       throw new KernelFault("corrupt_state");
-    if (a.assessment?.envelope?.providerIdentity && kernelHash(a.assessment.envelope.providerIdentity) !== kernelHash(m.provider)) throw new KernelFault("corrupt_state");
+    if (
+      a.assessment?.envelope?.providerIdentity &&
+      kernelHash(a.assessment.envelope.providerIdentity) !==
+        kernelHash(m.provider)
+    )
+      throw new KernelFault("corrupt_state");
   }
   for (const c of corrections) {
     const a = attempts.find((a) => a.id === c.attemptId);
@@ -161,7 +174,9 @@ export function validateKernelRelations(
       const r = reviews.find((r) => r.id === p.reviewId);
       const m = manifests.find((m) => m.id === p.manifestId);
       const a = attempts.find((a) => a.id === p.assessmentAttemptId);
-      const currentAttempt = attempts.find((a) => a.id === r?.attemptIds.at(-1) && a.manifestId === p.manifestId);
+      const currentAttempt = attempts.find(
+        (a) => a.id === r?.attemptIds.at(-1) && a.manifestId === p.manifestId,
+      );
       if (
         r?.terminalOutcome?.receiptId !== p.id ||
         r.manifestId !== p.manifestId ||
@@ -358,7 +373,13 @@ const transitions: Readonly<
     "committed",
     "disposed",
   ],
-  provider_attempt_failed: ["manifest_confirmed", "committed", "disposed", "stale", "cancelled"],
+  provider_attempt_failed: [
+    "manifest_confirmed",
+    "committed",
+    "disposed",
+    "stale",
+    "cancelled",
+  ],
   assessment_recorded: ["stale", "committed", "disposed", "cancelled"],
   stale: ["manifest_prepared", "cancelled"],
   disposed: [],
@@ -541,8 +562,13 @@ export function createKernelRepositories(
           kernelHash(r.effectDraft) !== kernelHash(old.effectDraft) &&
           r.baseProjectStateRevision !==
             readKernelHead(db, r.projectId).revision &&
-          !(r.status === "stale" && r.effectDraft.invalidated === true && old.effectDraft &&
-            kernelHash({ ...r.effectDraft, invalidated: false }) === kernelHash({ ...old.effectDraft, invalidated: false }))
+          !(
+            r.status === "stale" &&
+            r.effectDraft.invalidated === true &&
+            old.effectDraft &&
+            kernelHash({ ...r.effectDraft, invalidated: false }) ===
+              kernelHash({ ...old.effectDraft, invalidated: false })
+          )
         )
           throw new KernelFault("stale_revision");
         reviewRelations(r);
@@ -696,7 +722,14 @@ export function createKernelRepositories(
       const a = parseKernelAttempt(input);
       return write(a.projectId, () => {
         const old = next(a, expectedVersion, attempts.getById);
-        if (a.assessment?.envelope?.providerIdentity && kernelHash(a.assessment.envelope.providerIdentity) !== kernelHash(manifests.getById(a.projectId, a.manifestId)?.provider ?? null)) throw new KernelFault("relation_mismatch");
+        if (
+          a.assessment?.envelope?.providerIdentity &&
+          kernelHash(a.assessment.envelope.providerIdentity) !==
+            kernelHash(
+              manifests.getById(a.projectId, a.manifestId)?.provider ?? null,
+            )
+        )
+          throw new KernelFault("relation_mismatch");
         const allowed: Record<KernelAttempt["status"], readonly string[]> = {
           prepared: ["running", "cancelled"],
           running: ["completed", "failed", "uncertain", "cancelled"],
@@ -751,8 +784,19 @@ export function createKernelRepositories(
           const attempt = attempts.getById(c.projectId, c.attemptId);
           if (c.continuationReviewId) {
             const child = reviews.getById(c.projectId, c.continuationReviewId);
-            if (child?.source.kind !== "review" || child.source.id !== c.reviewId || child.status !== "draft") throw new KernelFault("relation_mismatch");
-            if (c.findingIndex !== undefined && !attempt?.assessment?.envelope?.assessment?.findings[c.findingIndex]) throw new KernelFault("relation_mismatch");
+            if (
+              child?.source.kind !== "review" ||
+              child.source.id !== c.reviewId ||
+              child.status !== "draft"
+            )
+              throw new KernelFault("relation_mismatch");
+            if (
+              c.findingIndex !== undefined &&
+              !attempt?.assessment?.envelope?.assessment?.findings[
+                c.findingIndex
+              ]
+            )
+              throw new KernelFault("relation_mismatch");
           }
           if (
             attempt?.reviewId !== c.reviewId ||
@@ -789,4 +833,3 @@ export function createKernelRepositories(
     }),
   });
 }
-

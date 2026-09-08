@@ -4,6 +4,7 @@ import {
   kernelInteger,
   kernelText,
   kernelBytesHash,
+  kernelHash,
   type KernelJson,
   type KernelResult,
 } from "@sestina/research";
@@ -15,10 +16,13 @@ import {
 import { createKernelRepositories } from "./repositories.js";
 import { validateLegacyRedaction } from "./privacy.js";
 import {
+  readKernelWorkspaceSnapshot,
+  type KernelWorkspaceSnapshot,
+} from "./workspace-snapshot.js";
+import {
   decodeKernelJson,
   readKernelHead,
   readKernelSnapshot,
-  type KernelSnapshot,
 } from "./state.js";
 
 /** Records uncertainty only. This module has no Provider or network dependency. */
@@ -102,6 +106,39 @@ export function readKernelProjection(
     if (!row) throw new KernelFault("corrupt_state");
     kernelInteger(row.version);
     kernelInteger(row.source_revision, 0);
+    if (kind !== "brief_file") {
+      // The canonical read must succeed even when the disposable index is damaged.
+      const current = readKernelWorkspaceSnapshot(db, projectId);
+      const base = {
+        sourceProjectStateRevision: row.source_revision,
+        version: row.version,
+      };
+      if (row.status !== "ready")
+        return { ...base, status: "rebuilding" as const, data: null };
+      try {
+        const value = decodeKernelJson(row.data);
+        if (
+          !value ||
+          typeof value !== "object" ||
+          Array.isArray(value) ||
+          !("format" in value) ||
+          value.format !== 1 ||
+          !("inputHash" in value) ||
+          !("payload" in value)
+        )
+          return { ...base, status: "unavailable" as const, data: null };
+        if (value.inputHash !== current.inputHash)
+          return { ...base, status: "rebuilding" as const, data: null };
+        if (
+          !("payloadHash" in value) ||
+          value.payloadHash !== kernelHash(value.payload)
+        )
+          return { ...base, status: "unavailable" as const, data: null };
+        return { ...base, status: "ready" as const, data: value.payload };
+      } catch {
+        return { ...base, status: "unavailable" as const, data: null };
+      }
+    }
     return {
       sourceProjectStateRevision: row.source_revision,
       status:
@@ -121,18 +158,27 @@ export function rebuildKernelProjection(
   db: StorageDatabase,
   projectId: string,
   kind: KernelProjectionKind,
-  build: (snapshot: KernelSnapshot) => KernelJson,
+  build: (snapshot: KernelWorkspaceSnapshot) => KernelJson,
 ): KernelResult<number> {
   try {
     if (!["search", "attention", "today", "resume", "history"].includes(kind))
       throw new KernelFault("invalid_record");
-    const snapshot = readKernelSnapshot(db, projectId);
-    const data = kernelCanonicalJson(build(snapshot));
+    const snapshot = readKernelWorkspaceSnapshot(db, projectId);
+    const payload = build(snapshot);
+    const data = kernelCanonicalJson({
+      format: 1,
+      inputHash: snapshot.inputHash,
+      payloadHash: kernelHash(payload),
+      payload,
+    });
     return {
       ok: true,
       value: withTransaction(db, () =>
         db.withKernelWrite("workflow", () => {
-          if (readKernelHead(db, projectId).revision !== snapshot.head.revision)
+          if (
+            readKernelWorkspaceSnapshot(db, projectId).inputHash !==
+            snapshot.inputHash
+          )
             throw new KernelFault("stale_revision");
           const changed = db.run(
             "UPDATE research_projection_metadata SET source_revision=?,status='ready',version=version+1,data=? WHERE project_id=? AND projection_kind=?",
@@ -185,18 +231,73 @@ export function readKernelLegacyRecord(
     projectId,
     sourceId,
   );
-  if (row && kernelBytesHash(row.data) !== row.source_hash && !validateLegacyRedaction(db, projectId, sourceKind, sourceId, row.data, row.source_hash))
+  if (
+    row &&
+    kernelBytesHash(row.data) !== row.source_hash &&
+    !validateLegacyRedaction(
+      db,
+      projectId,
+      sourceKind,
+      sourceId,
+      row.data,
+      row.source_hash,
+    )
+  )
     throw new KernelFault("corrupt_state");
-  const children = sourceKind === "closed_external_app_pilots" ? [
-    ...db.all<{id: string; status: string; failure_code: string | null; data: string}>("SELECT attempt_id id,status,failure_code,data FROM closed_external_app_pilot_attempts WHERE project_id=? AND pilot_id=? ORDER BY ordinal,attempt_id", projectId,sourceId).map(child => ({ ...child, table: "closed_external_app_pilot_attempts" })),
-    ...db.all<{id: string; status: string; data: string}>("SELECT event_id id,to_status status,data FROM closed_external_app_pilot_events WHERE project_id=? AND pilot_id=? ORDER BY event_index,event_id", projectId,sourceId).map(child => ({ ...child, table: "closed_external_app_pilot_events" })),
-  ].map(child => {
-    const data = decodeKernelJson(child.data);
-    if (data && typeof data === "object" && !Array.isArray(data) && "bodyAvailable" in data && data.bodyAvailable === false) {
-      if (!("originalRecordHash" in data) || typeof data.originalRecordHash !== "string" || !validateLegacyRedaction(db,projectId,child.table,child.id,child.data,data.originalRecordHash)) throw new KernelFault("corrupt_state");
-    }
-    return { ...child, data };
-  }) : [];
+  const children =
+    sourceKind === "closed_external_app_pilots"
+      ? [
+          ...db
+            .all<{
+              id: string;
+              status: string;
+              failure_code: string | null;
+              data: string;
+            }>(
+              "SELECT attempt_id id,status,failure_code,data FROM closed_external_app_pilot_attempts WHERE project_id=? AND pilot_id=? ORDER BY ordinal,attempt_id",
+              projectId,
+              sourceId,
+            )
+            .map((child) => ({
+              ...child,
+              table: "closed_external_app_pilot_attempts",
+            })),
+          ...db
+            .all<{ id: string; status: string; data: string }>(
+              "SELECT event_id id,to_status status,data FROM closed_external_app_pilot_events WHERE project_id=? AND pilot_id=? ORDER BY event_index,event_id",
+              projectId,
+              sourceId,
+            )
+            .map((child) => ({
+              ...child,
+              table: "closed_external_app_pilot_events",
+            })),
+        ].map((child) => {
+          const data = decodeKernelJson(child.data);
+          if (
+            data &&
+            typeof data === "object" &&
+            !Array.isArray(data) &&
+            "bodyAvailable" in data &&
+            data.bodyAvailable === false
+          ) {
+            if (
+              !("originalRecordHash" in data) ||
+              typeof data.originalRecordHash !== "string" ||
+              !validateLegacyRedaction(
+                db,
+                projectId,
+                child.table,
+                child.id,
+                child.data,
+                data.originalRecordHash,
+              )
+            )
+              throw new KernelFault("corrupt_state");
+          }
+          return { ...child, data };
+        })
+      : [];
   return row
     ? {
         sourceKind,

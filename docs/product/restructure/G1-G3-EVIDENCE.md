@@ -386,3 +386,75 @@ repeated. No real Provider or user research project was used. G6 and G7 are
 `completed_and_verified`, with no remaining scope blocker. G8–G13 remain
 unimplemented; the exact G8 entry is in
 [operations](G1-G3-OPERATIONS.md#exact-g8-continuation).
+
+## G8/G9 application, projection and visual evidence
+
+The 2026-09-08 handoff began at `5041e3c0d1cf9f04964c5cacbfbe1ae4c9ed29ee`
+on `codex/post-0.2-g6-g7`, then continued on `codex/post-0.2-g8-g9`.
+The existing uncommitted asynchronous open/close fix and lifecycle test were
+inspected, extended and verified. Unrelated `.gitignore`, lockfile and local
+reference/execution materials were retained. No release, push or tag was requested.
+The G0–G7 sections above remain historical evidence, not a fresh claim about
+this implementation. The released baseline remains v0.2.0/schema 20.
+
+The implementation map and failure contracts are in
+[G8/G9 decisions](IMPLEMENTATION-DECISIONS.md#g8g9-implementation-decisions),
+and the actual application/route entry is in
+[operations](G1-G3-OPERATIONS.md#g8g9-candidate-application-and-read-ports).
+
+| Behavior and actual failure | Verification |
+| --- | --- |
+| Closing a pending open could leave a usable session; persistence failure during close could leave the real lease held | `kernel-api-lifecycle` (5) and `kernel-close-failure` (1) verify generation revocation, real database lease reacquisition, cancellation and restart uncertainty. The close-failure assertion was RED before the finally-based resource release. |
+| Same integer head incorrectly marked changed workflow/cached bytes current | `projection-identity` (5) produced real REDs for saved-draft invalidation, stale rebuild publication and corrupt cache data, then GREEN. It also covers expiry without database writes, same-revision restore with different contents, hash-valid JSON tampering and preserved outbox. |
+| Views and restored navigation could disagree | `workspace-projections` (2) compares all seven surfaces and full Resume/Review detail against one input identity, verifies actual Receipt/revision, command result, durable restart and explicit rebuild without changing the canonical head. `workspace-recovery` (2) uses two actual SQLite connections and a stale restore preview. |
+| Focus refresh and late save responses lost or resurrected text | `review-draft-preservation` runs the actual built application with a held save acknowledgment, later typing, focus/reload, leave save/discard/cancel and browser back. `draft-buffer` (2) includes the RED late-acknowledgment-after-privacy-removal case. |
+| Old creation URLs and composite relation links were incorrectly accepted/rejected | HTTP old Appeal/Room creation returned 200 before the 410 fix; `kernel-http` verifies the refusal with and without Provider. `kernel-route` exposed a composite relation becoming `not_found`, then verified the fix. `g9-large-project` opens the actual relationship result via keyboard from its type filter. |
+| Exact request/result/session boundaries | Existing six-effect, provider, compensation, privacy and legacy regressions remain enabled. `g9-read-isolation` holds a real SQLite-backed old HTTP response while a newer search completes, then closes and reloads the session. The stale result cannot appear. |
+| First use and recovery | `kernel-start` verifies real candidate creation, unknown-store preservation and read-only mutation refusal; `workspace-recovery` verifies current-pair-bound restore confirmation. Existing migration, privacy and missing-file repair paths are retained. |
+
+The foundation browser command operates the real built candidate, real Kernel and
+isolated SQLite projects. Its integrated run passed 21 scenarios. After visual
+refinement the 12 affected theme/workflow scenarios passed again; the additional
+large-relation and delayed-query journeys passed separately. P1-06's corrected
+actual-candidate target passed all six language/theme/200%-text scenarios with
+four-entry and no-implicit-network assertions intact. Missing Electron and
+unrelated-source tag checks both still fail in their separate G10/G12 command;
+neither was skipped or reported closed.
+
+### Visual, interaction, motion and copy observations
+
+Product Design's audit workflow was used against the existing Quiet Instrument
+system, first on the real existing application and then on the rebuilt candidate.
+No generated design image replaced acceptance. Actual renders inspected include
+Start Center, Today, Project, Brief detail/edit/conflict, Search, Settings and its
+dialogs, History/export, new Review, saved Review/result, correction, uncertain
+restart and contextual Memory/Forget. English and Chinese, light/dark/high-contrast,
+1100/1280/1440/1920 widths, long text/lists and 200% text were exercised. Shared
+surfaces reuse their verified states rather than duplicating a report per card.
+
+Observed defects were corrected: stretched narrow-desktop navigation, an oversized
+long-Brief heading, missing dialog focus return, stale history response replacement,
+composite relation navigation, and an 8,099-character Finding filling a select
+option. The final Finding option is a short excerpt, with the full original text
+available separately; no request bytes are changed. The large Provider error case
+remains an honest uncertain outcome without raw exception text leaking into UI.
+
+Manual browser operation covered opening Project, opening/closing the context
+drawer repeatedly, Escape focus return, Tab inside the drawer, the inaccessible
+background while the native dialog is open, and the real appearance control with
+reduced motion on/off. Runtime frame samples additionally observed the entrance
+transform moving to zero and opacity to one, quick reversal without queued replay,
+and no transition under reduced motion. Slow save response behavior was exercised
+by retaining the real server result until newer input existed. No synthetic progress,
+simulation of thinking or success before a real saved result is used.
+
+Representative copy is now “保存草稿 / Save draft”, “查看修改 / View changes”,
+“草稿已保存，后来输入的文字尚未保存。 / Draft saved. Your newer text is still
+unsaved.” and “外发结果不确定 / Send outcome uncertain”. Recovery distinguishes
+saved data, read-only browsing, recheck required and retained backup copies.
+Necessary hashes and internal details stay in collapsed inspection sections.
+
+Local test evidence is under the ignored `.tmp/g8-g9/` directory (build, public,
+targeted performance, UI and deferred-RED logs, raw performance samples and selected
+screens). These synthetic browser renders are not Electron installation evidence.
+The final gate results and measured values are recorded below after completion.

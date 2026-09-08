@@ -35,8 +35,16 @@ it.each([false, true])(
         },
       };
     };
-    const command = async (body: Record<string, unknown>) =>
-      await call("/api/kernel/reviews", { projectId: f.projectId, ...body });
+    const command = async (body: Record<string, unknown>) => {
+      const status = await (
+        await fetch(`${running.origin}/api/kernel/status`)
+      ).json();
+      return await call("/api/kernel/reviews", {
+        projectId: f.projectId,
+        sessionGeneration: status.value.sessionGeneration,
+        ...body,
+      });
+    };
     try {
       expect(
         (await call("/api/kernel/open", { projectPath: f.root }, false)).status,
@@ -44,6 +52,13 @@ it.each([false, true])(
       expect(
         (await call("/api/kernel/open", { projectPath: f.root })).data.ok,
       ).toBe(true);
+      expect(
+        (await fetch(`${running.origin}/project/appeals/new`)).status,
+      ).toBe(410);
+      expect(
+        (await fetch(`${running.origin}/project/deliberation-rooms/new`))
+          .status,
+      ).toBe(410);
       let r = (
         await command({
           action: "create",

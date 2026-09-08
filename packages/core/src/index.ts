@@ -3,7 +3,7 @@ export { RandomIdFactory, SystemClock } from "./id-factory.js";
 export { ResearchDeliberationKernel, openResearchDeliberationKernel, KernelApplicationFault, serializeKernelProviderRequest, decodeProviderAssessment,
   type KernelApplicationOptions, type KernelProvider } from "./kernel-application.js";
 export { parseCanonicalEffect, type CanonicalEffectPayload } from "./kernel-effects.js";
-export { KernelFault, kernelRecord, kernelText, kernelInteger } from "@sestina/research";
+export { KernelFault, kernelRecord, kernelText, kernelInteger, kernelHash } from "@sestina/research";
 export type { BriefProjectionPublication, BriefProjectionPublisher, CoreBriefMutation, CoreBriefState, CoreDatabaseDiagnostics, CoreReviewSummary, DeterministicReviewResult, EpisodeIntegritySummary, OpenSestinaOptions } from "./sestina-core.js";
 export type {
   AnalyzedResearchRoomReview,
@@ -55,7 +55,7 @@ export type {
   DeliberationResolutionKind,
   DeliberationRoom,
 } from "@sestina/research";
-export { previewKernelMigration, migrateKernelProject, recoverKernelMigration, restoreKernelPreMigrationBackup, repairMissingKernelBrief, openKernelProject, KernelMigrationError, type KernelMigrationOptions, type KernelMigrationPreview, type KernelMigrationFaultPoint } from "./kernel-migration.js";
+export { previewKernelMigration, migrateKernelProject, recoverKernelMigration, restoreKernelPreMigrationBackup, previewKernelPreMigrationRestore, repairMissingKernelBrief, openKernelProject, KernelMigrationError, type KernelMigrationOptions, type KernelMigrationPreview, type KernelMigrationFaultPoint } from "./kernel-migration.js";
 export {
   compileCorrectionAppealSecondOpinionPrompt,
   compileDeliberationParticipantPrompt,
@@ -144,3 +144,5 @@ export type {
   ClosedPilotMcpObservation,
   PilotContextManifest,
 } from "@sestina/research";
+export { createKernelProject } from "./kernel-project-create.js";
+export { projectKernelWorkspace, projectWorkspaceReview } from "./kernel-workspace.js";

@@ -26,7 +26,11 @@ import {
   validateKernelDatabase,
   kernelBriefDocument,
 } from "@sestina/research-store";
-import { KernelFault, kernelCanonicalJson } from "@sestina/research";
+import {
+  KernelFault,
+  kernelCanonicalJson,
+  kernelHash,
+} from "@sestina/research";
 import { openSestina } from "./sestina-core.js";
 import { publishKernelBriefFile } from "./kernel-brief-publisher.js";
 
@@ -121,6 +125,10 @@ interface Journal {
 }
 export interface KernelMigrationOptions {
   readonly projectRoot: string;
+  readonly expectedSource?: Pick<
+    KernelMigrationPreview,
+    "projectId" | "sourceDatabaseHash" | "sourceBriefHash" | "sourceWalHash"
+  >;
   readonly faultInjection?: (
     point: KernelMigrationFaultPoint,
   ) => void | Promise<void>;
@@ -430,9 +438,9 @@ export async function previewKernelMigration(
     estimatedRequiredBytes: sourceBytes * 4 + 16_777_216,
   };
 }
-async function guarded(
+async function guarded<T>(
   projectRoot: string,
-  work: (p: Awaited<ReturnType<typeof paths>>) => Promise<unknown>,
+  work: (p: Awaited<ReturnType<typeof paths>>) => Promise<T>,
 ) {
   const p = await paths(projectRoot);
   const guard = await MaintenanceGuard.acquire({
@@ -477,7 +485,14 @@ export async function migrateKernelProject(
   readonly projectId: string;
 }> {
   const preview = await previewKernelMigration(options.projectRoot);
-  return (await guarded(options.projectRoot, async (p) => {
+  if (
+    options.expectedSource &&
+    Object.entries(options.expectedSource).some(
+      ([key, value]) => preview[key as keyof KernelMigrationPreview] !== value,
+    )
+  )
+    fail("source_changed");
+  return await guarded(options.projectRoot, async (p) => {
     await assertFingerprint(p.data, preview);
     const capacity = await statfs(p.data);
     if (capacity.bavail * capacity.bsize < preview.estimatedRequiredBytes)
@@ -665,7 +680,7 @@ export async function migrateKernelProject(
       // the original or silently retry a stage or a Provider request.
       throw new KernelMigrationError("migration_failed");
     }
-  })) as { stage: "swapped"; runId: string; projectId: string };
+  });
 }
 
 export async function recoverKernelMigration(
@@ -675,7 +690,7 @@ export async function recoverKernelMigration(
   readonly stage: "swapped" | "rolled_back";
   readonly runId: string;
 }> {
-  return (await guarded(projectRoot, async (p) => {
+  return await guarded(projectRoot, async (p) => {
     const j = await readJournal(p.journal);
     if (!j) fail("recovery_required");
     const run = join(p.runs, j.runId);
@@ -779,25 +794,40 @@ export async function recoverKernelMigration(
     j.failureCode = null;
     await saveJournal(p.journal, j);
     return { stage: "rolled_back" as const, runId: j.runId };
-  })) as { stage: "swapped" | "rolled_back"; runId: string };
+  });
 }
 
 /** Explicit repair of an absent derived file; existing unknown files are never overwritten. */
 export async function repairMissingKernelBrief(projectRoot: string) {
-  const p=await paths(projectRoot);
-  const guard=await MaintenanceGuard.acquire({databasePath:p.database,scope:"restore",ownerId:"kernel-brief-repair"});
-  let db:StorageDatabase | undefined;
+  const p = await paths(projectRoot);
+  const guard = await MaintenanceGuard.acquire({
+    databasePath: p.database,
+    scope: "restore",
+    ownerId: "kernel-brief-repair",
+  });
+  let db: StorageDatabase | undefined;
   try {
-    if(await exists(p.brief)) fail("source_changed");
-    const journal=await readJournal(p.journal);
-    if(journal?.stage!=="swapped") fail("recovery_required");
-    const inspected=await openDatabase({path:p.database,readOnly:true,migrate:false});
-    try {validateKernelDatabase(inspected,journal.projectId,undefined,true);} finally {inspected.close();}
-    db=await openDatabase({path:p.database,migrate:false});
-    db.maintenanceOwned=true;
-    validateKernelDatabase(db,journal.projectId,undefined,true);
-    return publishKernelBriefFile(db,journal.projectId,undefined,true);
-  } finally {db?.close();guard.release();}
+    if (await exists(p.brief)) fail("source_changed");
+    const journal = await readJournal(p.journal);
+    if (journal?.stage !== "swapped") fail("recovery_required");
+    const inspected = await openDatabase({
+      path: p.database,
+      readOnly: true,
+      migrate: false,
+    });
+    try {
+      validateKernelDatabase(inspected, journal.projectId, undefined, true);
+    } finally {
+      inspected.close();
+    }
+    db = await openDatabase({ path: p.database, migrate: false });
+    db.maintenanceOwned = true;
+    validateKernelDatabase(db, journal.projectId, undefined, true);
+    return publishKernelBriefFile(db, journal.projectId, undefined, true);
+  } finally {
+    db?.close();
+    guard.release();
+  }
 }
 
 export async function openKernelProject(
@@ -851,11 +881,54 @@ export async function openKernelProject(
 }
 
 /** Explicit local maintenance action; restores an immutable old pair, never reverse SQL. */
+export async function previewKernelPreMigrationRestore(projectRoot: string) {
+  return guarded(projectRoot, async () => inspectKernelRestore(projectRoot));
+}
+async function inspectKernelRestore(projectRoot: string) {
+  const p = await paths(projectRoot),
+    j = await readJournal(p.journal);
+  if (j?.stage !== "swapped") fail("recovery_required");
+  await verifiedBackup(join(p.runs, j.runId), j);
+  const current = await openKernelProject(projectRoot, true);
+  try {
+    if (
+      current.get(
+        "SELECT redaction_id FROM research_privacy_redactions WHERE project_id=? AND source_revision>1",
+        j.projectId,
+      )
+    )
+      fail("recovery_required");
+    const input = {
+      projectId: j.projectId,
+      runId: j.runId,
+      sourceSchema: j.sourceSchema,
+      targetSchema: 25,
+      backupDatabaseHash: j.backupDatabaseHash,
+      backupBriefHash: j.backupBriefHash,
+      current: (await fingerprint(p.data)).hashes,
+    };
+    return {
+      ...input,
+      previewHash: kernelHash(input),
+      confirmationRequired: true,
+      networkUsed: false,
+    };
+  } finally {
+    current.close();
+  }
+}
 export async function restoreKernelPreMigrationBackup(
   projectRoot: string,
   faultInjection?: (point: KernelMigrationFaultPoint) => void | Promise<void>,
+  expectedPreviewHash?: string,
 ): Promise<{ readonly stage: "rolled_back"; readonly runId: string }> {
   await guarded(projectRoot, async (p) => {
+    if (
+      expectedPreviewHash !== undefined &&
+      (await inspectKernelRestore(projectRoot)).previewHash !==
+        expectedPreviewHash
+    )
+      fail("source_changed");
     const j = await readJournal(p.journal);
     if (j?.stage !== "swapped") fail("recovery_required");
     const current = await openKernelProject(projectRoot, true);

@@ -347,7 +347,9 @@ export function readKernelSnapshot(
     const verified = validateKernelChain(db, projectId, state);
     if (verified.revision !== head.revision)
       throw new KernelFault("corrupt_state");
-    return freezeKernel({ head, state });
+    // Both values are already deeply frozen after decoding and validation.
+    // Retain those exact immutable values instead of recloning the whole store.
+    return Object.freeze({ head, state });
   });
 }
 export function appendKernelEvent(
@@ -462,10 +464,16 @@ export function projectKernelContext(
     const current = versions.find((v) => v.id === o.data.currentVersionId);
     if (!current) throw new KernelFault("corrupt_state");
     if (current.progressive) {
-      const p = current.progressive as { sections: Record<string, { status: string }> };
+      const p = current.progressive as {
+        sections: Record<string, { status: string }>;
+      };
       for (const [field, state] of Object.entries(p.sections)) {
         const limitation = `Brief ${field}: not_provided.`;
-        if (state.status === "not_provided" && !limitations.includes(limitation)) limitations.push(limitation);
+        if (
+          state.status === "not_provided" &&
+          !limitations.includes(limitation)
+        )
+          limitations.push(limitation);
       }
     }
     return Object.fromEntries(

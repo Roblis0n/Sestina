@@ -60,7 +60,10 @@ export interface BriefVersionDto extends BriefFieldsDto {
   supersedes?: string;
 }
 export interface BriefViewDto {
-  coverage?: Record<string, {section:string; status:string; reason:string}[]>;
+  coverage?: Record<
+    string,
+    { section: string; status: string; reason: string }[]
+  >;
   objectLabels?: Record<string, string>;
   objectVersions?: ObjectReferenceDto[];
   fileProjection?: { status: string; source_revision: number } | null;
@@ -76,6 +79,7 @@ export interface BriefViewDto {
   sections: Record<string, SectionStateDto>;
 }
 export interface KernelReviewDto {
+  bodyRedaction?: { redactionId: string; originalRecordHash: string };
   id: string;
   version: number;
   suggestion: string;
@@ -92,7 +96,10 @@ export interface KernelReviewDto {
   } | null;
   attemptIds: string[];
   manifestId: string | null;
-  terminalOutcome?: {resultingObjects: ObjectReferenceDto[]; receiptId:string | null} | null;
+  terminalOutcome?: {
+    resultingObjects: ObjectReferenceDto[];
+    receiptId: string | null;
+  } | null;
 }
 export interface KernelReviewViewDto {
   review: KernelReviewDto;
@@ -128,8 +135,9 @@ export function requireLocalValue<T>(value: T | null | undefined): T {
   return value;
 }
 function localObject(value: unknown): Record<string, LocalJson> {
-  const parsed=decodeLocalJson(value);
-  if(parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("invalid_payload");
+  const parsed = decodeLocalJson(value);
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed))
+    throw new Error("invalid_payload");
   return parsed;
 }
 export function decodeLocalJson(value: unknown, depth = 0): LocalJson {
@@ -165,6 +173,14 @@ export function decodeBriefView(value: unknown): BriefViewDto {
 }
 export function decodeReview(value: unknown): KernelReviewDto {
   const v = localObject(value);
+  if (v.bodyRedaction !== undefined) {
+    const redaction = localObject(v.bodyRedaction);
+    if (
+      typeof redaction.redactionId !== "string" ||
+      typeof redaction.originalRecordHash !== "string"
+    )
+      throw new Error("invalid_payload");
+  }
   if (
     typeof v.id !== "string" ||
     !Number.isSafeInteger(v.version) ||

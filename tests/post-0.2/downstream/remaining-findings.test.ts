@@ -7,10 +7,13 @@ import { SESTINA_RELEASE_IDENTITY as identity } from "../../../packages/schema/s
 import { validateReleaseManifest } from "../../../scripts/lib/release-verifier.mjs";
 it("P2-02 G10/G12: production package declares a bundled Electron application entry", async () => {
   const pkg = JSON.parse(
-    await readFile("apps/research-room/package.json", "utf8"),
+    await readFile("apps/desktop/package.json", "utf8").catch((error) => {
+      if (error.code === "ENOENT") return "{}";
+      throw error;
+    }),
   );
-  // This is the real package contract consumed by the release builder. The
-  // passing v0.2 artifact identity/lifecycle suite remains a separate gate.
+  // G10 owns apps/desktop. Absence is an explicit behavioral RED, never a skip
+  // or a request to add Electron to the published browser-preview package.
   expect({
     main: pkg.main ?? null,
     electron:
@@ -88,7 +91,9 @@ it("P2-02 G10/G12: the release tag verifier refuses a valid manifest from an unr
     ],
   };
   try {
-    expect(() => { validateReleaseManifest(manifest); }).not.toThrow();
+    expect(() => {
+      validateReleaseManifest(manifest);
+    }).not.toThrow();
     await writeFile(
       join(directory, "release-manifest.json"),
       JSON.stringify(manifest),

@@ -197,6 +197,9 @@ claim is implied.
 
 ## Exact G8 continuation
 
+Historical handoff from G6/G7. The G8/G9 implementation below now owns this
+entry; consult the current gate status rather than restarting these stages.
+
 After G6/G7 completion in [implementation status](IMPLEMENTATION-STATUS.md), start
 at plan 14's **G8 — Derived projections and recovery consistency**. Reuse
 `readKernelSnapshot`, the revision/outbox metadata and persistent Review/Receipt
@@ -211,6 +214,62 @@ case. Do not add another transaction, Review state machine or Authority policy.
 G9 owns global navigation and final route replacement. P1-06 remains RED there;
 G10/G12 own the remaining Electron/release RED. Electron assembly, final migration
 switch and publication are outside this implementation.
+
+## G8/G9 candidate application and read ports
+
+Build with `pnpm --filter @sestina/research-room build`, start the existing local
+Research Room application, and explicitly visit `/project/today`. The startup
+surface opens an opted-in project, creates a candidate in an explicitly chosen
+empty folder, or previews migration/recovery. It never creates or migrates merely
+because a URL was opened. The ordinary published preview default stays schema 20.
+`/project/kernel` is a compatibility redirect to this single candidate navigation.
+
+| Entry | User journey |
+| --- | --- |
+| `/project/today` | Current Brief question/task, grouped actionable Reviews and Issues, saved Review continuation and recent real results. |
+| `/project/reviews/new`, `/project/reviews/:reviewId` | Save suggestion; inspect context/missing inputs; inspect and confirm exact optional send; inspect six-kind effect preview; explicitly save; open actual result and secondary Receipt proof. No Provider is necessary. |
+| `/project/state` | Typed object filtering, versions, provenance and relation details. `?object=` retains exact IDs, including composite relation identities. Context Memory remains separate from Evidence. |
+| `/project/state/brief`, `/edit`, `/history/:versionId` | Relative to the Brief route: current details, typed editing and immutable historical versions. Dirty buffers and three-way conflict choices survive background reads. |
+| `/project/history`, `/:sourceKind/:id` | Relative to History: unified new Review/correction/Receipt history and explicit old source classes; read, proof, export and deliberate linked-draft conversion. |
+| `/project/search` | Full allowlisted research text, type/state/source/time/revision filters, matching reason, identity-bound pagination and explicit view reconstruction. Exact outbound bodies, raw Provider replies and Memory bodies are excluded. |
+| `/project/settings/:section` | Provider, privacy/network, appearance/accessibility, recovery/data, integrations, about and diagnostics. No unimplemented desktop toggles. |
+
+`KernelApplicationApi` implements the transport-independent shared port. All
+protected HTTP commands bind the current server `sessionGeneration` and project
+ID, in addition to the existing local HTTP session token. Review writes retain
+version, preview and command bindings. Closing invalidates capabilities before
+awaited open results can publish; late responses are discarded by the client.
+
+Additional reads: `workspace` with `view=today|attention|resume|project|search|history|receipt|object`
+and bounded `limit`, query/filter/cursor/ID; `legacy_detail` for a source-labelled
+historical record. `resume` with a Review ID uses the same full durable projection
+as Review reads. `rebuild_views` makes one explicit bounded reconstruction pass
+over existing disposable metadata and preserves event/outbox records. The UI
+normally calculates current pages from a consistent snapshot rather than trusting
+stored index bytes. There is no background retry or index-derived write authority.
+
+`POST /api/kernel/close`, `/create`, and `/maintenance` use the same session gate.
+Maintenance actions are preview/migrate, recover, restore_preview/restore; migration
+and restore confirmation bind the inspected content hashes. Read-only open accepts
+no research mutation, Host capability or Provider request. Missing-Brief repair
+retains its existing explicit protected endpoint.
+
+## Exact G10 continuation
+
+After the G8/G9 completion evidence in [implementation status](IMPLEMENTATION-STATUS.md),
+start plan 14's **G10 — Electron desktop shell**. Reuse the shared application port,
+typed projection decoders, current four-entry candidate renderer and live Kernel
+capability resolver. Assemble `apps/desktop` main/preload, restricted IPC, main-owned
+project/secret/Provider resources, native folder selection, embedded runtime and
+installation lifecycle. Do not move research rules into IPC or let the renderer
+construct user authority. Broadcasts only invalidate reads; outbound confirmation
+and uncertain-command lookup retain their existing semantics.
+
+P2-02's missing bundled Electron entry remains an executable G10 RED against
+`apps/desktop/package.json`; unrelated-source release-tag acceptance remains G12
+RED. The G9 browser screenshots and loopback journeys are not desktop installation
+evidence. Installation-state visual/lifecycle acceptance belongs to G10/G12/G13;
+the final default switch, migration cutover and published claims remain G12/G13.
 
 Every later UI increment must use Product Design's actual built-interface review,
 operate core flows, and inspect affected Chinese/English, light/dark/high-contrast,

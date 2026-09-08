@@ -1,7 +1,8 @@
 import { requireLocalValue } from "../../api/kernel-dto.js";
 import { KernelCorrectionHistory } from "./KernelCorrectionHistory.js";
 import { KernelMemoryDrawer } from "./KernelMemoryDrawer.js";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { DraftBuffer } from "../../api/draft-buffer.js";
 import { researchRoomApi, ResearchRoomApiError } from "../../api/client.js";
 import {
   decodeLocalJson,
@@ -12,7 +13,11 @@ import {
   type LocalJson,
   type ObjectReferenceDto,
 } from "../../api/kernel-dto.js";
-import { kernelLabel, readableKernelValue, visibleKernelChanges } from "./kernel-copy.js";
+import {
+  kernelLabel,
+  readableKernelValue,
+  visibleKernelChanges,
+} from "./kernel-copy.js";
 import { KernelEffectEditor } from "./KernelEffectEditor.js";
 import { KernelCorrectionPanel } from "./KernelCorrectionPanel.js";
 import { BriefRelationshipPicker } from "./BriefRelationshipPicker.js";
@@ -55,60 +60,165 @@ export function KernelReviewPanel({
   const [view, setView] = useState<KernelReviewViewDto>();
   const [body, setBody] = useState<LocalJson>();
   const [suggestion, setSuggestion] = useState("");
+  const buffer = useRef(new DraftBuffer());
+  const generation = useRef(0);
+  const requestSequence = useRef(0);
+  const running = useRef(false);
+  const effectEdits = useRef(0);
+  const saveCurrent = useRef<() => Promise<void>>(() =>
+    Promise.reject(new Error("editor_not_ready")),
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const [receipt, setReceipt] = useState<LocalJson>();
   const [draftInputsChanged, setDraftInputsChanged] = useState(false);
   const [attemptPending, setAttemptPending] = useState(false);
-  const [memoryCandidates, setMemoryCandidates] = useState<{ item: MemoryItemDto; sendEligible: boolean }[]>([]);
-  const [selectedMemory, setSelectedMemory] = useState<{ id: string; version: number; contentHash: string }[]>([]);
+  const [memoryCandidates, setMemoryCandidates] = useState<
+    { item: MemoryItemDto; sendEligible: boolean }[]
+  >([]);
+  const [selectedMemory, setSelectedMemory] = useState<
+    { id: string; version: number; contentHash: string }[]
+  >([]);
   const [evidence, setEvidence] = useState<ObjectReferenceDto[]>([]);
   const [issues, setIssues] = useState<ObjectReferenceDto[]>([]);
-  const [coverage, setCoverage] = useState<{ section: string; status: string }[]>([]);
+  const [coverage, setCoverage] = useState<
+    { section: string; status: string }[]
+  >([]);
   const [kind, setKind] = useState("record_only");
   const load = async () => {
+    const epoch = generation.current,
+      sequence = ++requestSequence.current;
     const v = await researchRoomApi.kernel(
       projectId,
       "read",
       { reviewId },
       decodeReviewView,
     );
+    if (epoch !== generation.current || sequence !== requestSequence.current)
+      return v;
     setView(v);
-    setSuggestion(v.review.suggestion);
+    buffer.current.receive(
+      v.review.suggestion,
+      v.review.version,
+      Boolean(v.review.bodyRedaction),
+    );
+    setSuggestion(buffer.current.text);
     if (v.review.terminalOutcome?.receiptId && v.review.effectDraft) {
-      setReceipt(await researchRoomApi.kernel(projectId, "lookup", {
-        authorityCommandId: v.review.effectDraft.authorityCommandId,
-      }, decodeLocalJson));
+      const result = await researchRoomApi.kernel(
+        projectId,
+        "lookup",
+        {
+          authorityCommandId: v.review.effectDraft.authorityCommandId,
+        },
+        decodeLocalJson,
+      );
+      if (epoch === generation.current && sequence === requestSequence.current)
+        setReceipt(result);
     }
     return v;
   };
   useEffect(() => {
+    generation.current++;
+    buffer.current = new DraftBuffer();
     setReceipt(undefined);
     setBody(undefined);
     setConfirmed(false);
-    void load().then(v => {
-      const payload=v.review.effectDraft?.payload;
-      if(payload && typeof payload === "object" && !Array.isArray(payload) && typeof payload.kind === "string") setKind(payload.kind);
-    }).catch(() => {
-      setError(en ? "Could not load this review." : "未能读取这条审议。");
-    });
+    void load()
+      .then((v) => {
+        const payload = v.review.effectDraft?.payload;
+        if (
+          payload &&
+          typeof payload === "object" &&
+          !Array.isArray(payload) &&
+          typeof payload.kind === "string"
+        )
+          setKind(payload.kind);
+      })
+      .catch(() => {
+        setError(en ? "Could not load this review." : "未能读取这条审议。");
+      });
+    return () => {
+      generation.current++;
+      requestSequence.current++;
+    };
   }, [reviewId, projectId]);
   useEffect(() => {
-    const refresh = () => { setBody(undefined); setConfirmed(false); setSelectedMemory([]); setMemoryCandidates([]); void load().catch(() => { setView(undefined); setError(en ? "Reload the review to inspect current content." : "请重新读取审议，查看当前内容。"); }); };
+    const refresh = () => {
+      setBody(undefined);
+      setConfirmed(false);
+      setSelectedMemory([]);
+      setMemoryCandidates([]);
+      void load().catch(() => {
+        setView(undefined);
+        setError(
+          en
+            ? "Reload the review to inspect current content."
+            : "请重新读取审议，查看当前内容。",
+        );
+      });
+    };
     const channel = new BroadcastChannel("sestina-kernel-context");
     channel.onmessage = refresh;
     window.addEventListener("sestina-kernel-context", refresh);
     window.addEventListener("focus", refresh);
-    return () => { channel.close(); window.removeEventListener("sestina-kernel-context", refresh); window.removeEventListener("focus", refresh); };
+    return () => {
+      channel.close();
+      window.removeEventListener("sestina-kernel-context", refresh);
+      window.removeEventListener("focus", refresh);
+    };
   }, [projectId, reviewId]);
   useEffect(() => {
     if (!attemptPending) return;
-    const timer = setInterval(() => { void load().catch(() => { setError(en ? "The request state could not be refreshed. Reload before trying again." : "暂时无法读取请求状态，请重新读取后再操作。"); }); }, 750);
-    return () => { clearInterval(timer); };
+    const timer = setInterval(() => {
+      void load().catch(() => {
+        setError(
+          en
+            ? "The request state could not be refreshed. Reload before trying again."
+            : "暂时无法读取请求状态，请重新读取后再操作。",
+        );
+      });
+    }, 750);
+    return () => {
+      clearInterval(timer);
+    };
   }, [attemptPending, reviewId, projectId]);
+  useEffect(() => {
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      if (buffer.current.dirty) event.preventDefault();
+    };
+    const beforeNavigate = (event: Event) => {
+      if (!buffer.current.dirty) return;
+      event.preventDefault();
+      const detail = (
+        event as CustomEvent<{
+          save?: () => Promise<void>;
+          discard?: () => void;
+        }>
+      ).detail;
+      const saveOther = detail.save,
+        discardOther = detail.discard;
+      detail.save = async () => {
+        await saveCurrent.current();
+        if (buffer.current.dirty) throw new Error("unsaved_draft");
+        await saveOther?.();
+      };
+      detail.discard = () => {
+        buffer.current.discard();
+        setSuggestion(buffer.current.text);
+        discardOther?.();
+      };
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    window.addEventListener("sestina-before-navigate", beforeNavigate);
+    return () => {
+      window.removeEventListener("beforeunload", beforeUnload);
+      window.removeEventListener("sestina-before-navigate", beforeNavigate);
+    };
+  }, []);
   const run = async (action: () => Promise<void>) => {
-    if (busy) return;
+    if (running.current) return;
+    running.current = true;
     setBusy(true);
     setError("");
     try {
@@ -116,22 +226,42 @@ export function KernelReviewPanel({
       await load();
       onChanged();
     } catch (failure) {
-      const codes = failure instanceof ResearchRoomApiError ? [failure.code, ...failure.reasons] : [];
+      const codes =
+        failure instanceof ResearchRoomApiError
+          ? [failure.code, ...failure.reasons]
+          : [];
       setError(
-        codes.some(code => ["provider_unavailable", "second_opinion_not_configured"].includes(code))
-          ? en ? "No assessment provider is configured for this review. You can continue without assessment." : "本条审议尚未配置评估服务，可以跳过评估继续处理。"
+        codes.some((code) =>
+          ["provider_unavailable", "second_opinion_not_configured"].includes(
+            code,
+          ),
+        )
+          ? en
+            ? "No assessment provider is configured for this review. You can continue without assessment."
+            : "本条审议尚未配置评估服务，可以跳过评估继续处理。"
           : codes.includes("second_opinion_same_runtime")
-          ? en ? "The second opinion uses the same runtime. Choose a different service or continue without assessment." : "第二意见使用了同一个服务运行配置。请选择不同服务，或跳过评估继续处理。"
-          : codes.includes("provider_generation_changed")
-          ? en ? "The provider configuration changed. No new connection was opened. Prepare and confirm the current send content again." : "评估服务配置已变化，本次未建立网络连接。请重新准备并确认当前发送内容。"
-          : codes.some(code => ["stale_revision", "stale_object"].includes(code))
-          ? en ? "The project or target object changed. Your draft is kept. Compare current versions and confirm a new preview." : "项目或目标对象已变化，草稿已保留。请比较当前版本，并重新确认新预览。"
-          : en
-          ? "The action did not complete. Your work is kept. Recheck the current version or look up the saved result."
-          : "操作未完成，已保留你的工作。请核对当前版本，或查询已保存的结果。",
+            ? en
+              ? "The second opinion uses the same runtime. Choose a different service or continue without assessment."
+              : "第二意见使用了同一个服务运行配置。请选择不同服务，或跳过评估继续处理。"
+            : codes.includes("provider_generation_changed")
+              ? en
+                ? "The provider configuration changed. No new connection was opened. Prepare and confirm the current send content again."
+                : "评估服务配置已变化，本次未建立网络连接。请重新准备并确认当前发送内容。"
+              : codes.some((code) =>
+                    ["stale_revision", "stale_object"].includes(code),
+                  )
+                ? en
+                  ? "The project or target object changed. Your draft is kept. Compare current versions and confirm a new preview."
+                  : "项目或目标对象已变化，草稿已保留。请比较当前版本，并重新确认新预览。"
+                : en
+                  ? "The action did not complete. Your work is kept. Recheck the current version or look up the saved result."
+                  : "操作未完成，已保留你的工作。请核对当前版本，或查询已保存的结果。",
       );
-      await load().catch(() => { setView(undefined); });
+      await load().catch(() => {
+        setView(undefined);
+      });
     } finally {
+      running.current = false;
       setBusy(false);
       setConfirmed(false);
     }
@@ -143,26 +273,103 @@ export function KernelReviewPanel({
   const r = view.review,
     next = view.allowedNext,
     stale = view.staleReasons.length > 0 || r.status === "stale";
-  const command = (action: string, extra: Record<string, unknown> = {}) =>
-    researchRoomApi.kernel(
+  const command = async (
+    action: string,
+    extra: Record<string, unknown> = {},
+  ) => {
+    let version = r.version;
+    if (action === "skip_assessment") {
+      await saveBuffer();
+      version = (await load()).review.version;
+    }
+    if (
+      buffer.current.dirty &&
+      [
+        "skip_assessment",
+        "prepare_effect",
+        "confirm_manifest",
+        "start_attempt",
+        "commit",
+      ].includes(action)
+    )
+      throw new Error("unsaved_draft");
+    return researchRoomApi.kernel(
       projectId,
       action,
-      { reviewId, expectedVersion: r.version, ...extra },
+      { reviewId, expectedVersion: version, ...extra },
       decodeLocalJson,
     );
+  };
   const preview = r.effectDraft?.preview as
     | {
-        objectLabels?: Record<string,string>; affectedReviews?: LocalJson[]; affectedManifests?: LocalJson[];
-        objects?: { kind: string; version: number; before: LocalJson; after: LocalJson }[];
+        objectLabels?: Record<string, string>;
+        affectedReviews?: LocalJson[];
+        affectedManifests?: LocalJson[];
+        objects?: {
+          kind: string;
+          version: number;
+          before: LocalJson;
+          after: LocalJson;
+        }[];
         unchangedObjects?: LocalJson[];
         rollbackMode?: string;
       }
     | undefined;
+  async function saveBuffer() {
+    const current = buffer.current;
+    const epoch = generation.current;
+    if (current.conflict) throw new Error("draft_conflict");
+    if (!current.dirty) return;
+    const submitted = current.text;
+    const saved = await researchRoomApi.kernel(
+      projectId,
+      "edit",
+      { reviewId, expectedVersion: current.baseVersion, suggestion: submitted },
+      decodeReview,
+    );
+    if (
+      epoch !== generation.current ||
+      current !== buffer.current ||
+      saved.version < current.serverVersion
+    )
+      return;
+    if (saved.bodyRedaction) current.receive("", saved.version, true);
+    else {
+      if (current.text === submitted && saved.version >= current.serverVersion)
+        current.text = saved.suggestion;
+      current.saved(saved.suggestion, saved.version);
+    }
+    setSuggestion(current.text);
+    setView((old) => (old ? { ...old, review: saved } : old));
+    setBody(undefined);
+    setConfirmed(false);
+  }
+  saveCurrent.current = saveBuffer;
   async function prepare() {
-    await command("prepare_manifest", {
-      selection: { coverageScope: { effectKind: kind, targetKinds: [...new Set([...evidence, ...issues].map(ref => ref.kind))] }, memory: selectedMemory, evidenceIds: evidence.map(item => item.id), issueIds: issues.map(item => item.id) },
-      useProvider: true,
-    });
+    await saveBuffer();
+    const fresh = await load();
+    if (buffer.current.dirty) throw new Error("unsaved_draft");
+    await researchRoomApi.kernel(
+      projectId,
+      "prepare_manifest",
+      {
+        reviewId,
+        expectedVersion: fresh.review.version,
+        selection: {
+          coverageScope: {
+            effectKind: kind,
+            targetKinds: [
+              ...new Set([...evidence, ...issues].map((ref) => ref.kind)),
+            ],
+          },
+          memory: selectedMemory,
+          evidenceIds: evidence.map((item) => item.id),
+          issueIds: issues.map((item) => item.id),
+        },
+        useProvider: true,
+      },
+      decodeLocalJson,
+    );
     await load();
     setBody(
       await researchRoomApi.kernel(
@@ -179,7 +386,9 @@ export function KernelReviewPanel({
         exactRequestBody?: string | null;
         exactRequestBytes?: number;
         bodyRedaction?: { redactionId: string };
-        contextSelection?: {briefCoverage?: {section:string; status:string; reason:string}[]};
+        contextSelection?: {
+          briefCoverage?: { section: string; status: string; reason: string }[];
+        };
       }
     | undefined;
   return (
@@ -192,8 +401,41 @@ export function KernelReviewPanel({
           {en ? "Project revision" : "项目修订"} {view.projectStateRevision}
         </small>
       </header>
-      <KernelMemoryDrawer projectId={projectId} en={en}/>
-      {!r.terminalOutcome ? <label>{en ? "Focus of a new assessment" : "新评估关注的操作"}<select value={kind} disabled={busy} onChange={event=>{setKind(event.target.value);setConfirmed(false);}}>{[["record_only","仅记录处置","Record a disposition"],["create_decision","保存决定","Save a decision"],["add_evidence","保存证据","Save evidence"],["create_or_resolve_issue","创建或解决问题","Create or resolve an issue"],["patch_brief","修改简报","Update the Brief"],["formal_direction_change","改变研究方向","Change research direction"]].map(([value,zh,english])=><option key={value} value={value}>{en?english:zh}</option>)}</select></label> : null}
+      <KernelMemoryDrawer projectId={projectId} en={en} />
+      {!r.terminalOutcome ? (
+        <label>
+          {en ? "Focus of a new assessment" : "新评估关注的操作"}
+          <select
+            value={kind}
+            disabled={busy}
+            onChange={(event) => {
+              setKind(event.target.value);
+              setConfirmed(false);
+            }}
+          >
+            {[
+              ["record_only", "仅记录处置", "Record a disposition"],
+              ["create_decision", "保存决定", "Save a decision"],
+              ["add_evidence", "保存证据", "Save evidence"],
+              [
+                "create_or_resolve_issue",
+                "创建或解决问题",
+                "Create or resolve an issue",
+              ],
+              ["patch_brief", "修改简报", "Update the Brief"],
+              [
+                "formal_direction_change",
+                "改变研究方向",
+                "Change research direction",
+              ],
+            ].map(([value, zh, english]) => (
+              <option key={value} value={value}>
+                {en ? english : zh}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
       {error ? (
         <p role="alert" className="persistent-message">
           {error}
@@ -212,16 +454,64 @@ export function KernelReviewPanel({
           value={suggestion}
           readOnly={!next.includes("edit")}
           onChange={(e) => {
+            buffer.current.text = e.target.value;
             setSuggestion(e.target.value);
+            setBody(undefined);
+            setConfirmed(false);
           }}
         />
       </label>
+      {buffer.current.dirty ? (
+        <p role="status">
+          {en
+            ? "Unsaved changes. Save this draft before confirming content."
+            : "有未保存的修改。请先保存草稿，再核对内容。"}
+        </p>
+      ) : null}
+      {buffer.current.conflict ? (
+        <section aria-label={en ? "Draft conflict" : "草稿冲突"}>
+          <h2>
+            {en ? "This draft changed elsewhere" : "草稿已在其他位置修改"}
+          </h2>
+          <p>
+            {en
+              ? "Your text is kept. Compare the versions before saving."
+              : "你的文字已保留。请比较版本后再保存。"}
+          </p>
+          <details>
+            <summary>
+              {en ? "Compare saved versions" : "比较已保存版本"}
+            </summary>
+            <h3>{en ? "Editing started from" : "编辑基准"}</h3>
+            <pre>{buffer.current.baseText}</pre>
+            <h3>{en ? "Current saved text" : "当前已保存内容"}</h3>
+            <pre>{buffer.current.serverText}</pre>
+          </details>
+          <Button
+            onClick={() => {
+              buffer.current.discard();
+              setSuggestion(buffer.current.text);
+            }}
+          >
+            {en ? "Use saved text" : "使用已保存内容"}
+          </Button>
+          <Button
+            onClick={() => {
+              buffer.current.keepLocalAgainstCurrent();
+              setSuggestion(buffer.current.text);
+              setView((old) => (old ? { ...old } : old));
+            }}
+          >
+            {en ? "Keep my text for the next save" : "下次保存使用我的文字"}
+          </Button>
+        </section>
+      ) : null}
       {next.includes("edit") ? (
         <Button
-          disabled={busy || !suggestion.trim()}
+          disabled={busy || !suggestion.trim() || buffer.current.conflict}
           onClick={() =>
             void run(async () => {
-              await command("edit", { suggestion });
+              await saveBuffer();
             })
           }
         >
@@ -239,7 +529,21 @@ export function KernelReviewPanel({
             disabled={busy}
             onClick={() =>
               void run(async () => {
-                await command("skip_assessment", { selection: { coverageScope: { effectKind: kind, targetKinds: [...new Set([...evidence, ...issues].map(ref => ref.kind))] }, memory: selectedMemory, evidenceIds: evidence.map(ref => ref.id), issueIds: issues.map(ref => ref.id) } });
+                await command("skip_assessment", {
+                  selection: {
+                    coverageScope: {
+                      effectKind: kind,
+                      targetKinds: [
+                        ...new Set(
+                          [...evidence, ...issues].map((ref) => ref.kind),
+                        ),
+                      ],
+                    },
+                    memory: selectedMemory,
+                    evidenceIds: evidence.map((ref) => ref.id),
+                    issueIds: issues.map((ref) => ref.id),
+                  },
+                });
                 setBody(undefined);
               })
             }
@@ -248,22 +552,199 @@ export function KernelReviewPanel({
           </Button>
         </div>
       ) : null}
-      {next.some(action => ["prepare_manifest", "rebuild_manifest", "skip_assessment"].includes(action)) ? <details><summary>{en ? "Choose context for a new assessment" : "选择新评估的上下文"}</summary>
-        <p>{en ? "Choose only what this request needs. Memory starts unselected and remains separate from Evidence." : "只选择本次请求需要的内容。Memory 默认不选，与证据分开。"}</p>
-        <details><summary>{en ? "Evidence" : "证据"}</summary><BriefRelationshipPicker projectId={projectId} kind="evidence" language={language} selected={evidence} onSelect={ref => {setEvidence(old=>[...old.filter(v=>v.id!==ref.id),ref]);setBody(undefined);setConfirmed(false);}} onRemove={ref=>{setEvidence(old=>old.filter(v=>v.id!==ref.id));setBody(undefined);setConfirmed(false);}}/></details>
-        <details><summary>{en ? "Issues" : "问题"}</summary><BriefRelationshipPicker projectId={projectId} kind="issue" language={language} selected={issues} onSelect={ref => {setIssues(old=>[...old.filter(v=>v.id!==ref.id),ref]);setBody(undefined);setConfirmed(false);}} onRemove={ref=>{setIssues(old=>old.filter(v=>v.id!==ref.id));setBody(undefined);setConfirmed(false);}}/></details>
-        <Button disabled={busy} onClick={()=>void run(async()=>{setSelectedMemory([]);setBody(undefined);setMemoryCandidates(await researchRoomApi.kernel(projectId,"recall_memory",{trigger:"add_context",objectIds:[]},decodeLocalJson) as unknown as typeof memoryCandidates);})}>{en ? "Look up project context" : "查找项目上下文"}</Button>
-        {memoryCandidates.map(row=><label key={row.item.id}><input type="checkbox" checked={selectedMemory.some(ref=>ref.id===row.item.id)} disabled={!row.sendEligible||busy} onChange={event=>{const checked=event.target.checked;setSelectedMemory(old=>checked&&row.item.contentHash?[...old.filter(ref=>ref.id!==row.item.id),{id:row.item.id,version:row.item.version,contentHash:row.item.contentHash}]:old.filter(ref=>ref.id!==row.item.id));setBody(undefined);setConfirmed(false);}}/><span>{readableKernelValue(row.item.content??null,en)}{!row.sendEligible?<small>{en?"This item cannot be sent.":"此项禁止发送。"}</small>:null}</span></label>)}
-        <p>{en?`${selectedMemory.length} context items selected.`:`已选择 ${selectedMemory.length} 项上下文。`}</p>
-        <Button disabled={busy} onClick={()=>void run(async()=>{setCoverage(await researchRoomApi.kernel(projectId,"coverage",{reviewId,effectKind:kind,targetKinds:[...new Set([...evidence,...issues].map(ref=>ref.kind))]},decodeLocalJson) as unknown as typeof coverage);})}>{en?"Check Brief coverage for this action":"检查简报对本次操作的覆盖"}</Button>
-        {coverage.length?<><p>{en?"Missing context limits an assessment; it does not remove your right to decide.":"上下文缺失会限制评估，不会取消你的裁决权。"}</p><ul>{coverage.filter(row=>row.status!=="not_applicable").map(row=><li key={row.section}>{kernelLabel(row.section,en)}: {row.status==="limited"?en?"Not provided; assessment limited":"未提供，评估受限":en?"Information supplied":"已提供信息"}</li>)}</ul></>:null}
-      </details>:null}
+      {next.some((action) =>
+        ["prepare_manifest", "rebuild_manifest", "skip_assessment"].includes(
+          action,
+        ),
+      ) ? (
+        <details>
+          <summary>
+            {en ? "Choose context for a new assessment" : "选择新评估的上下文"}
+          </summary>
+          <p>
+            {en
+              ? "Choose only what this request needs. Memory starts unselected and remains separate from Evidence."
+              : "只选择本次请求需要的内容。Memory 默认不选，与证据分开。"}
+          </p>
+          <details>
+            <summary>{en ? "Evidence" : "证据"}</summary>
+            <BriefRelationshipPicker
+              projectId={projectId}
+              kind="evidence"
+              language={language}
+              selected={evidence}
+              onSelect={(ref) => {
+                setEvidence((old) => [
+                  ...old.filter((v) => v.id !== ref.id),
+                  ref,
+                ]);
+                setBody(undefined);
+                setConfirmed(false);
+              }}
+              onRemove={(ref) => {
+                setEvidence((old) => old.filter((v) => v.id !== ref.id));
+                setBody(undefined);
+                setConfirmed(false);
+              }}
+            />
+          </details>
+          <details>
+            <summary>{en ? "Issues" : "问题"}</summary>
+            <BriefRelationshipPicker
+              projectId={projectId}
+              kind="issue"
+              language={language}
+              selected={issues}
+              onSelect={(ref) => {
+                setIssues((old) => [
+                  ...old.filter((v) => v.id !== ref.id),
+                  ref,
+                ]);
+                setBody(undefined);
+                setConfirmed(false);
+              }}
+              onRemove={(ref) => {
+                setIssues((old) => old.filter((v) => v.id !== ref.id));
+                setBody(undefined);
+                setConfirmed(false);
+              }}
+            />
+          </details>
+          <Button
+            disabled={busy}
+            onClick={() =>
+              void run(async () => {
+                setSelectedMemory([]);
+                setBody(undefined);
+                setMemoryCandidates(
+                  (await researchRoomApi.kernel(
+                    projectId,
+                    "recall_memory",
+                    { trigger: "add_context", objectIds: [] },
+                    decodeLocalJson,
+                  )) as unknown as typeof memoryCandidates,
+                );
+              })
+            }
+          >
+            {en ? "Look up project context" : "查找项目上下文"}
+          </Button>
+          {memoryCandidates.map((row) => (
+            <label key={row.item.id}>
+              <input
+                type="checkbox"
+                checked={selectedMemory.some((ref) => ref.id === row.item.id)}
+                disabled={!row.sendEligible || busy}
+                onChange={(event) => {
+                  const checked = event.target.checked;
+                  setSelectedMemory((old) =>
+                    checked && row.item.contentHash
+                      ? [
+                          ...old.filter((ref) => ref.id !== row.item.id),
+                          {
+                            id: row.item.id,
+                            version: row.item.version,
+                            contentHash: row.item.contentHash,
+                          },
+                        ]
+                      : old.filter((ref) => ref.id !== row.item.id),
+                  );
+                  setBody(undefined);
+                  setConfirmed(false);
+                }}
+              />
+              <span>
+                {readableKernelValue(row.item.content ?? null, en)}
+                {!row.sendEligible ? (
+                  <small>
+                    {en ? "This item cannot be sent." : "此项禁止发送。"}
+                  </small>
+                ) : null}
+              </span>
+            </label>
+          ))}
+          <p>
+            {en
+              ? `${selectedMemory.length} context items selected.`
+              : `已选择 ${selectedMemory.length} 项上下文。`}
+          </p>
+          <Button
+            disabled={busy}
+            onClick={() =>
+              void run(async () => {
+                setCoverage(
+                  (await researchRoomApi.kernel(
+                    projectId,
+                    "coverage",
+                    {
+                      reviewId,
+                      effectKind: kind,
+                      targetKinds: [
+                        ...new Set(
+                          [...evidence, ...issues].map((ref) => ref.kind),
+                        ),
+                      ],
+                    },
+                    decodeLocalJson,
+                  )) as unknown as typeof coverage,
+                );
+              })
+            }
+          >
+            {en
+              ? "Check Brief coverage for this action"
+              : "检查简报对本次操作的覆盖"}
+          </Button>
+          {coverage.length ? (
+            <>
+              <p>
+                {en
+                  ? "Missing context limits an assessment; it does not remove your right to decide."
+                  : "上下文缺失会限制评估，不会取消你的裁决权。"}
+              </p>
+              <ul>
+                {coverage
+                  .filter((row) => row.status !== "not_applicable")
+                  .map((row) => (
+                    <li key={row.section}>
+                      {kernelLabel(row.section, en)}:{" "}
+                      {row.status === "limited"
+                        ? en
+                          ? "Not provided; assessment limited"
+                          : "未提供，评估受限"
+                        : en
+                          ? "Information supplied"
+                          : "已提供信息"}
+                    </li>
+                  ))}
+              </ul>
+            </>
+          ) : null}
+        </details>
+      ) : null}
       {r.manifestId ? (
         <details>
           <summary>
             {en ? "Context and send content" : "上下文与发送内容"}
           </summary>
-          {manifest?.contextSelection?.briefCoverage ? <ul>{manifest.contextSelection.briefCoverage.filter(row => row.status !== "not_applicable").map(row => <li key={row.section}>{kernelLabel(row.section,en)}：{row.status === "limited" ? en ? "Not provided; assessment limited" : "未提供，评估受限" : en ? "Provided or explicitly left empty" : "已填写或已说明为空"}</li>)}</ul> : null}
+          {manifest?.contextSelection?.briefCoverage ? (
+            <ul>
+              {manifest.contextSelection.briefCoverage
+                .filter((row) => row.status !== "not_applicable")
+                .map((row) => (
+                  <li key={row.section}>
+                    {kernelLabel(row.section, en)}：
+                    {row.status === "limited"
+                      ? en
+                        ? "Not provided; assessment limited"
+                        : "未提供，评估受限"
+                      : en
+                        ? "Provided or explicitly left empty"
+                        : "已填写或已说明为空"}
+                  </li>
+                ))}
+            </ul>
+          ) : null}
           <Button
             disabled={busy}
             onClick={() =>
@@ -288,10 +769,14 @@ export function KernelReviewPanel({
                 {manifest?.exactRequestBytes ?? 0}
               </p>
               <pre className="exact-request">
-                {manifest?.bodyRedaction ? (en ? "The local request body was removed by Forget. The original send proof is retained." : "本地请求正文已按忘记操作移除，原发送证明保留。") : manifest?.exactRequestBody ??
-                  (en
-                    ? "Local snapshot; nothing will be sent."
-                    : "本地快照，不外发内容。")}
+                {manifest?.bodyRedaction
+                  ? en
+                    ? "The local request body was removed by Forget. The original send proof is retained."
+                    : "本地请求正文已按忘记操作移除，原发送证明保留。"
+                  : (manifest?.exactRequestBody ??
+                    (en
+                      ? "Local snapshot; nothing will be sent."
+                      : "本地快照，不外发内容。"))}
               </pre>
             </>
           ) : null}
@@ -344,10 +829,14 @@ export function KernelReviewPanel({
           onClick={() =>
             void run(async () => {
               setAttemptPending(true);
-              try { await command("start_attempt", {
-                manifestIdentityHash: manifest?.identityHash,
-                confirmed: true,
-              }); } finally { setAttemptPending(false); }
+              try {
+                await command("start_attempt", {
+                  manifestIdentityHash: manifest?.identityHash,
+                  confirmed: true,
+                });
+              } finally {
+                setAttemptPending(false);
+              }
             })
           }
         >
@@ -380,7 +869,12 @@ export function KernelReviewPanel({
           {a.assessment ? <p>{a.assessment.publicSummary}</p> : null}
         </article>
       ))}
-      <KernelCorrectionHistory projectId={projectId} review={r} en={en} onReview={onReview}/>
+      <KernelCorrectionHistory
+        projectId={projectId}
+        review={r}
+        en={en}
+        onReview={onReview}
+      />
       <KernelCorrectionPanel
         projectId={projectId}
         view={view}
@@ -388,29 +882,140 @@ export function KernelReviewPanel({
         onReview={onReview}
       />
       {next.includes("prepare_effect") ? (
-        <details open={!r.effectDraft || undefined} onChange={() => { setDraftInputsChanged(true); setConfirmed(false); }}>
+        <details
+          open={!r.effectDraft || undefined}
+          onChange={() => {
+            setDraftInputsChanged(true);
+            setConfirmed(false);
+          }}
+        >
           <summary>
             {en ? "Choose the research change" : "选择研究变更"}
           </summary>
-          {kind === "patch_brief" || kind === "formal_direction_change" ? <p>{en ? "Use the Research Brief form to prepare this change." : "请在研究简报表单中准备这项修改。"}</p> : <KernelEffectEditor key={reviewId} initialDraft={r.effectDraft} projectId={projectId} en={en} busy={busy} kind={kind} onKind={setKind} onDirty={() => { setDraftInputsChanged(true); setConfirmed(false); }} onPrepare={async payload => { await run(async () => {
-            let expectedVersion=r.version;
-            const m=view.manifest as {provider?:unknown;contextSelection?:{coverageScope?:{effectKind?:string}}}|null;
-            if(!m?.provider && m?.contextSelection?.coverageScope?.effectKind !== payload.kind) {
-              const prepared = await command("skip_assessment", {selection:{coverageScope:{effectKind:payload.kind,targetKinds:[]},memory:selectedMemory,evidenceIds:evidence.map(ref=>ref.id),issueIds:issues.map(ref=>ref.id)}});
-              expectedVersion=decodeReview(prepared).version;
-            }
-            await researchRoomApi.kernel(projectId,"prepare_effect",{reviewId,expectedVersion,payload},decodeLocalJson); setDraftInputsChanged(false);
-          }); }}/>} 
+          {kind === "patch_brief" || kind === "formal_direction_change" ? (
+            <p>
+              {en
+                ? "Use the Research Brief form to prepare this change."
+                : "请在研究简报表单中准备这项修改。"}
+            </p>
+          ) : (
+            <KernelEffectEditor
+              key={`${reviewId}:${r.bodyRedaction?.redactionId ?? "current"}`}
+              initialDraft={r.effectDraft}
+              projectId={projectId}
+              en={en}
+              busy={busy}
+              kind={kind}
+              onKind={setKind}
+              onDirty={() => {
+                effectEdits.current++;
+                setDraftInputsChanged(true);
+                setConfirmed(false);
+              }}
+              onPrepare={async (payload) => {
+                const completion = { prepared: false };
+                const submittedEdit = effectEdits.current;
+                await run(async () => {
+                  await saveBuffer();
+                  if (buffer.current.dirty) throw new Error("unsaved_draft");
+                  let expectedVersion = (await load()).review.version;
+                  const m = view.manifest as {
+                    provider?: unknown;
+                    contextSelection?: {
+                      coverageScope?: { effectKind?: string };
+                    };
+                  } | null;
+                  if (
+                    !m?.provider &&
+                    m?.contextSelection?.coverageScope?.effectKind !==
+                      payload.kind
+                  ) {
+                    const prepared = await command("skip_assessment", {
+                      selection: {
+                        coverageScope: {
+                          effectKind: payload.kind,
+                          targetKinds: [],
+                        },
+                        memory: selectedMemory,
+                        evidenceIds: evidence.map((ref) => ref.id),
+                        issueIds: issues.map((ref) => ref.id),
+                      },
+                    });
+                    expectedVersion = decodeReview(prepared).version;
+                  }
+                  await researchRoomApi.kernel(
+                    projectId,
+                    "prepare_effect",
+                    { reviewId, expectedVersion, payload },
+                    decodeLocalJson,
+                  );
+                  completion.prepared = true;
+                  setDraftInputsChanged(effectEdits.current !== submittedEdit);
+                });
+                if (!completion.prepared) throw new Error("draft_not_saved");
+              }}
+            />
+          )}
         </details>
       ) : null}
-      {r.effectDraft && ["patch_brief", "formal_direction_change"].includes(String((r.effectDraft.payload as { kind?: string }).kind)) && !["committed", "disposed", "cancelled"].includes(r.status) ? <Button disabled={busy} onClick={() => { onEditBrief(r); }}>{en ? "Edit this Brief draft" : "继续编辑这份简报草稿"}</Button> : null}
+      {r.effectDraft &&
+      ["patch_brief", "formal_direction_change"].includes(
+        String((r.effectDraft.payload as { kind?: string }).kind),
+      ) &&
+      !["committed", "disposed", "cancelled"].includes(r.status) ? (
+        <Button
+          disabled={busy}
+          onClick={() => {
+            onEditBrief(r);
+          }}
+        >
+          {en ? "Edit this Brief draft" : "继续编辑这份简报草稿"}
+        </Button>
+      ) : null}
       {r.effectDraft && !r.effectDraft.invalidated && !draftInputsChanged ? (
         <section className="brief-preview">
-          <h2>{r.terminalOutcome ? en ? "Saved changes" : "已保存的修改" : en ? "Changes to confirm" : "待确认的修改"}</h2>
+          <h2>
+            {r.terminalOutcome
+              ? en
+                ? "Saved changes"
+                : "已保存的修改"
+              : en
+                ? "Changes to confirm"
+                : "待确认的修改"}
+          </h2>
           {preview?.objects?.map((o, i) => (
             <article key={i}>
-              <h3>{kernelLabel(o.kind, en)} · {en ? "Version" : "版本"} {o.version}</h3>
-              {visibleKernelChanges(o.before,o.after).map(change => <section key={change.field}><h4>{kernelLabel(change.field,en)}</h4><div className="brief-diff"><div><strong>{en?"Before":"修改前"}</strong><pre>{readableKernelValue(change.before,en,preview.objectLabels)}</pre></div><div><strong>{en?"After":"修改后"}</strong><pre>{readableKernelValue(change.after,en,preview.objectLabels)}</pre></div></div></section>)}
+              <h3>
+                {kernelLabel(o.kind, en)} · {en ? "Version" : "版本"}{" "}
+                {o.version}
+              </h3>
+              {visibleKernelChanges(o.before, o.after).map((change) => (
+                <section key={change.field}>
+                  <h4>{kernelLabel(change.field, en)}</h4>
+                  <div className="brief-diff">
+                    <div>
+                      <strong>{en ? "Before" : "修改前"}</strong>
+                      <pre>
+                        {readableKernelValue(
+                          change.before,
+                          en,
+                          preview.objectLabels,
+                        )}
+                      </pre>
+                    </div>
+                    <div>
+                      <strong>{en ? "After" : "修改后"}</strong>
+                      <pre>
+                        {readableKernelValue(
+                          change.after,
+                          en,
+                          preview.objectLabels,
+                        )}
+                      </pre>
+                    </div>
+                  </div>
+                </section>
+              ))}
             </article>
           ))}
           {preview?.objects?.length === 0 ? (
@@ -418,13 +1023,26 @@ export function KernelReviewPanel({
               {en ? "No research objects will change." : "本次不改变研究对象。"}
             </p>
           ) : null}
-          <details><summary>{en ? "Object bindings and technical details" : "对象绑定与技术详情"}</summary><pre>{JSON.stringify(r.effectDraft.preview,null,2)}</pre></details>
+          <details>
+            <summary>
+              {en
+                ? "Object bindings and technical details"
+                : "对象绑定与技术详情"}
+            </summary>
+            <pre>{JSON.stringify(r.effectDraft.preview, null, 2)}</pre>
+          </details>
           <p>
             {en
               ? `${preview?.unchangedObjects?.length ?? 0} other objects stay unchanged.`
               : `其他 ${preview?.unchangedObjects?.length ?? 0} 个对象保持不变。`}
           </p>
-          {preview?.affectedReviews?.length ? <p>{en?`${preview.affectedReviews.length} pending reviews and ${preview.affectedManifests?.length??0} context confirmations will need rechecking.`:`${preview.affectedReviews.length} 条待处理审议与 ${preview.affectedManifests?.length??0} 份上下文确认需要重新核对。`}</p>:null}
+          {preview?.affectedReviews?.length ? (
+            <p>
+              {en
+                ? `${preview.affectedReviews.length} pending reviews and ${preview.affectedManifests?.length ?? 0} context confirmations will need rechecking.`
+                : `${preview.affectedReviews.length} 条待处理审议与 ${preview.affectedManifests?.length ?? 0} 份上下文确认需要重新核对。`}
+            </p>
+          ) : null}
           <p>
             {en
               ? "Later corrections use a new review and a new revision."
@@ -451,8 +1069,10 @@ export function KernelReviewPanel({
                   void run(async () => {
                     setReceipt(
                       await command("commit", {
-                        previewHash: requireLocalValue(r.effectDraft).previewHash,
-                        authorityCommandId: requireLocalValue(r.effectDraft).authorityCommandId,
+                        previewHash: requireLocalValue(r.effectDraft)
+                          .previewHash,
+                        authorityCommandId: requireLocalValue(r.effectDraft)
+                          .authorityCommandId,
                         confirmed: true,
                       }),
                     );
@@ -470,7 +1090,10 @@ export function KernelReviewPanel({
                 const found = await researchRoomApi.kernel(
                   projectId,
                   "lookup",
-                  { authorityCommandId: requireLocalValue(r.effectDraft).authorityCommandId },
+                  {
+                    authorityCommandId: requireLocalValue(r.effectDraft)
+                      .authorityCommandId,
+                  },
                   decodeLocalJson,
                 );
                 setReceipt(found);
@@ -490,8 +1113,23 @@ export function KernelReviewPanel({
       {receipt || r.terminalOutcome?.receiptId ? (
         <section>
           <h2>{en ? "Saved result" : "保存结果"}</h2>
-          <ul>{r.terminalOutcome?.resultingObjects.map(ref=><li key={ref.id}>{kernelLabel(ref.kind,en)} · {en ? "Version" : "版本"} {ref.version}</li>)}</ul>
-          {r.terminalOutcome?.resultingObjects.length === 0 ? <p>{en ? "The disposition is saved. No research object changed." : "处置已保存，研究对象未改变。"}</p> : null}
+          <ul>
+            {r.terminalOutcome?.resultingObjects.map((ref) => (
+              <li key={ref.id}>
+                <a href={`/project/state?object=${encodeURIComponent(ref.id)}`}>
+                  {kernelLabel(ref.kind, en)} · {en ? "Version" : "版本"}{" "}
+                  {ref.version}
+                </a>
+              </li>
+            ))}
+          </ul>
+          {r.terminalOutcome?.resultingObjects.length === 0 ? (
+            <p>
+              {en
+                ? "The disposition is saved. No research object changed."
+                : "处置已保存，研究对象未改变。"}
+            </p>
+          ) : null}
           <details>
             <summary>{en ? "Receipt details" : "凭证详情"}</summary>
             <pre>{JSON.stringify(receipt, null, 2)}</pre>
@@ -510,13 +1148,34 @@ export function KernelReviewPanel({
           {en ? "Cancel review" : "取消本次审议"}
         </Button>
       ) : null}
-      {r.status === "provider_attempt_uncertain" ? <p className="persistent-message">{en ? "The request may have reached the provider, but its outcome could not be saved with certainty. Reloading will not send it again. You can continue without assessment, or check and confirm a new request." : "请求可能已送达评估服务，但无法确定并保存结果。重新加载不会再次发送。你可以跳过评估继续处理，也可以核对并确认一次新请求。"}</p> : null}
-      {next.includes("continue_review") ? <Button disabled={busy} onClick={() => void run(async () => {
-        const child = await researchRoomApi.kernel(projectId, "create", {
-          suggestion: r.suggestion, sourceReviewId: r.id,
-        }, decodeReview);
-        onReview(child);
-      })}>{en ? "Continue in a new review" : "在新审议中继续"}</Button> : null}
+      {r.status === "provider_attempt_uncertain" ? (
+        <p className="persistent-message">
+          {en
+            ? "The request may have reached the provider, but its outcome could not be saved with certainty. Reloading will not send it again. You can continue without assessment, or check and confirm a new request."
+            : "请求可能已送达评估服务，但无法确定并保存结果。重新加载不会再次发送。你可以跳过评估继续处理，也可以核对并确认一次新请求。"}
+        </p>
+      ) : null}
+      {next.includes("continue_review") ? (
+        <Button
+          disabled={busy}
+          onClick={() =>
+            void run(async () => {
+              const child = await researchRoomApi.kernel(
+                projectId,
+                "create",
+                {
+                  suggestion: r.suggestion,
+                  sourceReviewId: r.id,
+                },
+                decodeReview,
+              );
+              onReview(child);
+            })
+          }
+        >
+          {en ? "Continue in a new review" : "在新审议中继续"}
+        </Button>
+      ) : null}
       <Button
         disabled={busy}
         onClick={() =>

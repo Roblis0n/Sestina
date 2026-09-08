@@ -18,15 +18,28 @@ import { AppChrome } from "../components/product/AppChrome.js";
 import type { InspectorSelection } from "../components/product/ContextInspector.js";
 import { StatusBadge } from "../components/primitives/StatusBadge.js";
 import { localizedError, t } from "../i18n/copy.js";
-import { applyAppearanceToDocument, readAppearancePreferences, writeAppearancePreferences, type AppearancePreferences } from "../preferences/appearance.js";
+import {
+  applyAppearanceToDocument,
+  readAppearancePreferences,
+  writeAppearancePreferences,
+  type AppearancePreferences,
+} from "../preferences/appearance.js";
 import { BriefSetup } from "../screens/BriefSetup.js";
 import { LanguageScreen } from "../screens/LanguageScreen.js";
 import { ProjectShell } from "../screens/ProjectShell.js";
 import { StartCenter } from "../screens/StartCenter.js";
 import { KernelProjectWorkspace } from "../screens/KernelProjectWorkspace.js";
 
-type Phase = "boot" | "language" | "start" | "brief" | "shell" | "fatal" | "kernel";
-type RuntimeState = "ready" | "analyzing" | "cancel_requested" | "degraded" | "invalid_response" | "offline" | "committed";
+type Phase =
+  "boot" | "language" | "start" | "brief" | "shell" | "fatal" | "kernel";
+type RuntimeState =
+  | "ready"
+  | "analyzing"
+  | "cancel_requested"
+  | "degraded"
+  | "invalid_response"
+  | "offline"
+  | "committed";
 
 interface Notice {
   readonly message: string;
@@ -38,70 +51,136 @@ export function App() {
   const [status, setStatus] = useState<StatusDto>();
   const [language, setLanguage] = useState<AppLanguage>("zh-CN");
   const [provider, setProvider] = useState<ProviderStatusDto>();
-  const [secondOpinionProvider, setSecondOpinionProvider] = useState<ProviderStatusDto>();
+  const [secondOpinionProvider, setSecondOpinionProvider] =
+    useState<ProviderStatusDto>();
   const [state, setState] = useState<ResearchRoomStateDto>();
-  const [openedProject, setOpenedProject] = useState<{ readonly id: string; readonly title: string }>();
+  const [openedProject, setOpenedProject] = useState<{
+    readonly id: string;
+    readonly title: string;
+  }>();
   const [prepared, setPrepared] = useState<PreparedReviewDto>();
   const [analyzed, setAnalyzed] = useState<AnalyzedReviewDto>();
   const [busyCount, setBusyCount] = useState(0);
   const [runtime, setRuntime] = useState<RuntimeState>("ready");
   const [notice, setNotice] = useState<Notice>();
   const [inspectorOpen, setInspectorOpen] = useState(false);
-  const [inspectorSelection, setInspectorSelection] = useState<InspectorSelection>();
+  const [inspectorSelection, setInspectorSelection] =
+    useState<InspectorSelection>();
   const [providerOpen, setProviderOpen] = useState(false);
-  const [secondOpinionProviderOpen, setSecondOpinionProviderOpen] = useState(false);
+  const [secondOpinionProviderOpen, setSecondOpinionProviderOpen] =
+    useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [recoveryOpen, setRecoveryOpen] = useState(false);
   const [recoveryAvailable, setRecoveryAvailable] = useState(false);
-  const [appearance, setAppearance] = useState<AppearancePreferences>(() => readAppearancePreferences());
+  const [appearance, setAppearance] = useState<AppearancePreferences>(() =>
+    readAppearancePreferences(),
+  );
   const pickerRequest = useRef<AbortController | undefined>(undefined);
   const busy = busyCount > 0;
 
-  const runBusy = useCallback(async <T,>(action: () => Promise<T>): Promise<T> => {
-    setBusyCount((value) => value + 1);
-    try { return await action(); }
-    finally { setBusyCount((value) => Math.max(0, value - 1)); }
-  }, []);
+  const runBusy = useCallback(
+    async <T,>(action: () => Promise<T>): Promise<T> => {
+      setBusyCount((value) => value + 1);
+      try {
+        return await action();
+      } finally {
+        setBusyCount((value) => Math.max(0, value - 1));
+      }
+    },
+    [],
+  );
 
-  const showNotice = useCallback((message: string, tone: Notice["tone"] = "ready") => { setNotice({ message, tone }); }, []);
+  const showNotice = useCallback(
+    (message: string, tone: Notice["tone"] = "ready") => {
+      setNotice({ message, tone });
+    },
+    [],
+  );
 
-  const handleFailure = useCallback((error: unknown, activeLanguage: AppLanguage = language) => {
-    const apiError = error instanceof ResearchRoomApiError ? error : undefined;
-    const message = localizedError(activeLanguage, error);
-    const nextRuntime: RuntimeState = apiError?.code === "offline" ? "offline" : apiError?.code === "invalid_payload" ? "invalid_response" : "degraded";
-    setRuntime(nextRuntime);
-    showNotice(message, "danger");
-    setInspectorSelection({ kind: "error", title: t(activeLanguage, nextRuntime), message, recovery: t(activeLanguage, "recovery_hint") });
-    setInspectorOpen(true);
-  }, [language, showNotice]);
+  const handleFailure = useCallback(
+    (error: unknown, activeLanguage: AppLanguage = language) => {
+      const apiError =
+        error instanceof ResearchRoomApiError ? error : undefined;
+      const message = localizedError(activeLanguage, error);
+      const nextRuntime: RuntimeState =
+        apiError?.code === "offline"
+          ? "offline"
+          : apiError?.code === "invalid_payload"
+            ? "invalid_response"
+            : "degraded";
+      setRuntime(nextRuntime);
+      showNotice(message, "danger");
+      setInspectorSelection({
+        kind: "error",
+        title: t(activeLanguage, nextRuntime),
+        message,
+        recovery: t(activeLanguage, "recovery_hint"),
+      });
+      setInspectorOpen(true);
+    },
+    [language, showNotice],
+  );
 
-  const restore = useCallback(async (initialStatus: StatusDto, activeLanguage: AppLanguage) => {
-    setStatus(initialStatus);
-    setLanguage(activeLanguage);
-    const [providerStatus, secondOpinionProviderStatus] = await Promise.all([researchRoomApi.provider(), researchRoomApi.secondOpinionProvider()]);
-    setProvider(providerStatus);
-    setSecondOpinionProvider(secondOpinionProviderStatus);
-    if (window.location.pathname === "/project/kernel") { setPhase("kernel"); return; }
-    if (!initialStatus.projectOpen) {
-      setPhase("start"); setRuntime("ready"); setRecoveryAvailable(initialStatus.recoveryRequired);
-      if (initialStatus.recoveryRequired) { setRecoveryOpen(true); showNotice(activeLanguage === "en" ? "The selected project requires recovery before it can open." : "所选项目需要先完成恢复才能打开。", "warning"); }
-      else showNotice(activeLanguage === "en" ? "Local service is ready." : "本地服务已就绪。", "ready");
-      return;
-    }
-    setRecoveryAvailable(true);
-    if (initialStatus.projectSetupRequired) {
-      setOpenedProject(initialStatus.project);
-      setPhase("brief");
+  const restore = useCallback(
+    async (initialStatus: StatusDto, activeLanguage: AppLanguage) => {
+      setStatus(initialStatus);
+      setLanguage(activeLanguage);
+      const [providerStatus, secondOpinionProviderStatus] = await Promise.all([
+        researchRoomApi.provider(),
+        researchRoomApi.secondOpinionProvider(),
+      ]);
+      setProvider(providerStatus);
+      setSecondOpinionProvider(secondOpinionProviderStatus);
+      const kernelSession = (await researchRoomApi.kernelSession()) as {
+        projectId: string | null;
+      };
+      if (
+        /^\/project\/(kernel|today|reviews|state|search|settings|history)(\/|$)/.test(
+          window.location.pathname,
+        ) ||
+        (kernelSession.projectId &&
+          window.location.pathname.startsWith("/project/"))
+      ) {
+        setPhase("kernel");
+        return;
+      }
+      if (!initialStatus.projectOpen) {
+        setPhase("start");
+        setRuntime("ready");
+        setRecoveryAvailable(initialStatus.recoveryRequired);
+        if (initialStatus.recoveryRequired) {
+          setRecoveryOpen(true);
+          showNotice(
+            activeLanguage === "en"
+              ? "The selected project requires recovery before it can open."
+              : "所选项目需要先完成恢复才能打开。",
+            "warning",
+          );
+        } else
+          showNotice(
+            activeLanguage === "en"
+              ? "Local service is ready."
+              : "本地服务已就绪。",
+            "ready",
+          );
+        return;
+      }
+      setRecoveryAvailable(true);
+      if (initialStatus.projectSetupRequired) {
+        setOpenedProject(initialStatus.project);
+        setPhase("brief");
+        setRuntime("ready");
+        return;
+      }
+      const restored = await researchRoomApi.state();
+      setState(restored);
+      setOpenedProject(restored.project);
+      setPhase("shell");
       setRuntime("ready");
-      return;
-    }
-    const restored = await researchRoomApi.state();
-    setState(restored);
-    setOpenedProject(restored.project);
-    setPhase("shell");
-    setRuntime("ready");
-    showNotice(t(activeLanguage, "restored"), "ready");
-  }, [showNotice]);
+      showNotice(t(activeLanguage, "restored"), "ready");
+    },
+    [showNotice],
+  );
 
   useEffect(() => {
     applyAppearanceToDocument(appearance);
@@ -109,9 +188,15 @@ export function App() {
       try {
         const initial = await researchRoomApi.status();
         setStatus(initial);
-        if (initial.languagePreference === null) { setPhase("language"); return; }
+        if (initial.languagePreference === null) {
+          setPhase("language");
+          return;
+        }
         await restore(initial, initial.languagePreference);
-      } catch (error) { setPhase("fatal"); handleFailure(error, "en"); }
+      } catch (error) {
+        setPhase("fatal");
+        handleFailure(error, "en");
+      }
     });
   }, []);
 
@@ -121,8 +206,15 @@ export function App() {
 
   useEffect(() => {
     if (!notice || notice.tone === "danger") return undefined;
-    const timeout = window.setTimeout(() => { setNotice((current) => current === notice ? undefined : current); }, notice.tone === "warning" ? 9_000 : 6_000);
-    return () => { window.clearTimeout(timeout); };
+    const timeout = window.setTimeout(
+      () => {
+        setNotice((current) => (current === notice ? undefined : current));
+      },
+      notice.tone === "warning" ? 9_000 : 6_000,
+    );
+    return () => {
+      window.clearTimeout(timeout);
+    };
   }, [notice]);
 
   async function chooseLanguage(next: AppLanguage) {
@@ -131,15 +223,27 @@ export function App() {
         await researchRoomApi.saveLanguage(next);
         const refreshed = await researchRoomApi.status();
         await restore(refreshed, next);
-      } catch (error) { handleFailure(error, next); }
+      } catch (error) {
+        handleFailure(error, next);
+      }
     });
   }
 
   async function changeLanguage(next: AppLanguage) {
     if (next === language) return;
     await runBusy(async () => {
-      try { await researchRoomApi.saveLanguage(next); setLanguage(next); showNotice(next === "en" ? "Interface language saved locally." : "界面语言已在本机保存。", "ready"); }
-      catch (error) { handleFailure(error); }
+      try {
+        await researchRoomApi.saveLanguage(next);
+        setLanguage(next);
+        showNotice(
+          next === "en"
+            ? "Interface language saved locally."
+            : "界面语言已在本机保存。",
+          "ready",
+        );
+      } catch (error) {
+        handleFailure(error);
+      }
     });
   }
 
@@ -158,17 +262,37 @@ export function App() {
 
   async function opened(openedValue: ProjectOpenResultDto) {
     setOpenedProject(openedValue.project);
-    setPrepared(undefined); setAnalyzed(undefined); setInspectorOpen(false);
+    setPrepared(undefined);
+    setAnalyzed(undefined);
+    setInspectorOpen(false);
     setRecoveryAvailable(true);
     if (openedValue.recoveryRequired) {
-      setState(undefined); setPhase("start"); setRuntime("degraded"); setRecoveryOpen(true);
-      showNotice(language === "en" ? "The project was preserved and moved into fail-closed recovery." : "项目已原样保留，并进入 fail-closed 恢复状态。", "warning");
+      setState(undefined);
+      setPhase("start");
+      setRuntime("degraded");
+      setRecoveryOpen(true);
+      showNotice(
+        language === "en"
+          ? "The project was preserved and moved into fail-closed recovery."
+          : "项目已原样保留，并进入 fail-closed 恢复状态。",
+        "warning",
+      );
       return;
     }
-    if (openedValue.setupRequired) { setPhase("brief"); showNotice(t(language, "initialized"), "ready"); return; }
+    if (openedValue.setupRequired) {
+      setPhase("brief");
+      showNotice(t(language, "initialized"), "ready");
+      return;
+    }
     await runBusy(async () => {
-      try { await refreshState(); setPhase("shell"); setRuntime("ready"); showNotice(t(language, "opened"), "ready"); }
-      catch (error) { handleFailure(error); }
+      try {
+        await refreshState();
+        setPhase("shell");
+        setRuntime("ready");
+        showNotice(t(language, "opened"), "ready");
+      } catch (error) {
+        handleFailure(error);
+      }
     });
   }
 
@@ -177,8 +301,12 @@ export function App() {
     pickerRequest.current = controller;
     // The native picker owns its own pending state. Keeping it outside the global
     // busy counter leaves manual path entry, cancellation, language, and appearance responsive.
-    try { return await researchRoomApi.previewSelectedDirectory(controller.signal); }
-    finally { if (pickerRequest.current === controller) pickerRequest.current = undefined; }
+    try {
+      return await researchRoomApi.previewSelectedDirectory(controller.signal);
+    } finally {
+      if (pickerRequest.current === controller)
+        pickerRequest.current = undefined;
+    }
   }
 
   async function cancelNative() {
@@ -186,86 +314,404 @@ export function App() {
     await researchRoomApi.cancelDirectorySelection();
   }
 
-  async function openManual(path: string, initializeIfNeeded: boolean): Promise<ProjectOpenResultDto> {
+  async function openManual(
+    path: string,
+    initializeIfNeeded: boolean,
+  ): Promise<ProjectOpenResultDto> {
     return runBusy(() => researchRoomApi.openProject(path, initializeIfNeeded));
   }
 
-  async function initializeNative(nonce: string): Promise<ProjectOpenResultDto> {
+  async function initializeNative(
+    nonce: string,
+  ): Promise<ProjectOpenResultDto> {
     return runBusy(() => researchRoomApi.initializeSelectedDirectory(nonce));
   }
 
-  async function activateBrief(question: string, task: string): Promise<ResearchRoomStateDto> {
+  async function activateBrief(
+    question: string,
+    task: string,
+  ): Promise<ResearchRoomStateDto> {
     return runBusy(() => researchRoomApi.activateBrief(question, task));
   }
 
   function activated(next: ResearchRoomStateDto) {
-    setState(next); setOpenedProject(next.project); setPhase("shell"); setRuntime("ready"); showNotice(t(language, "opened"), "ready");
+    setState(next);
+    setOpenedProject(next.project);
+    setPhase("shell");
+    setRuntime("ready");
+    showNotice(t(language, "opened"), "ready");
   }
 
   async function saveProvider(input: ProviderSaveInput) {
-    await runBusy(async () => { const next = await researchRoomApi.saveProvider(input); setProvider(next); showNotice(language === "en" ? "Provider configuration saved locally; no network request was made." : "Provider 配置已在本机保存；没有发出网络请求。", "ready"); });
+    await runBusy(async () => {
+      const next = await researchRoomApi.saveProvider(input);
+      setProvider(next);
+      showNotice(
+        language === "en"
+          ? "Provider configuration saved locally; no network request was made."
+          : "Provider 配置已在本机保存；没有发出网络请求。",
+        "ready",
+      );
+    });
   }
 
   async function deleteProviderConfig() {
-    await runBusy(async () => { setProvider(await researchRoomApi.deleteProviderConfig()); showNotice(language === "en" ? "Provider configuration deleted." : "Provider 配置已删除。", "ready"); });
+    await runBusy(async () => {
+      setProvider(await researchRoomApi.deleteProviderConfig());
+      showNotice(
+        language === "en"
+          ? "Provider configuration deleted."
+          : "Provider 配置已删除。",
+        "ready",
+      );
+    });
   }
 
   async function deleteProviderSecret() {
-    await runBusy(async () => { setProvider(await researchRoomApi.deleteProviderSecret()); showNotice(language === "en" ? "Provider secret deleted." : "Provider 密钥已删除。", "ready"); });
+    await runBusy(async () => {
+      setProvider(await researchRoomApi.deleteProviderSecret());
+      showNotice(
+        language === "en"
+          ? "Provider secret deleted."
+          : "Provider 密钥已删除。",
+        "ready",
+      );
+    });
   }
 
   async function saveSecondOpinionProvider(input: ProviderSaveInput) {
-    await runBusy(async () => { const next = await researchRoomApi.saveSecondOpinionProvider(input); setSecondOpinionProvider(next); showNotice(language === "en" ? "Independent second-opinion configuration saved locally; no research data was sent." : "独立第二意见配置已保存在本机；没有发送任何研究数据。", "ready"); });
+    await runBusy(async () => {
+      const next = await researchRoomApi.saveSecondOpinionProvider(input);
+      setSecondOpinionProvider(next);
+      showNotice(
+        language === "en"
+          ? "Independent second-opinion configuration saved locally; no research data was sent."
+          : "独立第二意见配置已保存在本机；没有发送任何研究数据。",
+        "ready",
+      );
+    });
   }
 
   async function deleteSecondOpinionProviderConfig() {
-    await runBusy(async () => { setSecondOpinionProvider(await researchRoomApi.deleteSecondOpinionProviderConfig()); showNotice(language === "en" ? "Independent second-opinion configuration deleted." : "独立第二意见配置已删除。", "ready"); });
+    await runBusy(async () => {
+      setSecondOpinionProvider(
+        await researchRoomApi.deleteSecondOpinionProviderConfig(),
+      );
+      showNotice(
+        language === "en"
+          ? "Independent second-opinion configuration deleted."
+          : "独立第二意见配置已删除。",
+        "ready",
+      );
+    });
   }
 
   async function deleteSecondOpinionProviderSecret() {
-    await runBusy(async () => { setSecondOpinionProvider(await researchRoomApi.deleteSecondOpinionProviderSecret()); showNotice(language === "en" ? "Independent second-opinion secret deleted." : "独立第二意见密钥已删除。", "ready"); });
+    await runBusy(async () => {
+      setSecondOpinionProvider(
+        await researchRoomApi.deleteSecondOpinionProviderSecret(),
+      );
+      showNotice(
+        language === "en"
+          ? "Independent second-opinion secret deleted."
+          : "独立第二意见密钥已删除。",
+        "ready",
+      );
+    });
   }
 
   async function testSecondOpinionProvider() {
-    await runBusy(async () => { const result = await researchRoomApi.testSecondOpinionProvider(); showNotice(language === "en" ? `Independent metadata connection reached ${result.providerId} (${result.httpStatus}); no research context was sent.` : `独立元数据连接已到达 ${result.providerId}（${result.httpStatus}）；未发送研究上下文。`, "ready"); });
+    await runBusy(async () => {
+      const result = await researchRoomApi.testSecondOpinionProvider();
+      showNotice(
+        language === "en"
+          ? `Independent metadata connection reached ${result.providerId} (${result.httpStatus}); no research context was sent.`
+          : `独立元数据连接已到达 ${result.providerId}（${result.httpStatus}）；未发送研究上下文。`,
+        "ready",
+      );
+    });
   }
 
-  async function prepareReview(suggestion: string, evidenceClass: EvidenceClass, selectedMemoryItemIds: readonly string[]) { return runBusy(() => researchRoomApi.prepareReview(suggestion, evidenceClass, selectedMemoryItemIds)); }
-  async function analyzeReview(value: PreparedReviewDto, signal: AbortSignal) { return runBusy(() => researchRoomApi.analyzeReview(value, signal)); }
-  async function cancelReview(value: PreparedReviewDto) { await runBusy(() => researchRoomApi.cancelReview(value).then(() => undefined)); }
-  async function commitDisposition(input: CommitDispositionInput) { return runBusy(() => researchRoomApi.commitDisposition(input)); }
-  async function committed(receipt: ResearchRoomReceiptDto) { await refreshState(); setInspectorSelection({ kind: "receipt", value: receipt }); setInspectorOpen(true); }
+  async function prepareReview(
+    suggestion: string,
+    evidenceClass: EvidenceClass,
+    selectedMemoryItemIds: readonly string[],
+  ) {
+    return runBusy(() =>
+      researchRoomApi.prepareReview(
+        suggestion,
+        evidenceClass,
+        selectedMemoryItemIds,
+      ),
+    );
+  }
+  async function analyzeReview(value: PreparedReviewDto, signal: AbortSignal) {
+    return runBusy(() => researchRoomApi.analyzeReview(value, signal));
+  }
+  async function cancelReview(value: PreparedReviewDto) {
+    await runBusy(() =>
+      researchRoomApi.cancelReview(value).then(() => undefined),
+    );
+  }
+  async function commitDisposition(input: CommitDispositionInput) {
+    return runBusy(() => researchRoomApi.commitDisposition(input));
+  }
+  async function committed(receipt: ResearchRoomReceiptDto) {
+    await refreshState();
+    setInspectorSelection({ kind: "receipt", value: receipt });
+    setInspectorOpen(true);
+  }
   async function downloadReceipt(receipt: ResearchRoomReceiptDto) {
     await runBusy(async () => {
       const blob = await researchRoomApi.downloadReceipt(receipt.id);
-      const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = `${receipt.id}.json`; link.click(); URL.revokeObjectURL(url); showNotice(t(language, "downloaded"), "ready");
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${receipt.id}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      showNotice(t(language, "downloaded"), "ready");
     });
   }
-  async function rollbackReceipt(receipt: ResearchRoomReceiptDto, reason: string) {
-    await runBusy(async () => { const result = await researchRoomApi.rollbackReceipt(state?.project.id ?? "", receipt.id, receipt.version, reason); await refreshState(); setInspectorSelection({ kind: "research_object", title: `Receipt ${result.id}`, status: result.status, fields: [{ label: "ID", value: result.id }, { label: "Version", value: String(result.version) }, { label: "Hash", value: result.receiptHash }] }); setInspectorOpen(true); setRuntime("ready"); showNotice(t(language, "rolled_back"), "ready"); });
+  async function rollbackReceipt(
+    receipt: ResearchRoomReceiptDto,
+    reason: string,
+  ) {
+    await runBusy(async () => {
+      const result = await researchRoomApi.rollbackReceipt(
+        state?.project.id ?? "",
+        receipt.id,
+        receipt.version,
+        reason,
+      );
+      await refreshState();
+      setInspectorSelection({
+        kind: "research_object",
+        title: `Receipt ${result.id}`,
+        status: result.status,
+        fields: [
+          { label: "ID", value: result.id },
+          { label: "Version", value: String(result.version) },
+          { label: "Hash", value: result.receiptHash },
+        ],
+      });
+      setInspectorOpen(true);
+      setRuntime("ready");
+      showNotice(t(language, "rolled_back"), "ready");
+    });
   }
 
   async function recoveryRestored() {
     await runBusy(async () => {
       try {
-        await refreshState(); setPhase("shell"); setRecoveryAvailable(true); setRuntime("ready");
-        showNotice(language === "en" ? "The verified backup was restored and the project reopened." : "已恢复经验证的备份，并重新打开项目。", "ready");
-      } catch (error) { handleFailure(error); }
+        await refreshState();
+        setPhase("shell");
+        setRecoveryAvailable(true);
+        setRuntime("ready");
+        showNotice(
+          language === "en"
+            ? "The verified backup was restored and the project reopened."
+            : "已恢复经验证的备份，并重新打开项目。",
+          "ready",
+        );
+      } catch (error) {
+        handleFailure(error);
+      }
     });
   }
 
-  const chrome = phase !== "language" && phase !== "boot" ? <AppChrome language={language} provider={provider} secondOpinionProvider={secondOpinionProvider} runtime={runtime} busy={busy} providerOpen={providerOpen} secondOpinionProviderOpen={secondOpinionProviderOpen} appearanceOpen={appearanceOpen} recoveryOpen={recoveryOpen} recoveryAvailable={recoveryAvailable} appearance={appearance} onLanguage={(next) => void changeLanguage(next)} onProviderOpen={setProviderOpen} onSecondOpinionProviderOpen={setSecondOpinionProviderOpen} onAppearanceOpen={setAppearanceOpen} onRecoveryOpen={setRecoveryOpen} onAppearance={applyAppearance} onSaveProvider={saveProvider} onDeleteProviderConfig={deleteProviderConfig} onDeleteProviderSecret={deleteProviderSecret} onSaveSecondOpinionProvider={saveSecondOpinionProvider} onDeleteSecondOpinionProviderConfig={deleteSecondOpinionProviderConfig} onDeleteSecondOpinionProviderSecret={deleteSecondOpinionProviderSecret} onTestSecondOpinionProvider={testSecondOpinionProvider} onRecoveryRestored={recoveryRestored} onNotice={showNotice} onError={(message) => { showNotice(message, "danger"); }} /> : null;
+  const chrome =
+    phase !== "language" && phase !== "boot" ? (
+      <AppChrome
+        candidate={phase === "kernel"}
+        language={language}
+        provider={provider}
+        secondOpinionProvider={secondOpinionProvider}
+        runtime={runtime}
+        busy={busy}
+        providerOpen={providerOpen}
+        secondOpinionProviderOpen={secondOpinionProviderOpen}
+        appearanceOpen={appearanceOpen}
+        recoveryOpen={recoveryOpen}
+        recoveryAvailable={recoveryAvailable}
+        appearance={appearance}
+        onLanguage={(next) => void changeLanguage(next)}
+        onProviderOpen={setProviderOpen}
+        onSecondOpinionProviderOpen={setSecondOpinionProviderOpen}
+        onAppearanceOpen={setAppearanceOpen}
+        onRecoveryOpen={setRecoveryOpen}
+        onAppearance={applyAppearance}
+        onSaveProvider={saveProvider}
+        onDeleteProviderConfig={deleteProviderConfig}
+        onDeleteProviderSecret={deleteProviderSecret}
+        onSaveSecondOpinionProvider={saveSecondOpinionProvider}
+        onDeleteSecondOpinionProviderConfig={deleteSecondOpinionProviderConfig}
+        onDeleteSecondOpinionProviderSecret={deleteSecondOpinionProviderSecret}
+        onTestSecondOpinionProvider={testSecondOpinionProvider}
+        onRecoveryRestored={recoveryRestored}
+        onNotice={showNotice}
+        onError={(message) => {
+          showNotice(message, "danger");
+        }}
+      />
+    ) : null;
 
-  return <div className="app-root" aria-busy={busy}>
-      <a className="skip-link" href="#main-content">Skip to main content</a>
+  return (
+    <div className="app-root" aria-busy={busy}>
+      <a className="skip-link" href="#main-content">
+        Skip to main content
+      </a>
       {chrome}
-      <div className="live-region" role="status" aria-live="polite" data-tone={notice?.tone ?? "ready"}>{notice ? <><span>{notice.message}</span><button type="button" aria-label={language === "en" ? "Dismiss notification" : "关闭通知"} onClick={() => { setNotice(undefined); }}>×</button></> : null}</div>
-      {phase === "boot" ? <main className="boot-screen"><img className="sestina-logo sestina-logo--boot" src="/sestina-logo.png" alt="Sestina" width="1024" height="1024" draggable={false} /><p>Starting the local Research Room…</p></main> : null}
-    {phase === "language" ? <LanguageScreen busy={busy} onChoose={(next) => void chooseLanguage(next)} /> : null}
-    {phase === "start" && status ? <><StartCenter language={language} directoryPickerAvailable={status.directoryPickerAvailable} busy={busy} onPreviewNative={previewNative} onCancelNative={cancelNative} onOpenManual={openManual} onInitializeNative={initializeNative} onOpened={(value) => void opened(value)} onNotice={showNotice} /><button className="button" onClick={()=>{window.history.replaceState({},"","/project/kernel");setPhase("kernel");}}>{language==="en"?"Open a migrated project":"打开已迁移项目"}</button></> : null}
-    {phase === "kernel" ? <KernelProjectWorkspace language={language} onBack={()=>{window.history.replaceState({},"","/");setPhase("start");}}/> : null}
-    {phase === "brief" && openedProject ? <BriefSetup language={language} projectTitle={openedProject.title} busy={busy} onActivate={activateBrief} onActivated={activated} onError={(message) => { showNotice(message, "danger"); }} /> : null}
-    {phase === "shell" && state ? <ProjectShell language={language} state={state} provider={provider} busy={busy} prepared={prepared} analyzed={analyzed} inspectorOpen={inspectorOpen} inspectorSelection={inspectorSelection} onInspector={(open, selection) => { setInspectorOpen(open); if (selection) setInspectorSelection(selection); }} onSwitchProject={() => { setPrepared(undefined); setAnalyzed(undefined); setInspectorOpen(false); setInspectorSelection(undefined); setRecoveryOpen(false); setRecoveryAvailable(false); setState(undefined); window.history.replaceState({}, "", "/"); setPhase("start"); }} onPrepared={setPrepared} onAnalyzed={setAnalyzed} onPrepare={prepareReview} onAnalyze={analyzeReview} onCancel={cancelReview} onCommit={commitDisposition} onCommitted={committed} onDownload={downloadReceipt} onRollback={rollbackReceipt} onRuntime={setRuntime} onNotice={showNotice} onError={handleFailure} onAuthorityChanged={async () => { await refreshState(); }} /> : null}
-    {phase === "fatal" ? <main id="main-content" className="fatal-screen"><StatusBadge tone="danger">{t(language, "offline")}</StatusBadge><h1>{t(language, "service_unavailable")}</h1><p>{t(language, "recovery_hint")}</p><button type="button" onClick={() => { window.location.reload(); }}>{t(language, "retry")}</button></main> : null}
-    </div>;
+      <div
+        className="live-region"
+        role="status"
+        aria-live="polite"
+        data-tone={notice?.tone ?? "ready"}
+      >
+        {notice ? (
+          <>
+            <span>{notice.message}</span>
+            <button
+              type="button"
+              aria-label={
+                language === "en" ? "Dismiss notification" : "关闭通知"
+              }
+              onClick={() => {
+                setNotice(undefined);
+              }}
+            >
+              ×
+            </button>
+          </>
+        ) : null}
+      </div>
+      {phase === "boot" ? (
+        <main className="boot-screen">
+          <img
+            className="sestina-logo sestina-logo--boot"
+            src="/sestina-logo.png"
+            alt="Sestina"
+            width="1024"
+            height="1024"
+            draggable={false}
+          />
+          <p>Starting the local Research Room…</p>
+        </main>
+      ) : null}
+      {phase === "language" ? (
+        <LanguageScreen
+          busy={busy}
+          onChoose={(next) => void chooseLanguage(next)}
+        />
+      ) : null}
+      {phase === "start" && status ? (
+        <>
+          <StartCenter
+            language={language}
+            directoryPickerAvailable={status.directoryPickerAvailable}
+            busy={busy}
+            onPreviewNative={previewNative}
+            onCancelNative={cancelNative}
+            onOpenManual={openManual}
+            onInitializeNative={initializeNative}
+            onOpened={(value) => void opened(value)}
+            onNotice={showNotice}
+          />
+          <button
+            className="button"
+            onClick={() => {
+              window.history.replaceState({}, "", "/project/kernel");
+              setPhase("kernel");
+            }}
+          >
+            {language === "en" ? "Open a migrated project" : "打开已迁移项目"}
+          </button>
+        </>
+      ) : null}
+      {phase === "kernel" ? (
+        <KernelProjectWorkspace
+          language={language}
+          onSettings={(section) => {
+            if (section === "provider") setProviderOpen(true);
+            else if (section === "second_opinion")
+              setSecondOpinionProviderOpen(true);
+            else if (section === "appearance") setAppearanceOpen(true);
+          }}
+          onBack={() => {
+            window.history.replaceState({}, "", "/");
+            setPhase("start");
+          }}
+        />
+      ) : null}
+      {phase === "brief" && openedProject ? (
+        <BriefSetup
+          language={language}
+          projectTitle={openedProject.title}
+          busy={busy}
+          onActivate={activateBrief}
+          onActivated={activated}
+          onError={(message) => {
+            showNotice(message, "danger");
+          }}
+        />
+      ) : null}
+      {phase === "shell" && state ? (
+        <ProjectShell
+          language={language}
+          state={state}
+          provider={provider}
+          busy={busy}
+          prepared={prepared}
+          analyzed={analyzed}
+          inspectorOpen={inspectorOpen}
+          inspectorSelection={inspectorSelection}
+          onInspector={(open, selection) => {
+            setInspectorOpen(open);
+            if (selection) setInspectorSelection(selection);
+          }}
+          onSwitchProject={() => {
+            setPrepared(undefined);
+            setAnalyzed(undefined);
+            setInspectorOpen(false);
+            setInspectorSelection(undefined);
+            setRecoveryOpen(false);
+            setRecoveryAvailable(false);
+            setState(undefined);
+            window.history.replaceState({}, "", "/");
+            setPhase("start");
+          }}
+          onPrepared={setPrepared}
+          onAnalyzed={setAnalyzed}
+          onPrepare={prepareReview}
+          onAnalyze={analyzeReview}
+          onCancel={cancelReview}
+          onCommit={commitDisposition}
+          onCommitted={committed}
+          onDownload={downloadReceipt}
+          onRollback={rollbackReceipt}
+          onRuntime={setRuntime}
+          onNotice={showNotice}
+          onError={handleFailure}
+          onAuthorityChanged={async () => {
+            await refreshState();
+          }}
+        />
+      ) : null}
+      {phase === "fatal" ? (
+        <main id="main-content" className="fatal-screen">
+          <StatusBadge tone="danger">{t(language, "offline")}</StatusBadge>
+          <h1>{t(language, "service_unavailable")}</h1>
+          <p>{t(language, "recovery_hint")}</p>
+          <button
+            type="button"
+            onClick={() => {
+              window.location.reload();
+            }}
+          >
+            {t(language, "retry")}
+          </button>
+        </main>
+      ) : null}
+    </div>
+  );
 }
