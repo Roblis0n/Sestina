@@ -3,6 +3,49 @@ import { createResearchRoomServer } from "../../../apps/research-room/dist/serve
 import { migrateKernelProject } from "../../../packages/core/src/index.js";
 import { productionUiProject } from "../ui-factory.js";
 
+test("G9: searching Brief boundaries opens readable Brief content and survives its object deep link", async ({
+  page,
+}) => {
+  const f = await productionUiProject();
+  await migrateKernelProject({ projectRoot: f.root });
+  const server = await createResearchRoomServer({
+    languagePreferenceStore: {
+      readLanguage: async () => "en",
+      writeLanguage: async () => {},
+    },
+  }).start();
+  try {
+    await page.goto(server.origin + "/project/today");
+    await page
+      .getByRole("textbox", { name: "Project folder", exact: true })
+      .fill(f.root);
+    await page
+      .getByRole("button", { name: "Open project", exact: true })
+      .click();
+    await page.getByRole("link", { name: "Search", exact: true }).click();
+    await page
+      .getByRole("searchbox", { name: "Search research", exact: true })
+      .fill("Scan arbitrary project files");
+    await expect(page.locator(".task-list li")).toHaveCount(1);
+    await page
+      .locator(".task-list li")
+      .getByRole("button", { name: "View details", exact: true })
+      .click();
+    await expect(page.locator(".project-brief-panel dl").first()).toBeVisible();
+    await expect(page.locator(".project-brief-panel")).toContainText(
+      "Scan arbitrary project files",
+    );
+    await page.reload();
+    await expect(page.locator(".project-brief-panel dl").first()).toBeVisible();
+    await page.screenshot({
+      path: ".tmp/g8-g9/visual/brief-search-detail.png",
+    });
+  } finally {
+    await server.close();
+    await f.cleanup();
+  }
+});
+
 test("G9: delayed real query results cannot replace a newer search or a closed session", async ({
   page,
 }) => {

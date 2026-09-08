@@ -967,6 +967,16 @@ export function KernelProjectWorkspace({
                     initialKind={route.kind}
                     recordId={route.id}
                   />
+                ) : data?.detail &&
+                  typeof data.detail === "object" &&
+                  !Array.isArray(data.detail) &&
+                  data.detail.kind === "brief" ? (
+                  <ProjectBriefPanel
+                    readOnly={readOnly}
+                    projectId={projectId}
+                    language={language}
+                    onReview={openReview}
+                  />
                 ) : data?.detail ? (
                   <KernelResultDetail
                     detail={data.detail}
