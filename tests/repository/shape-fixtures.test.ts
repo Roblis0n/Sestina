@@ -137,6 +137,38 @@ function createValidPackage(
 // ═══════════════════════════════════════════════════════════════════════════
 
 describe("check-repository-shape positive fixtures", () => {
+  it("accepts a binary wheel archive while still rejecting NUL in product source", () => {
+    const check = (withInvalidSource: boolean) =>
+      runShapeCheck("wheel-boundary", (root) => {
+        createValidPackage(
+          root,
+          "packages/foo",
+          "@sestina/foo",
+          "export const value = 1;\n",
+        );
+        const references = join(root, "local-references");
+        mkdirSync(references);
+        // Wheels are ZIP containers; an empty ZIP end record is binary as well.
+        const archive = Buffer.alloc(22);
+        archive.writeUInt32LE(0x06054b50);
+        writeFileSync(
+          join(references, "synthetic-0.1-py3-none-any.whl"),
+          archive,
+        );
+        if (withInvalidSource)
+          writeFileSync(
+            join(root, "packages/foo/src/text.ts"),
+            "export const bad = '\0';\n",
+          );
+      });
+    expect(check(false).exitCode).toBe(0);
+    const invalid = check(true);
+    expect(invalid.exitCode).toBe(1);
+    expect(invalid.stderr).toContain(
+      "packages/foo/src/text.ts contains a NUL byte",
+    );
+  });
+
   it("P1. accepts extensionless package-local import (./helper → helper.ts)", () => {
     const r = runShapeCheck("pos-local", (root) => {
       const dir = join(root, "packages", "foo");

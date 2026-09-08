@@ -637,6 +637,7 @@ const BINARY_EXTENSIONS = new Set([
   "mov",
   "pdf",
   "zip",
+  "whl", // Python wheel archives use the binary ZIP container format.
   "gz",
   "tar",
   "bz2",
