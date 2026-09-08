@@ -2,7 +2,7 @@
 title: Accepted post-0.2 product restructure authority
 authority_status: accepted_current_target
 accepted_at: 2026-09-01
-implementation_status: g1_g3_completed
+implementation_status: g8_g9_completed
 baseline_release: v0.2.0
 baseline_commit: caf893db7928bab91c4098eb04a7e4a8d4c62ffe
 decision_owner: user
@@ -146,10 +146,17 @@ three-platform evidence are recorded in [G1–G3 evidence](G1-G3-EVIDENCE.md).
 G1–G5 are completed and verified on the opt-in path. G4/G5 add the six typed
 user-confirmed effects and persistent Review/Provider application services; the
 final public gate passed at `85beaade435f8c5bf5eb52910a2017acbf43d98c`.
-The exact G6 entry is in [operations and continuation](G1-G3-OPERATIONS.md).
-G6–G13 remain unimplemented. The existing main interface is not switched.
-Agent Corrector integration, Electron packaging, route replacement, final
-production cutover and release work retain their assigned downstream gates.
+G6/G7 completed on `codex/post-0.2-g6-g7` at `4714bb20fed6a79f0f4fa773b05b1f4090230d17`,
+completing progressive Brief, object operations, linked correction, and memory governance.
+G8/G9 completed on `codex/post-0.2-g8-g9`: unified derived views and the complete
+four-entry candidate interface are verified, including real browser visual, motion
+and interaction acceptance. Agent Corrector's draft-only integration was completed
+in G7 and is connected to this Review flow. The exact G10 entry is in
+[operations and continuation](G1-G3-OPERATIONS.md#exact-g10-continuation).
+G10–G13 remain downstream. The shipped preview default stays unchanged; Electron
+assembly/security/provenance, installation-state acceptance and final migration,
+default and release cutover retain their assigned gates. See
+[implementation status](IMPLEMENTATION-STATUS.md) for exact commits and evidence.
 
 ## Current release versus accepted target
 

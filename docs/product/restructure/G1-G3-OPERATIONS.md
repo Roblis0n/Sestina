@@ -257,13 +257,19 @@ retains its existing explicit protected endpoint.
 ## Exact G10 continuation
 
 After the G8/G9 completion evidence in [implementation status](IMPLEMENTATION-STATUS.md),
-start plan 14's **G10 — Electron desktop shell**. Reuse the shared application port,
+start plan 14's **G10 — Electron, security and release provenance**. Reuse the shared application port,
 typed projection decoders, current four-entry candidate renderer and live Kernel
 capability resolver. Assemble `apps/desktop` main/preload, restricted IPC, main-owned
 project/secret/Provider resources, native folder selection, embedded runtime and
 installation lifecycle. Do not move research rules into IPC or let the renderer
 construct user authority. Broadcasts only invalidate reads; outbound confirmation
 and uncertain-command lookup retain their existing semantics.
+
+G10 also owns single-instance policy, application data directories/keychain,
+Host bridge off by default, installer/signing/notarisation/package provenance,
+manual update, upgrade pre-backup and uninstall/project-data separation. Its own
+completion requires the three-platform lifecycle and attack matrix, reproducible
+core/source provenance and Logo hash gate, with no public HTTP in production UI.
 
 P2-02's missing bundled Electron entry remains an executable G10 RED against
 `apps/desktop/package.json`; unrelated-source release-tag acceptance remains G12

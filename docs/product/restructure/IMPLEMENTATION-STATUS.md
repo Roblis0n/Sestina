@@ -2,8 +2,8 @@
 
 - **Status authority:** this record reports the boundary between the shipped
   `v0.2.0` implementation, the completed G0 contract freeze, the authorized
-  opt-in G1–G3 foundation, the G4/G5 persistent application path, and work
-  assigned to downstream gates.
+  opt-in G1–G3 foundation, the completed G4–G9 application and candidate
+  interface, and work assigned to G10–G13.
 - **Code-fact baseline:**
   `08bd5f29cd59e39f06a7de6d261aa84f73a5bc63`, whose product code is the
   `v0.2.0` release tree plus the accepted restructure authority.
@@ -101,7 +101,9 @@ code-fact question; it does not claim the target capability is implemented.
 | G5 — persistent Review and Provider attempts | `completed_and_verified` | Durable Review lifecycle, exact confirmed outbound bytes, attempt recovery, independent assessment facts and authenticated application/API integration passed the final public gate. |
 | G6 — progressive Brief and object operations | `completed_and_verified` | Minimal native Brief, typed fields and references, shared Coverage, durable candidates, conflict confirmation, actual object forms and derived-file repair passed application, built-interface and final public verification. |
 | G7 — correction, Memory, Host and historical paths | `completed_and_verified` | Linked correction and optional isolated assessment, Memory governance and resumable copy handling, draft-only Host/Skill intake and historical read/export/conversion passed application, privacy, recovery, visual and final public verification. |
-| G8–G13 | `not_started` | Derived projections, global interface replacement, Electron and final cutover remain downstream. |
+| G8 — derived projections and recovery consistency | `completed_and_verified` | All seven derived surfaces use one consistent input identity; workflow/privacy/time invalidation, restore/rebuild races, preserved outbox and seeded large-project reads passed. |
+| G9 — four-entry navigation and complete research flow | `completed_and_verified` | The opt-in schema-25 candidate integrates Today/Review, Project, Search and Settings with durable drafts, real results, recovery and verified built-interface visual/interaction journeys. |
+| G10–G13 | `not_started` | Electron/security/release provenance, later evaluation and final migration/default/release cutover retain their accepted gate assignments. |
 
 Completion evidence is the implementation tree at
 `e08c760e0adcf63c1ea54b22103b903b5e17ec83`, verified on 2026-09-06 by
@@ -141,6 +143,22 @@ G0 changes no production schema, runtime data, UI route, Provider behavior,
 Electron lifecycle, legacy cutover, or release artifact. It creates an
 executable specification and a verified baseline fact record only.
 
+G8/G9 completion is the candidate runtime at
+`089c2ee4e16f52e1951c2f016023773e4b3278b1`, including repository-check repair
+`6af31be`, on `codex/post-0.2-g8-g9`. On 2026-09-08 the final
+`pnpm verify:public` and `pnpm verify:platform win32 x64` both passed with
+exit code 0. The public run passed 331 production regressions and 364 foundation
+assertions; the Windows platform gate passed the same native foundation, two
+deterministic archive builds, exact artifact verification and real clean-extraction
+lifecycle. Additional built-browser, P1-06, visual/motion, large-project, delayed
+response and repository-type regression results are in
+[the G8/G9 evidence record](G1-G3-EVIDENCE.md#g8g9-application-projection-and-visual-evidence).
+No G8/G9 scope or verification blocker remains. Historical G0–G7 evidence above
+remains historical. The next entry is [exact G10 continuation](G1-G3-OPERATIONS.md#exact-g10-continuation).
+The released preview remains v0.2.0/schema 20; the candidate is explicitly enabled
+schema 25. No Electron installation, default switch, push, tag or publication is
+claimed. Final record-only edits receive document/contract/status checks.
+
 ## 6. Claims that remain unavailable
 
 The following remain `not_established`:
@@ -150,7 +168,7 @@ The following remain `not_established`:
 - adoption, market value, or commercial viability;
 - production readiness of the target Electron application;
 - final production data cutover and migration of real user projects;
-- production UI acceptance for the target task-first interface.
+- installation-state production UI acceptance for the target Electron interface (the G9 candidate browser interface is verified).
 
 The tables above describing the release are G0 baseline facts. The authorized
 G1–G3 execution begins at `a4889ee996064d95ee0a3fb470ee6ee12d3a91a3`;

@@ -406,7 +406,7 @@ and the actual application/route entry is in
 | --- | --- |
 | Closing a pending open could leave a usable session; persistence failure during close could leave the real lease held | `kernel-api-lifecycle` (5) and `kernel-close-failure` (1) verify generation revocation, real database lease reacquisition, cancellation and restart uncertainty. The close-failure assertion was RED before the finally-based resource release. |
 | Same integer head incorrectly marked changed workflow/cached bytes current | `projection-identity` (5) produced real REDs for saved-draft invalidation, stale rebuild publication and corrupt cache data, then GREEN. It also covers expiry without database writes, same-revision restore with different contents, hash-valid JSON tampering and preserved outbox. |
-| Views and restored navigation could disagree | `workspace-projections` (2) compares all seven surfaces and full Resume/Review detail against one input identity, verifies actual Receipt/revision, command result, durable restart and explicit rebuild without changing the canonical head. `workspace-recovery` (2) uses two actual SQLite connections and a stale restore preview. |
+| Views and restored navigation could disagree | `workspace-projections` (3) compares all seven surfaces and full Resume/Review detail against one input identity, verifies actual Receipt/revision, command result, durable restart and explicit rebuild without changing the canonical head. A real saved Brief scope phrase initially returned no search result (RED); the explicit research-field allowlist now includes structured Brief boundaries (GREEN). `workspace-recovery` (2) uses two actual SQLite connections and a stale restore preview. |
 | Focus refresh and late save responses lost or resurrected text | `review-draft-preservation` runs the actual built application with a held save acknowledgment, later typing, focus/reload, leave save/discard/cancel and browser back. `draft-buffer` (2) includes the RED late-acknowledgment-after-privacy-removal case. |
 | Old creation URLs and composite relation links were incorrectly accepted/rejected | HTTP old Appeal/Room creation returned 200 before the 410 fix; `kernel-http` verifies the refusal with and without Provider. `kernel-route` exposed a composite relation becoming `not_found`, then verified the fix. `g9-large-project` opens the actual relationship result via keyboard from its type filter. |
 | Exact request/result/session boundaries | Existing six-effect, provider, compensation, privacy and legacy regressions remain enabled. `g9-read-isolation` holds a real SQLite-backed old HTTP response while a newer search completes, then closes and reloads the session. The stale result cannot appear. |
@@ -457,4 +457,88 @@ Necessary hashes and internal details stay in collapsed inspection sections.
 Local test evidence is under the ignored `.tmp/g8-g9/` directory (build, public,
 targeted performance, UI and deferred-RED logs, raw performance samples and selected
 screens). These synthetic browser renders are not Electron installation evidence.
-The final gate results and measured values are recorded below after completion.
+The final gate results and measured values follow below.
+
+Selected actual renders retained with this record:
+[Chinese Today](evidence/g8-g9/today-zh.png),
+[200% text and high contrast](evidence/g8-g9/review-200-percent.png),
+[large-project search, second page](evidence/g8-g9/search-large.png),
+[long Brief with bounded heading and full content](evidence/g8-g9/brief-long.png),
+[full long Finding behind a compact selector](evidence/g8-g9/finding-full.png).
+The final built browser was also manually opened against a missing synthetic
+folder (honest error, input preserved), then opened read-only (new-review route
+offers browsing only), closed and reopened through its recent-project entry.
+The final long-Finding/uncertain/correction Chinese journey passed again against
+the build containing `025f7f2beed6649d2da64997bddb4dee8e2acc82`; its actual
+expanded Finding screenshot was opened and inspected before retention.
+
+### Final G8/G9 verification — 2026-09-08
+
+The final verified source is `089c2ee4e16f52e1951c2f016023773e4b3278b1`, comprising the implementation
+commit `26ae039`, the structured-Brief search fix `025f7f2`, and the repository
+archive classification fix `6af31be`, followed by the actual Brief-detail
+search/deep-link fix `156c590` and unified heading/layout refinement
+`089c2ee`. Both final gates exited 0:
+
+- `pnpm verify:public`: 331 production regressions, 364 foundation/application
+  assertions in 55 files, frozen contracts, immutable fixtures/discovery/schema,
+  production lint/types, repository/document/architecture/history checks.
+- `pnpm verify:platform win32 x64`: native foundation, two identical deterministic
+  preview archive builds, exact artifact verification and clean-extraction
+  start/reopen/upgrade/backup/restore/failure/future-schema/restart/uninstall/reinstall.
+- Additional actual-browser results: integrated 21, affected refinement 12, P1-06
+  six, large relation one, delayed-query/session one, final affected visual two,
+  final Chinese long-Finding/correction/uncertain one, and final Brief search/detail
+  plus delayed-query two; shared journeys are reused
+  and these counts must not be added as unique independent scenarios.
+- Repository file-type regression: 16 fixtures passed. A synthetic wheel archive
+  actually failed before the classification fix; product source containing NUL
+  still fails afterward. User reference materials were neither removed nor exempted
+  by directory name. Wheels use the same binary ZIP format already allowed by
+  this text-file check; all product import/security/history scans remain enabled.
+
+Earlier complete runs failed real next-page performance assertions (469 ms and
+406 ms against 400 ms); reusing already validated immutable snapshot ownership
+removed redundant whole-state cloning/hashing without dropping integrity checks.
+A later run caught the actual Brief search omission, corrected and independently
+verified before the final run. Another complete run reached repository checking
+and rejected two local wheel archives as text; the boundary regression above
+fixed that false classification. The final manual search journey then exposed
+a Brief result displaying only technical data; a built-browser assertion failed
+before reusing the full Brief panel. Search-to-detail and refreshed deep links
+now pass and the actual corrected English and Chinese renders were inspected.
+The visual follow-up also exposed duplicate headings; the one-primary-heading
+assertion failed before the shared layout correction, then passed. The in-flight pre-fix
+public run was stopped and restarted against the final source. None of the
+failed or interrupted runs is reported passed.
+
+Performance corpus seed `920000` contains at least 1,000 canonical research
+objects, 500 relationships, 1,100 persisted Reviews (including 1,000 migrated
+records and 100 native Reviews), 1,000 legacy history records, at least 300
+Attention candidates, 50 Memory records and long Chinese/English Brief bodies.
+Conditions: Windows x64 10.0.26100, Node 24.13.0, pnpm 11.19.0, AMD Ryzen 9
+8945HX and approximately 31.05 GiB RAM. Real SQLite reads use a freshly seeded
+project after its initial validation read, 25 sequential samples per operation;
+serialization has 75 samples (three views per iteration). p95 uses nearest rank.
+
+| Operation | Final public-run p95 (ms) |
+| --- | ---: |
+| Consistent database snapshot | 293.70 |
+| Today including database read | 304.84 |
+| Project including database read | 300.01 |
+| Search including database read | 304.20 |
+| Search next page including database read | 302.81 |
+| Pure projection | 13.18 |
+| Page JSON serialization | 0.38 |
+| Explicit validated rebuild | 617.88 |
+
+The platform gate's independent samples also passed all unchanged page thresholds
+(next-page p95 262.69 ms). Raw samples remain in
+`.tmp/g8-g9/performance-public.json` and `performance.json`; final command logs
+are `verified-public.log` and `platform.log` in the same local evidence directory.
+The actual large-project browser opened Today in 2,852 ms in its recorded journey;
+that single measurement is not a cold-start p95 claim. No packaged Electron
+performance, macOS/Linux revalidation, real-Provider semantic result or new release
+is claimed. The Windows gate exercises the existing preview artifact, not an
+Electron installer. G8/G9 have no remaining blocker; G10 starts at the exact
+continuation in the operations record.
