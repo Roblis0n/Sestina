@@ -99,3 +99,28 @@ it("G8: pagination binds workflow identity, rejects mixed pages and never leaks 
     await f.cleanup();
   }
 });
+
+it("G8: full-text search includes saved Brief scope and boundaries, without indexing arbitrary metadata", async () => {
+  const f = await applicationFixture();
+  try {
+    const brief = f.kernel.brief(session).brief!;
+    const r = await ready(f, "Save the scope exclusion");
+    commit(f, r, {
+      kind: "patch_brief",
+      targetId: brief.id,
+      expectedVersion: brief.version,
+      baseVersionId: brief.currentVersionId,
+      changes: { explicitNonGoals: ["Synthetic excluded inquiry albatross"] },
+      reason: "Record the user's scope",
+    });
+    const result = f.kernel.workspace(
+      { view: "search", query: "albatross" },
+      session,
+    );
+    expect(result.items).toContainEqual(
+      expect.objectContaining({ kind: "brief", matchReason: "content" }),
+    );
+  } finally {
+    await f.cleanup();
+  }
+});
