@@ -32,6 +32,7 @@ test("G9: searching Brief boundaries opens readable Brief content and survives i
       .getByRole("button", { name: "View details", exact: true })
       .click();
     await expect(page.locator(".project-brief-panel dl").first()).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveCount(1);
     await expect(page.locator(".project-brief-panel")).toContainText(
       "Scan arbitrary project files",
     );

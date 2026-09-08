@@ -503,14 +503,19 @@ export function KernelProjectWorkspace({
                   }}
                 />
               </fieldset>
-            ) : route.page === "brief" ? (
+            ) : route.page === "brief" ||
+              (route.page === "project" &&
+                data?.detail &&
+                typeof data.detail === "object" &&
+                !Array.isArray(data.detail) &&
+                data.detail.kind === "brief") ? (
               <ProjectBriefPanel
                 readOnly={readOnly}
                 key={`${briefDraft?.id ?? route.section}:${route.id ?? ""}`}
                 projectId={projectId}
                 language={language}
                 onReview={openReview}
-                candidate={briefDraft}
+                candidate={route.page === "brief" ? briefDraft : undefined}
                 initialEditing={route.section === "edit"}
                 historyVersionId={
                   route.section === "history" ? route.id : undefined
@@ -966,16 +971,6 @@ export function KernelProjectWorkspace({
                     onReview={openReview}
                     initialKind={route.kind}
                     recordId={route.id}
-                  />
-                ) : data?.detail &&
-                  typeof data.detail === "object" &&
-                  !Array.isArray(data.detail) &&
-                  data.detail.kind === "brief" ? (
-                  <ProjectBriefPanel
-                    readOnly={readOnly}
-                    projectId={projectId}
-                    language={language}
-                    onReview={openReview}
                   />
                 ) : data?.detail ? (
                   <KernelResultDetail
