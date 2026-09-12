@@ -2,7 +2,7 @@ import { it, expect } from "vitest";
 import { readFile, mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawnSync, execFileSync } from "node:child_process";
 import { SESTINA_RELEASE_IDENTITY as identity } from "../../../packages/schema/src/release-contract.mjs";
 import { validateReleaseManifest } from "../../../scripts/lib/release-verifier.mjs";
 it("P2-02 G10/G12: production package declares a bundled Electron application entry", async () => {
@@ -105,6 +105,11 @@ it("P2-02 G10/G12: the release tag verifier refuses a valid manifest from an unr
     );
     expect(checked.error).toBeUndefined();
     expect(checked.status).toBe(1);
+    expect(checked.stderr).toContain("release_tag_source_mismatch");
+    const tagCommit = execFileSync("git", ["rev-parse", "refs/tags/v0.2.0^{commit}"], { encoding: "utf8", windowsHide: true }).trim();
+    await writeFile(join(directory, "release-manifest.json"), JSON.stringify({ ...manifest, source: { gitCommit: tagCommit } }));
+    const valid = spawnSync(process.execPath, [resolve("scripts/verify-release-tag.mjs"), "v0.2.0", directory], { windowsHide: true, encoding: "utf8" });
+    expect(valid.status, valid.stderr).toBe(0);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

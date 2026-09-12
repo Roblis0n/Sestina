@@ -26,10 +26,12 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p client/tsconfig.json"
   },
   "dependencies": {
+    "@sestina/application": "workspace:*",
     "@sestina/core": "workspace:*",
     "@sestina/mcp": "workspace:*",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "@sestina/application-ports": "workspace:*"
   },
   "devDependencies": {
     "@sestina/storage": "workspace:*",

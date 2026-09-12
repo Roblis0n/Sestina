@@ -5,6 +5,9 @@ packages:
 onlyBuiltDependencies:
   - "@primno/dpapi"
   - esbuild
+  - electron
 allowBuilds:
   "@primno/dpapi": true
   esbuild: true
+  electron: true
+  electron-winstaller: false

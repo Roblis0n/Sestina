@@ -664,6 +664,9 @@ for (const fileRel of walkFiles(".")) {
   // Root release artifacts are generated, ignored binaries. Check 10 still
   // walks release manifests explicitly so template variables cannot escape.
   if (fileRel.startsWith("./release/")) continue;
+  // Local acceptance profiles and generated evidence are not product inputs.
+  // Actual packaged bytes are scanned by the artifact verifier.
+  if (fileRel.startsWith("./.tmp/")) continue;
   const ext = fileRel.split(".").pop()?.toLowerCase();
   if (BINARY_EXTENSIONS.has(ext)) continue;
   let buf;

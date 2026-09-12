@@ -53,6 +53,9 @@ if (!ROOT) {
 // Keys are workspace-relative package directories; "allow" lists the
 // @sestina/* package names (without scope) that may be imported.
 const NEW_PACKAGE_RULES = {
+  "packages/application-ports": { id: "ARCH-R013", allow: [], fix: "application-ports contains transport types and value decoders only" },
+  "packages/application": { id: "ARCH-R014", allow: ["core", "application-ports"], fix: "application composes public Core use cases and transport contracts; it cannot import desktop, HTTP apps, or storage" },
+  "apps/desktop": { id: "ARCH-R015", allow: ["core", "application", "application-ports"], fix: "desktop manages trusted OS resources through public application/Core ports" },
   "packages/research": {
     id: "ARCH-R001",
     allow: ["schema"],
@@ -90,7 +93,7 @@ const NEW_PACKAGE_RULES = {
   },
   "apps/research-room": {
     id: "ARCH-R012",
-    allow: ["core", "mcp"],
+    allow: ["core", "mcp", "application", "application-ports"],
     testAllow: ["storage"],
     fix: "apps/research-room is a loopback presentation adapter; business capabilities go through @sestina/core and the bounded Codex process/MCP adapter goes through @sestina/mcp; direct storage access is limited to destructive migration fixtures under test/",
   },

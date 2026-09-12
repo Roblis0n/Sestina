@@ -101,6 +101,7 @@ import type {
   WorkspacePage,
 } from "./dto.js";
 
+import { desktop, desktopRequest } from "./desktop.js";
 interface RequestOptions {
   readonly method?: "GET" | "POST" | "DELETE";
   readonly body?: unknown;
@@ -1759,6 +1760,13 @@ export class ResearchRoomApi {
         "The local session is unavailable.",
       );
     try {
+      if (desktop()) {
+        if (options.signal?.aborted) throw new DOMException("Cancelled", "AbortError");
+        const reply = await desktopRequest(path, options.method ?? "GET", options.body);
+        if (options.signal?.aborted) throw new DOMException("Cancelled", "AbortError");
+        if (!reply.ok) throw new ResearchRoomApiError(reply.error?.code ?? "operation_failed", reply.error?.code ?? "operation_failed");
+        return decode(reply.value);
+      }
       const response = await fetch(path, {
         method: options.method ?? "GET",
         headers: {

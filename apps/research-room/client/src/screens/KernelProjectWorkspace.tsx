@@ -19,6 +19,8 @@ import { KernelHistoryPanel } from "../components/product/KernelHistoryPanel.js"
 import { Button } from "../components/primitives/Button.js";
 import { Modal } from "../components/primitives/Modal.js";
 import { kernelLabel } from "../components/product/kernel-copy.js";
+import { desktop } from "../api/desktop.js";
+import { DesktopAbout } from "../components/product/DesktopAbout.js";
 import "../styles/kernel-workspace.css";
 
 interface LeaveRequest {
@@ -130,6 +132,14 @@ export function KernelProjectWorkspace({
       changeLocation(href);
     });
   };
+  useEffect(() => {
+    const bridge = desktop();
+    return bridge?.onCloseRequested(() => {
+      guard(() => {
+        void bridge.methods.closeWindow();
+      });
+    });
+  }, []);
   function openReview(r: KernelReviewDto) {
     changeLocation(`/project/reviews/${encodeURIComponent(r.id)}`);
     setRefresh((x) => x + 1);
@@ -624,7 +634,7 @@ export function KernelProjectWorkspace({
                       {en ? "Close project for recovery" : "关闭项目并进入恢复"}
                     </Button>
                   </>
-                ) : (
+                ) : desktop() ? <DesktopAbout en={en} /> : (
                   <>
                     <p>
                       {en

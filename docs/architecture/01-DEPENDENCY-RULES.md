@@ -28,6 +28,12 @@ schema and small leaf utilities
 - applications and integrations call public package entry points. They do not
   import another package's private subpaths or escape package roots with
   relative imports.
+- `packages/application` contains the shared application adapter, Provider
+  connection policy and temporary Host bridge. Both HTTP and desktop call it;
+  it calls public Core ports and never imports an application or storage.
+- `packages/application-ports` is the browser-safe transport contract. It has
+  no runtime package dependencies. Renderer and preload consume this entry;
+  only main imports `packages/application`. IPC cannot confer user authority.
 - renderer code consumes validated HTTP projections and never imports Core,
   storage, secret backends, or Provider runtimes.
 

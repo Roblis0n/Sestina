@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { researchRoomApi, ResearchRoomApiError } from "../api/client.js";
 import { Button } from "../components/primitives/Button.js";
 import type { LocalJson } from "../api/kernel-dto.js";
+import { desktop } from "../api/desktop.js";
 const recentKey = "sestina.candidate.recent-projects";
 function recents(): string[] {
   try {
@@ -99,6 +100,7 @@ export function KernelStartCenter({
           {en ? "Project folder" : "项目文件夹"}
           <input
             value={path}
+            readOnly={Boolean(desktop())}
             required
             autoComplete="off"
             onChange={(e) => {
@@ -106,6 +108,24 @@ export function KernelStartCenter({
             }}
           />
         </label>
+        {desktop() ? (
+          <Button
+            type="button"
+            disabled={busy}
+            onClick={() =>
+              void run(async () => {
+                const bridge = desktop();
+                if (!bridge) return;
+                const reply = await bridge.methods.pickDirectory();
+                if (!reply.ok) throw new Error("directory_unavailable");
+                const value = reply.value as { path?: string };
+                if (value.path) changePath(value.path);
+              })
+            }
+          >
+            {en ? "Choose folder" : "选择文件夹"}
+          </Button>
+        ) : null}
         <Button type="submit" variant="primary" disabled={busy || !path.trim()}>
           {en ? "Open project" : "打开项目"}
         </Button>
@@ -339,9 +359,11 @@ export function KernelStartCenter({
           {en ? "Working with the local project…" : "正在处理本地项目…"}
         </p>
       ) : null}
-      <Button disabled={busy} onClick={onBack}>
-        {en ? "Back" : "返回"}
-      </Button>
+      {!desktop() ? (
+        <Button disabled={busy} onClick={onBack}>
+          {en ? "Back" : "返回"}
+        </Button>
+      ) : null}
     </section>
   );
 }

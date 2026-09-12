@@ -31,6 +31,9 @@ run("production-source lint", eslint, [
   "apps/research-room/src/server.ts",
   "apps/research-room/src/kernel-api.ts",
   "apps/research-room/shared",
+  "apps/desktop/src",
+  "packages/application/src",
+  "packages/application-ports/src",
   "apps/research-room/client/src",
   "packages/core/src",
   "packages/research/src",
@@ -52,6 +55,9 @@ for (const project of [
   "packages/pilot/tsconfig.json",
   "apps/research-room/tsconfig.json",
   "apps/research-room/client/tsconfig.json",
+  "apps/desktop/tsconfig.json",
+  "packages/application/tsconfig.json",
+  "packages/application-ports/tsconfig.json",
 ]) {
   run(`typecheck ${project}`, tsc, ["--noEmit", "-p", project]);
 }

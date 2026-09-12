@@ -77,7 +77,7 @@ export interface KernelProvider {
   readonly maxOutputTokens: number;
   readonly timeoutMs?: number;
   /** Production adapter receives the already confirmed bytes; it may not serialize again. */
-  send(body: string, signal: AbortSignal): Promise<string>;
+  send(body: string, signal: AbortSignal, beforeWrite?: () => Promise<void>): Promise<string>;
 }
 export interface KernelApplicationOptions {
   readonly readOnly?: boolean;
@@ -1457,6 +1457,13 @@ export class ResearchDeliberationKernel {
         provider.send(
           requireKernelValue(manifest.exactRequestBody),
           controller.signal,
+          async () => {
+            const currentProvider = await this.providerFor(id);
+            controller.signal.throwIfAborted();
+            this.user(capability);
+            const current = this.review(id);
+            if (current.status !== "provider_attempt_running" || current.attemptIds.at(-1) !== attempt.id || this.fresh(current, manifest, currentProvider).length) throw new KernelFault("stale_revision");
+          },
         ),
         aborted,
       ]);
