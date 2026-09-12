@@ -1,5 +1,21 @@
 import { it, expect } from "vitest";
 import { confirmationCopy } from "../../apps/desktop/src/native-copy.js";
+it("names irreversible Forget and the selected Memory in the trusted confirmation", () => {
+  for (const language of ["en", "zh-CN"]) {
+    const copy = confirmationCopy({ action: "govern_memory", projectId: "synthetic-project", bindingHash: "a".repeat(64), snapshot: { input: { action: "forget", itemId: "synthetic-memory", expectedVersion: 3 } } }, language);
+    expect(copy.buttons[1]).toBe(language === "en" ? "Forget this memory" : "忘记这条记忆");
+    expect(copy.detail).toContain("synthetic-memory");
+    expect(copy.detail).toContain(language === "en" ? "cannot be undone" : "无法撤销");
+  }
+});
+it("describes retained copies as restore-disabled rather than deleted", () => {
+  for (const language of ["en", "zh-CN"]) {
+    const copy = confirmationCopy({ action: "privacy_cleanup", projectId: "synthetic", bindingHash: "a".repeat(64), snapshot: { copyAction: "retire", plan: { files: [{ locationToken: "backups/manual/synthetic/backup.db" }], blocked: [] } } }, language);
+    expect(copy.buttons[1]).toBe(language === "en" ? "Keep copies and block restore" : "保留副本并禁止恢复");
+    expect(copy.detail).toContain(language === "en" ? "The files will remain" : "文件会保留");
+    expect(copy.detail).not.toMatch(/deletion cannot|删除无法/);
+  }
+});
 it("keeps bilingual native actions specific and treats research text as data", () => {
   for (const action of [
     "commit",

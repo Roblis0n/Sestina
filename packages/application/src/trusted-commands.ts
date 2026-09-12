@@ -66,10 +66,13 @@ export class TrustedKernelCommands {
         return { read, manifest };
       }
       if (body.action === "privacy_cleanup")
-        return this.api.execute(
-          { ...base, action: "privacy_copy_preview" },
-          true,
-        );
+        return {
+          copyAction: body.copyAction ?? "delete",
+          plan: await this.api.execute(
+            { ...base, action: "privacy_copy_preview" },
+            true,
+          ),
+        };
       if (body.action === "govern_memory")
         return {
           memory: await this.api.execute({ ...base, action: "memory" }, true),

@@ -39,13 +39,20 @@ export function confirmationCopy(input: TrustedConfirmation, language: string) {
       "Allow draft intake",
     ],
   };
-  const label = labels[input.action];
-  if (!label) throw new Error("invalid_confirmation_action");
   const saved = object(input.snapshot),
     read = object(saved.read),
     review = object(read.review),
     manifest = object(saved.manifest),
     provider = object(manifest.provider);
+  const memoryInput = object(saved.input);
+  const forgetting = input.action === "govern_memory" && memoryInput.action === "forget";
+  const retaining = input.action === "privacy_cleanup" && saved.copyAction === "retire";
+  const label = forgetting
+    ? ["忘记这条记忆？", "Forget this memory?", "忘记这条记忆", "Forget this memory"]
+    : retaining
+      ? ["保留副本并禁止恢复？", "Keep copies and block restore?", "保留副本并禁止恢复", "Keep copies and block restore"]
+      : labels[input.action];
+  if (!label) throw new Error("invalid_confirmation_action");
   const detail: string[] = [(en ? "Project: " : "项目：") + input.projectId];
   if (input.action === "commit" || input.action === "start_attempt") {
     detail.push(
@@ -92,19 +99,34 @@ export function confirmationCopy(input: TrustedConfirmation, language: string) {
       (en ? "Request hash: " : "请求核对标识：") +
         String(manifest.exactRequestHash),
     );
-  } else if (input.action === "privacy_cleanup")
+  } else if (input.action === "privacy_cleanup") {
+    const plan = object(saved.plan);
+    if (Array.isArray(plan.files)) detail.push((en ? "Managed files: " : "受管文件数量：") + String(plan.files.length));
+    if (Array.isArray(plan.blocked) && plan.blocked.length) detail.push((en ? "Unverifiable locations: " : "无法核对的位置数量：") + String(plan.blocked.length));
     detail.push(
-      en
-        ? "The listed deletion cannot be undone here. Copies outside the managed scope are not included."
-        : "列出的删除无法在此撤销。受管范围之外的副本不在本次清理中。",
+      retaining
+        ? en
+          ? "The files will remain and may still contain forgotten content. Sestina will block restoring these copies. This does not delete them."
+          : "文件会保留，可能仍含已忘记的内容。Sestina 会禁止恢复这些副本。本次不会删除文件。"
+        : en
+          ? "The listed deletion cannot be undone here. Copies outside the managed scope are not included."
+          : "列出的删除无法在此撤销。受管范围之外的副本不在本次清理中。",
     );
-  else if (input.action === "govern_memory")
+  } else if (input.action === "govern_memory") {
+    if (typeof memoryInput.itemId === "string") detail.push(
+      (en ? "Selected memory: " : "所选记忆：") + quotedField(memoryInput.itemId),
+      (en ? "Saved version: " : "已保存版本：") + String(memoryInput.expectedVersion),
+    );
     detail.push(
-      en
-        ? "Memory stays context, not Evidence. Forgetting clears the selected local content; managed copies may require separate cleanup."
-        : "记忆仍是上下文，不会变成证据。忘记操作会清除所选本地内容；受管副本可能还需单独清理。",
+      forgetting
+        ? en
+          ? "This clears the selected local content and cannot be undone here. Managed copies may require separate cleanup."
+          : "这会清除所选本地内容，无法撤销。受管副本可能还需单独清理。"
+        : en
+          ? "This saves the selected memory change. Memory remains context and does not become Evidence."
+          : "这会保存所选记忆修改。记忆仍是上下文，不会变成证据。",
     );
-  else
+  } else
     detail.push(
       en
         ? "For 10 minutes, the holder can submit drafts and read their status. It cannot send to a Provider or save research decisions. Closing the project or restarting disables access."

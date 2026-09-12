@@ -3,6 +3,20 @@ import { KernelApplicationApi } from "../../../packages/application/src/kernel-a
 import { TrustedKernelCommands } from "../../../packages/application/src/trusted-commands.js";
 import { applicationFixture } from "../application-fixtures.js";
 
+it("trusted copy confirmation distinguishes retention from deletion using the actual request", async () => {
+  const f = await applicationFixture(); f.kernel.close();
+  const api = new KernelApplicationApi({});
+  let snapshot: any;
+  const desktop = new TrustedKernelCommands(api, async detail => { snapshot = detail.snapshot; return false; });
+  try {
+    const session = await api.open({ projectPath: f.root });
+    await expect(desktop.execute({ ...session, action: "privacy_cleanup", copyAction: "retire", confirmed: true })).rejects.toThrow("confirmation_declined");
+    expect(snapshot.copyAction).toBe("retire");
+    expect(snapshot.plan.projectId).toBe(session.projectId);
+    expect(snapshot.plan.planHash).toMatch(/^[a-f0-9]{64}$/);
+  } finally { api.dispose(); await f.cleanup(); }
+});
+
 it("a forged renderer confirmation cannot commit without trusted user confirmation", async () => {
   const f = await applicationFixture();
   f.kernel.close();

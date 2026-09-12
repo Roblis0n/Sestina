@@ -46,6 +46,7 @@ for (const language of ["en", "zh-CN"]) for (const theme of ["light", "dark", "h
     await button(en ? "Choose folder" : "选择文件夹").click();
     await button(en ? "Open project" : "打开项目").click();
     await expect(page.getByRole("heading", { name: en ? "Today / Review" : "今日 / 审议", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: en ? "Current research" : "当前研究", exact: true })).toBeVisible();
     await shot("today-1100");
     await size(1280); await link(en ? "Project" : "项目").click();
     await expect(page.locator(".task-list li").first()).toBeVisible();
