@@ -10,7 +10,7 @@ import {
   createSecretBackend,
   type SecretBackend,
   type SecretPlatform,
-} from "@sestina/secrets";
+} from "@sestina/core";
 import { lstat, readFile, open, rename, realpath, rm } from "node:fs/promises";
 import { join, dirname, resolve } from "node:path";
 import { randomUUID, createHash } from "node:crypto";
@@ -52,9 +52,10 @@ export class LegacySettingsMigration {
     private readonly secrets: SecretBackend,
     private readonly preferences: DesktopPreferenceStore,
     private readonly sourceRoot = dirname(resolveDefaultProviderConfigPath()),
-    private readonly readSecrets = () =>
+    private readonly readSecrets: () =>
+      SecretBackend | Promise<SecretBackend> = () =>
       createSecretBackend(process.platform as SecretPlatform, {
-        envReader: { read: () => undefined, keys: () => [] },
+        environmentFallback: false,
       }),
   ) {}
   async inspect() {
@@ -97,7 +98,7 @@ export class LegacySettingsMigration {
           }),
           sourceSecrets: {
             get: async (ref) => {
-              sourceSecrets ??= this.readSecrets();
+              sourceSecrets ??= await this.readSecrets();
               return sourceSecrets.get(ref);
             },
           },

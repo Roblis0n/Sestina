@@ -1,6 +1,6 @@
 import { build } from "esbuild";
 import { createRequire } from "node:module";
-import { mkdir, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readdir, writeFile, readFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { buildDesktopCompanion } from "./lib/desktop-companion.mjs";
@@ -30,6 +30,28 @@ await build({
   format: "cjs",
   target: "node24",
   external: ["electron", "@primno/dpapi", "@napi-rs/keyring"],
+  plugins: [
+    {
+      name: "desktop-core-secret-adapter",
+      setup(context) {
+        context.onLoad({ filter: /provider-secrets\.ts$/ }, async (args) => {
+          if (
+            resolve(args.path) !==
+            join(root, "packages/core/src/provider-secrets.ts")
+          )
+            return null;
+          return {
+            contents: (await readFile(args.path, "utf8")).replace(
+              "import(SECURE_STORAGE_PACKAGE)",
+              'import("@sestina/secrets")',
+            ),
+            loader: "ts",
+            resolveDir: join(root, "packages/core/src"),
+          };
+        });
+      },
+    },
+  ],
   sourcemap: false,
 });
 const assets = {};

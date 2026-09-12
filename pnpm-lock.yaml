@@ -72,9 +72,6 @@ importers:
       '@sestina/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@sestina/secrets':
-        specifier: workspace:*
-        version: link:../../packages/secrets
     devDependencies:
       electron:
         specifier: 44.3.0
