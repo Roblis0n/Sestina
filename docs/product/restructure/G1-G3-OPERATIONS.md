@@ -256,12 +256,14 @@ retains its existing explicit protected endpoint.
 
 ## Exact G10 continuation
 
-After the G8/G9 completion evidence in [implementation status](IMPLEMENTATION-STATUS.md),
-start plan 14's **G10 — Electron, security and release provenance**. Reuse the shared application port,
-typed projection decoders, current four-entry candidate renderer and live Kernel
-capability resolver. Assemble `apps/desktop` main/preload, restricted IPC, main-owned
-project/secret/Provider resources, native folder selection, embedded runtime and
-installation lifecycle. Do not move research rules into IPC or let the renderer
+G8/G9 remain complete. G10/G11 are now partially implemented on
+`codex/post-0.2-g10-g11`; use the latest candidate evidence below rather than
+rebuilding their already implemented desktop shell. `apps/desktop` uses the shared
+`@sestina/application-ports` contract and `@sestina/application` Node adapter,
+typed projection decoders, four-entry candidate renderer and live Kernel
+capability resolver. Main/preload, restricted IPC, main-owned project/secret/Provider
+resources, native folder selection and embedded runtime are present. Complete the
+remaining installation and recovery requirements. Do not move research rules into IPC or let the renderer
 construct user authority. Broadcasts only invalidate reads; outbound confirmation
 and uncertain-command lookup retain their existing semantics.
 
@@ -271,9 +273,9 @@ manual update, upgrade pre-backup and uninstall/project-data separation. Its own
 completion requires the three-platform lifecycle and attack matrix, reproducible
 core/source provenance and Logo hash gate, with no public HTTP in production UI.
 
-P2-02's missing bundled Electron entry remains an executable G10 RED against
-`apps/desktop/package.json`; unrelated-source release-tag acceptance remains G12
-RED. The G9 browser screenshots and loopback journeys are not desktop installation
+P2-02 now finds a real bundled Electron entry. The exact public-tag positive and
+unrelated-source negative checks are executable; their passing verifier test does
+not validate a new public release. The G9 browser screenshots and loopback journeys are not desktop installation
 evidence. Installation-state visual/lifecycle acceptance belongs to G10/G12/G13;
 the final default switch, migration cutover and published claims remain G12/G13.
 
@@ -287,3 +289,42 @@ just static screenshots. Copy states the real result and next action in natural,
 short language; internal names stay in technical details. Source review and
 generated images alone do not constitute acceptance. Run affected checks during
 iteration and one final public gate, without repeating unrelated platform audits.
+
+### Current desktop entry and remaining G10/G11 work
+
+Build and launch commands and the installed-window test entry are in
+[`apps/desktop/README.md`](../../../apps/desktop/README.md). The application loads
+`sestina://app/project/today` inside Electron and uses a native project-folder
+picker. No system Node, pnpm or first-launch runtime download is needed by the
+packaged Windows program. The public preview remains v0.2.0/schema 20.
+
+The remaining implementation is part of G10, not a reason to advance to G12:
+
+- Complete the verified update download/private staging/pre-upgrade backup/install
+  sequence. The existing signed-identity verifier and truthful unavailable-source
+  screen do not constitute this sequence.
+- Complete legacy credential and preference migration with verified read-back,
+  interrupted migration recovery, and the supported credential-unavailable path.
+- Complete schema-25 managed backup/upgrade/restore desktop integration and the
+  installed failure matrix. Do not use schema-20 backup acceptance for schema 25.
+- Finish packaged companion/MCP usage, platform path and credential matrices,
+  suspend/exit recovery and native-dialog focus, keyboard and motion observation.
+- Run macOS arm64 and Linux x64 installation journeys on those real systems.
+  No such machines, public signing accounts, notarization or trusted production
+  update roots were supplied for this local task. Do not push or trigger remote
+  work to obtain them without authorization.
+- Finish G11's remaining capability/terminology checks against the resulting
+  implementation. Existing historical terms, samples and hashes remain intact.
+
+### Exact G12 entry after G10/G11 completion
+
+G12 is not yet active. Its entry is the **same committed candidate source and
+actual three-platform installers** after the preceding implementation, OS and
+native visual requirements pass. Use plan 11's complete migration/restore and
+Forget matrix, plan 13's production acceptance, and plan 14's cutover rehearsal;
+check actual artifact provenance, resources and signed/notarized outer packages.
+Keep the current public default until the accepted G13 switch. After that switch,
+G13 repeats affected installed startup, deep links, old write rejection, migration,
+recovery, network/IPC, native focus, bilingual themes, text scaling and motion
+journeys against the final installed artifacts. Browser or historical preview
+evidence cannot close those installation requirements.

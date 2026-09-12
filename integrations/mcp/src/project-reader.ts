@@ -1,9 +1,10 @@
 import {
   openSestina,
+  readKernelReadonlyContext,
 } from "@sestina/core";
 import { createHash } from "node:crypto";
 import { readFile, realpath, stat } from "node:fs/promises";
-import { isAbsolute } from "node:path";
+import { isAbsolute, dirname } from "node:path";
 import {
   mcpErr,
   mcpOk,
@@ -142,6 +143,11 @@ class CoreProjectReader implements ProjectReader {
     if (this.#closed) return mcpErr("project_state_unavailable");
     const queried = await runWithQueryDeadline(
       async () => {
+        const kernel = await readKernelReadonlyContext(dirname(dirname(this.#databasePath)));
+        if (kernel) {
+          if (kernel.projectId !== this.#projectId) throw new Error("project_binding_changed");
+          return { ok: true as const, value: kernel.brief ? { ...kernel, brief: kernel.brief } : undefined };
+        }
         const opened = await openSestina({
           databasePath: this.#databasePath,
           readOnly: true,
@@ -317,6 +323,10 @@ export async function openProjectReader(options: OpenProjectReaderOptions): Prom
 
   const database = await revalidateProjectStateDatabase(paths.value);
   if (!database.ok) return database;
+  try {
+    const kernel = await readKernelReadonlyContext(paths.value.projectRoot);
+    if (kernel) return mcpOk(new CoreProjectReader(database.value, kernel.projectId, options.outputLimitBytes, options.queryTimeoutMs));
+  } catch { return mcpErr("project_state_unavailable"); }
   const opened = await openSestina({
     databasePath: database.value,
     readOnly: true,

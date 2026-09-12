@@ -47,3 +47,7 @@ implementation order.
 - [Third-party notices](release/THIRD-PARTY-NOTICES.md)
 - [Official logo](product/OFFICIAL-LOGO.md)
 - [Trademark guidance](../TRADEMARKS.md)
+
+## Internal desktop development
+
+[Electron candidate](../apps/desktop/README.md) contains the current build, run, runtime-test and packaging commands. Public installation guides above continue to describe the released v0.2.0 preview. A locally generated candidate is not a signed public release.

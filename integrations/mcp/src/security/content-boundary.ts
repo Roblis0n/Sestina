@@ -16,6 +16,7 @@ export const RESEARCH_CONTENT_BOUNDARY = Object.freeze({
 });
 
 export interface ResearchContextPayload {
+  readonly source?: { readonly schema: 25; readonly projectStateRevision: number; readonly canonicalHash: string };
   readonly schemaVersion: typeof MCP_RESEARCH_CONTEXT_SCHEMA_VERSION;
   readonly contentBoundary: typeof RESEARCH_CONTENT_BOUNDARY;
   readonly projectId: string;
@@ -61,7 +62,8 @@ export interface ResearchContinuitySource {
 
 export interface ResearchContextSource {
   readonly projectId: string;
-  readonly brief: CoreBriefState;
+  readonly brief: Pick<CoreBriefState, "brief" | "version">;
+  readonly source?: ResearchContextPayload["source"];
   readonly continuity: ResearchContinuitySource;
 }
 
@@ -125,6 +127,7 @@ export function projectResearchContext(source: ResearchContextSource, maxItems: 
 
   return Object.freeze({
     schemaVersion: MCP_RESEARCH_CONTEXT_SCHEMA_VERSION,
+    ...(source.source ? { source: Object.freeze({ ...source.source }) } : {}),
     contentBoundary: RESEARCH_CONTENT_BOUNDARY,
     projectId: source.projectId,
     briefId: state.brief.id,

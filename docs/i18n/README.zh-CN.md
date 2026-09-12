@@ -93,3 +93,7 @@ node apps/research-room/dist/main.js
 项目采用 [Apache License 2.0](../../LICENSE)。名称和官方 Logo 的商标边界见
 [TRADEMARKS.md](../../TRADEMARKS.md)。参与贡献前请阅读
 [CONTRIBUTING.md](../../CONTRIBUTING.md)，并且只使用合成数据。
+
+## 内部桌面候选
+
+当前源码包含 G10 Electron 候选，承接 schema25 的四入口研究界面。它尚未公开发行，不改变已发布的 v0.2.0 预览。开发运行与本地候选构建见[桌面入口](../../apps/desktop/README.md)，实际完成范围见[实施状态](../product/restructure/IMPLEMENTATION-STATUS.md)。三平台安装与生产签名验收尚未完成。

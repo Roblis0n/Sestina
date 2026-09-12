@@ -146,3 +146,4 @@ export type {
 } from "@sestina/research";
 export { createKernelProject } from "./kernel-project-create.js";
 export { projectKernelWorkspace, projectWorkspaceReview } from "./kernel-workspace.js";
+export { readKernelReadonlyContext } from "./kernel-readonly-context.js";

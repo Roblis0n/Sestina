@@ -1,5 +1,10 @@
 # macOS arm64 / macOS Apple 芯片安装
 
+This page describes the published preview. The internal Electron candidate's
+macOS installation, signing, notarization and Gatekeeper acceptance have not
+been established in this local task. See the
+[desktop candidate instructions](../../apps/desktop/README.md).
+
 Requirements / 要求：Apple silicon macOS、Node.js 24.x、本地浏览器。
 This public preview is not code-signed or notarized.
 

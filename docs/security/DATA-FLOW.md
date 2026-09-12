@@ -62,3 +62,7 @@ authority. The new Provider send implementation and production UI are downstream
 Known managed copies and privacy redactions are recorded; unobserved external
 copies remain unknown. See [foundation operations](../product/restructure/G1-G3-OPERATIONS.md)
 for the exact API and backup/Forget boundary.
+
+## Internal desktop candidate flow
+
+Renderer → named preload method → validated main window/frame/session → shared application adapter → Kernel → SQLite. Research commits and external sends additionally pass main-owned user confirmation bound to the immutable Kernel view. Provider DNS validation precedes a fresh pinned socket, and Kernel inputs are rechecked before body bytes are written. Host intake remains temporary draft/status only. Update signature verification has synthetic positive/negative tests; the internal candidate has no production trust root or automatic network check. [Candidate operations and remaining evidence](../../apps/desktop/README.md).

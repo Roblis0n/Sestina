@@ -20,6 +20,8 @@ for (const [address, prefix] of [
 const globalV6 = new BlockList();
 globalV6.addSubnet("2000::", 3, "ipv6");
 blocked.addSubnet("2001:db8::", 32, "ipv6");
+blocked.addSubnet("2002::", 16, "ipv6");
+blocked.addSubnet("2001::", 32, "ipv6");
 export function providerAddressAllowed(
   address: string,
   locality: "local" | "external",
@@ -126,7 +128,7 @@ export function createPinnedProviderFetch(
           const status = response.statusCode ?? 0;
           if (status < 200 || status >= 300) {
             response.destroy();
-            fail("provider_http_error");
+            fail(status >= 300 && status < 400 ? "provider_result_uncertain" : "provider_http_error");
             return;
           }
           response.on("data", (chunk: Buffer) => {

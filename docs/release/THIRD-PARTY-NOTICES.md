@@ -1,5 +1,14 @@
 # Third-party notices
 
+The internal G10 desktop candidate additionally redistributes Electron 44.3.0
+(MIT), including its Node.js, Chromium and SQLite runtime. Electron's own
+`LICENSE.electron.txt` and `LICENSES.chromium.html` accompany the installed
+runtime. The candidate ASAR includes this notice and the Sestina license.
+Electron Builder 26.15.3 (MIT) is a build tool, not an application runtime
+dependency. This candidate inventory does not change the historical preview
+inventory below. The desktop uses Electron safeStorage; it does not load the
+preview's separate DPAPI/keyring native modules for its credential path.
+
 Sestina source code and documentation are licensed under Apache License 2.0
 unless a file states otherwise. This document records third-party software that
 is compiled into or shipped with the Sestina Research Room 0.2.0 public-preview

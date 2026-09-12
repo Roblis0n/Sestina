@@ -52,3 +52,7 @@ Removing and re-extracting the runtime does not remove project state. Always
 verify the replacement artifact SHA-256 before opening an existing project.
 
 删除并重新解压运行时不会删除项目状态；打开既有项目之前必须先校验新制品。
+
+## Internal desktop boundary
+
+The Electron candidate does not automatically check or install updates. Without an installed trusted production key it reports the update source as unavailable. Signature, source, platform, version and byte-integrity checks have a separate local test entry; actual download, verified pre-upgrade backup, install/cancel and failure-recovery closure still require the installed-candidate journey. Do not treat an unsigned local build as a verified update. [Current desktop entry](../../apps/desktop/README.md).

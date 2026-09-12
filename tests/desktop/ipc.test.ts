@@ -9,7 +9,8 @@ it("real Electron IPC keeps renderer isolated, rejects forged inputs, and preser
   const projectPath = join(root, "project"); await mkdir(projectPath);
   const requireDesktop = createRequire(resolve("apps/desktop/package.json"));
   const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE;
-  const electron = await _electron.launch({ executablePath: requireDesktop("electron"), args: [resolve("apps/desktop"), `--user-data-dir=${join(root, "profile")}`], env, timeout: 30000 });
+  const installedExecutable = process.env.SESTINA_TEST_INSTALLED_EXECUTABLE;
+  const electron = await _electron.launch({ executablePath: installedExecutable ?? requireDesktop("electron"), args: [...(installedExecutable ? [] : [resolve("apps/desktop")]), `--user-data-dir=${join(root, "profile")}`], env, timeout: 30000 });
   try {
     const page = await electron.firstWindow();
     await electron.evaluate(({ BrowserWindow }) => { for (const window of BrowserWindow.getAllWindows()) window.hide(); });
@@ -40,5 +41,23 @@ it("real Electron IPC keeps renderer isolated, rejects forged inputs, and preser
     expect(read.value.review.status).toBe("manifest_confirmed");
     expect(read.value.review.terminalOutcome).toBeNull();
     expect(read.value.review.effectDraft.previewHash).toBe(prepared.value.effectDraft.previewHash);
+    // A renderer assertion must not authorize file repair, even on a valid selected folder.
+    expect((await invoke("repairBrief", { projectPath, confirmed: true })).error?.code).toBe("confirmation_declined");
   } finally { await electron.close(); await rm(root, { recursive: true, force: true, maxRetries: 4, retryDelay: 200 }); }
 }, 120000);
+
+it("a crashed renderer cannot keep the application waiting for an unreachable close guard", async () => {
+  const root = await mkdtemp(join(tmpdir(), "sestina-desktop-crash-"));
+  const requireDesktop = createRequire(resolve("apps/desktop/package.json"));
+  const env = { ...process.env }; delete env.ELECTRON_RUN_AS_NODE;
+  const installed = process.env.SESTINA_TEST_INSTALLED_EXECUTABLE;
+  const electron = await _electron.launch({ executablePath: installed ?? requireDesktop("electron"), args: [...(installed ? [] : [resolve("apps/desktop")]), `--user-data-dir=${root}`], env });
+  const child = electron.process();
+  try {
+    await electron.firstWindow();
+    const closed = electron.waitForEvent("close", { timeout: 5000 });
+    void closed.catch(() => {});
+    await electron.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0]!.webContents.forcefullyCrashRenderer(); }).catch(() => {});
+    await expect(closed).resolves.toBeUndefined();
+  } finally { child.kill(); await rm(root, { recursive: true, force: true, maxRetries: 4, retryDelay: 200 }).catch(() => {}); }
+}, 30000);

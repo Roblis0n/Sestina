@@ -162,3 +162,7 @@ bundled dependency terms are recorded in
 [third-party notices](docs/release/THIRD-PARTY-NOTICES.md). The copyright
 license does not grant trademark rights in the Sestina name or official logo;
 see [TRADEMARKS.md](TRADEMARKS.md).
+
+## Internal desktop candidate
+
+The G10 Electron candidate is available from this source checkout. It uses the schema-25 four-entry research interface and is separate from the published v0.2.0 preview. See [desktop build and operation](apps/desktop/README.md) and the [current verification status](docs/product/restructure/IMPLEMENTATION-STATUS.md). It is not available as a new public Release. Three-platform installation and production signing acceptance are not complete.

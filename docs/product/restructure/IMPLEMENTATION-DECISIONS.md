@@ -338,3 +338,23 @@ store is introduced.
 
 This is the explicit schema-25 browser candidate only. The shipped v0.2.0/schema-20
 default, official logo, Electron packaging and final cutover are not changed.
+
+## G10/G11 candidate implementation decisions
+
+These decisions describe the internal desktop work after G9. They do not amend
+the preceding historical completion evidence or declare G10/G11 complete.
+
+| User need | Owner, confirmation and failure boundary |
+| --- | --- |
+| Use the same saved research workflow in a desktop window | `packages/application-ports` owns the browser-safe typed contract; `packages/application` owns the neutral application adapter. Electron main supplies resources and native interaction; Kernel remains the only canonical writer. The HTTP candidate imports the same adapter. |
+| Confirm a change or exact outbound request | Main obtains a fresh Kernel snapshot and immutable binding. A native dialog supplies the final user answer. The one-use grant expires, is revoked on session/navigation changes, and cannot be created by renderer JSON. Native copy quotes identifiers and exposes proof without treating research text as system instructions. |
+| Close a project without late work reviving it | Main closes the existing application session and Host listener, revokes confirmation and aborts credential prompts on close, crash or suspend. Renderer-crash teardown destroys the unreachable window instead of waiting for its dirty-text guard. Persisted attempts retain their existing uncertainty recovery. |
+| Send only the checked request | The neutral Provider transport validates all DNS answers, pins the connection, retains hostname certificate verification, ignores implicit proxies, disables redirects and sends once. Redirect after a possible send is uncertain. Provider configuration generation has a persistent high-water mark across delete/restart/recreation. |
+| Read through MCP while the desktop owns a write lease | Core exposes a bounded read-only schema-25 context from one validated SQLite snapshot, including source revision/hash and excluding Memory/outbound bodies. MCP never imports private storage or obtains Authority. Legacy reads retain their separate source classification. |
+| Inspect where an installer came from | Candidate manifests bind the real source commit/tree, committed lock, build toolchain, migration source, official Logo and allowlisted files. Actual ASAR bytes and the Windows executable architecture are checked. Two independent unsigned-core builds must agree; unsigned candidate status is explicit. Public tags, signing and notarization are separate checks. |
+| Know whether an update was checked | The candidate has no configured trusted production source. Settings reports source unavailable on explicit check. The signed-identity verifier is implemented; downloading, private staging, pre-upgrade backup and installation orchestration are not yet complete and are not presented as a working updater. |
+
+Windows installation screenshots are evidence of the installed renderer only.
+Synthetic picker/confirmation answers in automation are never native-dialog
+acceptance. OS-specific credential, focus, motion, migration and installer results
+remain individually recorded. No Windows result establishes macOS/Linux behavior.

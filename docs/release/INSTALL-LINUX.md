@@ -1,5 +1,9 @@
 # Ubuntu x64 / Ubuntu x64 安装
 
+This page describes the published preview. The internal Electron candidate's
+Linux installation and Secret Service lifecycle have not been established in
+this local task. See the [desktop candidate instructions](../../apps/desktop/README.md).
+
 Requirements / 要求：Ubuntu x64、Node.js 24.x、本地浏览器。
 
 Download from the same `v0.2.0` GitHub Release:

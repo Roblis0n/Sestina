@@ -4,6 +4,7 @@ const execute = promisify(execFile);
 /** The OS entry dialog sends its value only to main, never to research webContents. */
 export async function requestCredential(
   language: string,
+  signal?: AbortSignal,
 ): Promise<string | undefined> {
   if (process.platform !== "win32") {
     try {
@@ -18,7 +19,7 @@ export async function requestCredential(
           : ["--password", "--title=Sestina API key"];
       return (
         (
-          await execute(command, args, { timeout: 120000, maxBuffer: 16384 })
+          await execute(command, args, { timeout: 120000, maxBuffer: 16384, signal })
         ).stdout.trim() || undefined
       );
     } catch {
@@ -51,7 +52,7 @@ $inputBox.Clear(); $form.Dispose()`;
         "-EncodedCommand",
         Buffer.from(source, "utf16le").toString("base64"),
       ],
-      { windowsHide: true, timeout: 120000, maxBuffer: 16384 },
+      { windowsHide: true, timeout: 120000, maxBuffer: 16384, signal },
     );
     return stdout
       ? Buffer.from(stdout.trim(), "base64").toString("utf8")

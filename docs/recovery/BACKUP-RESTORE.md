@@ -83,3 +83,7 @@ available for `unavailable`; and use the managed status/restore procedure for
 `corrupt`. A failed open or migration does not overwrite the existing database.
 
 Uninstalling the CLI or running `disconnect` does not delete these bundles or any project `.sestina/` data. See [the privacy policy](../../PRIVACY.md) and [data-flow inventory](../security/DATA-FLOW.md).
+
+## Internal desktop candidate
+
+The desktop start page delegates migration previews, migration and recovery to the existing Kernel copy-on-write services. The project must be closed for maintenance. Its native directory picker supplies the target directory; a page-provided path alone grants no file access. This integration does not by itself prove interrupted upgrade, disk-full, rename-failure or installed downgrade recovery. Those installation journeys remain explicit G10/G12 acceptance requirements. See [desktop operations](../../apps/desktop/README.md).

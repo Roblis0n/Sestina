@@ -50,3 +50,7 @@ data are preserved and refused. These checks do not grant user authority or prov
 Provider semantics. Electron IPC, connect-time Provider security and three-platform
 release verification remain downstream; see the
 [implemented foundation and evidence](docs/product/restructure/G1-G3-EVIDENCE.md).
+
+## Internal desktop boundary
+
+The G10 candidate uses sandboxed, context-isolated renderer windows, a local resource allowlist, restrictive CSP and main-frame/window checks on each named IPC entry. Kernel remains the research authority boundary; main-owned confirmation is required for commits and external sends. Provider connections validate all DNS results and pin one fresh socket, with no redirects, proxy environment, connection reuse or retries. These mechanisms have targeted local tests; they do not establish completion of the three-platform attack/installation matrix. See [candidate status](apps/desktop/README.md).

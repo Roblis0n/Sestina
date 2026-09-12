@@ -71,3 +71,7 @@ Core owns the copied migration, maintenance fence, verified backup and explicit
 recovery orchestration. No new renderer, transport or model write path is added.
 The six complete effect handlers and Provider orchestration remain G4/G5 work.
 See [operations and the exact G4 continuation](product/restructure/G1-G3-OPERATIONS.md).
+
+## Internal desktop candidate
+
+The public application adapters are now shared through packages/application; browser-safe contracts live in packages/application-ports. HTTP and Electron main use the same Kernel adapter. Desktop preload exposes named methods only and renderer imports only the contract/projection side. Main loads bundled resources through the sestina protocol and owns native interaction and resource shutdown. See [dependency rules](architecture/01-DEPENDENCY-RULES.md) and [desktop operations](../apps/desktop/README.md).

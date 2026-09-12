@@ -1,5 +1,11 @@
 # `@sestina/mcp`
 
+The schema-25 candidate uses Core's validated read-only snapshot so it can see
+committed changes while Electron retains the project writer lease. Returned
+context carries source revision/hash and remains untrusted research data with
+no Authority. This source package is not yet a standalone launcher bundled into
+the internal desktop installer. See [desktop candidate status](../../apps/desktop/README.md).
+
 `@sestina/mcp` is Sestina's production, local, read-only STDIO MCP package. A host starts the `sestina-mcp` binary as a child process and supplies one explicit absolute Sestina project root:
 
 ```text

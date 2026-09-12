@@ -6,6 +6,19 @@ commands inside the local Research Room and Kernel.
 
 ## Public MCP surface
 
+The schema-25 candidate keeps this read-only surface. Core supplies a consistent
+canonical snapshot even while the desktop owns the writer lease. Its context
+includes the source revision and canonical hash; Memory bodies, exact outbound
+requests and raw Provider responses are excluded. A new read observes committed
+desktop changes without creating a second research writer.
+
+The desktop Host draft bridge is a separate, explicit, ten-minute grant. It is
+off at startup and closes with the project. It admits linked drafts and their
+status only. The existing companion Skill and Agent Corrector remain proposal
+producers; they cannot confirm a Manifest or commit a decision. The desktop
+installer does not yet include a standalone MCP launcher; source-development
+MCP setup below remains separate from installing the desktop application.
+
 The stdio server exposes exactly:
 
 - tool `health`;

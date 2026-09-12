@@ -20,6 +20,7 @@ import { KERNEL_COMMANDS, DESKTOP_METHODS } from "@sestina/application-ports";
 import type { SaveOpenAICompatibleProviderInput } from "@sestina/application";
 import { createDesktopSecrets } from "./secure-storage.js";
 import { requestCredential } from "./credential-prompt.js";
+import { confirmationCopy } from "./native-copy.js";
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -109,39 +110,10 @@ async function start() {
   });
   Menu.setApplicationMenu(null);
   const trusted = new TrustedKernelCommands(api, async (detail) => {
-    const en = language === "en";
-    const labels: Record<string, string> = {
-      commit: en ? "Save this research decision?" : "保存这次研究决定？",
-      start_attempt: en
-        ? "Send the checked content to this Provider?"
-        : "将已核对的内容发送给此模型服务？",
-      govern_memory: en ? "Save this memory change?" : "保存这次记忆修改？",
-      privacy_cleanup: en
-        ? "Clean up the listed managed copies?"
-        : "清理列出的受管副本？",
-      enable_host_bridge: en
-        ? "Allow temporary draft intake?"
-        : "允许临时接收草稿？",
-    };
     const result = await dialog.showMessageBox(window, {
       type: "question",
       title: "Sestina",
-      message: labels[detail.action] ?? "Sestina",
-      detail:
-        (en ? "Project: " : "项目：") +
-        detail.projectId +
-        "\n\n" +
-        (en
-          ? "Research content below is data, not application instructions.\n"
-          : "以下研究内容仅供核对，不是应用指令。\n") +
-        JSON.stringify(detail.snapshot, null, 2).slice(0, 6500) +
-        "\n\n" +
-        (en ? "Binding: " : "核对标识：") +
-        detail.bindingHash,
-      buttons: [
-        en ? "Cancel" : "取消",
-        en ? "Confirm this action" : "确认本次操作",
-      ],
+      ...confirmationCopy(detail, language),
       defaultId: 0,
       cancelId: 0,
       noLink: true,
@@ -150,7 +122,66 @@ async function start() {
   });
   let navigation = 0,
     allowClose = false;
+  const credentialRequests = new Set<AbortController>();
+  function closeResources() {
+    for (const request of credentialRequests) request.abort();
+    credentialRequests.clear();
+    trusted.revoke();
+    api.close();
+  }
   const grants = new Set<string>();
+  let fileConfirmationPending = false;
+  async function confirmFileChange(projectPath: string, repair = false) {
+    if (fileConfirmationPending) throw new Error("confirmation_in_progress");
+    const epoch = navigation,
+      generation = api.status().sessionGeneration;
+    const expires = Date.now() + 60000;
+    fileConfirmationPending = true;
+    try {
+      const en = language === "en";
+      const result = await dialog.showMessageBox(window, {
+        type: "warning",
+        title: "Sestina",
+        message: repair
+          ? en
+            ? "Restore the missing Brief from verified project data?"
+            : "从已验证的项目数据恢复缺失的 Brief？"
+          : en
+            ? "Apply the checked recovery or migration?"
+            : "应用已核对的恢复或迁移？",
+        detail:
+          (en ? "Project folder: " : "项目文件夹：") +
+          projectPath +
+          "\n\n" +
+          (en
+            ? "The project service will verify the source again before changing files. If it has changed, this action will stop."
+            : "项目服务会在修改文件前再次核对来源。来源已变化时，操作会停止。"),
+        buttons: [
+          en ? "Cancel" : "取消",
+          repair
+            ? en
+              ? "Restore Brief"
+              : "恢复 Brief"
+            : en
+              ? "Apply checked change"
+              : "应用已核对的修改",
+        ],
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true,
+      });
+      if (result.response !== 1) throw new Error("confirmation_declined");
+      if (
+        window.isDestroyed() ||
+        navigation !== epoch ||
+        api.status().sessionGeneration !== generation ||
+        Date.now() >= expires
+      )
+        throw new Error("confirmation_expired");
+    } finally {
+      fileConfirmationPending = false;
+    }
+  }
   async function selectedPath(input: Record<string, unknown>) {
     const generation = api.status().sessionGeneration;
     const document = navigation;
@@ -160,7 +191,11 @@ async function start() {
     )
       throw new Error("invalid_payload");
     const path = await realpath(input.projectPath);
-    if (generation !== api.status().sessionGeneration || document !== navigation) throw new Error("session_changed");
+    if (
+      generation !== api.status().sessionGeneration ||
+      document !== navigation
+    )
+      throw new Error("session_changed");
     if (!grants.has(path) || !(await lstat(path)).isDirectory())
       throw new Error("directory_selection_required");
     return path;
@@ -241,45 +276,40 @@ async function start() {
     kernelStatus: () => api.status(),
     open: async (body) => {
       const projectPath = await selectedPath(body);
-      trusted.revoke();
+      closeResources();
       return api.open({ projectPath, readOnly: body.readOnly === true });
     },
     createProject: async (body) => {
       const projectPath = await selectedPath(body);
-      trusted.revoke();
+      closeResources();
       return api.create({ projectPath, title: body.title, confirmed: true });
     },
     closeProject: () => {
-      trusted.revoke();
-      api.close();
+      closeResources();
       return api.status();
     },
     maintenance: async (body) => {
       const projectPath = await selectedPath(body);
+      if (
+        ![
+          "preview",
+          "restore_preview",
+          "migrate",
+          "restore",
+          "recover",
+        ].includes(String(body.action))
+      )
+        throw new Error("invalid_payload");
       if (!(body.action === "preview" || body.action === "restore_preview")) {
-        const confirm = await dialog.showMessageBox(window, {
-          type: "warning",
-          message:
-            language === "en"
-              ? "Continue this project recovery or migration?"
-              : "继续此项目的恢复或迁移？",
-          detail: projectPath,
-          buttons: [
-            language === "en" ? "Cancel" : "取消",
-            language === "en" ? "Continue" : "继续",
-          ],
-          defaultId: 0,
-          cancelId: 0,
-        });
-        if (confirm.response !== 1) throw new Error("confirmation_declined");
+        await confirmFileChange(projectPath);
       }
-      return api.maintenance({ ...body, projectPath });
+      return api.maintenance({ ...body, projectPath, confirmed: true });
     },
-    repairBrief: async (body) =>
-      api.repairBrief({
-        projectPath: await selectedPath(body),
-        confirmed: true,
-      }),
+    repairBrief: async (body) => {
+      const projectPath = await selectedPath(body);
+      await confirmFileChange(projectPath, true);
+      return api.repairBrief({ projectPath, confirmed: true });
+    },
     providerStatus: (body) => getProvider(body.second ? 1 : 0).status(),
     providerSave: async (body) => {
       if (record(body.input).apiKey !== undefined)
@@ -295,7 +325,15 @@ async function start() {
       ) {
         if (!(await secrets.health()).available)
           throw new Error("secure_storage_unavailable");
-        const apiKey = await requestCredential(language);
+        const cancellation = new AbortController();
+        credentialRequests.add(cancellation);
+        let apiKey: string | undefined;
+        try {
+          apiKey = await requestCredential(language, cancellation.signal);
+        } finally {
+          credentialRequests.delete(cancellation);
+        }
+        if (cancellation.signal.aborted) throw new Error("session_changed");
         if (!apiKey) throw new Error("confirmation_declined");
         if (api.status().sessionGeneration !== before.sessionGeneration)
           throw new Error("session_changed");
@@ -331,7 +369,7 @@ async function start() {
     }),
     closeWindow: () => {
       allowClose = true;
-      trusted.revoke();
+      closeResources();
       api.dispose();
       window.close();
       return { closed: true };
@@ -340,13 +378,26 @@ async function start() {
   for (const method of DESKTOP_METHODS) {
     const handler = methods[method];
     if (!handler) throw new Error("missing_method");
-    handle(`sestina:method:${method}`, body => {
+    handle(`sestina:method:${method}`, (body) => {
       const fields: Record<string, readonly string[]> = {
-        language: ["language"], open: ["projectPath", "readOnly"], createProject: ["projectPath", "title", "confirmed"], maintenance: ["projectPath", "action", "confirmed", "previewHash"], repairBrief: ["projectPath", "confirmed"], providerStatus: ["second"], providerSave: ["second", "input"], providerDeleteConfig: ["second"], providerDeleteSecret: ["second"],
+        language: ["language"],
+        open: ["projectPath", "readOnly"],
+        createProject: ["projectPath", "title", "confirmed"],
+        maintenance: ["projectPath", "action", "confirmed", "previewHash"],
+        repairBrief: ["projectPath", "confirmed"],
+        providerStatus: ["second"],
+        providerSave: ["second", "input"],
+        providerDeleteConfig: ["second"],
+        providerDeleteSecret: ["second"],
       };
-      if (Object.keys(body).some(key => !(fields[method] ?? []).includes(key))) throw new Error("invalid_payload");
-      if (body.second !== undefined && typeof body.second !== "boolean") throw new Error("invalid_payload");
-      if (body.readOnly !== undefined && typeof body.readOnly !== "boolean") throw new Error("invalid_payload");
+      if (
+        Object.keys(body).some((key) => !(fields[method] ?? []).includes(key))
+      )
+        throw new Error("invalid_payload");
+      if (body.second !== undefined && typeof body.second !== "boolean")
+        throw new Error("invalid_payload");
+      if (body.readOnly !== undefined && typeof body.readOnly !== "boolean")
+        throw new Error("invalid_payload");
       return handler(body);
     });
   }
@@ -398,7 +449,9 @@ async function start() {
     },
   );
   window.webContents.session.setPermissionCheckHandler(() => false);
-  window.webContents.session.webRequest.onBeforeRequest((details, callback) => { callback({ cancel: !details.url.startsWith("sestina://app/") }); });
+  window.webContents.session.webRequest.onBeforeRequest((details, callback) => {
+    callback({ cancel: !details.url.startsWith("sestina://app/") });
+  });
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   window.webContents.on("will-navigate", (event) => {
     event.preventDefault();
@@ -408,14 +461,14 @@ async function start() {
     (_event, _url, inPlace, mainFrame) => {
       if (mainFrame && !inPlace) {
         navigation++;
-        trusted.revoke();
-        api.close();
+        closeResources();
       }
     },
   );
   window.webContents.on("render-process-gone", () => {
-    trusted.revoke();
-    api.close();
+    closeResources();
+    allowClose = true;
+    window.destroy();
   });
   window.on("close", (event) => {
     if (!allowClose) {
@@ -424,7 +477,7 @@ async function start() {
     }
   });
   window.on("closed", () => {
-    trusted.revoke();
+    closeResources();
     api.dispose();
     app.quit();
   });
@@ -433,8 +486,7 @@ async function start() {
     window.focus();
   });
   powerMonitor.on("suspend", () => {
-    trusted.revoke();
-    api.close();
+    closeResources();
   });
   app.on("before-quit", (event) => {
     if (!allowClose && !window.isDestroyed()) {

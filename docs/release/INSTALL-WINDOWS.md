@@ -1,5 +1,11 @@
 # Windows x64 / Windows x64 安装
 
+This page describes the published v0.2.0 preview. Internal desktop candidates
+use a self-contained installer and have a separate
+[local installation entry](../../apps/desktop/README.md). They are not available
+from the public v0.2.0 Release. 本页以下步骤只用于已发布预览；内部桌面候选
+使用独立安装物，用户运行时不需要系统 Node、pnpm 或浏览器启动命令。
+
 Requirements / 要求：Windows x64、Node.js 24.x、本地浏览器。
 
 Download these files from the same `v0.2.0` GitHub Release:

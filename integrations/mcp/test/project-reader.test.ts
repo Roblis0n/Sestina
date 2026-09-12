@@ -1,8 +1,9 @@
-import { mkdtemp, mkdir, readFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import { migrateKernelProject, openResearchDeliberationKernel, openSestina } from "@sestina/core";
 import {
   openProjectReader,
   runWithQueryDeadline,
@@ -24,6 +25,42 @@ afterEach(async () => {
 });
 
 describe("@sestina/mcp project reader", () => {
+  it("reads the schema-25 Brief while the desktop Kernel holds its writer lease", async () => {
+    const fixture = await createProjectFixture();
+    cleanup.push(fixture.root);
+    const legacy = await openSestina({ databasePath: fixture.databasePath });
+    if (!legacy.ok) throw new Error("fixture_open");
+    try {
+      const brief = legacy.value.getBriefState(fixture.projectId);
+      if (!brief.ok || !brief.value) throw new Error("fixture_brief");
+      await writeFile(join(fixture.root, ".sestina/research-brief.yaml"), brief.value.yaml);
+    } finally { legacy.value.close(); }
+    await migrateKernelProject({ projectRoot: fixture.root });
+    const session = Object.freeze({ synthetic: true });
+    const kernel = await openResearchDeliberationKernel(fixture.root, { resolveUser: value => value === session ? { kind: "user", actorId: "synthetic-reader-owner" } : undefined });
+    let reader: Awaited<ReturnType<typeof openProjectReader>> | undefined;
+    try {
+      reader = await openProjectReader({ projectRoot: fixture.root, outputLimitBytes: 32768, queryTimeoutMs: 5000 });
+      expect(reader.ok).toBe(true);
+      if (!reader.ok) throw new Error("schema25_reader_unavailable");
+      const context = await reader.value.readResearchContext();
+      expect(context.ok).toBe(true);
+      if (context.ok) {
+        expect(context.value.projectQuestion).toBe(kernel.brief(session).active!.projectQuestion);
+        expect(context.value.contentBoundary.authority).toBe("none");
+      }
+      const before = kernel.brief(session);
+      const draft = kernel.createReview("Synthetic live writer update", session);
+      const skipped = await kernel.skipAssessment(draft.id, draft.version, session);
+      const prepared = kernel.prepareEffect(draft.id, skipped.version, { kind: "patch_brief", targetId: before.brief!.id, expectedVersion: before.brief!.version, baseVersionId: before.active!.id, changes: { currentTask: "Read the committed desktop change" }, reason: "Synthetic visibility" }, session);
+      kernel.commitEffect(draft.id, prepared.version, prepared.effectDraft!.previewHash, prepared.effectDraft!.authorityCommandId!, session);
+      const next = await reader.value.readResearchContext();
+      expect(next.ok && next.value.currentTask).toBe("Read the committed desktop change");
+      expect(next.ok && next.value.source?.projectStateRevision).toBe(kernel.brief(session).projectStateRevision);
+      reader.value.close();
+      expect((await reader.value.readResearchContext()).ok).toBe(false);
+    } finally { if (reader?.ok) reader.value.close(); kernel.close(); }
+  });
   it("requires an explicit project root before reading research context", async () => {
     await expect(openProjectReader({
       projectRoot: "",

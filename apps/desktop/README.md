@@ -39,11 +39,23 @@ includes an unsigned deterministic core, candidate manifest and platform
 installer. Packaging does not establish installation, signature, notarization or
 Gatekeeper acceptance. Do not publish these unsigned internal candidates.
 
-The installer is intended to remove the program while preserving selected
-projects and backups. Installation, uninstall/reinstall, credential migration,
-upgrade recovery and native visual evidence must be recorded against the actual
-candidate before G10 can be marked complete. macOS/Linux machines and production
+The Windows candidate has been installed in an isolated directory, used to save
+a synthetic draft, exited and reopened, uninstalled and reinstalled while retaining
+the original project. The installer is unsigned. This result does not establish
+public signing or the complete upgrade/recovery fault matrix.
+
+Remaining G10 work includes legacy credential/preference migration, the complete
+verified update download/staging/install path, schema-25 backup/upgrade integration,
+and native-dialog/focus/motion acceptance. macOS/Linux machines and production
 signing/notarization resources were explicitly unavailable for this local task.
+The local implementation gaps are separate from those unavailable resources.
+
+For actual installed-window checks, set `SESTINA_TEST_INSTALLED_EXECUTABLE` to the
+installed executable and run `pnpm test:desktop`. The installed visual journey is
+`node node_modules/vite-node/vite-node.mjs --config tests/post-0.2/vitest.foundation.config.ts tests/desktop/installed-visual.ts`.
+Its synthetic OS-picker and native-confirmation answers are test stubs; they
+exercise the real renderer, IPC, Kernel and SQLite but do not prove native-dialog
+interaction or visual acceptance. Inspect the captured installed-window images.
 
 See the current [implementation status](../../docs/product/restructure/IMPLEMENTATION-STATUS.md)
 and [operations record](../../docs/product/restructure/G1-G3-OPERATIONS.md).

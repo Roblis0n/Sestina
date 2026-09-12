@@ -103,7 +103,9 @@ code-fact question; it does not claim the target capability is implemented.
 | G7 — correction, Memory, Host and historical paths | `completed_and_verified` | Linked correction and optional isolated assessment, Memory governance and resumable copy handling, draft-only Host/Skill intake and historical read/export/conversion passed application, privacy, recovery, visual and final public verification. |
 | G8 — derived projections and recovery consistency | `completed_and_verified` | All seven derived surfaces use one consistent input identity; workflow/privacy/time invalidation, restore/rebuild races, preserved outbox and seeded large-project reads passed. |
 | G9 — four-entry navigation and complete research flow | `completed_and_verified` | The opt-in schema-25 candidate integrates Today/Review, Project, Search and Settings with durable drafts, real results, recovery and verified built-interface visual/interaction journeys. |
-| G10–G13 | `not_started` | Electron/security/release provenance, later evaluation and final migration/default/release cutover retain their accepted gate assignments. |
+| G10 — Electron, security and release provenance | `current_partial` | A real internal Electron candidate, Windows installer and targeted runtime/IPC/TLS/installation evidence exist. The remaining implementation and installation requirements are explicit in the operations and evidence records; this is not a completed desktop gate. |
+| G11 — terminology, copy and documentation | `current_partial` | Current desktop boundaries and bilingual native actions are documented without promoting unverified platform or release claims. Completion remains bounded by unresolved G10 work. |
+| G12–G13 | `not_started` | Final migration/production acceptance, default cutover and public release remain downstream; the current candidate does not authorize these stages. |
 
 Completion evidence is the implementation tree at
 `e08c760e0adcf63c1ea54b22103b903b5e17ec83`, verified on 2026-09-06 by

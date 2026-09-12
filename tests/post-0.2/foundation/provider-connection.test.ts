@@ -2,6 +2,25 @@ import { it, expect } from "vitest";
 import { createKernelOpenAICompatibleProvider } from "../../../packages/application/src/openai-compatible-provider.js";
 import { createPinnedProviderFetch, providerAddressAllowed, resolveProviderEndpoint } from "../../../packages/application/src/provider-transport.js";
 import { createServer } from "node:http";
+import { createResearchRoomServer } from "../../../apps/research-room/src/server.js";
+import { ProviderConfigurationService, createFileProviderConfigStore } from "../../../packages/application/src/provider-settings.js";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+it("deleting configuration and restarting cannot reuse an old Manifest generation", async () => {
+  const root = await mkdtemp(join(tmpdir(), "sestina-provider-generation-"));
+  const store = () => createFileProviderConfigStore({ filePath: join(root, "provider.json") });
+  const secrets = { health: async () => ({ available: false, backend: "none" as const }), describe: async () => ({ configured: false }), get: async () => undefined, set: async () => {}, delete: async () => {} };
+  const input = { providerId: "synthetic", model: "synthetic", baseUrl: "http://127.0.0.1:22222", timeoutMs: 1000 };
+  try { const first = new ProviderConfigurationService(store(), secrets); const original = await first.save(input); await first.deleteConfig(); const reopened = new ProviderConfigurationService(store(), secrets); expect((await reopened.save(input)).generation).toBeGreaterThan(original.generation); }
+  finally { await rm(root, { recursive: true, force: true }); }
+});
+it("rejects Fetch-blocked port 6679 instead of advertising an unusable UI origin", async () => {
+  const app = createResearchRoomServer({ port: 6679 });
+  let opened: Awaited<ReturnType<typeof app.start>> | undefined;
+  try { await expect(app.start().then(value => { opened = value; return value; })).rejects.toThrow("browser-blocked port"); }
+  finally { await opened?.close(); app.application.close(); }
+});
 it("rejects metadata addresses before opening an actual Provider socket", async () => {
   let sockets = 0;
   const fakeFetch = (async () => { sockets++; return new Response(JSON.stringify({ choices: [{ message: { content: "synthetic" } }] })); }) as typeof fetch;
@@ -25,7 +44,7 @@ it("pins a local socket, sends exact UTF-8 once, rejects redirect without follow
     const exact = '{"text":"中文 English\\n<untrusted>"}';
     await fetch(`http://127.0.0.1:${address.port}/`, { method: "POST", body: exact, redirect: "error" });
     expect(bodies).toEqual([exact]); expect(checks).toBe(1); expect(connections).toBe(1);
-    await expect(fetch(`http://127.0.0.1:${address.port}/redirect`, { method: "POST", body: "{}", redirect: "error" })).rejects.toThrow("provider_http_error");
+    await expect(fetch(`http://127.0.0.1:${address.port}/redirect`, { method: "POST", body: "{}", redirect: "error" })).rejects.toThrow("provider_result_uncertain");
     expect(connections).toBe(2); expect(bodies).toHaveLength(2);
   } finally { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
 });

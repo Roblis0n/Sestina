@@ -93,3 +93,7 @@ A Capsule is created and transferred only by an explicit user action. Sestina do
 Uninstalling a CLI package, removing the local App, or disconnecting a host does not automatically delete project research data. Current package manifests are locked against `preuninstall`, `uninstall`, or `postuninstall` data-deletion scripts. Delete `.sestina/` or explicit exports only as a separate, deliberate user filesystem action after preserving any required recovery copies.
 
 For the exact flow inventory, see [docs/security/DATA-FLOW.md](docs/security/DATA-FLOW.md). For recovery locations and commands, see [docs/recovery/BACKUP-RESTORE.md](docs/recovery/BACKUP-RESTORE.md).
+
+## Internal Electron candidate
+
+The schema-25 desktop candidate loads installed static resources without the Research Room HTTP server. Main owns project sessions, the default-off temporary Host bridge, OS-encrypted credentials and explicit Provider sends. The research renderer receives typed projections and named operations. Credentials are entered in a separate OS dialog; no API key is accepted from the research renderer. Linux basic_text storage is rejected. The candidate has no configured trusted production update source and performs no automatic update check. Candidate implementation and unverified lifecycle requirements are listed in [desktop operations](apps/desktop/README.md).

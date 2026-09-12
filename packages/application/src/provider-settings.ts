@@ -59,6 +59,7 @@ export interface ProviderRuntimeSnapshot {
 }
 
 export interface ProviderConfigStore {
+  lastGeneration?(): Promise<number>;
   read(): Promise<OpenAICompatibleProviderConfig | undefined>;
   write(config: OpenAICompatibleProviderConfig): Promise<void>;
   delete(): Promise<void>;
@@ -327,8 +328,26 @@ export function createFileProviderConfigStore(
   options: FileProviderConfigStoreOptions,
 ): ProviderConfigStore {
   const filePath = options.filePath;
+  const generationPath = filePath + ".generation.json";
+  const lastGeneration = async () => {
+    let raw: string;
+    try { raw = await readFile(generationPath, "utf8"); }
+    catch (error) { if (isMissing(error)) return 0; throw error; }
+    const value: unknown = JSON.parse(raw);
+    if (!isRecord(value) || value.schemaVersion !== 1 || !Number.isSafeInteger(value.generation) || Number(value.generation) < 0 || Object.keys(value).length !== 2) throw new ProviderSettingsError("provider_config_corrupt", "Provider configuration history needs recovery.");
+    return Number(value.generation);
+  };
+  const saveGeneration = async (generation: number) => {
+    const current = await lastGeneration();
+    if (generation <= current) return;
+    await mkdir(dirname(filePath), { recursive: true });
+    const temporary = generationPath + "." + randomBytes(12).toString("hex") + ".tmp";
+    await writeFile(temporary, JSON.stringify({ schemaVersion: 1, generation }), { flag: "wx", mode: 0o600 });
+    await rename(temporary, generationPath);
+  };
   let writes = Promise.resolve();
   return Object.freeze({
+    lastGeneration,
     async read(): Promise<OpenAICompatibleProviderConfig | undefined> {
       let raw: string;
       try {
@@ -364,6 +383,7 @@ export function createFileProviderConfigStore(
           );
         const directory = dirname(filePath);
         await mkdir(directory, { recursive: true });
+        await saveGeneration(parsed.generation);
         const staged = join(
           directory,
           `.provider.${randomBytes(12).toString("hex")}.tmp`,
@@ -385,6 +405,10 @@ export function createFileProviderConfigStore(
       return result;
     },
     async delete(): Promise<void> {
+      try {
+        const config = parseConfig(JSON.parse(await readFile(filePath, "utf8")) as unknown);
+        if (config) await saveGeneration(config.generation);
+      } catch (error) { if (!isMissing(error)) throw error; }
       await rm(filePath, { force: true });
     },
   });
@@ -528,7 +552,7 @@ export class ProviderConfigurationService {
         ? {}
         : { maxOutputTokens: input.maxOutputTokens }),
       locality: validated.locality,
-      generation: (previous?.generation ?? 0) + 1,
+      generation: Math.max(previous?.generation ?? 0, await this.store.lastGeneration?.() ?? 0) + 1,
     });
     await this.store.write(config);
     return config;

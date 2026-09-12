@@ -57,3 +57,7 @@ integrity, not research correctness, Provider quality, adoption, or market value
 
 请继续阅读对应平台指南、恢复指南和安全边界。制品身份与 hash 只能证明制品
 完整性，不能证明研究结论、Provider 质量、外部采用或市场价值。
+
+## Internal desktop packaging
+
+The commands above describe the published preview. The new internal Electron recipe is documented in [desktop operations](../../apps/desktop/README.md). It records a real source commit/tree, lock hash, bundled runtime, schema, Logo hash and file manifest. Its unsigned core is separate from platform signing. Candidate packages are not public v0.2.0 tag artifacts; no public push, tag, Release, signing account or notarization service is used by the local candidate recipe.
