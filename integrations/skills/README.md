@@ -2,6 +2,13 @@
 
 This private workspace package owns Sestina's host-neutral research-integrity instructions and deterministic Codex artifacts.
 
+The internal desktop package copies these generated artifacts into companion
+resources. Settings → Integrations → Read-only MCP and companion Skills opens
+that installation's files. It does not generate a different policy or activate a
+host listener. Agent Corrector remains same-agent/same-session proposal work;
+an explicit user handoff creates a Review draft, never a research decision,
+Memory selection, Manifest confirmation or Provider request.
+
 - `canonical/research-integrity.md` and `canonical/agent-corrector/` are the hand-maintained sources for the two Skill families.
 - `pnpm --filter @sestina/skills generate` refreshes the Codex host copy and the TypeScript constants consumed by the CLI.
 - `pnpm --filter @sestina/skills check` is read-only and fails when a generated artifact drifts.

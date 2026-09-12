@@ -1,5 +1,5 @@
 import { createRequire } from "node:module";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir, lstat } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { join, resolve, normalize } from "node:path";
@@ -26,6 +26,7 @@ const identity = JSON.parse(
 );
 for (const key of [
   "sourceCommit",
+  "sequence",
   "sourceTree",
   "lockSha256",
   "electron",
@@ -48,30 +49,104 @@ if (
   !/^[a-f0-9]{40}$/.test(identity.sourceCommit)
 )
   throw new Error("candidate_identity_invalid");
-const git = (...args) => execFileSync("git", args, { cwd: root, windowsHide: true });
-const expectedSource = process.argv[4] ?? git("rev-parse", "HEAD").toString().trim();
-if (identity.sourceCommit !== expectedSource) throw new Error("desktop_expected_source_mismatch");
-if (identity.sourceTree !== git("rev-parse", `${expectedSource}^{tree}`).toString().trim()) throw new Error("desktop_source_tree_mismatch");
-for (const [field, path] of [["lockSha256", "pnpm-lock.yaml"], ["migrationSourceSha256", "packages/storage/src/kernel-schema.ts"], ["logoSha256", "apps/research-room/client/public/sestina-logo.png"]]) {
-  if (identity[field] !== sha(git("show", `${expectedSource}:${path}`))) throw new Error(`desktop_source_content_mismatch:${field}`);
+const git = (...args) =>
+  execFileSync("git", args, { cwd: root, windowsHide: true });
+const expectedSource =
+  process.argv[4] ?? git("rev-parse", "HEAD").toString().trim();
+if (identity.sourceCommit !== expectedSource)
+  throw new Error("desktop_expected_source_mismatch");
+if (
+  identity.sourceTree !==
+  git("rev-parse", `${expectedSource}^{tree}`).toString().trim()
+)
+  throw new Error("desktop_source_tree_mismatch");
+for (const [field, path] of [
+  ["lockSha256", "pnpm-lock.yaml"],
+  ["migrationSourceSha256", "packages/storage/src/kernel-schema.ts"],
+  ["logoSha256", "apps/research-room/client/public/sestina-logo.png"],
+]) {
+  if (identity[field] !== sha(git("show", `${expectedSource}:${path}`)))
+    throw new Error(`desktop_source_content_mismatch:${field}`);
 }
-if (JSON.parse(asar.extractFile(archive, "package.json").toString()).version !== identity.version) throw new Error("desktop_package_version_mismatch");
+if (
+  JSON.parse(asar.extractFile(archive, "package.json").toString()).version !==
+  identity.version
+)
+  throw new Error("desktop_package_version_mismatch");
 if (identity.platform === "win32") {
   const binary = await readFile(join(directory, "Sestina Candidate.exe"));
-  if (binary.toString("ascii", 0, 2) !== "MZ" || binary.readUInt16LE(binary.readUInt32LE(0x3c) + 4) !== 0x8664 || identity.arch !== "x64") throw new Error("desktop_binary_target_mismatch");
+  if (
+    binary.toString("ascii", 0, 2) !== "MZ" ||
+    binary.readUInt16LE(binary.readUInt32LE(0x3c) + 4) !== 0x8664 ||
+    identity.arch !== "x64"
+  )
+    throw new Error("desktop_binary_target_mismatch");
 }
 const expected = new Set(manifest.files.map((file) => "/" + file.path));
+if (expected.size !== manifest.files.length)
+  throw Error("desktop_duplicate_content");
+const companion =
+  /^dist\/companion\/(?:index\.js|main\.js|runtime\.js|package\.json|runtime-identity\.json|NODE-LICENSE\.txt|node(?:\.exe)?|sestina-mcp(?:\.cmd)?|skills\/(?:agent-corrector|sestina-research-integrity)\/(?:SKILL\.md|agents\/openai\.yaml|references\/(?:drift-rubrics|intervention-contract|task-anchor)\.md))$/;
+const native =
+  /^dist\/node_modules\/(?:@primno\/dpapi\/(?:package\.json|LICENSE|dist\/index\.js|prebuilds\/win32-(?:x64|arm64)\/@primno\+dpapi\.node)|node-gyp-build\/(?:package\.json|LICENSE|index\.js|node-gyp-build\.js)|@napi-rs\/keyring(?:-(?:darwin-arm64|linux-x64-gnu))?\/(?:package\.json|LICENSE|README\.md|index\.js|keytar\.js|keyring\.[a-z0-9-]+\.node))$/;
 for (const file of manifest.files) {
   if (
     !/^(?:dist\/(?:main\.cjs|preload\.cjs|assets\.json|identity\.json|client\/(?:index\.html|sestina-logo\.png|assets\/[a-zA-Z0-9_.-]+))|package\.json|LICENSE|THIRD-PARTY-NOTICES\.md)$/.test(
       file.path,
-    )
+    ) &&
+    !companion.test(file.path) &&
+    !native.test(file.path)
   )
     throw new Error("desktop_unapproved_content");
-  const bytes = asar.extractFile(archive, normalize(file.path));
+  const bytes = companion.test(file.path)
+    ? await readFile(join(directory, "resources", file.path.slice(5)))
+    : asar.extractFile(archive, normalize(file.path));
   if (bytes.length !== file.size || sha(bytes) !== file.sha256)
     throw new Error(`desktop_content_mismatch:${file.path}`);
 }
+async function inspectResources(folder, prefix) {
+  for (const entry of await readdir(folder, { withFileTypes: true })) {
+    const path = join(folder, entry.name),
+      name = `${prefix}/${entry.name}`;
+    if (entry.isSymbolicLink()) throw Error("desktop_resource_symlink");
+    if (entry.isDirectory()) await inspectResources(path, name);
+    else if (!entry.isFile() || !expected.has(name))
+      throw Error(`desktop_unlisted_content:${name}`);
+  }
+}
+await inspectResources(
+  join(directory, "resources/companion"),
+  "/dist/companion",
+);
+await inspectResources(join(directory, "resources/app.asar.unpacked"), "");
+const runtime = JSON.parse(
+  await readFile(
+    join(directory, "resources/companion/runtime-identity.json"),
+    "utf8",
+  ),
+);
+const runtimeBytes = await readFile(
+  join(
+    directory,
+    "resources/companion",
+    identity.platform === "win32" ? "node.exe" : "node",
+  ),
+);
+if (
+  runtime.platform !== identity.platform ||
+  runtime.arch !== identity.arch ||
+  runtime.version !== "24.13.0" ||
+  runtime.sha256 !== sha(runtimeBytes)
+)
+  throw Error("desktop_companion_identity_mismatch");
+if (
+  identity.platform === "win32" &&
+  (runtimeBytes.toString("ascii", 0, 2) !== "MZ" ||
+    runtimeBytes.readUInt16LE(runtimeBytes.readUInt32LE(0x3c) + 4) !== 0x8664)
+)
+  throw Error("desktop_companion_target_mismatch");
+if (!(await lstat(join(directory, "resources/companion"))).isDirectory())
+  throw Error("desktop_companion_missing");
 for (const name of asar
   .listPackage(archive)
   .map((name) => name.replaceAll("\\", "/"))) {

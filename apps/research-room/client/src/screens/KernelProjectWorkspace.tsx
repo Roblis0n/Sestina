@@ -136,10 +136,28 @@ export function KernelProjectWorkspace({
     const bridge = desktop();
     return bridge?.onCloseRequested(() => {
       guard(() => {
-        void bridge.methods.closeWindow();
+        void bridge.methods.closeWindow().then((reply) => {
+          if (!reply.ok)
+            setError(
+              en
+                ? "A backup or update is still running. Wait for it to finish, or cancel the download from Updates before closing."
+                : "备份或更新仍在进行。请等待完成，或在更新页面取消下载后再关闭。",
+            );
+        });
       });
     });
   }, []);
+  useEffect(
+    () =>
+      desktop()?.onSessionClosed(() => {
+        setError(
+          en
+            ? "The project session closed when the computer suspended. Saved work is kept. Copy any unsaved text before closing and reopening the project."
+            : "电脑挂起时项目会话已关闭，已保存的工作仍在。请先复制尚未保存的文字，再关闭并重新打开项目。",
+        );
+      }),
+    [en],
+  );
   function openReview(r: KernelReviewDto) {
     changeLocation(`/project/reviews/${encodeURIComponent(r.id)}`);
     setRefresh((x) => x + 1);
@@ -634,7 +652,9 @@ export function KernelProjectWorkspace({
                       {en ? "Close project for recovery" : "关闭项目并进入恢复"}
                     </Button>
                   </>
-                ) : desktop() ? <DesktopAbout en={en} /> : (
+                ) : desktop() ? (
+                  <DesktopAbout en={en} guard={guard} />
+                ) : (
                   <>
                     <p>
                       {en

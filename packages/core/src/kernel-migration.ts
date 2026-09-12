@@ -835,6 +835,8 @@ export async function openKernelProject(
   readOnly = false,
 ): Promise<StorageDatabase> {
   const p = await paths(projectRoot);
+  if (await lstat(join(p.data, ".managed-restore.json")).catch(() => undefined))
+    fail("recovery_required");
   const j = await readJournal(p.journal);
   if (j && !["swapped", "rolled_back"].includes(j.stage))
     fail("recovery_required");

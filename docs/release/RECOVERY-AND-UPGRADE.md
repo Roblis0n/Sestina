@@ -1,6 +1,6 @@
 # Backup, restore, continuity, and upgrade / 备份、恢复、连续性与升级
 
-Open **Backup & recovery / 备份与恢复** from Research Room.
+The initial sections describe the published v0.2.0 preview. Open **Backup & recovery / 备份与恢复** from that Research Room. The internal schema-25 desktop workflow is described separately below.
 
 ## Backup / 备份
 
@@ -55,4 +55,22 @@ verify the replacement artifact SHA-256 before opening an existing project.
 
 ## Internal desktop boundary
 
-The Electron candidate does not automatically check or install updates. Without an installed trusted production key it reports the update source as unavailable. Signature, source, platform, version and byte-integrity checks have a separate local test entry; actual download, verified pre-upgrade backup, install/cancel and failure-recovery closure still require the installed-candidate journey. Do not treat an unsigned local build as a verified update. [Current desktop entry](../../apps/desktop/README.md).
+Settings → About exposes explicit check, download, cancel, install and recovery
+actions backed by the desktop updater. Signed metadata binds channel, version,
+sequence, platform, architecture, source commit, migration identity, size, full
+installer hash and unsigned-core proof identity. The current candidate accepts
+only the same schema/migration identity; new schema upgrades require a separately
+verified migration contract. The official trust-root set and source are empty,
+so this candidate reports unavailable and makes no update request.
+
+Isolated tests supply synthetic trust and fetch/installer assembly only through
+the service constructor. The installed application exposes no trust override.
+An explicit install closes project resources, verifies its pre-upgrade backup,
+preserves a checked copy of the old program, rechecks the installer and records
+the phase before launch. Restart reconciles the program identity without retrying
+the download or installer. Recovery opens the verified previous program; project
+recovery uses a compatible verified backup, never reverse SQL migration.
+
+本候选不会自动检查、下载或安装更新。尚无可信来源时明确显示不可用。更新文件
+验证通过仍不表示已安装；安装或重开结果不确定时保留阶段记录、旧程序和备份。
+实际安装验收范围及尚缺的系统／签名证据见[桌面记录](../../apps/desktop/README.md)。

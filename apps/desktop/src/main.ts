@@ -6,9 +6,11 @@ import {
   protocol,
   Menu,
   powerMonitor,
+  shell,
 } from "electron";
-import { readFile, realpath, lstat, mkdir, writeFile } from "node:fs/promises";
-import { join, resolve, extname } from "node:path";
+import { readFile, realpath, lstat, mkdir, chmod } from "node:fs/promises";
+import { join, resolve, extname, dirname, basename, relative } from "node:path";
+import { spawn } from "node:child_process";
 import {
   KernelApplicationApi,
   TrustedKernelCommands,
@@ -20,6 +22,21 @@ import { KERNEL_COMMANDS, DESKTOP_METHODS } from "@sestina/application-ports";
 import type { SaveOpenAICompatibleProviderInput } from "@sestina/application";
 import { createDesktopSecrets } from "./secure-storage.js";
 import { requestCredential } from "./credential-prompt.js";
+import { DesktopUpdater } from "./updater.js";
+import {
+  TRUSTED_UPDATE_ROOTS,
+  type InstalledUpdateIdentity,
+} from "./update-policy.js";
+import {
+  preserveInstalledProgram,
+  verifyPreservedProgram,
+} from "./runtime-copy.js";
+import {
+  DesktopPreferenceStore,
+  parseDesktopPreferences,
+} from "./preferences.js";
+import { LegacySettingsMigration } from "./legacy-settings.js";
+import { withSessionSecrets } from "./session-secrets.js";
 import { confirmationCopy } from "./native-copy.js";
 
 protocol.registerSchemesAsPrivileged([
@@ -48,19 +65,18 @@ function record(value: unknown): Record<string, unknown> {
 async function start() {
   const data = app.getPath("userData");
   await mkdir(data, { recursive: true });
-  let language = "zh-CN";
-  try {
-    const saved = record(
-      JSON.parse(
-        await readFile(join(data, "preferences.json"), "utf8"),
-      ) as unknown,
-    );
-    if (saved.language === "en" || saved.language === "zh-CN")
-      language = saved.language;
-  } catch {
-    /* first launch */
-  }
-  const secrets = createDesktopSecrets(join(data, "credentials"));
+  const preferences = new DesktopPreferenceStore(data);
+  let language =
+    (await preferences.read().catch(() => undefined))?.language ?? "zh-CN";
+  const secretSession = withSessionSecrets(
+    createDesktopSecrets(join(data, "credentials")),
+  );
+  const secrets = secretSession.backend;
+  const migration = new LegacySettingsMigration(
+    data,
+    secretSession.persistent,
+    preferences,
+  );
   const providers = ["provider", "second-opinion-provider"].map(
     (name, index) =>
       new ProviderConfigurationService(
@@ -85,6 +101,7 @@ async function start() {
       : undefined;
   };
   const api = new KernelApplicationApi({
+    exclusiveLease: true,
     provider: () => loadProvider(0),
     secondOpinionProvider: () => loadProvider(1),
   });
@@ -122,14 +139,112 @@ async function start() {
   });
   let navigation = 0,
     allowClose = false;
+  let activeProjectPath: string | undefined;
   const credentialRequests = new Set<AbortController>();
   function closeResources() {
+    secretSession.clear();
     for (const request of credentialRequests) request.abort();
     credentialRequests.clear();
     trusted.revoke();
     api.close();
   }
   const grants = new Set<string>();
+  const installed = await readFile(join(__dirname, "identity.json"), "utf8")
+    .then((value) => record(JSON.parse(value)))
+    .catch(() => undefined);
+  const current: InstalledUpdateIdentity = {
+    version: app.getVersion(),
+    channel: "internal_candidate",
+    sequence: Number(installed?.sequence ?? 0),
+    platform: process.platform,
+    arch: process.arch,
+    schema: 25,
+    sourceCommit:
+      typeof installed?.sourceCommit === "string"
+        ? installed.sourceCommit
+        : "0".repeat(40),
+    migrationSourceSha256:
+      typeof installed?.migrationSourceSha256 === "string"
+        ? installed.migrationSourceSha256
+        : "0".repeat(64),
+  };
+  const runtimeRoot =
+    process.platform === "darwin"
+      ? resolve(process.execPath, "../../..")
+      : dirname(process.execPath);
+  const rollbackRoot = join(data, "updates", "rollback");
+  const launch = (path: string, args: string[] = []) =>
+    new Promise<void>((resolveLaunch, reject) => {
+      const child = spawn(path, args, {
+        detached: true,
+        stdio: "ignore",
+        windowsHide: true,
+      });
+      child.once("error", reject);
+      child.once("spawn", () => {
+        child.unref();
+        resolveLaunch();
+      });
+    });
+  const updater = new DesktopUpdater({
+    directory: join(data, "updates"),
+    current,
+    roots: TRUSTED_UPDATE_ROOTS,
+    // An authorized source is a build-time setting. No renderer, environment,
+    // project file or test flag can install a signing root or an update URL.
+    beforeInstall: async () => {
+      if (api.maintaining || credentialRequests.size)
+        throw Error("update_project_busy");
+      const projectPath = activeProjectPath;
+      closeResources();
+      activeProjectPath = undefined;
+      window.webContents.send("sestina:session-closed");
+      if (!projectPath) return {};
+      const backup = (await api.maintenance({
+        action: "pre_upgrade_backup",
+        projectPath,
+        sessionGeneration: api.status().sessionGeneration,
+      })) as { backupId: string };
+      return { backupId: backup.backupId, projectPath };
+    },
+    preserveProgram: async () => {
+      if (!app.isPackaged || !installed)
+        throw Error("update_installation_required");
+      return preserveInstalledProgram(
+        runtimeRoot,
+        rollbackRoot,
+        current.sourceCommit,
+      );
+    },
+    launchInstaller: async (path) => {
+      if (process.platform === "win32") await launch(path);
+      else if (process.platform === "linux") {
+        await chmod(path, 0o700);
+        await launch(path, [`--user-data-dir=${data}`]);
+      } else {
+        const failure = await shell.openPath(path);
+        if (failure) throw Error("update_installer_failed");
+      }
+      allowClose = true;
+      closeResources();
+      api.dispose();
+      app.quit();
+    },
+    restoreProgram: async (id) => {
+      const preserved = await verifyPreservedProgram(rollbackRoot, id);
+      const executable = join(
+        preserved,
+        relative(runtimeRoot, process.execPath),
+      );
+      if (basename(executable) !== basename(process.execPath))
+        throw Error("update_rollback_invalid");
+      app.relaunch({ execPath: executable, args: [`--user-data-dir=${data}`] });
+      allowClose = true;
+      closeResources();
+      app.quit();
+    },
+  });
+  await updater.initialize();
   let fileConfirmationPending = false;
   async function confirmFileChange(projectPath: string, repair = false) {
     if (fileConfirmationPending) throw new Error("confirmation_in_progress");
@@ -256,36 +371,61 @@ async function start() {
       )
         throw new Error("invalid_payload");
       language = body.language;
-      await writeFile(
-        join(data, "preferences.json"),
-        JSON.stringify({ language }),
-        { mode: 0o600 },
-      );
+      await preferences.update({ language });
       return { language };
     },
-    pickDirectory: async () => {
+    pickDirectory: async (body) => {
+      const epoch = navigation,
+        generation = api.status().sessionGeneration;
       const result = await dialog.showOpenDialog(window, {
         title: language === "en" ? "Choose a project folder" : "选择项目文件夹",
         properties: ["openDirectory", "createDirectory"],
+        ...(typeof body.initialPath === "string" &&
+        body.initialPath.length <= 4096
+          ? { defaultPath: body.initialPath }
+          : {}),
       });
       if (result.canceled || !result.filePaths[0]) return { cancelled: true };
       const path = await realpath(result.filePaths[0]);
+      if (
+        window.isDestroyed() ||
+        epoch !== navigation ||
+        generation !== api.status().sessionGeneration
+      )
+        throw new Error("session_changed");
       grants.add(path);
       return { path, cancelled: false };
     },
     kernelStatus: () => api.status(),
     open: async (body) => {
+      if (updater.busy || api.maintaining)
+        throw Error("maintenance_in_progress");
       const projectPath = await selectedPath(body);
       closeResources();
-      return api.open({ projectPath, readOnly: body.readOnly === true });
+      const opened = await api.open({
+        projectPath,
+        readOnly: body.readOnly === true,
+      });
+      activeProjectPath = projectPath;
+      return opened;
     },
     createProject: async (body) => {
+      if (updater.busy || api.maintaining)
+        throw Error("maintenance_in_progress");
       const projectPath = await selectedPath(body);
       closeResources();
-      return api.create({ projectPath, title: body.title, confirmed: true });
+      const opened = await api.create({
+        projectPath,
+        title: body.title,
+        confirmed: true,
+      });
+      activeProjectPath = projectPath;
+      return opened;
     },
     closeProject: () => {
+      if (api.maintaining) throw Error("maintenance_in_progress");
       closeResources();
+      activeProjectPath = undefined;
       return api.status();
     },
     maintenance: async (body) => {
@@ -297,20 +437,61 @@ async function start() {
           "migrate",
           "restore",
           "recover",
+          "backup",
+          "pre_upgrade_backup",
+          "backup_status",
+          "backup_restore_preview",
+          "backup_restore",
+          "backup_recover",
         ].includes(String(body.action))
       )
         throw new Error("invalid_payload");
-      if (!(body.action === "preview" || body.action === "restore_preview")) {
+      if (
+        ![
+          "preview",
+          "restore_preview",
+          "backup",
+          "pre_upgrade_backup",
+          "backup_status",
+          "backup_restore_preview",
+        ].includes(String(body.action))
+      ) {
         await confirmFileChange(projectPath);
       }
       return api.maintenance({ ...body, projectPath, confirmed: true });
+    },
+    showBackupDirectory: async (body) => {
+      const projectPath = await selectedPath(body);
+      await api.maintenance({
+        projectPath,
+        sessionGeneration: body.sessionGeneration,
+        action: "backup_status",
+      });
+      const directory = join(projectPath, ".sestina", "backups", "manual");
+      for (const path of [
+        join(projectPath, ".sestina"),
+        join(projectPath, ".sestina", "backups"),
+        directory,
+      ]) {
+        const info = await lstat(path);
+        if (!info.isDirectory() || info.isSymbolicLink())
+          throw new Error("invalid_payload");
+      }
+      const failure = await shell.openPath(directory);
+      if (failure) throw new Error("operation_failed");
+      return { opened: true };
     },
     repairBrief: async (body) => {
       const projectPath = await selectedPath(body);
       await confirmFileChange(projectPath, true);
       return api.repairBrief({ projectPath, confirmed: true });
     },
-    providerStatus: (body) => getProvider(body.second ? 1 : 0).status(),
+    providerStatus: async (body) => ({
+      ...(await getProvider(body.second ? 1 : 0).status()),
+      credentialPersistence: secretSession.sessionOnly()
+        ? "session"
+        : "os_encrypted",
+    }),
     providerSave: async (body) => {
       if (record(body.input).apiKey !== undefined)
         throw new Error("native_credential_entry_required");
@@ -323,8 +504,31 @@ async function start() {
         config.baseUrl.startsWith("https:") &&
         !(await service.status()).secretConfigured
       ) {
-        if (!(await secrets.health()).available)
-          throw new Error("secure_storage_unavailable");
+        if (!(await secrets.health()).available) {
+          const result = await dialog.showMessageBox(window, {
+            type: "question",
+            title: "Sestina",
+            message:
+              language === "en"
+                ? "Secure storage is unavailable. Use the key for this session only?"
+                : "安全存储不可用。仅在本次会话使用密钥？",
+            detail:
+              language === "en"
+                ? "The key will stay in memory and be cleared when the project closes or the program exits. You can also cancel and continue local research."
+                : "密钥仅保存在内存中，关闭项目或退出程序时清除。也可以取消并继续本地研究。",
+            buttons: [
+              language === "en" ? "Cancel" : "取消",
+              language === "en" ? "Use for this session" : "仅本次会话使用",
+            ],
+            defaultId: 0,
+            cancelId: 0,
+            noLink: true,
+          });
+          if (result.response !== 1) throw Error("confirmation_declined");
+          if (api.status().sessionGeneration !== before.sessionGeneration)
+            throw Error("session_changed");
+          secretSession.enable();
+        }
         const cancellation = new AbortController();
         credentialRequests.add(cancellation);
         let apiKey: string | undefined;
@@ -345,7 +549,82 @@ async function start() {
         await service.save(
           config as unknown as SaveOpenAICompatibleProviderInput,
         );
-      return service.status();
+      return {
+        ...(await service.status()),
+        credentialPersistence: secretSession.sessionOnly()
+          ? "session"
+          : "os_encrypted",
+      };
+    },
+    preferences: async (body) => {
+      if (body.action === "read") return preferences.read();
+      if (body.action === "save") {
+        const patch = record(body.input);
+        if (
+          Object.keys(patch).some(
+            (k) => !["appearance", "recentProjects"].includes(k),
+          )
+        )
+          throw Error("invalid_payload");
+        return preferences.update(patch);
+      }
+      if (body.action === "import") {
+        const value = parseDesktopPreferences(body.input);
+        await preferences.update(value);
+        language = value.language;
+        return value;
+      }
+      throw Error("invalid_payload");
+    },
+    settingsMigration: async (body) => {
+      if (body.action === "status") return migration.inspect();
+      if (body.action !== "migrate") throw Error("invalid_payload");
+      const result = await migration.run();
+      language = result.preferences.language;
+      return result;
+    },
+    integration: async (body) => {
+      const session = api.status();
+      if (
+        !activeProjectPath ||
+        body.projectId !== session.projectId ||
+        body.sessionGeneration !== session.sessionGeneration
+      )
+        throw Error("session_changed");
+      const directory = app.isPackaged
+        ? join(process.resourcesPath, "companion")
+        : join(__dirname, "companion");
+      const root = await lstat(directory);
+      if (!root.isDirectory() || root.isSymbolicLink())
+        throw Error("integration_unavailable");
+      const command = join(
+          directory,
+          process.platform === "win32" ? "node.exe" : "node",
+        ),
+        entry = join(directory, "main.js");
+      for (const path of [command, entry]) {
+        const file = await lstat(path);
+        if (!file.isFile() || file.isSymbolicLink())
+          throw Error("integration_unavailable");
+      }
+      if (body.action === "open_companion") {
+        const error = await shell.openPath(join(directory, "skills"));
+        if (error) throw Error("integration_unavailable");
+        return { opened: true };
+      }
+      if (body.action !== "config") throw Error("invalid_payload");
+      const args = [entry, "--project-root", activeProjectPath];
+      return {
+        json: JSON.stringify(
+          { mcpServers: { sestina: { command, args } } },
+          null,
+          2,
+        ),
+        toml: `[mcp_servers.sestina]\ncommand = ${JSON.stringify(command)}\nargs = ${JSON.stringify(args)}\n`,
+        companionDirectory: join(directory, "skills"),
+        readOnly: true,
+        hostVerification: "unverified",
+      };
     },
     providerDeleteConfig: async (body) => {
       await getProvider(body.second ? 1 : 0).deleteConfig();
@@ -363,11 +642,70 @@ async function start() {
       published: false,
       update: "not_checked",
     }),
-    checkUpdate: () => ({
-      status: "source_unavailable",
-      currentVersion: app.getVersion(),
-    }),
+    checkUpdate: () => updater.check(),
+    update: async (body) => {
+      if (body.action === "status") return updater.status();
+      if (body.action === "check") return updater.check();
+      if (body.action === "download") return updater.download();
+      if (body.action === "cancel") return updater.cancel();
+      if (body.action !== "install" && body.action !== "recover_program")
+        throw Error("invalid_payload");
+      const checked = JSON.stringify(updater.status()),
+        expires = Date.now() + 60000;
+      if (
+        updater.busy ||
+        (body.action === "install" && updater.status().stage !== "verified") ||
+        (body.action === "recover_program" &&
+          !updater.status().rollbackAvailable)
+      )
+        throw Error("update_not_verified");
+      const epoch = navigation,
+        generation = api.status().sessionGeneration;
+      const en = language === "en",
+        version = updater.status().version;
+      const choice = await dialog.showMessageBox(window, {
+        type: "warning",
+        title: "Sestina",
+        message:
+          body.action === "install"
+            ? en
+              ? `Install ${version ?? ""}?`
+              : `安装 ${version ?? ""}？`
+            : en
+              ? "Open the verified previous program?"
+              : "打开经过验证的旧程序？",
+        detail: en
+          ? "Saved project data will be protected before installation. The program will close. A previous program must never write a newer project format; use the recovery page to inspect saved backups."
+          : "安装前会保护已保存的项目数据，随后关闭程序。旧程序不能写入更新格式的项目；需要恢复时，请在恢复页面检查已有备份。",
+        buttons: [
+          en ? "Cancel" : "取消",
+          body.action === "install"
+            ? en
+              ? "Install update"
+              : "安装更新"
+            : en
+              ? "Open previous program"
+              : "打开旧程序",
+        ],
+        defaultId: 0,
+        cancelId: 0,
+        noLink: true,
+      });
+      if (choice.response !== 1) throw Error("confirmation_declined");
+      if (
+        epoch !== navigation ||
+        generation !== api.status().sessionGeneration ||
+        Date.now() >= expires ||
+        checked !== JSON.stringify(updater.status())
+      )
+        throw Error("session_changed");
+      return body.action === "install"
+        ? updater.install()
+        : updater.recoverProgram();
+    },
     closeWindow: () => {
+      if (api.maintaining || updater.busy)
+        throw new Error("maintenance_in_progress");
       allowClose = true;
       closeResources();
       api.dispose();
@@ -383,7 +721,22 @@ async function start() {
         language: ["language"],
         open: ["projectPath", "readOnly"],
         createProject: ["projectPath", "title", "confirmed"],
-        maintenance: ["projectPath", "action", "confirmed", "previewHash"],
+        maintenance: [
+          "projectPath",
+          "action",
+          "confirmed",
+          "previewHash",
+          "sessionGeneration",
+          "backupId",
+          "confirmationNonce",
+          "expectedStateBinding",
+        ],
+        showBackupDirectory: ["projectPath", "sessionGeneration"],
+        update: ["action"],
+        preferences: ["action", "input"],
+        settingsMigration: ["action"],
+        pickDirectory: ["initialPath"],
+        integration: ["action", "projectId", "sessionGeneration"],
         repairBrief: ["projectPath", "confirmed"],
         providerStatus: ["second"],
         providerSave: ["second", "input"],
@@ -486,7 +839,10 @@ async function start() {
     window.focus();
   });
   powerMonitor.on("suspend", () => {
+    updater.interrupt();
     closeResources();
+    if (!window.isDestroyed())
+      window.webContents.send("sestina:session-closed");
   });
   app.on("before-quit", (event) => {
     if (!allowClose && !window.isDestroyed()) {

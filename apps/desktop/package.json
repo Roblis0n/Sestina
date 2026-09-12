@@ -14,6 +14,7 @@
   "dependencies": {
     "@sestina/application": "workspace:*",
     "@sestina/core": "workspace:*",
+    "@sestina/secrets": "workspace:*",
     "@sestina/application-ports": "workspace:*"
   },
   "devDependencies": {

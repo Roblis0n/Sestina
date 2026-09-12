@@ -6,6 +6,8 @@ import {
   type KernelReviewDto,
 } from "../../api/kernel-dto.js";
 import { Button } from "../primitives/Button.js";
+import { DesktopIntegration } from "./DesktopIntegration.js";
+import { desktop } from "../../api/desktop.js";
 
 export function KernelConnectionsPanel({
   projectId,
@@ -48,6 +50,7 @@ export function KernelConnectionsPanel({
           : "导入建议只保存为草稿。连接不能发送评估、修改研究对象或确认变更。文件引用仅作来源提示，导入不会读取文件。"}
       </p>
       {error ? <p role="alert">{error}</p> : null}
+      {desktop() ? <DesktopIntegration en={en} projectId={projectId} /> : null}
       <details>
         <summary>{en ? "Import a structured draft" : "导入结构化草稿"}</summary>
         <label>

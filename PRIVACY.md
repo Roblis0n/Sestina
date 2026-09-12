@@ -1,6 +1,6 @@
 # Privacy
 
-The production privacy contract is machine-readable through:
+The published v0.2.0 preview privacy contract is machine-readable through:
 
 ```text
 sestina privacy show --json
@@ -14,7 +14,7 @@ Core/CLI state, the active Research Brief, Decisions, Issues, Reviews, and local
 
 The default offline path includes deterministic review, reports, local Capsule export/import, project-state backup/restore, and the read-only stdio MCP. Explicit content commands such as `brief show`, `report`, `capsule export`, and MCP `get_research_context` return the research content the user requested; that response is not background logging.
 
-## Explicit network exceptions
+## Published preview network exceptions and historical workflows
 
 Codex host verification and active host-assisted work can contact the user-selected Codex model provider only after an explicit user action. In particular, `connection-status --verify-host` requires `--yes`. It may send bounded research context, project/active-Brief identifiers, and current research boundaries. This is not a background or default connection, and the read-only MCP response cannot change user authority.
 
@@ -62,10 +62,10 @@ bindings, RI-50 remains locally operable through draft, failure/partial records,
 manual disclosure, and user Resolution, while real two-Provider evidence stays
 `blocked_missing_user_config`.
 
-## Opt-in post-0.2 storage foundation
+## Internal schema-25 application
 
-The G1–G3 development path uses schema 25 and is not connected to the shipped
-Research Room or its Provider send path. Unlike the legacy workflows above,
+The internal Research Room and Electron candidate use schema 25 through the
+shared application service. Unlike the legacy workflows above,
 its persistent Context Manifest stores the exact prepared request body locally
 so that restart can recover the confirmed bytes. A no-Provider Manifest has no
 request body. Treat the target database and any copies of it as sensitive
@@ -76,8 +76,10 @@ reasoning. No startup, migration or workflow recovery automatically sends data.
 
 The new privacy ledger and managed-copy inventory record what is known. They do
 not claim that manual or Provider-side copies were deleted. A new Forget blocks
-downgrade to a pre-migration backup that could restore the forgotten body; full
-copy cleanup and the new Memory interface remain at G7. See the
+downgrade to a pre-migration backup that could restore the forgotten body.
+Memory governance includes explicit managed-copy cleanup or recorded retention;
+schema-25 restore refuses a different privacy history and any retired backup.
+Retaining a copy is reported as retention, never deletion. See the
 [foundation operation and recovery boundaries](docs/product/restructure/G1-G3-OPERATIONS.md).
 
 ## Currently unavailable model paths

@@ -3,11 +3,11 @@
 Sestina separates research authority from presentation, persistence, model
 execution, and host integration.
 
-This document describes the shipped `v0.2.0` architecture. The accepted
-[post-0.2 target architecture](product/restructure/README.md) replaces the
-future implementation direction where it conflicts with this baseline, but it
-must remain labelled as target behavior until its full migration, production,
-security, lifecycle, and release evidence passes.
+The layers and legacy flows below describe the shipped `v0.2.0` preview.
+The separate schema-25 and desktop sections describe the implemented internal
+candidate. It has not replaced the public preview. Remaining acceptance and
+release boundaries are recorded in the
+[implementation status](product/restructure/IMPLEMENTATION-STATUS.md).
 
 ## Layers
 
@@ -55,9 +55,9 @@ automatic retry or fallback.
 For enforceable import rules, see
 [dependency and authority boundaries](architecture/01-DEPENDENCY-RULES.md).
 
-## Opt-in post-0.2 persistence foundation
+## Internal schema-25 application
 
-G1–G3 add schema 25 behind explicit Core entry points. Existing production opens
+The internal application uses schema 25 behind explicit Core entry points. Public preview opens
 still use schema 20, and the old runtime refuses a target database as too new.
 `ResearchUnitOfWork.kernel` extends the same SQLite transaction and repositories:
 canonical objects, state head/event, terminal Review, Receipt, command identity
@@ -68,9 +68,11 @@ advance research state. Receipt and revision Trace are proofs of resulting objec
 Single-transaction reads produce validated canonical snapshots; context and
 search/attention/Brief-file projections have explicit policy/source revisions.
 Core owns the copied migration, maintenance fence, verified backup and explicit
-recovery orchestration. No new renderer, transport or model write path is added.
-The six complete effect handlers and Provider orchestration remain G4/G5 work.
-See [operations and the exact G4 continuation](product/restructure/G1-G3-OPERATIONS.md).
+recovery orchestration. G4–G9 implement all six typed effects, the persistent
+Review and optional Provider flow, progressive Brief, linked correction, Memory
+governance, derived views and the four-entry Research Room. HTTP and desktop
+adapters share these application services; neither introduces a second research
+write path. See [operations and current continuation](product/restructure/G1-G3-OPERATIONS.md).
 
 ## Internal desktop candidate
 

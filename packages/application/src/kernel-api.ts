@@ -15,6 +15,12 @@ import {
   kernelInteger,
   type KernelApplicationOptions,
   type ResearchDeliberationKernel,
+  ProjectRecoveryConfirmationService,
+  createProjectStateBackup,
+  createPreUpgradeProjectStateBackup,
+  inspectProjectRecovery,
+  recoverInterruptedProjectStateRestore,
+  type CoreResult,
 } from "@sestina/core";
 import { HostDraftBridge } from "./host-draft-bridge.js";
 import type { KernelApplicationPort } from "@sestina/application-ports";
@@ -27,6 +33,11 @@ export class KernelApplicationApi implements KernelApplicationPort {
   #epoch = 0;
   #disposed = false;
   #readOnly = false;
+  #maintaining = false;
+  readonly #recovery = new ProjectRecoveryConfirmationService();
+  get maintaining() {
+    return this.#maintaining;
+  }
   readonly #capability = Object.freeze({});
   readonly #bridge = new HostDraftBridge(
     (body, connectionId) => {
@@ -67,7 +78,7 @@ export class KernelApplicationApi implements KernelApplicationPort {
     this.close({ dispose: true });
   }
   async create(input: unknown) {
-    if (this.#disposed || this.#opening)
+    if (this.#disposed || this.#opening || this.#maintaining)
       throw new KernelFault("storage_unavailable");
     const body = kernelRecord(input, ["projectPath", "title", "confirmed"]);
     kernelText(body.projectPath, 4096);
@@ -89,43 +100,107 @@ export class KernelApplicationApi implements KernelApplicationPort {
       "action",
       "confirmed",
       "previewHash",
+      "sessionGeneration",
+      "backupId",
+      "confirmationNonce",
+      "expectedStateBinding",
     ]);
     kernelText(body.projectPath, 4096);
-    if (this.#disposed || this.#opening || this.active)
+    if (this.#disposed || this.#opening || this.#maintaining || this.active)
       throw new KernelFault("storage_unavailable");
-    if (body.action === "restore_preview")
-      return previewKernelPreMigrationRestore(body.projectPath);
-    if (body.action === "preview") {
+    if (
+      [
+        "backup",
+        "pre_upgrade_backup",
+        "backup_status",
+        "backup_restore_preview",
+        "backup_restore",
+        "backup_recover",
+      ].includes(String(body.action))
+    ) {
+      if (body.sessionGeneration !== this.#epoch)
+        throw new KernelFault("stale_revision");
+      const sessionBinding = kernelHash({ generation: this.#epoch });
+      const options = { projectRoot: body.projectPath, kernelRecovery: true };
+      const unwrap = <T>(result: CoreResult<T>): T => {
+        if (!result.ok)
+          throw Object.assign(new Error(result.error.code), {
+            code: result.error.code,
+          });
+        return result.value;
+      };
+      this.#maintaining = true;
+      try {
+        if (body.action === "backup")
+          return unwrap(await createProjectStateBackup(options));
+        if (body.action === "pre_upgrade_backup")
+          return unwrap(await createPreUpgradeProjectStateBackup(options));
+        if (body.action === "backup_status")
+          return unwrap(await inspectProjectRecovery(options));
+        if (body.action === "backup_recover")
+          return unwrap(
+            await recoverInterruptedProjectStateRestore({
+              ...options,
+              confirmed: body.confirmed === true,
+            }),
+          );
+        kernelText(body.backupId, 128);
+        const input = { ...options, backupId: body.backupId, sessionBinding };
+        if (body.action === "backup_restore_preview")
+          return unwrap(await this.#recovery.prepare(input));
+        kernelText(body.confirmationNonce, 64);
+        kernelText(body.expectedStateBinding, 64);
+        return unwrap(
+          await this.#recovery.execute({
+            ...input,
+            confirmed: body.confirmed === true,
+            confirmationNonce: body.confirmationNonce,
+            expectedStateBinding: body.expectedStateBinding,
+          }),
+        );
+      } finally {
+        this.#maintaining = false;
+      }
+    }
+    this.#maintaining = true;
+    try {
+      if (body.action === "restore_preview")
+        return await previewKernelPreMigrationRestore(body.projectPath);
+      if (body.action === "preview") {
+        const preview = await previewKernelMigration(body.projectPath);
+        return { ...preview, previewHash: kernelHash(preview) };
+      }
+      if (body.confirmed !== true) throw new KernelFault("authority_required");
+      if (body.action === "restore") {
+        kernelText(body.previewHash, 64);
+        return await restoreKernelPreMigrationBackup(
+          body.projectPath,
+          undefined,
+          body.previewHash,
+        );
+      }
+      if (body.action === "recover")
+        return await recoverKernelMigration(body.projectPath);
+      if (body.action !== "migrate") throw new KernelFault("invalid_record");
       const preview = await previewKernelMigration(body.projectPath);
-      return { ...preview, previewHash: kernelHash(preview) };
+      if (body.previewHash !== kernelHash(preview))
+        throw new KernelFault("stale_revision");
+      return await migrateKernelProject({
+        projectRoot: body.projectPath,
+        expectedSource: {
+          projectId: preview.projectId,
+          sourceDatabaseHash: preview.sourceDatabaseHash,
+          sourceBriefHash: preview.sourceBriefHash,
+          sourceWalHash: preview.sourceWalHash,
+        },
+      });
+    } finally {
+      this.#maintaining = false;
     }
-    if (body.confirmed !== true) throw new KernelFault("authority_required");
-    if (body.action === "restore") {
-      kernelText(body.previewHash, 64);
-      return restoreKernelPreMigrationBackup(
-        body.projectPath,
-        undefined,
-        body.previewHash,
-      );
-    }
-    if (body.action === "recover")
-      return recoverKernelMigration(body.projectPath);
-    if (body.action !== "migrate") throw new KernelFault("invalid_record");
-    const preview = await previewKernelMigration(body.projectPath);
-    if (body.previewHash !== kernelHash(preview))
-      throw new KernelFault("stale_revision");
-    return migrateKernelProject({
-      projectRoot: body.projectPath,
-      expectedSource: {
-        projectId: preview.projectId,
-        sourceDatabaseHash: preview.sourceDatabaseHash,
-        sourceBriefHash: preview.sourceBriefHash,
-        sourceWalHash: preview.sourceWalHash,
-      },
-    });
   }
   async open(input: unknown) {
-    if (this.#disposed) throw new KernelFault("storage_unavailable");
+    if (this.#disposed || this.#maintaining)
+      throw new KernelFault("storage_unavailable");
     const body = kernelRecord(input, ["projectPath", "readOnly"]);
     kernelText(body.projectPath, 4096);
     if (body.readOnly !== undefined && typeof body.readOnly !== "boolean")
@@ -178,7 +253,8 @@ export class KernelApplicationApi implements KernelApplicationPort {
     }
   }
   async repairBrief(input: unknown) {
-    if (this.#disposed) throw new KernelFault("storage_unavailable");
+    if (this.#disposed || this.#maintaining)
+      throw new KernelFault("storage_unavailable");
     const body = kernelRecord(input, ["projectPath", "confirmed"]);
     kernelText(body.projectPath, 4096);
     if (body.confirmed !== true) throw new KernelFault("authority_required");

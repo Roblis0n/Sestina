@@ -1,6 +1,10 @@
 # Legacy to Research migration
 
-The legacy importer is the only new product boundary allowed to interpret the
+This section describes the published preview importer. Schema-25 desktop
+migration uses the separately frozen copied-migration mapping and verified
+pre-migration backup; current operations are in
+[desktop recovery](../recovery/BACKUP-RESTORE.md#internal-desktop-candidate).
+The preview importer is the boundary allowed to interpret the
 legacy project, contract, correction, and evidence tables. It opens the source
 database read-only and follows one explicit flow:
 

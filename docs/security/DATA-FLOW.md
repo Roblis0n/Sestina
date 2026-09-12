@@ -1,6 +1,6 @@
-# Production data-flow inventory
+# Data-flow inventory
 
-The authoritative machine-readable form is returned by `sestina privacy show --json`. This document explains the same production manifest.
+The published v0.2.0 preview machine-readable form is returned by `sestina privacy show --json`. The first table and legacy workflow sections describe that preview. The internal desktop section records the separate schema-25 candidate; it is not a release claim.
 
 | Flow | Trigger | Data categories | Destination | Network | Explicit user action or confirmation | Can change research authority |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -14,7 +14,7 @@ The authoritative machine-readable form is returned by `sestina privacy show --j
 
 ## Local storage contents
 
-`.sestina/state.sqlite` stores local research lifecycle records through schema 18. In addition to append-only Appeals, it stores project-bound Deliberation Room source/context freezes, participant identity digests, two exact Context Manifests, round/attempt state, normalized assessments, deterministic Difference summaries, challenge/manual-opinion disclosure, direct-user Resolutions, transitions, idempotent command receipts, and lineage. It does not store Provider secrets, raw responses, authentication headers, full network payloads, private sessions, or hidden reasoning. `.sestina/research-brief.yaml` is the file projection of the active research question and boundaries. `.sestina/backups/manual/` contains strict managed recovery bundles; `.sestina/backups/forensic/` contains raw pre-restore evidence when the current state is not healthy enough to create a verified bundle.
+`.sestina/state.sqlite` stores local research lifecycle records through schema 20. In addition to append-only Appeals, it stores project-bound Deliberation Room source/context freezes, participant identity digests, two exact Context Manifests, round/attempt state, normalized assessments, deterministic Difference summaries, challenge/manual-opinion disclosure, direct-user Resolutions, transitions, idempotent command receipts, and lineage. It does not store Provider secrets, raw responses, authentication headers, full network payloads, private sessions, or hidden reasoning. `.sestina/research-brief.yaml` is the file projection of the active research question and boundaries. `.sestina/backups/manual/` contains strict managed recovery bundles; `.sestina/backups/forensic/` contains raw pre-restore evidence when the current state is not healthy enough to create a verified bundle.
 
 Recovery bundles intentionally exclude `.codex`, `.agents`, authentication stores, Provider configuration/responses, log files, temporary files, Capsule responses, and user project source files outside the active Brief. Secret backends remain separate from project recovery.
 
@@ -42,7 +42,7 @@ always marked non-verifiable for mutual blindness. Cross-project Room reads,
 events, imports, search, and deep links fail closed. See
 [the RI-50 architecture contract](../architecture/04-MUTUALLY-BLIND-BOUNDED-DELIBERATION-ROOMS.md).
 
-## Opt-in G1–G3 foundation data flow
+## Internal schema-25 application data flow
 
 This development path is separate from the shipped production privacy manifest.
 Explicit Core migration reads a verified source snapshot, writes a verified
@@ -57,8 +57,9 @@ the approved object results and their revision/Receipt/Trace together. The
 Receipt and journal do not duplicate request text. Derived projections retain
 their source revision and never become authority.
 
-None of these paths sends data or grants a Provider, host or saved hash user
-authority. The new Provider send implementation and production UI are downstream.
+Migration, local persistence and recovery send no data. The implemented optional
+Provider path sends only the exact confirmed Manifest after freshness and endpoint
+checks. No Provider, host or saved hash gains user authority.
 Known managed copies and privacy redactions are recorded; unobserved external
 copies remain unknown. See [foundation operations](../product/restructure/G1-G3-OPERATIONS.md)
 for the exact API and backup/Forget boundary.

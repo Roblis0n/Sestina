@@ -1,7 +1,15 @@
 import { safeStorage } from "electron";
-import { readFile, writeFile, rename, mkdir } from "node:fs/promises";
-import { join } from "node:path";
-import { createHash } from "node:crypto";
+import {
+  readFile,
+  writeFile,
+  rename,
+  mkdir,
+  lstat,
+  realpath,
+  rm,
+} from "node:fs/promises";
+import { join, resolve } from "node:path";
+import { createHash, randomUUID } from "node:crypto";
 import type { SecretBackend, SecretBackendStatus } from "@sestina/core";
 
 /** Only OS-encrypted bytes are persisted. basic_text is never an acceptable backend. */
@@ -35,6 +43,16 @@ export function createDesktopSecrets(directory: string): SecretBackend {
   const get = async (ref: string) => {
     await requireAvailable();
     try {
+      const root = await lstat(directory);
+      if (
+        !root.isDirectory() ||
+        root.isSymbolicLink() ||
+        (await realpath(directory)) !== resolve(directory)
+      )
+        throw Error("secure_storage_unavailable");
+      const info = await lstat(file(ref));
+      if (!info.isFile() || info.isSymbolicLink() || info.size > 65536)
+        throw Error("secure_storage_unavailable");
       return safeStorage.decryptString(await readFile(file(ref)));
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "ENOENT") return undefined;
@@ -47,14 +65,25 @@ export function createDesktopSecrets(directory: string): SecretBackend {
     async set(ref, value) {
       await requireAvailable();
       await mkdir(directory, { recursive: true, mode: 0o700 });
+      const root = await lstat(directory);
+      if (
+        !root.isDirectory() ||
+        root.isSymbolicLink() ||
+        (await realpath(directory)) !== resolve(directory)
+      )
+        throw Error("secure_storage_unavailable");
       const encrypted = safeStorage.encryptString(value);
       if (safeStorage.decryptString(encrypted) !== value)
         throw new Error("secure_storage_unavailable");
-      const pending = file(ref) + ".pending";
-      await writeFile(pending, encrypted, { flag: "wx", mode: 0o600 });
-      await rename(pending, file(ref));
-      if ((await get(ref)) !== value)
-        throw new Error("secure_storage_unavailable");
+      const pending = file(ref) + `.${randomUUID()}.pending`;
+      try {
+        await writeFile(pending, encrypted, { flag: "wx", mode: 0o600 });
+        await rename(pending, file(ref));
+        if ((await get(ref)) !== value)
+          throw new Error("secure_storage_unavailable");
+      } finally {
+        await rm(pending, { force: true }).catch(() => undefined);
+      }
     },
     async delete(ref) {
       await requireAvailable();

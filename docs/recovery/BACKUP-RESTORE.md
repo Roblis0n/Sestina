@@ -86,4 +86,24 @@ Uninstalling the CLI or running `disconnect` does not delete these bundles or an
 
 ## Internal desktop candidate
 
-The desktop start page delegates migration previews, migration and recovery to the existing Kernel copy-on-write services. The project must be closed for maintenance. Its native directory picker supplies the target directory; a page-provided path alone grants no file access. This integration does not by itself prove interrupted upgrade, disk-full, rename-failure or installed downgrade recovery. Those installation journeys remain explicit G10/G12 acceptance requirements. See [desktop operations](../../apps/desktop/README.md).
+For schema 25, close the project through Settings → Recovery & data, select its
+folder and open Backup & recovery. Create a backup, check saved backups or open
+the backup folder. Choose a verified backup to preview its identity, then confirm
+the restore in the native dialog. The same Core recovery service verifies the
+current state and the backup again, preserves a verified pre-restore bundle and
+replaces the database/Brief pair under maintenance and writer locks. Reopen the
+project after the result appears. These operations use no network.
+
+An interrupted swap or cleanup blocks ordinary project opening. Choose Recover
+interrupted restore to verify the preserved files and finish the recorded local
+recovery. Unknown replacements are retained and refused. Schema-25 recovery needs
+a verifiable current privacy history: corrupt or missing history cannot be
+overridden by an older backup. A Forget or retired managed copy blocks restoring
+content from before that cleanup. The schema-20 CLI procedure above retains its
+legacy forensic behavior; it does not authorize writing schema 25.
+
+恢复前会保护当前已保存的数据。预览过期、备份被修改、项目仍有写入会话或隐私
+清理记录不一致时，恢复会停止。中断记录存在时，先选择“处理上次中断的恢复”，
+完成核验后再打开项目。不要手动删除中断记录或用旧程序打开新数据库。
+
+See [desktop operations and acceptance scope](../../apps/desktop/README.md).

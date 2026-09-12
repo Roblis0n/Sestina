@@ -2,10 +2,20 @@ import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { DatabaseSync, constants, type StatementSync } from "node:sqlite";
 import { statSync, existsSync, readFileSync } from "node:fs";
-import { KERNEL_CANONICAL_TABLES, KERNEL_WORKFLOW_TABLES, KERNEL_LEGACY_TABLES } from "./kernel-schema.js";
+import {
+  KERNEL_CANONICAL_TABLES,
+  KERNEL_WORKFLOW_TABLES,
+  KERNEL_LEGACY_TABLES,
+} from "./kernel-schema.js";
 import { SestinaError, SestinaErrorCode } from "@sestina/schema";
 import { applySecurityPragmas, DEFAULT_BUSY_TIMEOUT_MS } from "./pragmas.js";
-import { mapSqliteError, sqliteErrcode, SQLITE_ERROR, SQLITE_CORRUPT, SQLITE_NOTADB } from "./errors.js";
+import {
+  mapSqliteError,
+  sqliteErrcode,
+  SQLITE_ERROR,
+  SQLITE_CORRUPT,
+  SQLITE_NOTADB,
+} from "./errors.js";
 import { MigrationRunner, MIGRATIONS, type Migration } from "./migrator.js";
 
 export interface OpenDatabaseOptions {
@@ -24,7 +34,14 @@ export interface OpenDatabaseOptions {
    * schema-too-new guard as well, so callers must not use it for normal
    * writable operation.
    */
-  migrate?: boolean | { backupDirectory?: string; migrations?: readonly Migration[]; verifiedStagingCopy?: boolean; onMigrationApplied?: (version: number) => void | Promise<void> };
+  migrate?:
+    | boolean
+    | {
+        backupDirectory?: string;
+        migrations?: readonly Migration[];
+        verifiedStagingCopy?: boolean;
+        onMigrationApplied?: (version: number) => void | Promise<void>;
+      };
 }
 
 export interface QueryResult {
@@ -44,12 +61,18 @@ function normalizeParams(params: unknown[]): SqlBindValue[] {
   return params.map((p): SqlBindValue => {
     if (p === undefined) return null;
     if (typeof p === "boolean") return p ? 1 : 0;
-    if (typeof p === "string" || typeof p === "number" || typeof p === "bigint") {
+    if (
+      typeof p === "string" ||
+      typeof p === "number" ||
+      typeof p === "bigint"
+    ) {
       return p;
     }
     if (p === null) return null;
     if (p instanceof Uint8Array) return p;
-    throw new TypeError("Unsupported bind parameter type — pass schema-validated JSON strings");
+    throw new TypeError(
+      "Unsupported bind parameter type — pass schema-validated JSON strings",
+    );
   });
 }
 
@@ -71,50 +94,112 @@ export class StorageDatabase {
   private kernelPolicy = false;
   /** Set only by the owner of the external maintenance guard. */
   maintenanceOwned = false;
-  private kernelMode: "none" | "workflow" | "canonical" | "migration" | "privacy" = "none";
+  private kernelMode:
+    "none" | "workflow" | "canonical" | "migration" | "privacy" = "none";
   private readonly fileIdentity: string;
 
   constructor(path: string, raw: DatabaseSync, readOnly: boolean) {
     this.path = path;
     this.rawDb = raw;
     this.readOnly = readOnly;
-    const info = statSync(path); this.fileIdentity = `${info.dev}:${info.ino}`;
+    const info = statSync(path);
+    this.fileIdentity = `${info.dev}:${info.ino}`;
   }
 
   /** Storage capability only. The Kernel owns authorization and project scope. */
-  withKernelWrite<T>(mode: "workflow" | "canonical" | "migration", work: () => T): T {
-    if (!this.isTransaction) throw new SestinaError(SestinaErrorCode.internal_error, "Kernel writes require an enclosing transaction");
+  withKernelWrite<T>(
+    mode: "workflow" | "canonical" | "migration",
+    work: () => T,
+  ): T {
+    if (!this.isTransaction)
+      throw new SestinaError(
+        SestinaErrorCode.internal_error,
+        "Kernel writes require an enclosing transaction",
+      );
     const before = this.kernelMode;
-    if (before === "workflow" && mode !== "workflow") throw new SestinaError(SestinaErrorCode.database_readonly, "Workflow cannot acquire canonical write access");
-    this.kernelMode = before === "canonical" || before === "migration" ? before : mode;
+    if (before === "workflow" && mode !== "workflow")
+      throw new SestinaError(
+        SestinaErrorCode.database_readonly,
+        "Workflow cannot acquire canonical write access",
+      );
+    this.kernelMode =
+      before === "canonical" || before === "migration" ? before : mode;
     this.refreshKernelAuthorizer();
     try {
       const result = work();
-      if (result !== null && typeof result === "object" && "then" in result) throw new SestinaError(SestinaErrorCode.internal_error, "Kernel writes must be synchronous");
+      if (result !== null && typeof result === "object" && "then" in result)
+        throw new SestinaError(
+          SestinaErrorCode.internal_error,
+          "Kernel writes must be synchronous",
+        );
       return result;
-    } finally { this.kernelMode = before; this.refreshKernelAuthorizer(); }
+    } finally {
+      this.kernelMode = before;
+      this.refreshKernelAuthorizer();
+    }
   }
 
-  enableKernelWriteBoundary(): void { if (!this.readOnly) this.rawDb.exec("PRAGMA secure_delete=ON"); this.kernelPolicy = true; this.refreshKernelAuthorizer(); }
+  enableKernelWriteBoundary(): void {
+    if (!this.readOnly) this.rawDb.exec("PRAGMA secure_delete=ON");
+    this.kernelPolicy = true;
+    this.refreshKernelAuthorizer();
+  }
   /** Reclaim free pages and truncate old WAL frames after committed privacy erasure. */
   purgeKernelFreePages(): void {
-    if (!this.kernelPolicy || this.readOnly || this.isTransaction || !this.maintenanceOwned || this.kernelMode !== "none") throw new SestinaError(SestinaErrorCode.database_readonly, "Privacy compaction requires exclusive maintenance ownership");
-    this.kernelMode = "migration"; this.refreshKernelAuthorizer();
+    if (
+      !this.kernelPolicy ||
+      this.readOnly ||
+      this.isTransaction ||
+      !this.maintenanceOwned ||
+      this.kernelMode !== "none"
+    )
+      throw new SestinaError(
+        SestinaErrorCode.database_readonly,
+        "Privacy compaction requires exclusive maintenance ownership",
+      );
+    this.kernelMode = "migration";
+    this.refreshKernelAuthorizer();
     try {
       this.rawDb.exec("PRAGMA secure_delete=ON");
       this.rawDb.exec("VACUUM");
-      const result = this.rawDb.prepare("PRAGMA wal_checkpoint(TRUNCATE)").get() as { busy: number };
-      if (result.busy !== 0) throw new SestinaError(SestinaErrorCode.storage_busy, "Privacy checkpoint is waiting for readers");
-    } finally { this.kernelMode = "none"; this.refreshKernelAuthorizer(); }
+      const result = this.rawDb
+        .prepare("PRAGMA wal_checkpoint(TRUNCATE)")
+        .get() as { busy: number };
+      if (result.busy !== 0)
+        throw new SestinaError(
+          SestinaErrorCode.storage_busy,
+          "Privacy checkpoint is waiting for readers",
+        );
+    } finally {
+      this.kernelMode = "none";
+      this.refreshKernelAuthorizer();
+    }
   }
   /** Narrow body erasure capability, available only inside an authorized canonical transaction. */
   withKernelPrivacyRedaction<T>(work: () => T): T {
-    if (!this.isTransaction || this.kernelMode !== "canonical") throw new SestinaError(SestinaErrorCode.database_readonly, "Privacy erasure requires the canonical transaction");
-    this.kernelMode = "privacy"; this.refreshKernelAuthorizer();
-    try { const result = work(); if (result && typeof result === "object" && "then" in result) throw new SestinaError(SestinaErrorCode.internal_error, "Privacy erasure must be synchronous"); return result; }
-    finally { this.kernelMode = "canonical"; this.refreshKernelAuthorizer(); }
+    if (!this.isTransaction || this.kernelMode !== "canonical")
+      throw new SestinaError(
+        SestinaErrorCode.database_readonly,
+        "Privacy erasure requires the canonical transaction",
+      );
+    this.kernelMode = "privacy";
+    this.refreshKernelAuthorizer();
+    try {
+      const result = work();
+      if (result && typeof result === "object" && "then" in result)
+        throw new SestinaError(
+          SestinaErrorCode.internal_error,
+          "Privacy erasure must be synchronous",
+        );
+      return result;
+    } finally {
+      this.kernelMode = "canonical";
+      this.refreshKernelAuthorizer();
+    }
   }
-  get isKernelCanonicalWrite(): boolean { return this.kernelMode === "canonical" || this.kernelMode === "migration"; }
+  get isKernelCanonicalWrite(): boolean {
+    return this.kernelMode === "canonical" || this.kernelMode === "migration";
+  }
   private refreshKernelAuthorizer(): void {
     if (!this.kernelPolicy) return;
     this.statementCache.clear();
@@ -122,26 +207,91 @@ export class StorageDatabase {
     // Keep trusted_schema OFF; no unsafe user SQL functions are installed.
     this.rawDb.setAuthorizer((action, table, argument) => {
       if (this.kernelMode === "migration") return constants.SQLITE_OK;
-      if ([constants.SQLITE_SELECT, constants.SQLITE_READ, constants.SQLITE_FUNCTION, constants.SQLITE_TRANSACTION, constants.SQLITE_SAVEPOINT, constants.SQLITE_RECURSIVE].includes(action)) return constants.SQLITE_OK;
-      if ([constants.SQLITE_INSERT, constants.SQLITE_UPDATE, constants.SQLITE_DELETE].includes(action)) {
+      if (
+        [
+          constants.SQLITE_SELECT,
+          constants.SQLITE_READ,
+          constants.SQLITE_FUNCTION,
+          constants.SQLITE_TRANSACTION,
+          constants.SQLITE_SAVEPOINT,
+          constants.SQLITE_RECURSIVE,
+        ].includes(action)
+      )
+        return constants.SQLITE_OK;
+      if (
+        [
+          constants.SQLITE_INSERT,
+          constants.SQLITE_UPDATE,
+          constants.SQLITE_DELETE,
+        ].includes(action)
+      ) {
         if (this.kernelMode === "privacy") {
           // Trigger definitions are restored in this same transaction. No legacy
           // object insertion, deletion or column mutation is granted.
-          if (["sqlite_master", "sqlite_schema"].includes(table ?? "")) return constants.SQLITE_OK;
-          return action === constants.SQLITE_UPDATE && argument === "data" && [...KERNEL_LEGACY_TABLES, "research_provider_attempts"].includes(table ?? "") ? constants.SQLITE_OK : constants.SQLITE_DENY;
+          if (["sqlite_master", "sqlite_schema"].includes(table ?? ""))
+            return constants.SQLITE_OK;
+          return action === constants.SQLITE_UPDATE &&
+            argument === "data" &&
+            [...KERNEL_LEGACY_TABLES, "research_provider_attempts"].includes(
+              table ?? "",
+            )
+            ? constants.SQLITE_OK
+            : constants.SQLITE_DENY;
         }
-        const workflow = (KERNEL_WORKFLOW_TABLES as readonly string[]).includes(table ?? "") && table !== "research_projection_outbox";
-        const canonical = (KERNEL_CANONICAL_TABLES as readonly string[]).includes(table ?? "") || table === "research_projection_outbox";
-        return this.kernelMode === "canonical" && (canonical || workflow) || this.kernelMode === "workflow" && workflow ? constants.SQLITE_OK : constants.SQLITE_DENY;
+        const workflow =
+          (KERNEL_WORKFLOW_TABLES as readonly string[]).includes(table ?? "") &&
+          table !== "research_projection_outbox";
+        const canonical =
+          (KERNEL_CANONICAL_TABLES as readonly string[]).includes(
+            table ?? "",
+          ) || table === "research_projection_outbox";
+        return (this.kernelMode === "canonical" && (canonical || workflow)) ||
+          (this.kernelMode === "workflow" && workflow)
+          ? constants.SQLITE_OK
+          : constants.SQLITE_DENY;
       }
-      if (this.kernelMode === "privacy" && [constants.SQLITE_CREATE_TRIGGER, constants.SQLITE_DROP_TRIGGER].includes(action)) {
-        return table === "kernel_attempt_terminal" || table === "trg_closed_external_app_pilot_events_no_update" || KERNEL_LEGACY_TABLES.some(t => table === `kernel_legacy_${t}_update`) ? constants.SQLITE_OK : constants.SQLITE_DENY;
+      if (
+        this.kernelMode === "privacy" &&
+        [
+          constants.SQLITE_CREATE_TRIGGER,
+          constants.SQLITE_DROP_TRIGGER,
+        ].includes(action)
+      ) {
+        return table === "kernel_attempt_terminal" ||
+          table === "trg_closed_external_app_pilot_events_no_update" ||
+          KERNEL_LEGACY_TABLES.some(
+            (t) => table === `kernel_legacy_${t}_update`,
+          )
+          ? constants.SQLITE_OK
+          : constants.SQLITE_DENY;
       }
       // PRAGMA integrity/foreign-key diagnostics are reads; setters, ATTACH,
       // schema mutation and writable_schema are never exposed by this mode.
       if (action === constants.SQLITE_PRAGMA) {
-        const diagnostics = ["integrity_check", "quick_check", "foreign_key_check", "foreign_keys", "journal_mode", "table_info", "index_list", "index_info", "foreign_key_list", "wal_checkpoint", "data_version"];
-        return diagnostics.includes(table ?? "") && (argument === null || ["table_info", "index_list", "index_info", "foreign_key_list", "wal_checkpoint"].includes(table ?? "")) ? constants.SQLITE_OK : constants.SQLITE_DENY;
+        const diagnostics = [
+          "integrity_check",
+          "quick_check",
+          "foreign_key_check",
+          "foreign_keys",
+          "journal_mode",
+          "table_info",
+          "index_list",
+          "index_info",
+          "foreign_key_list",
+          "wal_checkpoint",
+          "data_version",
+        ];
+        return diagnostics.includes(table ?? "") &&
+          (argument === null ||
+            [
+              "table_info",
+              "index_list",
+              "index_info",
+              "foreign_key_list",
+              "wal_checkpoint",
+            ].includes(table ?? ""))
+          ? constants.SQLITE_OK
+          : constants.SQLITE_DENY;
       }
       return constants.SQLITE_DENY;
     });
@@ -161,7 +311,10 @@ export class StorageDatabase {
 
   private ensureOpen(): void {
     if (this.closed) {
-      throw new SestinaError(SestinaErrorCode.internal_error, "Database is closed");
+      throw new SestinaError(
+        SestinaErrorCode.internal_error,
+        "Database is closed",
+      );
     }
   }
 
@@ -173,7 +326,11 @@ export class StorageDatabase {
       );
     }
     const info = statSync(this.path);
-    if (`${info.dev}:${info.ino}` !== this.fileIdentity) throw new SestinaError(SestinaErrorCode.stale_state, "Database was replaced; reopen the project");
+    if (`${info.dev}:${info.ino}` !== this.fileIdentity)
+      throw new SestinaError(
+        SestinaErrorCode.stale_state,
+        "Database was replaced; reopen the project",
+      );
     if (!this.maintenanceOwned) assertNoIncompleteKernelMigration(this.path);
   }
 
@@ -192,8 +349,7 @@ export class StorageDatabase {
     this.ensureOpen();
     try {
       const row = this.prepareCached(`PRAGMA ${name}`).get() as
-        | Record<string, unknown>
-        | undefined;
+        Record<string, unknown> | undefined;
       if (!row) return undefined;
       const values = Object.values(row);
       return values[0];
@@ -224,10 +380,14 @@ export class StorageDatabase {
 
   // The row type parameter appears only in the return position.
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters
-  get<T = Record<string, unknown>>(sql: string, ...params: unknown[]): T | undefined {
+  get<T = Record<string, unknown>>(
+    sql: string,
+    ...params: unknown[]
+  ): T | undefined {
     this.ensureOpen();
     try {
-      return this.prepareCached(sql).get(...normalizeParams(params)) as T | undefined;
+      return this.prepareCached(sql).get(...normalizeParams(params)) as
+        T | undefined;
     } catch (err) {
       throw mapSqliteError(err, "Database query failed");
     }
@@ -273,22 +433,44 @@ export class StorageDatabase {
  * Opens a Sestina database with the documented security baseline and,
  * on writable opens, applies pending migrations (docs/17 §3.1, docs/09 §22).
  */
-export async function openDatabase(options: OpenDatabaseOptions): Promise<StorageDatabase> {
+export async function openDatabase(
+  options: OpenDatabaseOptions,
+): Promise<StorageDatabase> {
   const readOnly = options.readOnly ?? false;
   if (!readOnly) assertNoIncompleteKernelMigration(options.path);
-  if (!readOnly && typeof options.migrate === "object" &&
-      options.migrate.migrations?.some(m => m.version >= 21) &&
-      !options.migrate.verifiedStagingCopy && existsSync(options.path) && statSync(options.path).size > 0) {
+  if (
+    !readOnly &&
+    typeof options.migrate === "object" &&
+    options.migrate.migrations?.some((m) => m.version >= 21) &&
+    !options.migrate.verifiedStagingCopy &&
+    existsSync(options.path) &&
+    statSync(options.path).size > 0
+  ) {
     // Inspect through a read-only handle before writable PRAGMAs can change
     // even the old database's journal-mode header. Existing upgrades require
     // the Core's verified staging-copy coordinator.
     const inspection = new DatabaseSync(options.path, { readOnly: true });
     const requestedMigrations = options.migrate.migrations;
     try {
-      const rows = inspection.prepare("SELECT version,name,status FROM migrations ORDER BY version").all() as { version: number; name: string; status: string }[];
-      if (rows.length !== requestedMigrations.length || rows.some((r, i) => r.status !== "completed" || r.version !== requestedMigrations[i]?.version || r.name !== requestedMigrations[i].name))
-        throw new SestinaError(SestinaErrorCode.migration_failed, "Existing projects require a verified migration copy");
-    } finally { inspection.close(); }
+      const rows = inspection
+        .prepare("SELECT version,name,status FROM migrations ORDER BY version")
+        .all() as { version: number; name: string; status: string }[];
+      if (
+        rows.length !== requestedMigrations.length ||
+        rows.some(
+          (r, i) =>
+            r.status !== "completed" ||
+            r.version !== requestedMigrations[i]?.version ||
+            r.name !== requestedMigrations[i].name,
+        )
+      )
+        throw new SestinaError(
+          SestinaErrorCode.migration_failed,
+          "Existing projects require a verified migration copy",
+        );
+    } finally {
+      inspection.close();
+    }
   }
   const immutable = options.immutable ?? false;
   if (immutable && !readOnly) {
@@ -364,14 +546,16 @@ export async function openDatabase(options: OpenDatabaseOptions): Promise<Storag
   }
 
   if (!readOnly && options.migrate !== false) {
-    const migrateOpts = typeof options.migrate === "object" ? options.migrate : {};
+    const migrateOpts =
+      typeof options.migrate === "object" ? options.migrate : {};
     const runner = new MigrationRunner(
       db,
       migrateOpts.migrations ?? MIGRATIONS,
       {
         // Destructive migrations on an existing database are always backed
         // up (docs/17 §10); the default location is next to the database.
-        backupDirectory: migrateOpts.backupDirectory ?? join(dirname(options.path), "backups"),
+        backupDirectory:
+          migrateOpts.backupDirectory ?? join(dirname(options.path), "backups"),
         verifiedStagingCopy: migrateOpts.verifiedStagingCopy,
         onMigrationApplied: migrateOpts.onMigrationApplied,
       },
@@ -384,16 +568,38 @@ export async function openDatabase(options: OpenDatabaseOptions): Promise<Storag
     }
   }
 
-  if (db.get("SELECT name FROM sqlite_schema WHERE type='table' AND name='research_project_state_heads'")) db.enableKernelWriteBoundary();
+  if (
+    db.get(
+      "SELECT name FROM sqlite_schema WHERE type='table' AND name='research_project_state_heads'",
+    )
+  )
+    db.enableKernelWriteBoundary();
   return db;
 }
 
 function assertNoIncompleteKernelMigration(databasePath: string): void {
+  if (existsSync(join(dirname(databasePath), ".managed-restore.json")))
+    throw new SestinaError(
+      SestinaErrorCode.migration_failed,
+      "Managed restore requires recovery before writing",
+    );
   const journal = join(dirname(databasePath), ".kernel-migration.json");
   if (!existsSync(journal)) return;
   try {
     if (statSync(journal).size > 65_536) throw new Error("oversize");
-    const value = JSON.parse(readFileSync(journal, "utf8")) as { schemaVersion?: unknown; stage?: unknown };
-    if (value.schemaVersion !== "1.0.0" || !["swapped", "rolled_back"].includes(String(value.stage))) throw new Error("incomplete");
-  } catch { throw new SestinaError(SestinaErrorCode.migration_failed, "Kernel migration requires recovery before writing"); }
+    const value = JSON.parse(readFileSync(journal, "utf8")) as {
+      schemaVersion?: unknown;
+      stage?: unknown;
+    };
+    if (
+      value.schemaVersion !== "1.0.0" ||
+      !["swapped", "rolled_back"].includes(String(value.stage))
+    )
+      throw new Error("incomplete");
+  } catch {
+    throw new SestinaError(
+      SestinaErrorCode.migration_failed,
+      "Kernel migration requires recovery before writing",
+    );
+  }
 }

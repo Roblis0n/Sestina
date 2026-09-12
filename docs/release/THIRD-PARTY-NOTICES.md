@@ -6,8 +6,13 @@ The internal G10 desktop candidate additionally redistributes Electron 44.3.0
 runtime. The candidate ASAR includes this notice and the Sestina license.
 Electron Builder 26.15.3 (MIT) is a build tool, not an application runtime
 dependency. This candidate inventory does not change the historical preview
-inventory below. The desktop uses Electron safeStorage; it does not load the
-preview's separate DPAPI/keyring native modules for its credential path.
+inventory below. New desktop credentials use Electron safeStorage. Explicit
+import of earlier credentials uses the matching preview DPAPI/keyring native
+module; its license accompanies the packaged module. The companion includes
+Node.js 24.13.0 for the read-only MCP process, with its complete upstream license
+in `NODE-LICENSE.txt` beside the runtime (source copy:
+[NODE-RUNTIME-LICENSE.txt](NODE-RUNTIME-LICENSE.txt)). Its binary hash and target
+are recorded in the companion runtime identity.
 
 Sestina source code and documentation are licensed under Apache License 2.0
 unless a file states otherwise. This document records third-party software that

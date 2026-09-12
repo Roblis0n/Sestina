@@ -43,6 +43,14 @@ change project memory.
 
 ## Local development
 
+The internal desktop candidate provides installation-specific JSON/TOML and
+companion Skills in Settings → Integrations. Its bundled MCP runtime does not use
+system Node or the repository working directory. An empty progressive Brief is
+reported as `no_active_brief`; once the user saves the first Brief, the same MCP
+process can read its latest consistent snapshot while the desktop holds its
+writer lease. The temporary Host bridge remains separately enabled by the user,
+supports draft intake/status only and is not restarted automatically.
+
 Build the MCP adapter from the repository root:
 
 ```text

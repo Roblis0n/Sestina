@@ -82,7 +82,7 @@ export type { PrivacyDataFlow, PrivacyManifest } from "./privacy.js";
 export type { CopyFile, CleanupPlan } from "./kernel-privacy-maintenance.js";
 export { getReleaseIdentity, RELEASE_IDENTITY } from "./release-identity.js";
 export type { ReleaseIdentity } from "@sestina/schema";
-export { createPreUpgradeProjectStateBackup, createProjectStateBackup, inspectProjectRecovery, previewProjectStateRestore, ProjectRecoveryConfirmationService, restoreProjectState } from "./recovery.js";
+export { createPreUpgradeProjectStateBackup, createProjectStateBackup, inspectProjectRecovery, previewProjectStateRestore, ProjectRecoveryConfirmationService, restoreProjectState, recoverInterruptedProjectStateRestore } from "./recovery.js";
 export type {
   ExecuteProjectStateRestoreInput, ExecutedProjectStateRestore, PrepareProjectStateRestoreInput, PreparedProjectStateRestore,
   PreviewProjectStateRestoreOptions, ProjectRecoveryConfirmationServiceOptions, ProjectRecoveryOptions, ProjectRecoveryStatus,

@@ -1,5 +1,13 @@
 // Connection and pragmas
-export { KERNEL_MIGRATIONS, KERNEL_SCHEMA_VERSION, KERNEL_CANONICAL_TABLES, KERNEL_WORKFLOW_TABLES, KERNEL_LEGACY_TABLES, hasKernelSchema } from "./kernel-schema.js";
+export { acquireProjectWriteLease } from "./project-write-lease.js";
+export {
+  KERNEL_MIGRATIONS,
+  KERNEL_SCHEMA_VERSION,
+  KERNEL_CANONICAL_TABLES,
+  KERNEL_WORKFLOW_TABLES,
+  KERNEL_LEGACY_TABLES,
+  hasKernelSchema,
+} from "./kernel-schema.js";
 export {
   openDatabase,
   StorageDatabase,
@@ -80,7 +88,10 @@ export {
 } from "./lease.js";
 
 // Maintenance
-export { MaintenanceLock, DEFAULT_MAINTENANCE_LOCK_TTL_MS } from "./maintenance-lock.js";
+export {
+  MaintenanceLock,
+  DEFAULT_MAINTENANCE_LOCK_TTL_MS,
+} from "./maintenance-lock.js";
 export {
   MaintenanceGuard,
   maintenanceRootOf,
@@ -132,7 +143,12 @@ export {
   decodeEventCursor,
   type EventCursor,
 } from "./stream-sequence.js";
-export { search, type SearchQuery, type SearchRow, type SearchKind } from "./search.js";
+export {
+  search,
+  type SearchQuery,
+  type SearchRow,
+  type SearchKind,
+} from "./search.js";
 export {
   previewRetention,
   applyRetentionPreview,
@@ -162,12 +178,8 @@ export {
   type ExportResult,
   type ExportManifest,
 } from "./exports.js";
-export type {
-  ProjectRepository,
-} from "./repositories/projects.js";
-export type {
-  TaskRepository,
-} from "./repositories/tasks.js";
+export type { ProjectRepository } from "./repositories/projects.js";
+export type { TaskRepository } from "./repositories/tasks.js";
 export type {
   HostSessionRepository,
   HostSessionRecord,
@@ -176,59 +188,33 @@ export type {
   RootBindingRepository,
   RootBindingRecord,
 } from "./repositories/root-bindings.js";
-export type {
-  SessionAttachmentRepository,
-} from "./repositories/session-attachments.js";
-export type {
-  UnownedActivityRepository,
-} from "./repositories/uowned-activity.js";
-export type {
-  ContractRepository,
-} from "./repositories/contracts.js";
-export type {
-  CorrectionRepository,
-} from "./repositories/corrections.js";
+export type { SessionAttachmentRepository } from "./repositories/session-attachments.js";
+export type { UnownedActivityRepository } from "./repositories/uowned-activity.js";
+export type { ContractRepository } from "./repositories/contracts.js";
+export type { CorrectionRepository } from "./repositories/corrections.js";
 export type {
   EventRepository,
   EventReserveResult,
 } from "./repositories/events.js";
-export type {
-  DecisionRepository,
-} from "./repositories/decisions.js";
-export type {
-  DecisionTraceRepository,
-} from "./repositories/traces.js";
-export type {
-  AssertionRepository,
-} from "./repositories/assertions.js";
-export type {
-  EvidenceRepository,
-} from "./repositories/evidence.js";
-export type {
-  ClaimRepository,
-} from "./repositories/claims.js";
-export type {
-  DeliverableRepository,
-} from "./repositories/deliverables.js";
-export type {
-  ConversationRepository,
-} from "./repositories/conversations.js";
+export type { DecisionRepository } from "./repositories/decisions.js";
+export type { DecisionTraceRepository } from "./repositories/traces.js";
+export type { AssertionRepository } from "./repositories/assertions.js";
+export type { EvidenceRepository } from "./repositories/evidence.js";
+export type { ClaimRepository } from "./repositories/claims.js";
+export type { DeliverableRepository } from "./repositories/deliverables.js";
+export type { ConversationRepository } from "./repositories/conversations.js";
 export type {
   CollaborationRepository,
   DeliveryReserveResult,
 } from "./repositories/collaboration.js";
-export type {
-  ReviewRepository,
-} from "./repositories/reviews.js";
-export type {
-  HostStreamRepository,
-} from "./repositories/host-stream.js";
-export type {
-  NotificationRepository,
-} from "./repositories/notifications.js";
-export type {
-  UsageRepository,
-} from "./repositories/usage.js";
+export type { ReviewRepository } from "./repositories/reviews.js";
+export type { HostStreamRepository } from "./repositories/host-stream.js";
+export type { NotificationRepository } from "./repositories/notifications.js";
+export type { UsageRepository } from "./repositories/usage.js";
 export type { CursorInput, Page } from "./repositories/shared.js";
 export { keysetPage } from "./repositories/shared.js";
-export { verifyKernelLegacyShape, verifyKernelTargetShape, kernelTableFingerprint } from "./kernel-legacy.js";
+export {
+  verifyKernelLegacyShape,
+  verifyKernelTargetShape,
+  kernelTableFingerprint,
+} from "./kernel-legacy.js";

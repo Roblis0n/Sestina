@@ -13,6 +13,13 @@ target has now been accepted and is governed by the
 not a claim that the existing release already implements the new schema,
 persistent Review aggregate, task-first routes, or Electron lifecycle.
 
+G1–G9 now implement the schema-25 Kernel, persistent Review/Manifest/effects,
+Memory governance and four-entry interface. The G10/G11 internal candidate adds
+Electron, explicit update orchestration, configuration migration, schema-25
+desktop recovery and packaged read-only integration. Implementation does not
+close its remaining native/OS/signing acceptance. Current capability evidence
+and exact execution entry are recorded in [status](restructure/IMPLEMENTATION-STATUS.md).
+
 The accepted target makes one causal path authoritative: a Suggestion becomes
 a persistent Review, is bound to an exact state and outbound Manifest, may
 receive a non-authoritative Provider assessment, then receives an explicit

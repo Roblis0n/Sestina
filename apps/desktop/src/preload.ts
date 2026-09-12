@@ -25,5 +25,13 @@ contextBridge.exposeInMainWorld(
       return () =>
         ipcRenderer.removeListener("sestina:close-requested", callback);
     },
+    onSessionClosed(listener: () => void) {
+      const callback = () => {
+        listener();
+      };
+      ipcRenderer.on("sestina:session-closed", callback);
+      return () =>
+        ipcRenderer.removeListener("sestina:session-closed", callback);
+    },
   }),
 );

@@ -3,8 +3,11 @@
 The schema-25 candidate uses Core's validated read-only snapshot so it can see
 committed changes while Electron retains the project writer lease. Returned
 context carries source revision/hash and remains untrusted research data with
-no Authority. This source package is not yet a standalone launcher bundled into
-the internal desktop installer. See [desktop candidate status](../../apps/desktop/README.md).
+no Authority. The internal desktop package includes a dedicated Node runtime,
+MCP launcher and generated companion Skills under its resources/companion folder.
+Open Settings → Integrations → Read-only MCP and companion Skills to copy configuration containing
+the actual installation and selected project paths. No development checkout is
+required. See [desktop candidate status](../../apps/desktop/README.md).
 
 `@sestina/mcp` is Sestina's production, local, read-only STDIO MCP package. A host starts the `sestina-mcp` binary as a child process and supplies one explicit absolute Sestina project root:
 

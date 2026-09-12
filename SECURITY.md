@@ -17,7 +17,7 @@ Use a synthetic reproduction. Never attach unpublished research content, a real 
 Provider 响应、密钥/token/API key、项目或个人路径、设备标识、原始日志、
 stdout/stderr 或隐私截图。
 
-## Current security boundaries
+## Published v0.2.0 preview security boundaries
 
 - The default Core, CLI, deterministic review, backup/restore, Capsule file operations, and stdio MCP do not require a network connection.
 - `connection-status --verify-host --yes` is an explicit exception: it starts a Codex host/model operation and may send the bounded categories declared by `sestina privacy show` to the user-selected Codex model provider.
@@ -34,10 +34,10 @@ stdout/stderr 或隐私截图。
 
 See [PRIVACY.md](PRIVACY.md), [the local-first guarantee](docs/security/LOCAL-FIRST-GUARANTEE.md), [the data-flow inventory](docs/security/DATA-FLOW.md), and [backup and restore](docs/recovery/BACKUP-RESTORE.md).
 
-## Opt-in schema-25 development boundary
+## Internal schema-25 application boundary
 
-G1–G3 add a local persistence foundation, with no production HTTP/IPC command
-or automatic migration cutover. The new Manifest stores a prepared request body
+The internal candidate connects the shared application service to typed HTTP
+and restricted Electron IPC. Public migration cutover has not occurred. Its Manifest stores a prepared request body
 inside the target database for exact recovery; this differs from the legacy
 payload-retention statements above. Secrets, authentication headers, raw Provider
 responses and hidden reasoning remain outside its structured record contract.
@@ -47,8 +47,9 @@ project/version binding, immutable proof records and read-only legacy tables.
 Staged migration validates the source, backup and target before a journaled
 switch. Incomplete operations fence ordinary writes; unknown replacements or WAL
 data are preserved and refused. These checks do not grant user authority or prove
-Provider semantics. Electron IPC, connect-time Provider security and three-platform
-release verification remain downstream; see the
+Provider semantics. Electron IPC and connect-time Provider security are implemented
+with targeted local verification; complete three-platform lifecycle, signature and
+release verification remain outstanding. See the
 [implemented foundation and evidence](docs/product/restructure/G1-G3-EVIDENCE.md).
 
 ## Internal desktop boundary

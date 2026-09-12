@@ -153,9 +153,10 @@ four-entry candidate interface are verified, including real browser visual, moti
 and interaction acceptance. Agent Corrector's draft-only integration was completed
 in G7 and is connected to this Review flow. The exact G10 entry is in
 [operations and continuation](G1-G3-OPERATIONS.md#exact-g10-continuation).
-G10–G13 remain downstream. The shipped preview default stays unchanged; Electron
-assembly/security/provenance, installation-state acceptance and final migration,
-default and release cutover retain their assigned gates. See
+G10/G11 are current partial work: Electron assembly, restricted IPC and local
+candidate flows are implemented, with remaining acceptance tracked in the status
+record. G12/G13 remain downstream. The shipped preview default stays unchanged;
+final migration, default and release cutover retain their assigned gates. See
 [implementation status](IMPLEMENTATION-STATUS.md) for exact commits and evidence.
 
 ## Current release versus accepted target

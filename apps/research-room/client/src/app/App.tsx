@@ -29,6 +29,7 @@ import { LanguageScreen } from "../screens/LanguageScreen.js";
 import { ProjectShell } from "../screens/ProjectShell.js";
 import { StartCenter } from "../screens/StartCenter.js";
 import { KernelProjectWorkspace } from "../screens/KernelProjectWorkspace.js";
+import { desktop } from "../api/desktop.js";
 
 type Phase =
   "boot" | "language" | "start" | "brief" | "shell" | "fatal" | "kernel";
@@ -186,6 +187,20 @@ export function App() {
     applyAppearanceToDocument(appearance);
     void runBusy(async () => {
       try {
+        const saved = await desktop()?.methods.preferences({ action: "read" });
+        if (saved?.ok) {
+          const p = saved.value as {
+            appearance: AppearancePreferences;
+            recentProjects: string[];
+          };
+          writeAppearancePreferences(p.appearance);
+          applyAppearanceToDocument(p.appearance);
+          setAppearance(p.appearance);
+          localStorage.setItem(
+            "sestina.candidate.recent-projects",
+            JSON.stringify(p.recentProjects),
+          );
+        }
         const initial = await researchRoomApi.status();
         setStatus(initial);
         if (initial.languagePreference === null) {
@@ -198,6 +213,28 @@ export function App() {
         handleFailure(error, "en");
       }
     });
+  }, []);
+
+  useEffect(() => {
+    const imported = (event: Event) => {
+      const value = (event as CustomEvent).detail as {
+        language: AppLanguage;
+        appearance: AppearancePreferences;
+        recentProjects: string[];
+      };
+      setLanguage(value.language);
+      writeAppearancePreferences(value.appearance);
+      applyAppearanceToDocument(value.appearance);
+      setAppearance(value.appearance);
+      localStorage.setItem(
+        "sestina.candidate.recent-projects",
+        JSON.stringify(value.recentProjects),
+      );
+    };
+    window.addEventListener("sestina-preferences-imported", imported);
+    return () => {
+      window.removeEventListener("sestina-preferences-imported", imported);
+    };
   }, []);
 
   useEffect(() => {
@@ -251,6 +288,20 @@ export function App() {
     writeAppearancePreferences(preferences);
     applyAppearanceToDocument(preferences);
     setAppearance(preferences);
+    void desktop()
+      ?.methods.preferences({
+        action: "save",
+        input: { appearance: preferences },
+      })
+      .then((reply) => {
+        if (!reply.ok)
+          showNotice(
+            language === "en"
+              ? "Appearance changed for this window, but could not be saved for reopening."
+              : "当前窗口外观已改变，但未能保存供下次打开使用。",
+            "warning",
+          );
+      });
   }
 
   async function refreshState() {

@@ -1,6 +1,6 @@
 import { build } from "esbuild";
 import { createRequire } from "node:module";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, cp } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { spawn } from "node:child_process";
@@ -9,6 +9,11 @@ const requireDesktop = createRequire(join(root, "apps/desktop/package.json"));
 const electron = requireDesktop("electron");
 const directory = await mkdtemp(join(tmpdir(), "sestina-electron-check-"));
 try {
+  await cp(
+    join(root, "apps/desktop/dist/node_modules"),
+    join(directory, "node_modules"),
+    { recursive: true },
+  );
   const entry = join(directory, "runtime.mjs"),
     report = join(directory, "report.json");
   await build({
@@ -21,6 +26,7 @@ try {
     external: ["electron", "@primno/dpapi", "@napi-rs/keyring"],
     alias: {
       "@sestina/application": join(root, "packages/application/src/index.ts"),
+      "@sestina/secrets": join(root, "packages/secrets/src/index.ts"),
     },
   });
   const env = { ...process.env };

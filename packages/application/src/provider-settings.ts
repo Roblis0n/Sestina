@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, createHash } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, posix, win32 } from "node:path";
@@ -331,18 +331,37 @@ export function createFileProviderConfigStore(
   const generationPath = filePath + ".generation.json";
   const lastGeneration = async () => {
     let raw: string;
-    try { raw = await readFile(generationPath, "utf8"); }
-    catch (error) { if (isMissing(error)) return 0; throw error; }
+    try {
+      raw = await readFile(generationPath, "utf8");
+    } catch (error) {
+      if (isMissing(error)) return 0;
+      throw error;
+    }
     const value: unknown = JSON.parse(raw);
-    if (!isRecord(value) || value.schemaVersion !== 1 || !Number.isSafeInteger(value.generation) || Number(value.generation) < 0 || Object.keys(value).length !== 2) throw new ProviderSettingsError("provider_config_corrupt", "Provider configuration history needs recovery.");
+    if (
+      !isRecord(value) ||
+      value.schemaVersion !== 1 ||
+      !Number.isSafeInteger(value.generation) ||
+      Number(value.generation) < 0 ||
+      Object.keys(value).length !== 2
+    )
+      throw new ProviderSettingsError(
+        "provider_config_corrupt",
+        "Provider configuration history needs recovery.",
+      );
     return Number(value.generation);
   };
   const saveGeneration = async (generation: number) => {
     const current = await lastGeneration();
     if (generation <= current) return;
     await mkdir(dirname(filePath), { recursive: true });
-    const temporary = generationPath + "." + randomBytes(12).toString("hex") + ".tmp";
-    await writeFile(temporary, JSON.stringify({ schemaVersion: 1, generation }), { flag: "wx", mode: 0o600 });
+    const temporary =
+      generationPath + "." + randomBytes(12).toString("hex") + ".tmp";
+    await writeFile(
+      temporary,
+      JSON.stringify({ schemaVersion: 1, generation }),
+      { flag: "wx", mode: 0o600 },
+    );
     await rename(temporary, generationPath);
   };
   let writes = Promise.resolve();
@@ -406,9 +425,13 @@ export function createFileProviderConfigStore(
     },
     async delete(): Promise<void> {
       try {
-        const config = parseConfig(JSON.parse(await readFile(filePath, "utf8")) as unknown);
+        const config = parseConfig(
+          JSON.parse(await readFile(filePath, "utf8")) as unknown,
+        );
         if (config) await saveGeneration(config.generation);
-      } catch (error) { if (!isMissing(error)) throw error; }
+      } catch (error) {
+        if (!isMissing(error)) throw error;
+      }
       await rm(filePath, { force: true });
     },
   });
@@ -534,6 +557,8 @@ export class ProviderConfigurationService {
         );
       try {
         await this.secrets.set(this.#secretRef, apiKey);
+        if ((await this.secrets.get(this.#secretRef)) !== apiKey)
+          throw new Error("secure_storage_unavailable");
       } catch {
         throw new ProviderSettingsError(
           "secure_storage_unavailable",
@@ -552,7 +577,11 @@ export class ProviderConfigurationService {
         ? {}
         : { maxOutputTokens: input.maxOutputTokens }),
       locality: validated.locality,
-      generation: Math.max(previous?.generation ?? 0, await this.store.lastGeneration?.() ?? 0) + 1,
+      generation:
+        Math.max(
+          previous?.generation ?? 0,
+          (await this.store.lastGeneration?.()) ?? 0,
+        ) + 1,
     });
     await this.store.write(config);
     return config;
@@ -599,4 +628,117 @@ export class ProviderConfigurationService {
   async currentGeneration(): Promise<number | undefined> {
     return (await this.store.read())?.generation;
   }
+}
+
+export interface ProviderMigrationRecord {
+  readonly sourceHash: string;
+  readonly generation: number;
+  readonly stage: "prepared" | "config_migrated" | "complete";
+}
+/** Configuration generation is renewed; old research or Host authority is never imported. */
+export async function migrateProviderConfiguration(options: {
+  source: ProviderConfigStore;
+  target: ProviderConfigStore;
+  sourceSecrets: Pick<SecretBackend, "get">;
+  targetSecrets: SecretBackend;
+  sourceRef: string;
+  targetRef: string;
+  readRecord: () => Promise<ProviderMigrationRecord | undefined>;
+  writeRecord: (record: ProviderMigrationRecord) => Promise<void>;
+}): Promise<{
+  status:
+    "missing" | "current_config_kept" | "credentials_need_input" | "complete";
+  sourcePreserved: true;
+  generation?: number;
+}> {
+  const source = await options.source.read();
+  if (!source) return { status: "missing", sourcePreserved: true };
+  const sourceHash = createHash("sha256")
+    .update(JSON.stringify(source))
+    .digest("hex");
+  let record = await options.readRecord();
+  let target = await options.target.read();
+  if (
+    record &&
+    (Object.keys(record).sort().join(",") !== "generation,sourceHash,stage" ||
+      !/^[a-f0-9]{64}$/.test(record.sourceHash) ||
+      !Number.isSafeInteger(record.generation) ||
+      record.generation <= source.generation ||
+      !["prepared", "config_migrated", "complete"].includes(record.stage))
+  )
+    throw new ProviderSettingsError(
+      "provider_config_corrupt",
+      "The migration record needs recovery.",
+    );
+  if (record && record.sourceHash !== sourceHash)
+    return { status: "current_config_kept", sourcePreserved: true };
+  if (!record) {
+    if (target) return { status: "current_config_kept", sourcePreserved: true };
+    record = {
+      sourceHash,
+      generation:
+        Math.max(
+          source.generation,
+          (await options.source.lastGeneration?.()) ?? 0,
+          (await options.target.lastGeneration?.()) ?? 0,
+        ) + 1,
+      stage: "prepared",
+    };
+    await options.writeRecord(record);
+  }
+  const candidate = { ...source, generation: record.generation };
+  const highWater = (await options.target.lastGeneration?.()) ?? 0;
+  if (!target && (highWater > record.generation || record.stage === "complete"))
+    return { status: "current_config_kept", sourcePreserved: true };
+  if (target && JSON.stringify(target) !== JSON.stringify(candidate))
+    return { status: "current_config_kept", sourcePreserved: true };
+  if (!target) {
+    await options.target.write(candidate);
+    target = await options.target.read();
+    if (JSON.stringify(target) !== JSON.stringify(candidate))
+      throw new ProviderSettingsError(
+        "provider_config_corrupt",
+        "The migrated configuration could not be verified.",
+      );
+  }
+  if (record.stage === "complete")
+    return {
+      status: "complete",
+      sourcePreserved: true,
+      generation: record.generation,
+    };
+  record = { ...record, stage: "config_migrated" };
+  await options.writeRecord(record);
+  try {
+    const value = await options.sourceSecrets.get(options.sourceRef);
+    if (value !== undefined) {
+      if (
+        typeof value !== "string" ||
+        value.length < 1 ||
+        value.length > 8192 ||
+        !(await options.targetSecrets.health()).available
+      )
+        throw Error("secure_storage_unavailable");
+      await options.targetSecrets.set(options.targetRef, value);
+      if ((await options.targetSecrets.get(options.targetRef)) !== value)
+        throw Error("secure_storage_unavailable");
+    } else if (source.locality === "external")
+      return {
+        status: "credentials_need_input",
+        sourcePreserved: true,
+        generation: record.generation,
+      };
+  } catch {
+    return {
+      status: "credentials_need_input",
+      sourcePreserved: true,
+      generation: record.generation,
+    };
+  }
+  await options.writeRecord({ ...record, stage: "complete" });
+  return {
+    status: "complete",
+    sourcePreserved: true,
+    generation: record.generation,
+  };
 }

@@ -1,8 +1,10 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { researchRoomApi, ResearchRoomApiError } from "../api/client.js";
 import { Button } from "../components/primitives/Button.js";
 import type { LocalJson } from "../api/kernel-dto.js";
 import { desktop } from "../api/desktop.js";
+import { DesktopRecovery } from "../components/product/DesktopRecovery.js";
+import { DesktopSettingsMigration } from "../components/product/DesktopSettingsMigration.js";
 const recentKey = "sestina.candidate.recent-projects";
 function recents(): string[] {
   try {
@@ -35,6 +37,15 @@ export function KernelStartCenter({
     [notice, setNotice] = useState(""),
     [restore, setRestore] = useState<LocalJson>();
   const active = useRef(false);
+  useEffect(() => {
+    const update = () => {
+      setRecent(recents());
+    };
+    window.addEventListener("sestina-preferences-imported", update);
+    return () => {
+      window.removeEventListener("sestina-preferences-imported", update);
+    };
+  }, []);
   const changePath = (next: string) => {
     setPath(next);
     setPreview(undefined);
@@ -46,6 +57,10 @@ export function KernelStartCenter({
     const values = [value, ...recents().filter((p) => p !== value)].slice(0, 8);
     localStorage.setItem(recentKey, JSON.stringify(values));
     setRecent(values);
+    void desktop()?.methods.preferences({
+      action: "save",
+      input: { recentProjects: values },
+    });
   };
   async function run(action: () => Promise<void>) {
     if (active.current) return;
@@ -334,7 +349,18 @@ export function KernelStartCenter({
                 <Button
                   variant="quiet"
                   onClick={() => {
-                    changePath(p);
+                    if (desktop())
+                      void run(async () => {
+                        const bridge = desktop();
+                        if (!bridge) throw Error("desktop_required");
+                        const reply = await bridge.methods.pickDirectory({
+                          initialPath: p,
+                        });
+                        if (!reply.ok) throw Error("directory_unavailable");
+                        const value = reply.value as { path?: string };
+                        if (value.path) changePath(value.path);
+                      });
+                    else changePath(p);
                   }}
                 >
                   {p}
@@ -346,6 +372,10 @@ export function KernelStartCenter({
             onClick={() => {
               localStorage.removeItem(recentKey);
               setRecent([]);
+              void desktop()?.methods.preferences({
+                action: "save",
+                input: { recentProjects: [] },
+              });
             }}
           >
             {en ? "Clear recent locations" : "清除最近位置"}
@@ -353,6 +383,17 @@ export function KernelStartCenter({
         </section>
       ) : null}
       {error ? <p role="alert">{error}</p> : null}
+      {desktop() ? (
+        <DesktopRecovery
+          key={path}
+          en={en}
+          path={path}
+          busy={busy}
+          run={run}
+          onReopen={() => void run(() => open())}
+        />
+      ) : null}
+      {desktop() ? <DesktopSettingsMigration en={en} /> : null}
       {notice ? <p role="status">{notice}</p> : null}
       {busy ? (
         <p role="status">

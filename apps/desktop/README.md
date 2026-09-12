@@ -1,10 +1,69 @@
 # Sestina internal desktop candidate
 
-This is the G10 Electron candidate, using the G8/G9 schema-25 research interface.
-It is not a public release and does not change the published v0.2.0/schema-20
-preview. The three-platform installation gate is not complete.
+This Electron candidate uses the schema-25 Research Room and shared application
+service. It is not a public release. The published v0.2.0/schema-20 preview remains
+unchanged. G10/G11 acceptance is tracked in the
+[current evidence](../../docs/product/restructure/G1-G3-EVIDENCE.md#g10g11-internal-desktop-evidence).
 
-For contributors, from the repository root:
+## Use the candidate / 使用候选
+
+Choose a project folder, then open or create a project. A Provider is optional:
+save a Review draft, inspect changes and confirm a research decision locally.
+Only saved drafts and results return after restart. Closing or suspending the
+application revokes project and Host sessions; no uncertain request is resent.
+
+选择项目文件夹，再打开或创建项目。没有模型服务也可以保存草稿、查看修改、
+保存研究决定。重启恢复的是已经保存的内容。安装器、模型和宿主不替用户裁决。
+
+| Location | Action and result |
+| --- | --- |
+| Start page → Backup & recovery | Close the project, create/check a schema-25 backup, open its directory, preview/confirm restore, recover an interrupted swap and reopen. |
+| Start page → Earlier settings | Inspect the supported earlier application directory, migrate Provider configuration/credentials and language, or paste/export preferences. Source copies are retained; browser databases are never scanned. |
+| Settings → Recovery & data | Close the project with the unsaved-input guard and return to maintenance. |
+| Settings → Integrations → Read-only MCP and companion Skills | Copy installation-specific MCP JSON/TOML or open bundled companion Skills. The dedicated Node runtime needs no development checkout. Generating configuration does not establish a host connection. |
+| Settings → About | Explicit update check, download, cancel, verify, install and previous-program recovery. No trusted source/root is configured in this build, so the available result is “source unavailable.” |
+| Settings → Appearance | Application-level language, themes, reduced motion and transparency preferences. |
+
+旧设置迁移在宿主内读取密钥，写入桌面加密存储后实际读回验证。配置 generation
+会更新，旧外发清单不会恢复有效。原副本保留；密钥失败时已迁移配置仍保留，
+可以重新输入密钥。无法访问的旧浏览器偏好可通过偏好文本导入或重新设置。
+旧令牌、用户裁决能力、Host bridge 和后台运行状态不导入。
+
+If secure storage is unavailable, the native prompt offers explicit session-only
+use. Its key stays in memory until project close, suspension or exit; local
+research remains usable. Linux basic_text and unknown backends are refused.
+Preferences and Provider configuration do not advance the research revision.
+
+## Recovery, updates and storage
+
+Project databases and backups stay in the selected project folder. Installation,
+application preferences, encrypted credentials, update staging and preserved
+programs have separate locations. Windows uninstall preserves projects and app
+settings. Delete a saved key through Provider settings as a separate action.
+
+Schema-25 restore verifies project, Brief, revision/event/workflow and privacy
+identity, creates a pre-restore backup and rechecks source/current files under
+maintenance and writer locks. Interrupted swap/cleanup blocks project opening
+until explicit recovery. Unknown/corrupt replacements and different Forget
+history are refused. An older program cannot write newer schema. See
+[backup instructions](../../docs/recovery/BACKUP-RESTORE.md).
+
+The updater accepts signed metadata from installed roots only. It checks channel,
+sequence, version, target, source and migration identity, installer size/hash and
+the signed unsigned-core identity. Startup/status never fetch. Restart reports
+interrupted work without resuming it. An explicit new check removes recognized
+abandoned partial downloads. Before launch it protects saved project state,
+verifies a preserved program and records the phase. New schema/migration identity
+is refused pending an applicable verified migration contract.
+
+Synthetic tests inject trust/source/installer functions through service construction.
+The app exposes no test-root switch or environment trust override. Synthetic tests
+are not a signed release or native installer acceptance. See
+[upgrade scope](../../docs/release/RECOVERY-AND-UPGRADE.md).
+
+## Contributor build and verification
+
+From the repository root:
 
 ```text
 pnpm install --frozen-lockfile
@@ -14,60 +73,39 @@ pnpm desktop:runtime
 pnpm test:desktop
 ```
 
-The application loads bundled resources through `sestina://app/`; it does not
-start the Research Room HTTP server or open a system browser. Main owns project
-leases, OS storage, Provider connections and native confirmation. Preload exposes
-named methods only. Research rules and transactions remain in Kernel.
+Resources load through sestina://app/ without an HTTP server. Main owns files,
+leases, secrets, native dialogs and installation. Preload exposes named methods;
+the renderer consumes typed projections and uses the shared Kernel service.
 
-Choose a project folder in the native picker. Create a project or open an
-existing compatible project. Today, Project, Search and Settings use the same
-typed projections as the controlled browser candidate. A Provider is optional.
-Saving a research decision and sending checked content require main-owned user
-confirmation. Closing a project revokes its session; restarting never resends a
-Provider request or enables the Host bridge.
+Package committed source with `pnpm desktop:package win32`, `darwin` or `linux`.
+Targets remain Windows x64, macOS arm64 and Linux x64. Each invocation creates a
+fresh staging directory and produces a deterministic unsigned core, manifest and
+installer under release/desktop/platform-arch. The companion pins Node 24.13.0,
+ships its full license and includes platform native credential modules.
+Cross-building requires an explicit target Node runtime (SESTINA_COMPANION_NODE)
+and native dependencies. Prefer a target-system build; Windows cannot verify
+another OS's installed lifecycle.
 
-Project databases stay in the selected folders. Program installation, application
-preferences, OS-encrypted credential files and project backups are separate.
-No telemetry or background update checker is installed. The candidate has no
-configured trusted production update root; the update page reports this as
-unavailable, not up to date. Linux `basic_text` encryption is rejected.
+`node scripts/verify-desktop-artifact.mjs <installed-directory> <manifest> <source-commit>`
+checks actual ASAR, unpacked native resources, companion runtime, source, lockfile,
+migration and unchanged official Logo. Independent clean cores must match;
+installer signatures remain a separate outer-artifact requirement.
 
-Package a committed candidate with `pnpm desktop:package win32` (Windows x64),
-`pnpm desktop:package darwin` (macOS arm64), or `pnpm desktop:package linux`
-(Linux x64). Output is under `release/desktop/<platform>-<arch>/`. The recipe
-includes an unsigned deterministic core, candidate manifest and platform
-installer. Packaging does not establish installation, signature, notarization or
-Gatekeeper acceptance. Do not publish these unsigned internal candidates.
+Set SESTINA_TEST_INSTALLED_EXECUTABLE to the installed executable for installed
+IPC/layout tests. The installed visual journey is:
 
-The Windows candidate has been installed in an isolated directory, used to save
-a synthetic draft, exited and reopened, uninstalled and reinstalled while retaining
-the original project. The installer is unsigned. This result does not establish
-public signing or the complete upgrade/recovery fault matrix.
+```text
+node node_modules/vite-node/vite-node.mjs --config tests/post-0.2/vitest.foundation.config.ts tests/desktop/installed-visual.ts
+```
 
-Remaining G10 work includes legacy credential/preference migration, the complete
-verified update download/staging/install path, schema-25 backup/upgrade integration,
-and native-dialog/focus/motion acceptance. macOS/Linux machines and production
-signing/notarization resources were explicitly unavailable for this local task.
-The local implementation gaps are separate from those unavailable resources.
+This journey uses synthetic picker/confirmation answers. It checks the installed
+renderer, IPC, Kernel and SQLite; native-dialog acceptance requires actual
+Computer Use operation. Product Design must inspect captured images and running
+transitions, focus, rapid interruption and reduced motion. This continues into
+G12/G13 installed acceptance.
 
-For actual installed-window checks, set `SESTINA_TEST_INSTALLED_EXECUTABLE` to the
-installed executable and run `pnpm test:desktop`. The installed visual journey is
-`node node_modules/vite-node/vite-node.mjs --config tests/post-0.2/vitest.foundation.config.ts tests/desktop/installed-visual.ts`.
-Its synthetic OS-picker and native-confirmation answers are test stubs; they
-exercise the real renderer, IPC, Kernel and SQLite but do not prove native-dialog
-interaction or visual acceptance. Inspect the captured installed-window images.
-
-See the current [implementation status](../../docs/product/restructure/IMPLEMENTATION-STATUS.md)
-and [operations record](../../docs/product/restructure/G1-G3-OPERATIONS.md).
-
-## 本地 Windows 候选的使用入口
-
-本次已安装并验证的候选为 `0.2.0-g10.5490837b`。安装包位于
-`release/desktop/win32-x64/`，程序已安装在仓库的
-`.tmp/g10-g11/installed/Sestina Candidate.exe`。这是未签名的内部候选，
-不是公开 Release；其他平台和完整原生视觉验收尚未完成。
-
-启动后选择项目文件夹，再打开或创建项目。没有模型服务也可以保存草稿、
-查看修改并保存研究决定。只有已经保存的内容能够在重启后恢复。
-研究项目保留在你选择的文件夹，卸载程序不会删除它们。
-更新页目前会说明尚未配置可信更新源，不会自动联网，也不会声称已是最新版。
+No macOS/Linux machine, signing/notarization account or authorized production
+update root is available for this task. Their actual acceptance remains open;
+local implementation and Windows evidence are recorded separately in the
+[implementation status](../../docs/product/restructure/IMPLEMENTATION-STATUS.md).
+No push, tag, publication or G12/G13 cutover is part of this candidate.

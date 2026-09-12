@@ -1,6 +1,14 @@
 # Sestina Research Room
 
-Sestina Research Room is a loopback-only local web application. On first run,
+## Published v0.2.0 preview
+
+The published Research Room is a loopback-only local web application. The
+internal schema-25 Electron candidate uses the same Research Room interface
+through shared application services; its current user instructions are in
+[desktop operations](../desktop/README.md). The legacy Preview, Appeal and Room
+flows below describe v0.2.0 and retain their historical labels.
+
+On first run of the published preview,
 it requires an explicit `中文` or `English` interface-language choice before a
 project can be opened. The choice is stored as a strict App-level preference in
 `%LOCALAPPDATA%\Sestina\preferences.json` on Windows and is restored across

@@ -4,7 +4,20 @@ Sestina can expose a bounded, read-only MCP view of the current Research Brief
 to a compatible Codex host. The integration does not turn the host into a
 research authority and does not give it write access to project state.
 
-## Build the local integration
+## Use an internal desktop installation
+
+Open a project, choose Settings → Integrations → Read-only MCP and companion Skills, then choose
+Show configuration to copy. Copy the JSON or TOML into the compatible host's MCP
+settings. It uses the installation's bundled Node and MCP entry and the selected
+project path. Open companion Skills shows the generated files from that same
+installation. Sestina does not edit host configuration automatically or claim
+that the host has connected. All MCP tools remain read-only.
+
+在内部桌面候选中打开项目，进入“设置 → 集成 → 只读 MCP 与配套 Skills”，生成并复制配置。
+配置使用安装目录中的运行时和当前项目路径，无需开发仓库。复制配置不表示宿主
+已经连接；辅助纠偏只产生建议，必须由用户明确交接为审议草稿。
+
+## Build the local integration from source
 
 From the repository root:
 

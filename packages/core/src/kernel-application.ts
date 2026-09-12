@@ -38,7 +38,11 @@ import {
   writeKernelBriefMetadata,
   readKernelLegacyRecord,
 } from "@sestina/research-store";
-import type { StorageDatabase } from "@sestina/storage";
+import {
+  acquireProjectWriteLease,
+  type StorageDatabase,
+} from "@sestina/storage";
+import { join } from "node:path";
 import { RandomIdFactory, SystemClock } from "./id-factory.js";
 import { openKernelProject } from "./kernel-migration.js";
 import {
@@ -77,9 +81,14 @@ export interface KernelProvider {
   readonly maxOutputTokens: number;
   readonly timeoutMs?: number;
   /** Production adapter receives the already confirmed bytes; it may not serialize again. */
-  send(body: string, signal: AbortSignal, beforeWrite?: () => Promise<void>): Promise<string>;
+  send(
+    body: string,
+    signal: AbortSignal,
+    beforeWrite?: () => Promise<void>,
+  ): Promise<string>;
 }
 export interface KernelApplicationOptions {
+  readonly exclusiveLease?: boolean;
   readonly readOnly?: boolean;
   /** Only the local application's session gate supplies this callback; never request data. */
   readonly resolveUser: (capability: unknown) => ResearchActor | undefined;
@@ -254,6 +263,7 @@ export class ResearchDeliberationKernel {
     readonly database: StorageDatabase,
     readonly projectId: string,
     private readonly options: KernelApplicationOptions,
+    private readonly releaseLease?: () => void,
   ) {
     this.#ids = options.idFactory ?? new RandomIdFactory();
     this.#clock = options.clock ?? new SystemClock();
@@ -1462,7 +1472,12 @@ export class ResearchDeliberationKernel {
             controller.signal.throwIfAborted();
             this.user(capability);
             const current = this.review(id);
-            if (current.status !== "provider_attempt_running" || current.attemptIds.at(-1) !== attempt.id || this.fresh(current, manifest, currentProvider).length) throw new KernelFault("stale_revision");
+            if (
+              current.status !== "provider_attempt_running" ||
+              current.attemptIds.at(-1) !== attempt.id ||
+              this.fresh(current, manifest, currentProvider).length
+            )
+              throw new KernelFault("stale_revision");
           },
         ),
         aborted,
@@ -2020,7 +2035,11 @@ export class ResearchDeliberationKernel {
       this.#closed = true;
       for (const controller of this.#active.values()) controller.abort();
       this.#active.clear();
-      this.database.close();
+      try {
+        this.database.close();
+      } finally {
+        this.releaseLease?.();
+      }
     }
   }
 }
@@ -2028,7 +2047,21 @@ export async function openResearchDeliberationKernel(
   projectRoot: string,
   options: KernelApplicationOptions,
 ) {
-  const db = await openKernelProject(projectRoot, options.readOnly === true);
+  let lease: ReturnType<typeof acquireProjectWriteLease> | undefined;
+  if (options.exclusiveLease && !options.readOnly) {
+    const inspected = await openKernelProject(projectRoot, true);
+    inspected.close();
+    lease = acquireProjectWriteLease(
+      join(projectRoot, ".sestina", "state.sqlite"),
+    );
+  }
+  const db = await openKernelProject(
+    projectRoot,
+    options.readOnly === true,
+  ).catch((error: unknown) => {
+    lease?.release();
+    throw error;
+  });
   try {
     const project = db.get<{
       project_id: string;
@@ -2038,6 +2071,7 @@ export async function openResearchDeliberationKernel(
       db,
       project.project_id,
       options,
+      lease?.release,
     );
     if (!options.readOnly)
       value(
@@ -2050,6 +2084,7 @@ export async function openResearchDeliberationKernel(
     return kernel;
   } catch (error) {
     db.close();
+    lease?.release();
     throw error;
   }
 }

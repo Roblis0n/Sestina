@@ -1,13 +1,21 @@
 import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import { mkdir, readFile, readdir, writeFile, cp, rename } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import {
+  mkdir,
+  readFile,
+  readdir,
+  writeFile,
+  cp,
+  rename,
+} from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { createDeterministicTarGzip } from "./lib/archive.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 // This local recipe never consumes a signing account inherited from the shell.
-for (const key of Object.keys(process.env)) if (/^(?:WIN_)?CSC_/.test(key)) delete process.env[key];
+for (const key of Object.keys(process.env))
+  if (/^(?:WIN_)?CSC_/.test(key)) delete process.env[key];
 process.env.CSC_IDENTITY_AUTO_DISCOVERY = "false";
 const { build, Platform, Arch } = createRequire(
   join(root, "apps/desktop/package.json"),
@@ -34,11 +42,34 @@ const dirty = git(
   "docs/release/THIRD-PARTY-NOTICES.md",
 );
 if (dirty) throw new Error("desktop_source_not_committed");
-if (git("ls-files", "--others", "--exclude-standard", "--", "apps", "packages", "scripts")) throw new Error("desktop_untracked_source");
-const committedLock = execFileSync("git", ["show", `${sourceCommit}:pnpm-lock.yaml`], { cwd: root, windowsHide: true });
+if (
+  git(
+    "ls-files",
+    "--others",
+    "--exclude-standard",
+    "--",
+    "apps",
+    "packages",
+    "scripts",
+  )
+)
+  throw new Error("desktop_untracked_source");
+const committedLock = execFileSync(
+  "git",
+  ["show", `${sourceCommit}:pnpm-lock.yaml`],
+  { cwd: root, windowsHide: true },
+);
 // This retired importer is an inherited local cleanup, outside every desktop dependency.
-const runtimeLock = bytes => bytes.toString().replaceAll("\r\n", "\n").replace(/^  spikes\/mcp-v2:\n[\s\S]*?(?=^packages:)/m, "");
-if (runtimeLock(committedLock) !== runtimeLock(await readFile(join(root, "pnpm-lock.yaml")))) throw new Error("desktop_dependency_lock_changed");
+const runtimeLock = (bytes) =>
+  bytes
+    .toString()
+    .replaceAll("\r\n", "\n")
+    .replace(/^  spikes\/mcp-v2:\n[\s\S]*?(?=^packages:)/m, "");
+if (
+  runtimeLock(committedLock) !==
+  runtimeLock(await readFile(join(root, "pnpm-lock.yaml")))
+)
+  throw new Error("desktop_dependency_lock_changed");
 const sha = (value) => createHash("sha256").update(value).digest("hex");
 const version = `0.2.0-g10.${sourceCommit.slice(0, 8)}`;
 const output = join(root, "release", "desktop", `${target}-${architecture}`);
@@ -48,15 +79,20 @@ const staging = join(
   "desktop-packaging",
   `${target}-${architecture}`,
   sourceCommit,
+  randomUUID(),
 );
 const app = join(staging, "app");
 await mkdir(app, { recursive: true });
 await mkdir(output, { recursive: true });
-execFileSync(process.execPath, [join(root, "scripts/build-desktop.mjs")], {
-  cwd: root,
-  windowsHide: true,
-  stdio: "inherit",
-});
+execFileSync(
+  process.execPath,
+  [join(root, "scripts/build-desktop.mjs"), target, architecture],
+  {
+    cwd: root,
+    windowsHide: true,
+    stdio: "inherit",
+  },
+);
 await cp(join(root, "apps/desktop/dist"), join(app, "dist"), {
   recursive: true,
   force: true,
@@ -67,6 +103,7 @@ const lockBytes = execFileSync(
   { cwd: root, windowsHide: true },
 );
 const identity = {
+  sequence: Number(git("show", "-s", "--format=%ct", sourceCommit)),
   channel: "internal_candidate",
   version,
   sourceCommit,
@@ -74,9 +111,16 @@ const identity = {
   lockSha256: sha(lockBytes),
   electron: "44.3.0",
   buildNode: process.versions.node,
-  packageManager: JSON.parse(await readFile(join(root, "package.json"), "utf8")).packageManager,
+  packageManager: JSON.parse(await readFile(join(root, "package.json"), "utf8"))
+    .packageManager,
   buildCommand: `pnpm desktop:package ${target}`,
-  migrationSourceSha256: sha(execFileSync("git", ["show", `${sourceCommit}:packages/storage/src/kernel-schema.ts`], { cwd: root, windowsHide: true })),
+  migrationSourceSha256: sha(
+    execFileSync(
+      "git",
+      ["show", `${sourceCommit}:packages/storage/src/kernel-schema.ts`],
+      { cwd: root, windowsHide: true },
+    ),
+  ),
   schema: 25,
   platform: target,
   arch: architecture,
@@ -107,7 +151,10 @@ await writeFile(
   ) + "\n",
 );
 await cp(join(root, "LICENSE"), join(app, "LICENSE"));
-await cp(join(root, "docs/release/THIRD-PARTY-NOTICES.md"), join(app, "THIRD-PARTY-NOTICES.md"));
+await cp(
+  join(root, "docs/release/THIRD-PARTY-NOTICES.md"),
+  join(app, "THIRD-PARTY-NOTICES.md"),
+);
 const entries = [];
 async function walk(relative = "") {
   for (const entry of (
@@ -120,12 +167,32 @@ async function walk(relative = "") {
       entries.push({
         path: name,
         data: await readFile(join(app, name)),
-        mode: 0o644,
+        mode:
+          target !== "win32" &&
+          ["dist/companion/node", "dist/companion/sestina-mcp"].includes(name)
+            ? 0o755
+            : 0o644,
       });
   }
 }
 await walk();
-await createDeterministicTarGzip(join(output, "unsigned-core.tar.gz"), entries);
+// The bundled Node executable is about 90 MB. Preview archive limits retain
+// their defaults; only this exact runtime entry receives the desktop allowance.
+for (const entry of entries)
+  if (
+    entry.data.length > 32 * 1024 * 1024 &&
+    !/^dist\/companion\/node(?:\.exe)?$/.test(entry.path)
+  )
+    throw Error("desktop_entry_too_large");
+await createDeterministicTarGzip(
+  join(output, "unsigned-core.tar.gz"),
+  entries,
+  {
+    maxFiles: 256,
+    maxEntryBytes: 128 * 1024 * 1024,
+    maxTotalBytes: 256 * 1024 * 1024,
+  },
+);
 const core = await readFile(join(output, "unsigned-core.tar.gz"));
 
 await writeFile(
@@ -158,11 +225,23 @@ await build({
     productName: "Sestina Candidate",
     electronVersion: "44.3.0",
     directories: { app, output },
-    files: ["dist/**/*", "package.json", "LICENSE", "THIRD-PARTY-NOTICES.md"],
+    files: [
+      "dist/**/*",
+      "!dist/companion/**/*",
+      "package.json",
+      "LICENSE",
+      "THIRD-PARTY-NOTICES.md",
+    ],
+    extraResources: [{ from: join(app, "dist/companion"), to: "companion" }],
+    asarUnpack: ["**/*.node"],
     asar: true,
     npmRebuild: false,
     publish: null,
-    win: { target: "nsis", signExecutable: false, icon: join(root, "apps/research-room/client/public/sestina-logo.png") },
+    win: {
+      target: "nsis",
+      signExecutable: false,
+      icon: join(root, "apps/research-room/client/public/sestina-logo.png"),
+    },
     nsis: {
       oneClick: false,
       perMachine: false,
@@ -178,5 +257,10 @@ await build({
   },
 });
 // Builder's unresolved NSIS diagnostic template is build metadata, not a release manifest.
-await rename(join(output, "builder-debug.yml"), join(staging, "builder-debug.yml")).catch(error => { if (error.code !== "ENOENT") throw error; });
+await rename(
+  join(output, "builder-debug.yml"),
+  join(staging, "builder-debug.yml"),
+).catch((error) => {
+  if (error.code !== "ENOENT") throw error;
+});
 console.log(JSON.stringify({ output, identity }));
