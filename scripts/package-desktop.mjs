@@ -228,12 +228,15 @@ await build({
     files: [
       "dist/**/*",
       "!dist/companion/**/*",
+      "!dist/node_modules/**/*",
       "package.json",
       "LICENSE",
       "THIRD-PARTY-NOTICES.md",
     ],
-    extraResources: [{ from: join(app, "dist/companion"), to: "companion" }],
-    asarUnpack: ["**/*.node"],
+    extraResources: [
+      { from: join(app, "dist/companion"), to: "companion" },
+      { from: join(app, "dist/node_modules"), to: "native/node_modules" },
+    ],
     asar: true,
     npmRebuild: false,
     publish: null,

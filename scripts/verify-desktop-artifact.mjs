@@ -100,7 +100,9 @@ for (const file of manifest.files) {
     throw new Error("desktop_unapproved_content");
   const bytes = companion.test(file.path)
     ? await readFile(join(directory, "resources", file.path.slice(5)))
-    : asar.extractFile(archive, normalize(file.path));
+    : native.test(file.path)
+      ? await readFile(join(directory, "resources/native", file.path.slice(5)))
+      : asar.extractFile(archive, normalize(file.path));
   if (bytes.length !== file.size || sha(bytes) !== file.sha256)
     throw new Error(`desktop_content_mismatch:${file.path}`);
 }
@@ -118,7 +120,10 @@ await inspectResources(
   join(directory, "resources/companion"),
   "/dist/companion",
 );
-await inspectResources(join(directory, "resources/app.asar.unpacked"), "");
+await inspectResources(
+  join(directory, "resources/native/node_modules"),
+  "/dist/node_modules",
+);
 const runtime = JSON.parse(
   await readFile(
     join(directory, "resources/companion/runtime-identity.json"),

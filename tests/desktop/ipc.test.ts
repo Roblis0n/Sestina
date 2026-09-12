@@ -1,10 +1,12 @@
 import { it, expect } from "vitest";
 import { _electron } from "@playwright/test";
 import { createRequire } from "node:module";
-import { mkdtemp, mkdir, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { createSecretBackend } from "../../packages/secrets/src/index.js";
+import { OPENAI_COMPATIBLE_API_KEY_REF } from "../../packages/application/src/index.js";
 it("real Electron IPC keeps renderer isolated, rejects forged inputs, and preserves a local draft", async () => {
   const root = await mkdtemp(join(tmpdir(), "sestina-desktop-ipc-"));
   const projectPath = join(root, "合成项目 with spaces");
@@ -12,6 +14,32 @@ it("real Electron IPC keeps renderer isolated, rejects forged inputs, and preser
   const requireDesktop = createRequire(resolve("apps/desktop/package.json"));
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
+  if (process.platform === "win32") {
+    env.LOCALAPPDATA = join(root, "legacy-appdata");
+    const legacyRoot = join(env.LOCALAPPDATA, "Sestina");
+    await mkdir(legacyRoot, { recursive: true });
+    const secrets = createSecretBackend("win32", {
+      windowsVaultPath: join(legacyRoot, "secrets", "vault.json"),
+      envReader: { read: () => undefined, keys: () => [] },
+    });
+    await secrets.set(
+      OPENAI_COMPATIBLE_API_KEY_REF,
+      "synthetic-installed-migration-key",
+    );
+    await writeFile(
+      join(legacyRoot, "provider.json"),
+      JSON.stringify({
+        schemaVersion: "1.0.0",
+        family: "openai_compatible",
+        providerId: "synthetic",
+        baseUrl: "https://provider.invalid",
+        model: "synthetic",
+        timeoutMs: 1000,
+        locality: "external",
+        generation: 7,
+      }),
+    );
+  }
   const installedExecutable = process.env.SESTINA_TEST_INSTALLED_EXECUTABLE;
   const electron = await _electron.launch({
     executablePath: installedExecutable ?? requireDesktop("electron"),
@@ -28,6 +56,23 @@ it("real Electron IPC keeps renderer isolated, rejects forged inputs, and preser
       for (const window of BrowserWindow.getAllWindows()) window.hide();
     });
     await page.waitForFunction(() => Boolean((window as any).sestinaDesktop));
+    if (process.platform === "win32") {
+      const migration = await page.evaluate(() =>
+        window.sestinaDesktop!.methods.settingsMigration({ action: "migrate" }),
+      );
+      expect(migration.ok).toBe(true);
+      expect((migration.value as any).providers[0].status).toBe("complete");
+      const status = await page.evaluate(() =>
+        window.sestinaDesktop!.methods.providerStatus(),
+      );
+      expect(status.ok && (status.value as any).secretConfigured).toBe(true);
+      expect(
+        await readFile(join(root, "profile", "provider.json"), "utf8"),
+      ).not.toContain("synthetic-installed-migration-key");
+      await page.evaluate(() =>
+        window.sestinaDesktop!.methods.providerDeleteConfig(),
+      );
+    }
     expect(
       await page.evaluate(() => ({
         require: typeof (window as any).require,

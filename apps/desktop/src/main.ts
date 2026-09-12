@@ -39,6 +39,11 @@ import { LegacySettingsMigration } from "./legacy-settings.js";
 import { withSessionSecrets } from "./session-secrets.js";
 import { confirmationCopy } from "./native-copy.js";
 
+// Native dependency resources are copied byte-for-byte outside ASAR. The
+// research renderer cannot configure this installed module search location.
+if (app.isPackaged)
+  module.paths.unshift(join(process.resourcesPath, "native", "node_modules"));
+
 protocol.registerSchemesAsPrivileged([
   {
     scheme: "sestina",
