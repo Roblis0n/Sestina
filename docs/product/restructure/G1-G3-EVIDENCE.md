@@ -681,3 +681,130 @@ Both executable and installer report **NotSigned**, never a trusted public signa
 Read the existing operation record for the exact remaining implementation and
 platform resources. These passing local results do not close G10/G11, authorize
 G12, switch the default, or validate signed/public three-platform installers.
+
+### Continued G10/G11 local verification (2026-09-12)
+
+This continuation supersedes the previous candidate's remaining local
+implementation list, without changing its historical evidence. The runtime
+source is `0c33aad574d4368996ab09e020459f4c218d87f4`, tree
+`24b16d89c86095eb6737ee24d47323fd4c30a86f`. Later evidence and test-launcher edits
+do not alter the installed runtime. G0–G9 stay complete; G10/G11 remain partial
+for the exact acceptance limits in the [current mapping](G1-G3-OPERATIONS.md#current-desktop-entry-and-remaining-g10g11-work).
+
+Implemented and connected to the application:
+
+- Core schema-25 managed recovery validates canonical revision/hash, Brief,
+  workflow/event chain and privacy identity. It creates verified pre-restore and
+  pre-upgrade bundles, binds single-use confirmations to the session and current
+  files, holds shared maintenance/writer locks and blocks retired or
+  privacy-incompatible restores. Interrupted pair replacement and cleanup retain
+  an explicit recoverable marker; unknown replacements remain refused.
+- Desktop start-page backup/recovery and earlier-settings import/export use the
+  shared application service. Legacy configuration migration renews generation,
+  verifies native credential read-back before publication, preserves source
+  copies and resumes explicit partial migration without replacing newer user
+  preferences or resurrecting deleted configuration. Explicit session-only keys
+  clear on project close, suspension or exit.
+- The manual updater implements installed-root verification, monotonic identity,
+  bounded metadata/artifact downloads, private staging and phase records,
+  cancellation, restart without retry, pre-upgrade project backup, verified
+  physical program preservation, installer launch and previous-program recovery.
+  Production roots remain empty. Synthetic constructor injection supplies only
+  isolated test offers; there is no application trust override or publication.
+- Installation resources include a dedicated Node 24.13.0 runtime and license,
+  read-only MCP, canonical generated companion Skills and platform native
+  credential modules. Settings exposes exact installed JSON/TOML commands.
+  Native modules are copied outside ASAR and verified byte-for-byte.
+- Bilingual operation/failure copy and current capability documentation are
+  synchronized. Semantic tests reject obsolete generic effect kinds while
+  preserving legitimate accepted Decision state and immutable legacy language.
+
+The behavioral RED/repair sequence included missing credential read-back,
+application maintenance/Brief-repair interleaving, preference root junctions,
+interrupted preference migration overwriting a later user choice, and interrupted
+post-commit restore cleanup. Current recovery tests also cover stale/replayed
+confirmation, changed backups/current files, failed pair replacement, explicit
+rollback recovery, writer contention and Forget protection. These tests pass.
+
+Actual packaging/installation exposed three additional failures that development
+source checks could not close. The builder rewrote native package metadata inside
+ASAR; native resources were moved to byte-preserving extra resources. Electron's
+virtual ASAR filesystem prevented physical program backup; a real Electron RED
+probe now passes using its physical filesystem without global ASAR mutation.
+Finally, ESM native import ignored the packaged CommonJS search path, so installed
+DPAPI migration returned `credentials_need_input`. The bundle now resolves native
+adapters through its installed CommonJS entry, and the real installed migration
+passes. Public-gate failures also caught two unregistered foundation tests and a
+desktop-to-secrets architecture violation; discovery was registered and the
+adapter routed through Core's public factory. No gate, policy or frozen corpus
+was weakened to obtain a pass.
+
+Final verification and local logs (all log names below are under `.tmp/g10-g11`):
+
+| Verification | Actual result and scope | Evidence |
+| --- | --- | --- |
+| `pnpm verify:public` | Passed 331 production tests, 384 foundation tests and all lint/type, contract, discovery, architecture, repository, documentation and public-history gates on final runtime source. | `public-final.log` |
+| `pnpm verify:platform win32 x64` | Passed 384 native foundation tests, two deterministic preview builds and preview extraction/start/upgrade/recovery/no-network/uninstall/reinstall. This remains the published-preview platform gate, separate from Electron acceptance. | `platform-final.log` |
+| Installed desktop suite | 23 tests in 10 files passed. Includes real installed DPAPI migration/read-back, session/IPC/CSP/sender rejection, saved project/MCP reads, schema-25 recovery, suspend/crash fences and updater/program-copy failure tests. Native confirmation and picker answers inside these test processes are stubs. | `desktop-final.log`; `tests/desktop` |
+| Real Electron network probe | Two exact requests over four observed TLS sockets; Kernel completed/uncertain outcomes; final guard prevented body send, wrong certificates and mixed DNS rejected, implicit proxy ignored, restart sent nothing. Synthetic local certificate only. | `network-final.log`; `scripts/verify-desktop-network.mjs` |
+| Actual Windows upgrade | Final `63627711` → `0c33aad5` upgrade used the real NSIS executable, real schema-25 pre-upgrade backup and verified old-program copy. A failed pre-backup prevented installer launch. Restart reconciled to installed without another fetch; preserved previous executable actually opened. Earlier in this continuation `5490837b` also upgraded to `63627711`. | `upgrade-final.log`, `installed-upgrade-result.json`; `scripts/verify-desktop-upgrade.mjs` |
+| Actual uninstall/reinstall | Silent uninstall removed the isolated executable and preserved the original synthetic database and Brief bytes. The session's native installer subsequently displayed progress and completion at the selected installation location. Actual installed-file verification, original draft reopen/double-launch and both IPC tests (including native credential migration and bundled MCP) passed there. | `uninstall-final.json`, `reinstall-reopen-final.log`, `reinstalled-ipc-final.log`, `artifact-installed-final.log` |
+| Actual resource verification | 34 expected resources match source/tree, committed lockfile, schema/migration, official Logo, runtime and target. Wrong source/platform/main hash and actual native/Node byte tampering fail; restored bytes verify again. | `artifact-installed-final.log`, `artifact-negatives-final.log` |
+| Independent clean builds | Two fresh staging directories produce identical unsigned-core bytes. Outer unsigned NSIS packaging is recorded separately. | `reproducibility-final.json`, `package-final.log`, `package-repro-final.log` |
+| Installed visual journeys | Six English/Chinese × light/dark/high-contrast journeys pass at 1100×760, 1280×800, 1440×900 and 1920×1080; long content, 200% text, local saved decision, error/input preservation, rapid drawer cancellation, Escape/focus return and reduced-motion operation. No renderer network request. | `visual-final.log`, `installed-visual-0c33aad5/results.json` and 43 actual window PNGs |
+
+Final installer:
+`release/desktop/win32-x64/Sestina Candidate Setup 0.2.0-g10.0c33aad5.exe`,
+135,367,605 bytes, SHA-256
+`a5465d621f54bd9d23aa30880867ff33e4e459f128331888410c0786cfd84ac7`.
+The unsigned-core SHA-256 from both independent builds is
+`d76d8d792d30be58b19fae991fa8cbb10ad671d75069ac26a6051e89d3f3265c`.
+The final executable and installer are **NotSigned** (`signatures-final.json`).
+The actual selected installation location is kept in private local logs rather
+than committed as a personal absolute path. The earlier isolated installation
+was removed by the verified uninstall and must not be advertised as the final
+executable location.
+
+The preserved synthetic database SHA-256 is
+`b90041027c8f27961cce743cbcbfab79f4b5be4b39ec39d6a5b3376dc21b7f64`;
+the Brief SHA-256 is
+`411a6d876c63deb7ed6f2bb49722f9842114a42b19a907e9d9c614ed8994ca0c`.
+Original project identity and draft text were read after reinstall. No real
+research material or Provider response was used in the acceptance fixtures.
+
+Product Design inspection opened the final actual captures for English light
+backup/Today/saved result, English high-contrast integration, Chinese light
+invalid-settings import, English dark About and Chinese dark Review at 200%
+text. An earlier capture showed adjoining start-page and MCP buttons. Their
+spacing/wrapping was corrected using the existing design and then re-inspected
+in the final installed images. Copy reports saved state, preserved input,
+retained earlier settings, unverified host connection and unavailable update
+source without elevating test, hash or model status into research authority.
+
+Native Computer Use was retried in this continuation. An initial launch approval
+timed out; later calls successfully observed and dismissed an installer error,
+opened the actual retained program, opened the final candidate's real folder
+picker, observed Tab's visible focus change, cancelled it with Escape and sent a
+system close. Native installer progress/completion was also observed during the
+session. This establishes those observations only. The helper repeatedly returned
+stale focus data/control indexes, inconsistent screen/tree state and
+concurrent-input/minimized-window guards; its product policy blocked the
+uninstaller executable. Full native folder selection, credential/confirmation
+focus, uninstall-wizard UX and continuously observed motion have **not** passed.
+No substitute UI automation or static-image claim is used to close them.
+
+One isolated upgrade attempt also failed because the acceptance process retained
+the old ASAR archive handle. Reading the previous identity outside Electron
+removed that test interference and the actual installer then succeeded. A desktop
+build overlapped preview platform output replacement; its removed output was
+rebuilt after that gate finished. Neither diagnostic attempt counts as a pass.
+
+macOS arm64/Linux x64 systems, signing/notarization resources and production update
+trust were not supplied. Their lifecycle and attack/credential matrices remain
+unverified. G10/G11 are still `current_partial` with execution entry at G10;
+G12/G13, public default, remote pushes, CI, tags and publication were not invoked.
+Final record/launcher edits passed the documentation link check, frozen contract
+verification, four targeted terminology/claim tests and diff whitespace check.
+The launcher now accepts the actual installed executable path through the existing
+SESTINA_TEST_INSTALLED_EXECUTABLE environment setting; the reinstall check above
+exercised that path.

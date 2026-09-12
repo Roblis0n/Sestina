@@ -103,8 +103,8 @@ code-fact question; it does not claim the target capability is implemented.
 | G7 — correction, Memory, Host and historical paths | `completed_and_verified` | Linked correction and optional isolated assessment, Memory governance and resumable copy handling, draft-only Host/Skill intake and historical read/export/conversion passed application, privacy, recovery, visual and final public verification. |
 | G8 — derived projections and recovery consistency | `completed_and_verified` | All seven derived surfaces use one consistent input identity; workflow/privacy/time invalidation, restore/rebuild races, preserved outbox and seeded large-project reads passed. |
 | G9 — four-entry navigation and complete research flow | `completed_and_verified` | The opt-in schema-25 candidate integrates Today/Review, Project, Search and Settings with durable drafts, real results, recovery and verified built-interface visual/interaction journeys. |
-| G10 — Electron, security and release provenance | `current_partial` | A real internal Electron candidate, Windows installer and targeted runtime/IPC/TLS/installation evidence exist. The remaining implementation and installation requirements are explicit in the operations and evidence records; this is not a completed desktop gate. |
-| G11 — terminology, copy and documentation | `current_partial` | Current desktop boundaries and bilingual native actions are documented without promoting unverified platform or release claims. Completion remains bounded by unresolved G10 work. |
+| G10 — Electron, security and release provenance | `current_partial` | Schema-25 desktop recovery, manual update lifecycle, verified earlier-settings/credential migration and packaged read-only MCP/Skills are implemented. The final Windows candidate passed installed tests, real upgrade/program recovery, uninstall/reinstall continuity and reproducible-core checks. Remaining native interaction and other-OS/signing acceptance are explicit below. |
+| G11 — terminology, copy and documentation | `current_partial` | Bilingual operation/failure copy, current capability/data-flow documentation and semantic anti-overclaim checks are implemented and verified. Historical terms and frozen sources remain intact. Gate completion still depends on the remaining G10 installation/native acceptance. |
 | G12–G13 | `not_started` | Final migration/production acceptance, default cutover and public release remain downstream; the current candidate does not authorize these stages. |
 
 Completion evidence is the implementation tree at
@@ -163,16 +163,27 @@ claimed. Final record-only edits receive document/contract/status checks.
 
 ### G10/G11 local desktop progress
 
-The internal Windows candidate runtime is
-`5490837bc633d632c08f01060740b654e9d4280b`. Its final public gate, Windows preview
-platform gate and separate actual installed Electron checks passed; reproducible
-core, installation/reopen/uninstall/reinstall, real TLS and inspected installed
-renderer evidence are in [the desktop evidence](G1-G3-EVIDENCE.md#g10g11-internal-desktop-evidence).
-The installer is unsigned. Other OS installation and signing resources are absent;
-native dialog/focus/motion acceptance and the explicitly listed local update,
-credential-migration and schema-25 backup/upgrade work remain unfinished.
-Therefore G10 and G11 remain `current_partial`, and the accurate execution entry
-remains G10. The conditional G12 entry is documented without marking it ready.
+The current internal Windows candidate runtime is
+`0c33aad574d4368996ab09e020459f4c218d87f4`, replacing the historical `5490837b`
+candidate. Final verification passed 331 public-preview tests, 384 foundation
+tests, all shared gates and 23 desktop tests. The separate Windows preview
+platform gate also passed. The installed candidate has its own real upgrade,
+pre-upgrade backup, preserved-program startup, uninstall/reinstall continuity,
+native credential migration, TLS and artifact evidence. Two independent clean
+cores match. The six bilingual/theme journeys produced 43 actual installed
+window captures; affected frames were inspected and button spacing repaired.
+
+The native installation progress/completion screen and real folder picker were
+observed. Full OS-dialog focus/confirmation and continuous motion acceptance did
+not pass: the helper returned stale focus/control information, repeated concurrent
+input/minimized-window guards, and blocked the uninstaller by product policy.
+These are separate from the passing silent lifecycle and renderer tests. macOS,
+Linux, signing/notarization and production update trust remain unavailable.
+See the single [capability/remaining/evidence mapping](G1-G3-OPERATIONS.md#current-desktop-entry-and-remaining-g10g11-work)
+and [latest verification](G1-G3-EVIDENCE.md#continued-g10g11-local-verification-2026-09-12).
+G10/G11 remain `current_partial`; the execution entry remains G10. G12/G13 and the
+public default are unchanged. Later evidence/test-harness edits do not change
+this installed runtime identity.
 
 ## 6. Claims that remain unavailable
 

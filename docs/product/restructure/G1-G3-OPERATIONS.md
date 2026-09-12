@@ -262,8 +262,8 @@ rebuilding their already implemented desktop shell. `apps/desktop` uses the shar
 `@sestina/application-ports` contract and `@sestina/application` Node adapter,
 typed projection decoders, four-entry candidate renderer and live Kernel
 capability resolver. Main/preload, restricted IPC, main-owned project/secret/Provider
-resources, native folder selection and embedded runtime are present. Complete the
-remaining installation and recovery requirements. Do not move research rules into IPC or let the renderer
+resources, native folder selection and embedded runtime are present. The implemented
+recovery/update increment and remaining acceptance are mapped below. Do not move research rules into IPC or let the renderer
 construct user authority. Broadcasts only invalidate reads; outbound confirmation
 and uncertain-command lookup retain their existing semantics.
 
@@ -298,23 +298,30 @@ Build and launch commands and the installed-window test entry are in
 picker. No system Node, pnpm or first-launch runtime download is needed by the
 packaged Windows program. The public preview remains v0.2.0/schema 20.
 
-The remaining implementation is part of G10, not a reason to advance to G12:
+The runtime source is `0c33aad574d4368996ab09e020459f4c218d87f4`. This is the current
+capability/remaining/evidence mapping; the older evidence below is historical.
 
-- Complete the verified update download/private staging/pre-upgrade backup/install
-  sequence. The existing signed-identity verifier and truthful unavailable-source
-  screen do not constitute this sequence.
-- Complete legacy credential and preference migration with verified read-back,
-  interrupted migration recovery, and the supported credential-unavailable path.
-- Complete schema-25 managed backup/upgrade/restore desktop integration and the
-  installed failure matrix. Do not use schema-20 backup acceptance for schema 25.
-- Finish packaged companion/MCP usage, platform path and credential matrices,
-  suspend/exit recovery and native-dialog focus, keyboard and motion observation.
-- Run macOS arm64 and Linux x64 installation journeys on those real systems.
-  No such machines, public signing accounts, notarization or trusted production
-  update roots were supplied for this local task. Do not push or trigger remote
-  work to obtain them without authorization.
-- Finish G11's remaining capability/terminology checks against the resulting
-  implementation. Existing historical terms, samples and hashes remain intact.
+| Capability and current entry | Implemented/verified locally | Remaining acceptance |
+| --- | --- | --- |
+| Start page → Backups and recovery | Schema-25 backup/status/preview/confirmed restore, pre-restore and pre-upgrade copies, single-use session-bound confirmation, shared writer lease, privacy/Forget refusal, explicit interrupted swap and post-commit cleanup recovery. Foundation failure tests and installed IPC/renderer flows pass. | Full native confirmation/focus journey and actual other-OS installation matrix. Schema-20 preview tests do not substitute. |
+| Settings → About → manual update | Signed installed-root identity, sequence/channel/target/schema/migration checks, bounded HTTPS streaming, private staging, hash recheck, cancellation/interruption without restart retry, pre-upgrade backup, verified physical program copy, installer launch and explicit previous-program recovery. Actual Windows upgrade and preserved executable opening pass. | No production source/root or signed offer is available. The synthetic service assembly never installs trust into the app. Actual signed three-platform upgrade and native update-confirmation UX remain open. |
+| Start page → Earlier settings; Provider settings | Known-source-only preference/configuration migration, intent records, generation renewal, preserved sources, idempotent retry without resurrecting deleted configuration, native secret read-back before publication, explicit session-only fallback and clearing on close/suspend/exit. Real installed Windows DPAPI migration passes. | Real macOS Keychain/Linux Secret Service and unavailable-backend dialogs; no claim that inaccessible browser databases were imported. |
+| Settings → Integrations → Read-only MCP and companion Skills | Installation-specific JSON/TOML, bundled Node 24.13.0/license, read-only MCP, canonical generated Agent Corrector Skill, copied native resources and installed companion execution. Resource inventory and native/runtime byte-tamper negatives pass. | Actual host connection is not established by copying configuration. Other-OS executable/path/keychain journeys remain open. |
+| Windows application lifecycle and visual quality | Original saved project survives real upgrade, failed pre-backup prevents installer launch, previous program starts, real uninstall preserves DB/Brief bytes and actual reinstall reopens the original draft. Six installed language/theme journeys pass across four desktop sizes, long text, 200% text, dirty-input protection, rapid drawer cancellation and reduced-motion operation. 43 real captures were produced and affected frames inspected. | Native folder picker opening/Tab/Escape and installer progress/completion were observed. The tool's stale focus/control cache and concurrent-input/minimized-window guards prevented complete native keyboard/confirmation observation. Its product policy blocks the uninstaller UI. Continuous motion observation remains unverified; static frames and test stubs do not close it. |
+| G11 terms, claims and docs | Actual generic effect kinds are rejected while legitimate accepted Decision state is preserved. AST/copy/anti-overclaim tests and public docs/contract checks pass. README, desktop use, architecture, privacy/security/data flow, recovery/upgrade, MCP/Skills and old-import boundaries are synchronized. Frozen plans, samples and historical hashes remain unchanged. | Completion of G11 remains bounded by G10's unresolved actual installation/native acceptance, rather than by unfinished local copy replacement. |
+
+Exact commands, counts, artifact hashes and local log names are in
+[the latest evidence](G1-G3-EVIDENCE.md#continued-g10g11-local-verification-2026-09-12).
+The installed executable's location is recorded in the private local artifact
+check; do not assume that the earlier isolated installation still exists after
+the real uninstall. The final installer remains under release/desktop/win32-x64.
+
+macOS arm64 and Linux x64 machines, public signing accounts, notarization and
+trusted production update roots were not supplied. They cannot be validated on
+this Windows host. Do not push or trigger remote work to obtain them. Native
+helper failures are a distinct local acceptance limitation and must not be
+reported as unavailable OS resources. G10/G11 remain partial, with entry at G10;
+there is no G12/G13 cutover authorization.
 
 ### Exact G12 entry after G10/G11 completion
 

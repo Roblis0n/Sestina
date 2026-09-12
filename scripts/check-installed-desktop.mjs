@@ -5,7 +5,9 @@ import { resolve, join } from "node:path";
 import { strict as assert } from "node:assert";
 const root = resolve(import.meta.dirname, ".."),
   dir = join(root, ".tmp/g10-g11");
-const executable = join(dir, "installed/Sestina Candidate.exe");
+const executable =
+  process.env.SESTINA_TEST_INSTALLED_EXECUTABLE ??
+  join(dir, "installed/Sestina Candidate.exe");
 const projectPath = join(dir, "install-project"),
   profile = join(dir, "installation-profile");
 await mkdir(projectPath, { recursive: true });
