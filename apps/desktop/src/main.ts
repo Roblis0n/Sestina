@@ -89,6 +89,7 @@ async function start() {
   });
   const window = new BrowserWindow({
     title: "Sestina — Internal candidate",
+    icon: join(__dirname, "client/sestina-logo.png"),
     width: 1280,
     height: 900,
     minWidth: 900,

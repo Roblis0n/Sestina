@@ -6,6 +6,9 @@ import { join, resolve } from "node:path";
 import { createDeterministicTarGzip } from "./lib/archive.mjs";
 
 const root = resolve(import.meta.dirname, "..");
+// This local recipe never consumes a signing account inherited from the shell.
+for (const key of Object.keys(process.env)) if (/^(?:WIN_)?CSC_/.test(key)) delete process.env[key];
+process.env.CSC_IDENTITY_AUTO_DISCOVERY = "false";
 const { build, Platform, Arch } = createRequire(
   join(root, "apps/desktop/package.json"),
 )("electron-builder");
@@ -148,7 +151,7 @@ await build({
     asar: true,
     npmRebuild: false,
     publish: null,
-    win: { target: "nsis", signAndEditExecutable: false },
+    win: { target: "nsis", signExecutable: false, icon: join(root, "apps/research-room/client/public/sestina-logo.png") },
     nsis: {
       oneClick: false,
       perMachine: false,
