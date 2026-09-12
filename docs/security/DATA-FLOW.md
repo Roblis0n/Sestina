@@ -67,3 +67,17 @@ for the exact API and backup/Forget boundary.
 ## Internal desktop candidate flow
 
 Renderer → named preload method → validated main window/frame/session → shared application adapter → Kernel → SQLite. Research commits and external sends additionally pass main-owned user confirmation bound to the immutable Kernel view. Provider DNS validation precedes a fresh pinned socket, and Kernel inputs are rechecked before body bytes are written. Host intake remains temporary draft/status only. Update signature verification has synthetic positive/negative tests; the internal candidate has no production trust root or automatic network check. [Candidate operations and remaining evidence](../../apps/desktop/README.md).
+
+| Desktop flow | Explicit trigger | Local data and destination | Network and authority |
+| --- | --- | --- | --- |
+| Earlier settings | Inspect/import on the start page | Known earlier application configuration and credentials → app preferences, renewed Provider configuration and OS-encrypted credential storage; migration records bind source/target hashes and stage. Source copies remain. | No network; no research revision, token or user capability is imported. Browser databases are not scanned. |
+| Credentials | Save/delete through Provider settings and the separate native credential dialog | Main writes encrypted values and reads them back before publishing configuration. Explicit session-only fallback stays in memory and is cleared on project close, suspension or exit. | No network on save; research renderer receives configured/persistence status only. |
+| Managed recovery | Closed-project backup, preview, confirmed restore or interrupted-operation recovery | Verified schema-25 database/Brief bundles and swap marker remain in the selected project. A pre-restore bundle protects saved current state. Privacy history, identity and current bytes are rechecked under locks. | No network; stale, retired, cross-project or privacy-incompatible copies cannot be restored. |
+| Manual update | Check/download/install in About | Private app-data staging stores bounded metadata, installer bytes, phase, project path/backup ID and preserved-program ID. Program recovery stores verified installation files, not research records. | No source is configured in this candidate. With installed trust, explicit actions issue HTTPS GETs for metadata/artifact only, without cookies, credentials, project context or request bodies; redirects/retries are refused. |
+| Companion MCP and Skills | Copy configuration/open bundled Skills in Integrations; user separately configures a host | Installation-specific command paths and the selected project path; bundled Node, read-only MCP and canonical Skills | Generating configuration sends nothing and does not verify the host. A host's later model use remains an explicit user-controlled external flow; MCP cannot grant research authority. |
+
+Application preference import/export is plain inspectable text. Update and migration
+records contain operational metadata, not Provider responses or hidden reasoning.
+Uninstall does not erase projects, app preferences, encrypted credentials or their
+independently retained earlier copies. Deleting a current Provider key does not
+claim deletion of retained migration sources.

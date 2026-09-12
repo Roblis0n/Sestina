@@ -55,3 +55,13 @@ release verification remain outstanding. See the
 ## Internal desktop boundary
 
 The G10 candidate uses sandboxed, context-isolated renderer windows, a local resource allowlist, restrictive CSP and main-frame/window checks on each named IPC entry. Kernel remains the research authority boundary; main-owned confirmation is required for commits and external sends. Provider connections validate all DNS results and pin one fresh socket, with no redirects, proxy environment, connection reuse or retries. These mechanisms have targeted local tests; they do not establish completion of the three-platform attack/installation matrix. See [candidate status](apps/desktop/README.md).
+
+Managed restore binds a single-use confirmation to the session, backup and current
+state, then revalidates under maintenance and writer locks. Interrupted pair swaps
+and cleanup fence normal opening until explicit verified recovery. Update metadata
+is checked against installed trust roots, target/channel/sequence and schema/source
+identity; bounded downloads and physical program copies are hashed again before
+installation. The renderer cannot provide trust roots, installer paths or credentials.
+No trusted update source is configured for this internal candidate. Earlier-settings
+migration rejects changed sources/targets and preserves existing data; encrypted
+credential read-back is required before configuration publication.

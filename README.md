@@ -166,3 +166,5 @@ see [TRADEMARKS.md](TRADEMARKS.md).
 ## Internal desktop candidate
 
 The G10 Electron candidate is available from this source checkout. It uses the schema-25 four-entry research interface and is separate from the published v0.2.0 preview. See [desktop build and operation](apps/desktop/README.md) and the [current verification status](docs/product/restructure/IMPLEMENTATION-STATUS.md). It is not available as a new public Release. Three-platform installation and production signing acceptance are not complete.
+
+The start page includes managed backup/recovery and explicit earlier-settings migration. Settings provides application appearance, OS-encrypted or explicit session-only credentials, installation-specific read-only MCP/Skills configuration, and manual update controls. No trusted update source is configured; checking reports that limitation without sending research data.

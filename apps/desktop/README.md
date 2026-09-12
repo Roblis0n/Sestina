@@ -104,6 +104,15 @@ Computer Use operation. Product Design must inspect captured images and running
 transitions, focus, rapid interruption and reduced motion. This continues into
 G12/G13 installed acceptance.
 
+The local `node scripts/verify-desktop-upgrade.mjs` acceptance runner expects the
+existing isolated `.tmp/g10-g11/installed` application, synthetic `install-project`
+and a newer committed Windows candidate. It verifies real backup, installer launch,
+restart reconciliation and preserved-program opening. Synthetic trust is confined
+to service construction; it is never installed into the application. The runner
+reads the earlier identity outside Electron to avoid retaining a Windows archive
+handle while the installer replaces it. Choose a separate
+SESTINA_DESKTOP_VISUAL_OUTPUT directory when preserving earlier image evidence.
+
 No macOS/Linux machine, signing/notarization account or authorized production
 update root is available for this task. Their actual acceptance remains open;
 local implementation and Windows evidence are recorded separately in the

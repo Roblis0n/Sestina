@@ -97,3 +97,5 @@ node apps/research-room/dist/main.js
 ## 内部桌面候选
 
 当前源码包含 G10 Electron 候选，承接 schema25 的四入口研究界面。它尚未公开发行，不改变已发布的 v0.2.0 预览。开发运行与本地候选构建见[桌面入口](../../apps/desktop/README.md)，实际完成范围见[实施状态](../product/restructure/IMPLEMENTATION-STATUS.md)。三平台安装与生产签名验收尚未完成。
+
+起始页提供备份与恢复、显式旧设置迁移；设置中可以调整应用外观、使用系统加密存储或明确选择仅本次会话保存密钥、获取当前安装的只读 MCP 与配套 Skills 配置，以及手动检查更新。当前没有配置可信更新源，检查会直接说明这一点，不会发送研究内容。

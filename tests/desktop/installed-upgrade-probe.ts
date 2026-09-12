@@ -29,10 +29,7 @@ void app.whenReady().then(async () => {
     assert.equal(process.platform, "win32");
     assert.equal(process.type, "browser");
     const current: InstalledUpdateIdentity = JSON.parse(
-      await readFile(
-        join(installed, "resources/app.asar/dist/identity.json"),
-        "utf8",
-      ),
+      await readFile(join(area, "upgrade-current-identity.json"), "utf8"),
     );
     current.sequence ??= 0;
     const next = JSON.parse(

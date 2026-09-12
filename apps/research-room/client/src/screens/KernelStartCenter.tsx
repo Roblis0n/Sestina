@@ -123,34 +123,41 @@ export function KernelStartCenter({
             }}
           />
         </label>
-        {desktop() ? (
+        <div className="action-row">
+          {desktop() ? (
+            <Button
+              type="button"
+              disabled={busy}
+              onClick={() =>
+                void run(async () => {
+                  const bridge = desktop();
+                  if (!bridge) return;
+                  const reply = await bridge.methods.pickDirectory();
+                  if (!reply.ok) throw new Error("directory_unavailable");
+                  const value = reply.value as { path?: string };
+                  if (value.path) changePath(value.path);
+                })
+              }
+            >
+              {en ? "Choose folder" : "选择文件夹"}
+            </Button>
+          ) : null}
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={busy || !path.trim()}
+          >
+            {en ? "Open project" : "打开项目"}
+          </Button>
           <Button
             type="button"
-            disabled={busy}
-            onClick={() =>
-              void run(async () => {
-                const bridge = desktop();
-                if (!bridge) return;
-                const reply = await bridge.methods.pickDirectory();
-                if (!reply.ok) throw new Error("directory_unavailable");
-                const value = reply.value as { path?: string };
-                if (value.path) changePath(value.path);
-              })
-            }
+            disabled={busy || !path.trim()}
+            onClick={() => void run(() => open(true))}
           >
-            {en ? "Choose folder" : "选择文件夹"}
+            {en ? "Browse read-only" : "只读浏览"}
           </Button>
-        ) : null}
-        <Button type="submit" variant="primary" disabled={busy || !path.trim()}>
-          {en ? "Open project" : "打开项目"}
-        </Button>
+        </div>
       </form>
-      <Button
-        disabled={busy || !path.trim()}
-        onClick={() => void run(() => open(true))}
-      >
-        {en ? "Browse read-only" : "只读浏览"}
-      </Button>
       <details>
         <summary>
           {en ? "Create a project in this folder" : "在此文件夹创建项目"}

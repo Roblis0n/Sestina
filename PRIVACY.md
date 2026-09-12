@@ -99,3 +99,12 @@ For the exact flow inventory, see [docs/security/DATA-FLOW.md](docs/security/DAT
 ## Internal Electron candidate
 
 The schema-25 desktop candidate loads installed static resources without the Research Room HTTP server. Main owns project sessions, the default-off temporary Host bridge, OS-encrypted credentials and explicit Provider sends. The research renderer receives typed projections and named operations. Credentials are entered in a separate OS dialog; no API key is accepted from the research renderer. Linux basic_text storage is rejected. The candidate has no configured trusted production update source and performs no automatic update check. Candidate implementation and unverified lifecycle requirements are listed in [desktop operations](apps/desktop/README.md).
+
+Earlier-settings migration is explicit and limited to the known application
+directory. It verifies credential read-back before publishing configuration and
+retains original copies. Preference text import does not restore old tokens or
+Host permissions. If encrypted storage is unavailable, explicit session-only use
+keeps the key in memory until project close, suspension or exit. Schema-25 backup
+and restore stay local and refuse incompatible privacy history. Update staging
+stores operational metadata and installation files separately from research data;
+any explicitly configured trusted update request carries no research context.

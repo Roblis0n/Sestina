@@ -29,6 +29,9 @@ await build({
   platform: "node",
   format: "cjs",
   target: "node24",
+  // Native adapters must use this CommonJS entry's installed module.paths;
+  // ESM dynamic import would ignore it and lose unpacked native resources.
+  supported: { "dynamic-import": false },
   external: ["electron", "@primno/dpapi", "@napi-rs/keyring"],
   plugins: [
     {

@@ -7,7 +7,9 @@ import { migrateKernelProject } from "../../packages/core/src/index.js";
 
 const executablePath = process.env.SESTINA_TEST_INSTALLED_EXECUTABLE;
 if (!executablePath) throw new Error("installed_executable_required");
-const output = resolve(".tmp/g10-g11/installed-visual");
+const output = resolve(
+  process.env.SESTINA_DESKTOP_VISUAL_OUTPUT ?? ".tmp/g10-g11/installed-visual",
+);
 await mkdir(output, { recursive: true });
 const records: object[] = [];
 for (const language of ["en", "zh-CN"])
