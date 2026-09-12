@@ -102,8 +102,21 @@ void app.whenReady().then(async () => {
         assert.ok(backup.ok);
         return { backupId: backup.value.backupId, projectPath: projectRoot };
       },
-      preserveProgram: () =>
-        preserveInstalledProgram(installed, rollbackRoot, current.sourceCommit),
+      preserveProgram: async () => {
+        try {
+          return await preserveInstalledProgram(
+            installed,
+            rollbackRoot,
+            current.sourceCommit,
+          );
+        } catch (error) {
+          await writeFile(
+            join(area, "program-copy-failure.txt"),
+            String(error instanceof Error ? error.stack : error),
+          );
+          throw error;
+        }
+      },
       launchInstaller: async (path) => {
         launches++;
         await new Promise<void>((done, reject) => {

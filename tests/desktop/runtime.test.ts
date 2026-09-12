@@ -13,6 +13,7 @@ it("starts real Electron main and verifies its SQLite/Core/credential runtime", 
   expect(report.versions.electron).toBe("44.3.0");
   expect(report.sqliteTransactionReopen).toBe(true);
   expect(report.kernelDraftReopen).toBe(true);
+  expect(report.physicalAsarProgramCopy).toBe(true);
   if (process.platform === "win32")
     expect(report.legacyCredentialMigration).toBe(true);
 }, 120000);

@@ -13,6 +13,10 @@ import { createSecretBackend } from "@sestina/secrets";
 import { LegacySettingsMigration } from "../../apps/desktop/src/legacy-settings.js";
 import { DesktopPreferenceStore } from "../../apps/desktop/src/preferences.js";
 import { createDesktopSecrets } from "../../apps/desktop/src/secure-storage.js";
+import {
+  preserveInstalledProgram,
+  verifyPreservedProgram,
+} from "../../apps/desktop/src/runtime-copy.js";
 
 // This program is launched by Electron itself, never ELECTRON_RUN_AS_NODE.
 const report = process.argv
@@ -24,6 +28,18 @@ void app.whenReady().then(async () => {
   const root = await mkdtemp(join(tmpdir(), "sestina-electron-runtime-"));
   let api: KernelApplicationApi | undefined;
   try {
+    const program = join(root, "program");
+    await mkdir(program);
+    await writeFile(
+      join(program, "app.asar"),
+      "synthetic archived program bytes",
+    );
+    const copyId = await preserveInstalledProgram(
+      program,
+      join(root, "rollback"),
+      "a".repeat(40),
+    );
+    await verifyPreservedProgram(join(root, "rollback"), copyId);
     const database = new DatabaseSync(join(root, "probe.sqlite"));
     database.exec(
       "CREATE TABLE probe(value TEXT); BEGIN IMMEDIATE; INSERT INTO probe VALUES ('synthetic'); COMMIT;",
@@ -176,6 +192,7 @@ void app.whenReady().then(async () => {
           arch: process.arch,
           sqliteTransactionReopen: true,
           kernelDraftReopen: true,
+          physicalAsarProgramCopy: true,
           credentialEncryptionAvailable: available,
           legacyCredentialMigration: migrationVerified,
         },

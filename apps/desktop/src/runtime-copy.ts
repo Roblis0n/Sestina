@@ -1,5 +1,18 @@
 import { createHash, randomUUID } from "node:crypto";
-import {
+import * as nodeFs from "node:fs/promises";
+import { createRequire } from "node:module";
+import { join, resolve, relative, sep, dirname, isAbsolute } from "node:path";
+
+// Electron's patched fs treats app.asar as a virtual directory. Program recovery
+// must copy and hash the physical archive bytes without changing global ASAR state.
+const physicalFs: typeof nodeFs = process.versions.electron
+  ? (
+      createRequire(process.execPath)("original-fs") as {
+        promises: typeof nodeFs;
+      }
+    ).promises
+  : nodeFs;
+const {
   copyFile,
   lstat,
   mkdir,
@@ -13,8 +26,7 @@ import {
   statfs,
   symlink,
   chmod,
-} from "node:fs/promises";
-import { join, resolve, relative, sep, dirname, isAbsolute } from "node:path";
+} = physicalFs;
 interface RuntimeFile {
   path: string;
   size: number;
