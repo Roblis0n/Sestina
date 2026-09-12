@@ -161,6 +161,19 @@ The released preview remains v0.2.0/schema 20; the candidate is explicitly enabl
 schema 25. No Electron installation, default switch, push, tag or publication is
 claimed. Final record-only edits receive document/contract/status checks.
 
+### G10/G11 local desktop progress
+
+The internal Windows candidate runtime is
+`5490837bc633d632c08f01060740b654e9d4280b`. Its final public gate, Windows preview
+platform gate and separate actual installed Electron checks passed; reproducible
+core, installation/reopen/uninstall/reinstall, real TLS and inspected installed
+renderer evidence are in [the desktop evidence](G1-G3-EVIDENCE.md#g10g11-internal-desktop-evidence).
+The installer is unsigned. Other OS installation and signing resources are absent;
+native dialog/focus/motion acceptance and the explicitly listed local update,
+credential-migration and schema-25 backup/upgrade work remain unfinished.
+Therefore G10 and G11 remain `current_partial`, and the accurate execution entry
+remains G10. The conditional G12 entry is documented without marking it ready.
+
 ## 6. Claims that remain unavailable
 
 The following remain `not_established`:

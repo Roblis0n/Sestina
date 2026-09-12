@@ -542,3 +542,142 @@ performance, macOS/Linux revalidation, real-Provider semantic result or new rele
 is claimed. The Windows gate exercises the existing preview artifact, not an
 Electron installer. G8/G9 have no remaining blocker; G10 starts at the exact
 continuation in the operations record.
+
+## G10/G11 internal desktop evidence
+
+This is partial implementation evidence, not a G10/G11 completion or public
+release declaration. G8/G9 completion remains unchanged. Work started at
+`17a59be0fac31b59d25f890591b26e6889638e8d` on
+`codex/post-0.2-g10-g11`. Commits `615f27c` and `16d542c` introduced the
+real desktop candidate and initial installation recipe; `7f54d2c` fixed lifecycle,
+transport, MCP and installed layout behavior; `5490837` distinguishes irreversible
+Forget from retaining managed copies in trusted confirmation. The inherited
+`.gitignore` edit, retired lockfile importer cleanup and user reference directories
+were preserved separately. No push, tag, public release or signing account was used.
+
+Environment: Windows x64, host Node 24.13.0, pnpm 11.16.0. Real Electron 44.3.0
+reports Node 24.20.0, Chromium 152.0.7977.78 and SQLite 3.53.4. The runtime probe
+requires Electron's browser process and fails host-Node substitution. It imports
+Core, performs real SQLite transactions, closes/reopens, persists a Kernel draft
+and exercises the available OS encryption backend. This is Electron runtime
+evidence; it does not by itself establish installer or native-dialog acceptance.
+
+| Capability statement | Implementation / actual evidence | Limit |
+| --- | --- | --- |
+| One research workflow in a bundled window | `apps/desktop`, neutral `packages/application`, browser-safe `packages/application-ports`; actual IPC and installed journeys use Kernel/SQLite | No public default switch; schema 25 remains the candidate |
+| Renderer claims cannot authorize a research write | `TrustedKernelCommands`, `tests/desktop/ipc.test.ts`, `foundation/desktop-authority.test.ts`; declined, expired and revoked confirmation preserve the Review | Automated OS answers are explicitly test stubs, not native-dialog usability evidence |
+| Closing/crashing revokes resources | Actual renderer crash reproduced a close-guard deadlock; corrected teardown passes. Old session edits fail after reopen; draft survives | Full suspend/platform lifecycle matrix remains open |
+| Exact Provider bytes reach only a validated connection | `provider-transport.ts`, `tests/desktop/network-probe.ts`; real Electron TLS, exact body, pinned address, mixed-DNS denial, wrong-certificate rejection, final-guard-before-write, no implicit proxy | Synthetic DNS/HTTPS only; no real research Provider or metadata endpoint contacted |
+| Uncertain results never automatically resend | TLS redirect creates durable uncertain attempt; successful request completes; reopen sends nothing | Not a model-quality claim |
+| Deleting/recreating Provider configuration cannot revive an old binding | Persistent configuration-generation high-water mark; delete/restart/recreate regression passes without changing project revision | Legacy configuration/credential migration is not complete |
+| MCP sees current research while desktop writes | `readKernelProjectContext`, actual writer-held snapshot regression and MCP boundary tests | Standalone installed MCP launcher/companion packaging is not complete |
+| Native words distinguish privacy actions | Actual failing Forget/retire tests turn green; selected Memory/version and irreversible consequence are shown; retained files are explicitly not deleted | Native OS dialog layout/focus/motion still needs acceptance |
+| New terminology does not reintroduce old permission semantics | `tests/desktop/terminology.test.ts` checks new desktop/adapter code with executable positive/negative examples and bilingual copy against frozen claims | It intentionally preserves legacy readers, samples and canonical Decision status enums; it is not a semantic-quality evaluator |
+| Internal update status is truthful | Actual installed About page says source unavailable; signed-identity tests reject tampering/replay/wrong platform/unknown root | Download/staging/backup/install orchestration is not complete |
+
+Behavioral failures are retained locally under `.tmp/g10-g11`: renderer-crash
+close timeout, stale MCP WAL read, narrow-window content gap (131 px against a
+64 px limit), visible accessibility legend, generic Forget wording and missing
+retire/delete distinction. These were actual runtime/state/copy failures, not
+missing-symbol or missing-tool failures. Redirect uncertainty and browser-blocked
+port 6679 were also corrected. An OpenSSL fixture setup failure and a strict lint
+failure were setup/check failures and are not counted as behavioral RED.
+
+The shared public gate passed on `7f54d2c` (331 production tests and 372 foundation
+tests plus its contract, lint/type, repository, documentation, architecture and
+history checks). The subsequent native privacy-confirmation refinement has its
+own failed/green evidence and requires the final runtime gate recorded below.
+An in-progress platform run observed the new retirement assertion before its
+adapter fix was available to that worker; that run failed and is not evidence of
+platform completion. Generated builder diagnostic YAML was moved into private
+build staging; repository checks and content rules were not weakened.
+
+The earlier Windows installer `0.2.0-g10.16d542c6` was really installed, used,
+exited/reopened, double-launched, uninstalled, and reinstalled in an isolated
+directory. The original synthetic database remained byte-identical across
+uninstall and its saved draft was readable after reinstall. Two fresh staging
+builds of that source produced the same unsigned-core SHA-256
+`c6fa439e91aa0562ee16057eb82e95c1502ddee96ee719837e8e9016b12c493bb`.
+Those are preliminary-candidate results, not the final corrected installer.
+
+Product Design review used actual installed Electron window captures, not browser
+screenshots. English/Chinese × light/dark/high-contrast journeys used widths
+1100/1280/1440/1920, 200% text, long synthetic content, keyboard navigation, dirty
+text protection, drawer Escape/focus return, rapid open/close, reduced motion,
+unavailable updates and a no-Provider decision saved through real Kernel. Screenshots
+were opened and inspected. The narrow-layout gap and visible screen-reader legend
+were found visually and fixed, with actual Electron layout regression evidence.
+The native picker and final confirmation were stubbed only inside those test
+processes; neither these stubs nor static screenshots count as native-dialog or
+observed animation acceptance. The native Computer Use helper reported a stopped
+session, including after the user's authorization to continue. No further native
+app input was sent through that stopped helper. Native focus and observed motion
+remain unverified rather than inferred from automated assertions.
+
+macOS arm64 and Linux x64 machines, public signing/notarization resources and
+production update trust were explicitly unavailable. No old platform pass,
+cross-compilation, self-signing or mock is substituted. Independent remaining
+implementation (updates, credential migration, full schema-25 backup/upgrade
+integration and installed failure matrix) is listed separately in the
+[exact continuation](G1-G3-OPERATIONS.md#current-desktop-entry-and-remaining-g10g11-work).
+G10/G11 are `current_partial`; G12 is not active.
+
+### Final local candidate verification (2026-09-12)
+
+The final runtime is `5490837bc633d632c08f01060740b654e9d4280b`, tree
+`2390d144180bdd7f0b02cc08f10a184de2079b13`. Subsequent changes only refine the
+test harness/terminology checks and this evidence; they do not change the installed
+runtime. The Windows installer is
+`release/desktop/win32-x64/Sestina Candidate Setup 0.2.0-g10.5490837b.exe`
+(111,835,941 bytes), SHA-256
+`d508cb36c498ed0fc7a3ed99b50ba78106177fd40e94b887158e42bee3604107`.
+Its actual installation remains in `.tmp/g10-g11/installed` for local inspection.
+Both executable and installer report **NotSigned**, never a trusted public signature.
+
+- Final `pnpm verify:public` passed: 331 production tests, 373 foundation tests,
+  and every shared gate. Log: `.tmp/g10-g11/verify-public-final-runtime.log`.
+- Final `pnpm verify:platform win32 x64` passed: 373 native foundation tests,
+  two deterministic **preview** builds, exact preview verification, and the
+  preview's clean extraction/upgrade/recovery/no-network/uninstall journey.
+  Log: `.tmp/g10-g11/platform-windows.log`. This remains a preview platform check;
+  it does not masquerade as Electron installation coverage.
+- Actual installed candidate: 11 desktop tests in six files passed, followed by
+  the two affected IPC tests with additional real foreign-window sender rejection,
+  renderer CSP denial, protocol 403 and new-window denial. Logs:
+  `final-installed-desktop-tests.log`, `final-installed-ipc-sender.log`.
+- Real Electron TLS: two exact HTTP requests across four observed TLS sockets
+  (including final-guard cancellation and wrong-certificate rejection); actual
+  Kernel states `completed` and `uncertain`; restart sent nothing. The explicit
+  test certificate is synthetic and TLS verification remains enabled.
+  Log: `electron-network.log`; runner: `scripts/verify-desktop-network.mjs`.
+- Two fresh final staging builds produced identical unsigned-core SHA-256
+  `31e2dad013dca3b1d5a6c2ed9da23ac0ac86b409fbb180b95a47f178f7d0d56d`.
+  Actual ASAR verification checks 11 allowlisted files, identity, migration/lock/
+  Logo source hashes and Windows PE architecture. The same installed positive
+  passes while actual source, platform and main-bundle hash mismatches fail for
+  those mismatches. Logs: `final-reproducibility.json`, `final-artifact.log`,
+  `final-artifact-negatives.log`.
+- Final installation, reopen, double launch, uninstall and reinstall passed.
+  Uninstall removed the executable while retaining the original synthetic
+  `state.sqlite` hash
+  `b90041027c8f27961cce743cbcbfab79f4b5be4b39ec39d6a5b3376dc21b7f64`.
+  Reinstall read the original project identity and saved text. Logs:
+  `final-install.json`, `final-install-reopen.log`, `final-uninstall.json`,
+  `final-reinstall-reopen.log`. Full desktop upgrade-failure acceptance is still
+  a separate open requirement.
+- Final installed six-language/theme journeys passed and produced 25 real window
+  captures under `.tmp/g10-g11/installed-visual`. The capture harness now waits
+  for actual Chromium presentation; a prior capture batch included preceding
+  compositor frames and is retained as diagnostic, not accepted final imagery.
+  Viewed final frames include English light Today at 1100, Chinese dark Review
+  at 1440, Chinese/English high-contrast Review at 200% text, English saved result,
+  English dark About and Chinese light About at 1920. Narrow spacing, hidden
+  accessibility legend, vertical reflow, visible focus and persistent unavailable
+  update feedback were confirmed from these images. Rapid drawer cancellation,
+  Escape/focus return and reduced-motion operation passed automated interactions.
+  **Observed native motion, OS dialog focus and native installation screens have
+  not passed visual acceptance.** The OS stubs and automation cannot replace them.
+
+Read the existing operation record for the exact remaining implementation and
+platform resources. These passing local results do not close G10/G11, authorize
+G12, switch the default, or validate signed/public three-platform installers.

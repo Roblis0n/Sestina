@@ -29,6 +29,10 @@ for (const language of ["en", "zh-CN"]) for (const theme of ["light", "dark", "h
     await page.reload();
     const size = async (width: number) => { await electron.evaluate(({ BrowserWindow }, width) => BrowserWindow.getAllWindows()[0]!.setContentSize(width, 900), width); };
     const shot = async (name: string) => {
+      // DOM assertions can finish before Chromium presents the next frame.
+      // Capture the settled real window, not the preceding screen's compositor surface.
+      await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+      await page.waitForTimeout(200);
       const png = await electron.evaluate(async ({ BrowserWindow }) => {
         const window = BrowserWindow.getAllWindows()[0]!;
         const image = await window.capturePage(undefined, { stayAwake: true });

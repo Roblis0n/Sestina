@@ -59,3 +59,15 @@ interaction or visual acceptance. Inspect the captured installed-window images.
 
 See the current [implementation status](../../docs/product/restructure/IMPLEMENTATION-STATUS.md)
 and [operations record](../../docs/product/restructure/G1-G3-OPERATIONS.md).
+
+## 本地 Windows 候选的使用入口
+
+本次已安装并验证的候选为 `0.2.0-g10.5490837b`。安装包位于
+`release/desktop/win32-x64/`，程序已安装在仓库的
+`.tmp/g10-g11/installed/Sestina Candidate.exe`。这是未签名的内部候选，
+不是公开 Release；其他平台和完整原生视觉验收尚未完成。
+
+启动后选择项目文件夹，再打开或创建项目。没有模型服务也可以保存草稿、
+查看修改并保存研究决定。只有已经保存的内容能够在重启后恢复。
+研究项目保留在你选择的文件夹，卸载程序不会删除它们。
+更新页目前会说明尚未配置可信更新源，不会自动联网，也不会声称已是最新版。

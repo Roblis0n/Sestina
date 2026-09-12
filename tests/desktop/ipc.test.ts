@@ -18,6 +18,18 @@ it("real Electron IPC keeps renderer isolated, rejects forged inputs, and preser
     expect(await page.evaluate(() => ({ require: typeof (window as any).require, process: typeof (window as any).process, invoke: typeof (window as any).sestinaDesktop.invoke }))).toEqual({ require: "undefined", process: "undefined", invoke: "undefined" });
     const security = await electron.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]!.webContents.getLastWebPreferences());
     expect(security).toMatchObject({ sandbox: true, contextIsolation: true, nodeIntegration: false, webSecurity: true });
+    const otherSender = await electron.evaluate(async ({ BrowserWindow, app }) => {
+      const foreign = new BrowserWindow({ show: false, webPreferences: { preload: `${app.getAppPath()}/dist/preload.cjs`, partition: "sestina-candidate", sandbox: true, contextIsolation: true, nodeIntegration: false } });
+      try {
+        await foreign.loadURL("sestina://app/project/today");
+        return await foreign.webContents.executeJavaScript("window.sestinaDesktop.methods.status()");
+      } finally { foreign.destroy(); }
+    });
+    expect(otherSender.error.code).toBe("invalid_sender");
+    expect(await page.evaluate(() => fetch("sestina://app/%2Fprivate-file").then(() => "unexpected_response", error => error.name))).toBe("TypeError");
+    expect(await electron.evaluate(async ({ BrowserWindow }) => (await BrowserWindow.getAllWindows()[0]!.webContents.session.fetch("sestina://app/%2Fprivate-file")).status)).toBe(403);
+    expect(await page.evaluate(() => window.open("https://synthetic.invalid/", "_blank") === null)).toBe(true);
+    expect(await electron.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(1);
     const invoke = (method: string, input: unknown = {}) => page.evaluate(({ method, input }) => (window as any).sestinaDesktop.methods[method](input), { method, input });
     expect((await invoke("open", { projectPath })).error.code).toBe("directory_selection_required");
     expect((await invoke("status", { confirmed: true, actorId: "user" })).error.code).toBe("invalid_payload");
