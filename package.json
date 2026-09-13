@@ -9,7 +9,10 @@
     "node": ">=24 <25"
   },
   "scripts": {
-    "build": "pnpm -r build",
+    "start": "node scripts/start-desktop.mjs",
+    "build": "node scripts/build-desktop.mjs",
+    "build:packages": "pnpm -r build",
+    "package": "node scripts/package-desktop.mjs",
     "test": "vitest run",
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",

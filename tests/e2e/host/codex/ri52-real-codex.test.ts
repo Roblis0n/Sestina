@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
-import { openSestina, type CoreResult } from "../../../../packages/core/src/index.js";
+import { openSestina, type CoreResult } from "@sestina/core";
 import { ResearchRoomApi } from "../../../../apps/research-room/client/src/api/client.js";
 import { createResearchRoomServer, type RunningResearchRoomServer } from "../../../../apps/research-room/src/server.js";
 

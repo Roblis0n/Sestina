@@ -7,6 +7,19 @@ unchanged. G10/G11 acceptance is tracked in the
 
 ## Use the candidate / 使用候选
 
+The repository defaults (`pnpm start`, `pnpm build`, `pnpm package win32`) now
+select this desktop. Root and project switching both open the same Kernel entry.
+Normal CLI `context`/`doctor` read schema-25 projections; old CLI creation and
+legacy SDK/HTTP research writes are rejected. No production runtime flag restores
+those writers. Synthetic historical tests resolve the explicit
+`sestina-legacy-fixtures` package condition; the build refuses it in the desktop.
+
+当前源码只以桌面为默认入口。安装后选择项目文件夹；新项目需明确勾选创建。
+旧项目先检查并生成迁移备份，再由用户确认迁移。未知或未来版本不会覆盖。
+通过开始页的备份恢复先预览，再明确确认；程序回退和研究数据恢复分别执行。
+升级前保护项目并保留旧程序；卸载程序保留项目，凭据需在 Provider 设置单独删除。
+此候选没有生产更新源，使用交付的本地安装器进行隔离升级验证。
+
 Choose a project folder, then open or create a project. A Provider is optional:
 save a Review draft, inspect changes and confirm a research decision locally.
 Only saved drafts and results return after restart. Closing or suspending the
@@ -104,20 +117,44 @@ Computer Use operation. Product Design must inspect captured images and running
 transitions, focus, rapid interruption and reduced motion. This continues into
 G12/G13 installed acceptance.
 
-The local `node scripts/verify-desktop-upgrade.mjs` acceptance runner expects the
-existing isolated `.tmp/g10-g11/installed` application, synthetic `install-project`
-and a newer committed Windows candidate. It verifies real backup, installer launch,
-restart reconciliation and preserved-program opening. Synthetic trust is confined
-to service construction; it is never installed into the application. The runner
-reads the earlier identity outside Electron to avoid retaining a Windows archive
-handle while the installer replaces it. Choose a separate
-SESTINA_DESKTOP_VISUAL_OUTPUT directory when preserving earlier image evidence.
+The installed lifecycle runner is `tests/desktop/installed-lifecycle.ts`, executed
+with vite-node and the foundation config shown above. Supply absolute paths in
+`SESTINA_UPGRADE_AREA` (a fresh directory inside repository `.tmp`),
+`SESTINA_PREVIOUS_INSTALLER`, `SESTINA_UPGRADE_INSTALLER` and
+`SESTINA_UPGRADE_MANIFEST`. It creates synthetic research, installs the prior
+candidate, then runs the real backup/update/preserved-program probe. Its
+`lifecycle-result.json` can be supplied to the common target entry. The old
+`.tmp/g10-g11/installed` path is not assumed to exist. Synthetic trust is confined
+to service construction and is never installed into the application. Native
+uninstall/credential/focus observation remains separate.
+
+Use the common acceptance entry after installing the exact candidate:
+
+```text
+pnpm verify:target --phase candidate --manifest <candidate-manifest.json> --installed <installed-app-directory> --installer <installer-file> --lifecycle-result <lifecycle-result.json> --output <local-evidence-directory>
+```
+
+`final` also checks the default cutover. `publish` is a read-only verification of
+an explicitly authorized actual public release; it does not create a tag or
+upload files. The three modes share checks. Each result names the runtime source,
+verification source, installer digest, platform, raw test records and outstanding
+formal observations. A local pass and formal platform acceptance are separate
+fields. Installed performance keeps all samples and a fresh retained seed for
+each run; screenshots and native-dialog fixture answers cannot by themselves
+establish continuous motion or native focus acceptance.
+
+The common entry also recompiles the unsigned core in a fresh staging directory
+and compares the complete archive and every entry. It does not compare signature
+timestamps. Final cutover checks inspect installed renderer/runtime input graphs,
+reject legacy active service code in both the main app and companion, and actually
+operate the packaged default entry, project creation, old links and project switch.
 
 No macOS/Linux machine, signing/notarization account or authorized production
 update root is available for this task. Their actual acceptance remains open;
 local implementation and Windows evidence are recorded separately in the
 [implementation status](../../docs/product/restructure/IMPLEMENTATION-STATUS.md).
-No push, tag, publication or G12/G13 cutover is part of this candidate.
+No push, public tag or publication is authorized. The later local G12/G13
+continuation is recorded in the implementation status and combined evidence.
 
 ## Remaining prerequisite check
 
@@ -129,8 +166,10 @@ This is G10 verification preparation. It executes the existing Windows x64
 installed-resource verifier when both installed/manifest arguments are supplied,
 then reports outstanding G10/G11 observation bindings. The source is the
 inventory's explicit 40-character `sourceCommit`, never an inferred current HEAD.
-The current installed verifier supports the unsigned internal Windows candidate;
-it does not verify signed/macOS/Linux packages or establish a production signature.
+The installed verifier checks the declared platform's resource layout and native
+executable architecture, including macOS app bundles. Only Windows has actual
+local installation results; layout checks do not establish other-platform
+installation or a production signature.
 The separate `verify:platform` still checks Public Preview archives, and can
 replace release output while building. It is not target-desktop acceptance.
 

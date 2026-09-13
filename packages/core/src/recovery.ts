@@ -33,7 +33,7 @@ import {
   type CoreErrorCode,
   type CoreResult,
 } from "./errors.js";
-import { openSestina } from "./sestina-core.js";
+import { openLegacyResearchReader as openSestina } from "./legacy-reader.js";
 import {
   validateKernelDatabase,
   readKernelSnapshot,

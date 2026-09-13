@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { openSestina, type CoreResult } from "../../packages/core/src/index.js";
+import { openSestina, type CoreResult } from "@sestina/core";
 import { parseArgumentEvidence, type ResearchResult } from "../../packages/research/src/index.js";
 import { createResearchStore } from "../../packages/research-store/src/index.js";
 import { openDatabase } from "../../packages/storage/src/index.js";

@@ -100,7 +100,7 @@ const native =
   /^dist\/node_modules\/(?:@primno\/dpapi\/(?:package\.json|LICENSE|dist\/index\.js|prebuilds\/win32-(?:x64|arm64)\/@primno\+dpapi\.node)|node-gyp-build\/(?:package\.json|LICENSE|index\.js|node-gyp-build\.js)|@napi-rs\/keyring(?:-(?:darwin-arm64|linux-x64-gnu))?\/(?:package\.json|LICENSE|README\.md|index\.js|keytar\.js|keyring\.[a-z0-9-]+\.node))$/;
 for (const file of manifest.files) {
   if (
-    !/^(?:dist\/(?:main\.cjs|preload\.cjs|assets\.json|identity\.json|client\/(?:index\.html|sestina-logo\.png|assets\/[a-zA-Z0-9_.-]+))|package\.json|LICENSE|THIRD-PARTY-NOTICES\.md)$/.test(
+    !/^(?:dist\/(?:main\.cjs|preload\.cjs|assets\.json|identity\.json|(?:renderer|runtime)-inputs\.json|client\/(?:index\.html|sestina-logo\.png|assets\/[a-zA-Z0-9_.-]+))|package\.json|LICENSE|THIRD-PARTY-NOTICES\.md)$/.test(
       file.path,
     ) &&
     !companion.test(file.path) &&

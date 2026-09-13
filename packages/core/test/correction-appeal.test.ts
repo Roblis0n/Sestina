@@ -8,7 +8,7 @@ import {
   type CoreResult,
   type ResearchRoomProvider,
   type SestinaCore,
-} from "../src/index.js";
+} from "@sestina/core";
 import {
   createStableTextSpan,
   prepareCorrectionAppealSecondOpinionRequest,

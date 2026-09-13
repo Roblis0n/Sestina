@@ -1,6 +1,7 @@
 import { _electron } from "@playwright/test";
 import { strict as assert } from "node:assert";
 import { createServer } from "node:http";
+import { createServer as createTlsServer } from "node:https";
 import {
   mkdir,
   mkdtemp,
@@ -33,7 +34,7 @@ const cases: string[] = [],
   requests: string[] = [];
 const nativeAnswers: { message: string; detail: string }[] = [];
 let mode = "valid";
-const server = createServer(async (req, res) => {
+const handler: import("node:http").RequestListener = async (req, res) => {
   const parts: Buffer[] = [];
   for await (const part of req) parts.push(Buffer.from(part));
   const body = Buffer.concat(parts).toString();
@@ -77,12 +78,63 @@ const server = createServer(async (req, res) => {
       ],
     }),
   );
-});
+};
+const server = createServer(handler);
 await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
 const address = server.address();
 if (!address || typeof address === "string") throw Error("fixture_address");
 const endpoint = `http://127.0.0.1:${address.port}`;
+await writeFile(
+  join(area, "openssl.cnf"),
+  "[req]\ndistinguished_name=dn\n[dn]\n",
+);
+for (const name of ["trusted", "untrusted"]) {
+  execFileSync(
+    process.env.SESTINA_TEST_OPENSSL ?? "openssl",
+    [
+      "req",
+      "-config",
+      join(area, "openssl.cnf"),
+      "-x509",
+      "-newkey",
+      "rsa:2048",
+      "-nodes",
+      "-keyout",
+      join(area, `${name}-key.pem`),
+      "-out",
+      join(area, `${name}-cert.pem`),
+      "-subj",
+      "/CN=localhost",
+      "-addext",
+      "subjectAltName=DNS:localhost,IP:127.0.0.1",
+      "-days",
+      "1",
+    ],
+    { windowsHide: true, stdio: "pipe" },
+  );
+}
+const tlsServers = await Promise.all(
+  ["trusted", "untrusted"].map(async (name) => {
+    const server = createTlsServer(
+      {
+        key: await readFile(join(area, `${name}-key.pem`)),
+        cert: await readFile(join(area, `${name}-cert.pem`)),
+      },
+      handler,
+    );
+    await new Promise<void>((done) => server.listen(0, "127.0.0.1", done));
+    const address = server.address();
+    if (!address || typeof address === "string")
+      throw Error("fixture_tls_address");
+    return {
+      server,
+      port: address.port,
+      endpoint: `https://127.0.0.1:${address.port}`,
+    };
+  }),
+);
 const env = { ...process.env };
+env.NODE_EXTRA_CA_CERTS = join(area, "trusted-cert.pem");
 delete env.ELECTRON_RUN_AS_NODE;
 let electron: Awaited<ReturnType<typeof _electron.launch>>;
 let page: Awaited<ReturnType<typeof electron.firstWindow>>;
@@ -171,7 +223,10 @@ const collect = async () => {
   assert.ok(
     sockets.every(
       (socket: any) =>
-        socket.address === "127.0.0.1" && socket.port === address.port,
+        socket.address === "127.0.0.1" &&
+        [address.port, ...tlsServers.map((server) => server.port)].includes(
+          socket.port,
+        ),
     ),
     JSON.stringify(sockets),
   );
@@ -289,6 +344,32 @@ try {
     model: "synthetic",
     timeoutMs: 400,
   };
+  // Synthetic transport credential setup, not native credential-entry evidence.
+  // Keep it outside the renderer and encrypt it with this actual Electron OS backend.
+  await electron.evaluate(async ({ app, safeStorage }) => {
+    if (!safeStorage.isEncryptionAvailable())
+      throw Error("fixture_secure_storage_required");
+    const require = (process as any).mainModule.require;
+    const fs = require("node:fs/promises"),
+      path = require("node:path"),
+      crypto = require("node:crypto");
+    const directory = path.join(app.getPath("userData"), "credentials");
+    await fs.mkdir(directory, { recursive: true });
+    const file = path.join(
+      directory,
+      crypto
+        .createHash("sha256")
+        .update("sestina.provider.api-key")
+        .digest("hex") + ".enc",
+    );
+    const encrypted = safeStorage.encryptString("synthetic-local-tls-fixture");
+    await fs.writeFile(file, encrypted, { flag: "wx" });
+    if (
+      safeStorage.decryptString(await fs.readFile(file)) !==
+      "synthetic-local-tls-fixture"
+    )
+      throw Error("fixture_credential_roundtrip_failed");
+  });
   await invoke("providerSave", { input: config });
   for (const scenario of [
     "valid",
@@ -299,8 +380,21 @@ try {
     "disconnect",
     "redirect",
     "cancel",
+    "tls-valid",
+    "tls-untrusted",
   ]) {
     mode = scenario;
+    await invoke("providerSave", {
+      input: {
+        ...config,
+        baseUrl:
+          scenario === "tls-valid"
+            ? tlsServers[0]!.endpoint
+            : scenario === "tls-untrusted"
+              ? tlsServers[1]!.endpoint
+              : endpoint,
+      },
+    });
     const before = requests.length;
     let review = await command("create", {
       suggestion: `Installed ${scenario} 中文`,
@@ -335,22 +429,24 @@ try {
       });
     }
     await send;
-    assert.equal(requests.length, before + 1, scenario);
-    assert.equal(requests.at(-1), prepared.manifest.exactRequestBody);
+    const expectedRequests = before + (scenario === "tls-untrusted" ? 0 : 1);
+    assert.equal(requests.length, expectedRequests, scenario);
+    if (scenario !== "tls-untrusted")
+      assert.equal(requests.at(-1), prepared.manifest.exactRequestBody);
     const read = await command("read", { reviewId: review.id });
     assert.equal(
       read.attempts[0].status === "completed",
-      ["valid", "wrong-identity"].includes(scenario),
+      ["valid", "tls-valid", "wrong-identity"].includes(scenario),
       `${scenario}: ${JSON.stringify(read.attempts)}`,
     );
     if (read.attempts[0].status === "completed")
       assert.equal(
         read.attempts[0].assessment.requestBound,
-        scenario === "valid",
+        ["valid", "tls-valid"].includes(scenario),
       );
     assert.equal(read.review.terminalOutcome, null);
     await restart();
-    assert.equal(requests.length, before + 1);
+    assert.equal(requests.length, expectedRequests);
     const recovered = await command("read", { reviewId: review.id });
     assert.equal(recovered.attempts[0].status, read.attempts[0].status);
     await commit(
@@ -361,6 +457,7 @@ try {
     cases.push(`provider-${scenario}-exact-body-no-retry`);
   }
   mode = "valid";
+  await invoke("providerSave", { input: config });
   await invoke("providerSave", {
     second: true,
     input: {
@@ -630,6 +727,8 @@ try {
         exactBodies: requests,
         nativeConfirmationCount: nativeAnswers.length,
         nativeObservation: "not_established_dialog_answers_are_fixtures",
+        tlsCredentialSetup:
+          "synthetic_OS_encrypted_fixture_not_native_entry_acceptance",
         chromiumLogs: "chromium-network-*.json",
         rendererConnections,
         mainSockets:
@@ -664,4 +763,8 @@ try {
 } finally {
   server.closeAllConnections();
   await new Promise<void>((done) => server.close(() => done()));
+  for (const { server } of tlsServers) {
+    server.closeAllConnections();
+    await new Promise<void>((done) => server.close(() => done()));
+  }
 }

@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
-import { openSestina, type CoreResult, type ResearchRoomProvider } from "../../packages/core/src/index.js";
+import { openSestina, type CoreResult, type ResearchRoomProvider } from "@sestina/core";
 import { createStableTextSpan, type ResearchRoomSemanticJudgeRequest } from "../../packages/review/src/index.js";
 
 export const RI48_USER = Object.freeze({ kind: "user" as const, actorId: "ri48-test-owner" });

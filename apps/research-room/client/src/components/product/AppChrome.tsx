@@ -11,9 +11,10 @@ import { Button } from "../primitives/Button.js";
 import { StatusBadge } from "../primitives/StatusBadge.js";
 import { AppearanceDialog } from "./AppearanceDialog.js";
 import { ProviderDialog } from "./ProviderDialog.js";
-import { RecoveryDialog } from "./RecoveryDialog.js";
+import type { RecoveryDialog } from "./RecoveryDialog.js";
 
 interface AppChromeProps {
+  readonly Recovery?: typeof RecoveryDialog;
   readonly candidate?: boolean;
   readonly language: AppLanguage;
   readonly provider?: ProviderStatusDto;
@@ -58,6 +59,7 @@ interface AppChromeProps {
   readonly onError: (message: string) => void;
 }
 export function AppChrome(props: AppChromeProps) {
+  const Recovery = props.Recovery;
   const chromeRef = useRef<HTMLElement>(null);
   const providerButtonRef = useRef<HTMLButtonElement>(null);
   const secondOpinionProviderButtonRef = useRef<HTMLButtonElement>(null);
@@ -254,7 +256,7 @@ export function AppChrome(props: AppChromeProps) {
         onSave={props.onSaveSecondOpinionProvider}
         onDeleteConfig={props.onDeleteSecondOpinionProviderConfig}
         onDeleteSecret={props.onDeleteSecondOpinionProviderSecret}
-        onTest={props.onTestSecondOpinionProvider}
+        onTest={props.candidate ? undefined : props.onTestSecondOpinionProvider}
         onError={props.onError}
       />
       <AppearanceDialog
@@ -267,17 +269,19 @@ export function AppChrome(props: AppChromeProps) {
         }}
         onApply={props.onAppearance}
       />
-      <RecoveryDialog
-        open={props.recoveryOpen}
-        language={props.language}
-        busy={props.busy}
-        returnFocusRef={recoveryButtonRef}
-        onClose={() => {
-          props.onRecoveryOpen(false);
-        }}
-        onRestored={props.onRecoveryRestored}
-        onNotice={props.onNotice}
-      />
+      {Recovery ? (
+        <Recovery
+          open={props.recoveryOpen}
+          language={props.language}
+          busy={props.busy}
+          returnFocusRef={recoveryButtonRef}
+          onClose={() => {
+            props.onRecoveryOpen(false);
+          }}
+          onRestored={props.onRecoveryRestored}
+          onNotice={props.onNotice}
+        />
+      ) : null}
     </>
   );
 }

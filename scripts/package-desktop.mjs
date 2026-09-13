@@ -9,7 +9,8 @@ import {
   cp,
   rename,
 } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { join, resolve, relative } from "node:path";
+import { parseArgs } from "node:util";
 import { createDeterministicTarGzip } from "./lib/archive.mjs";
 
 const root = resolve(import.meta.dirname, "..");
@@ -20,7 +21,15 @@ process.env.CSC_IDENTITY_AUTO_DISCOVERY = "false";
 const { build, Platform, Arch } = createRequire(
   join(root, "apps/desktop/package.json"),
 )("electron-builder");
-const target = process.argv[2] ?? process.platform;
+const { values, positionals } = parseArgs({
+  allowPositionals: true,
+  options: {
+    output: { type: "string" },
+    "core-only": { type: "boolean", default: false },
+  },
+});
+if (positionals.length > 1) throw Error("unexpected_packaging_argument");
+const target = positionals[0] ?? process.platform;
 const architecture = target === "darwin" ? "arm64" : "x64";
 if (!["win32", "darwin", "linux"].includes(target))
   throw new Error("unsupported_desktop_target");
@@ -72,7 +81,11 @@ if (
   throw new Error("desktop_dependency_lock_changed");
 const sha = (value) => createHash("sha256").update(value).digest("hex");
 const version = `0.2.0-g10.${sourceCommit.slice(0, 8)}`;
-const output = join(root, "release", "desktop", `${target}-${architecture}`);
+const output = values.output
+  ? resolve(values.output)
+  : join(root, "release", "desktop", `${target}-${architecture}`);
+if (!/^(?:\.tmp|release)[\\/]/.test(relative(root, output)))
+  throw Error("desktop_output_outside_artifact_area");
 const staging = join(
   root,
   ".tmp",
@@ -212,6 +225,17 @@ await writeFile(
     2,
   ) + "\n",
 );
+if (values["core-only"]) {
+  console.log(
+    JSON.stringify({
+      output,
+      identity,
+      coreOnly: true,
+      unsignedCoreSha256: sha(core),
+    }),
+  );
+  process.exit(0);
+}
 const targets =
   target === "win32"
     ? Platform.WINDOWS.createTarget(["nsis"], Arch.x64)
@@ -256,7 +280,11 @@ await build({
       identity: null,
       category: "public.app-category.productivity",
     },
-    linux: { target: "AppImage", category: "Office" },
+    linux: {
+      target: "AppImage",
+      category: "Office",
+      executableName: "sestina-candidate",
+    },
   },
 });
 // Builder's unresolved NSIS diagnostic template is build metadata, not a release manifest.

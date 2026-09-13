@@ -15,6 +15,7 @@ import type {
   StatusDto,
 } from "../api/dto.js";
 import { AppChrome } from "../components/product/AppChrome.js";
+import { RecoveryDialog } from "../components/product/RecoveryDialog.js";
 import type { InspectorSelection } from "../components/product/ContextInspector.js";
 import { StatusBadge } from "../components/primitives/StatusBadge.js";
 import { localizedError, t } from "../i18n/copy.js";
@@ -574,6 +575,7 @@ export function App() {
   const chrome =
     phase !== "language" && phase !== "boot" ? (
       <AppChrome
+        Recovery={RecoveryDialog}
         candidate={phase === "kernel"}
         language={language}
         provider={provider}

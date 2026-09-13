@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { openSestina, type CoreResult } from "../../packages/core/src/index.js";
+import { openSestina, type CoreResult } from "@sestina/core";
 import type { LiveProjectWorkingMemory, ProjectWorkingMemoryContent } from "../../packages/research/src/index.js";
 import { createUi02Project, UI02_USER, type Ui02ProjectFixture } from "./ui02-project.js";
 

@@ -298,8 +298,9 @@ Build and launch commands and the installed-window test entry are in
 picker. No system Node, pnpm or first-launch runtime download is needed by the
 packaged Windows program. The public preview remains v0.2.0/schema 20.
 
-The runtime source is `0c33aad574d4368996ab09e020459f4c218d87f4`. This is the current
-capability/remaining/evidence mapping; the older evidence below is historical.
+The historical G10/G11 runtime source is `0c33aad574d4368996ab09e020459f4c218d87f4`.
+The following mapping preserves that handoff; current results are in
+[the combined continuation index](G1-G3-EVIDENCE.md#authorized-local-g12g13-continuation-2026-09-13).
 
 | Capability and current entry | Implemented/verified locally | Remaining acceptance |
 | --- | --- | --- |
@@ -340,7 +341,7 @@ production runner remains G12 work; this prerequisite facility can be reused by 
 
 ### Exact G12 entry after G10/G11 completion
 
-G12 is not yet active. Its entry is the **same committed candidate source and
+The original formal entry requires the **same committed candidate source and
 actual three-platform installers** after the preceding implementation, OS and
 native visual requirements pass. Use plan 11's complete migration/restore and
 Forget matrix, plan 13's production acceptance, and plan 14's cutover rehearsal;
@@ -350,3 +351,27 @@ G13 repeats affected installed startup, deep links, old write rejection, migrati
 recovery, network/IPC, native focus, bilingual themes, text scaling and motion
 journeys against the final installed artifacts. Browser or historical preview
 evidence cannot close those installation requirements.
+
+### Current authorized local G12/G13 execution
+
+The later user instruction permits independent local implementation despite
+unavailable external platform/signing and native observations. Candidate
+`c4d91033` passed the executed local data-safety, function, installed lifecycle
+and performance checks, permitting the local G13 cutover. G10/G11 remain partial.
+The earlier prerequisite-only execution instructions above are historical.
+
+Use `pnpm start` for the current desktop, `pnpm build` for its build, and
+`pnpm package win32` for the local Windows installer. The shared `verify:target`
+runner is implemented: `candidate` checks the pre-cutover package, `final` adds
+actual installed default-entry/legacy-rejection checks, and `publish` only checks
+an authorized real public release. Each mode uses the same checks and source,
+platform, artifact and raw-evidence bindings. Missing/failed results never pass.
+
+The start page handles explicit new/open/migrate and backup/restore. A legacy
+project is inspected and backed up before confirmed migration; unknown/future
+state is protected. Saved history can be read/exported or converted to a fresh
+Draft without inferring old user authority. CLI context/doctor and MCP remain
+read-only. Old SDK/HTTP/CLI active writes reject direct callers, and the desktop
+renderer has no HTTP fallback. Program rollback uses a preserved executable;
+data restore separately validates privacy/Forget identity and creates a backup.
+No reverse SQL, old writer reactivation, remote push/tag/CI or release is used.

@@ -13,7 +13,7 @@ import {
   restoreProjectState,
   type CoreResult,
   type SestinaCore,
-} from "../src/index.js";
+} from "@sestina/core";
 
 const roots: string[] = [];
 const cores: SestinaCore[] = [];

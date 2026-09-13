@@ -22,10 +22,12 @@ import { runSnapshot } from "./commands/snapshot.js";
 import { EXIT_CODES, type CliExitCode } from "./exit-codes.js";
 import { failure, success, type CliIo } from "./output.js";
 import type { CliDependencies } from "./connections/connection-plan.js";
+import { legacyFixtureWritesEnabled } from "@sestina/core";
+import { runReadonlyContext } from "./commands/context.js";
 
 export type { CliIo } from "./output.js";
 
-export const CLI_HELP = `Sestina local research revision workflow
+export const CLI_HELP = legacyFixtureWritesEnabled() ? `Sestina local research revision workflow
 
   sestina init --project <dir> --title <title> --yes
   sestina doctor [--project <dir>]
@@ -48,6 +50,28 @@ sestina report markdown|json [--all-findings]
   sestina capsule export|import-response
 
 Use --json for stable machine output. Authority-changing research actions require --yes.
+` : `Sestina local research reader and maintenance tools
+
+Open Research Room with pnpm start. Create projects and confirm research changes there.
+Legacy research writing commands have been retired.
+
+  sestina context [--project <dir>] [--json]
+  sestina doctor [--project <dir>]
+  sestina privacy show [--project <dir>] [--json]
+  sestina data status|backup [--project <dir>] [--json]
+  sestina data restore <backup-id> [--project <dir>] [--yes] [--json]
+  sestina brief show
+  sestina artifact list
+  sestina revision diff
+  sestina episode show
+  sestina decision list
+  sestina issue list|show
+  sestina review show
+  sestina snapshot show|verify
+  sestina report markdown|json
+  sestina connect|connection-status|disconnect [--project <dir>]
+
+Use --json for machine output. Historical reading never grants new research authority.
 `;
 
 function onlyOptions(parsed: ParsedCliArguments, allowed: ReadonlySet<string>): boolean {
@@ -68,6 +92,19 @@ export async function runCli(args: readonly string[], io: CliIo, dependencies: C
   if (parsed.options.help === true || command === "help") {
     io.stdout(CLI_HELP);
     return EXIT_CODES.success;
+  }
+  if (!legacyFixtureWritesEnabled()) {
+    if (command === "context" || command === "doctor") {
+      if (parsed.positionals.length !== 1 || !onlyOptions(parsed, new Set(["project", "json"])))
+        return failure(io, json, EXIT_CODES.invalidInput, "invalid_input", "Command arguments are invalid.");
+      return runReadonlyContext(stringOption(parsed, "project"), command === "doctor", json, io);
+    }
+    const readers: Readonly<Record<string, readonly string[]>> = {
+      brief: ["show"], artifact: ["list"], revision: ["diff"], episode: ["show"],
+      decision: ["list"], issue: ["list", "show"], review: ["show"], snapshot: ["show", "verify"], report: ["markdown", "json"],
+    };
+    if (command === "init" || command === "capsule" || (command !== undefined && readers[command] && !readers[command].includes(parsed.positionals[1] ?? "")))
+      return failure(io, json, EXIT_CODES.invalidInput, "legacy_write_disabled", "This historical research writer is retired. Use Research Room to create a project or confirm a Kernel Review.");
   }
   if (command === "init" && parsed.positionals.length === 1) {
     const options: InitOptions = { project: stringOption(parsed, "project"), title: stringOption(parsed, "title"), yes: parsed.options.yes === true, json };

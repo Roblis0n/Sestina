@@ -31,7 +31,7 @@ import {
   kernelCanonicalJson,
   kernelHash,
 } from "@sestina/research";
-import { openSestina } from "./sestina-core.js";
+import { openLegacyResearchReader as openSestina } from "./legacy-reader.js";
 import { publishKernelBriefFile } from "./kernel-brief-publisher.js";
 
 const DB = "state.sqlite";

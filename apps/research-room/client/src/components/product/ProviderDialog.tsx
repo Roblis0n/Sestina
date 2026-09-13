@@ -75,7 +75,7 @@ export function ProviderDialog({
   }, [open, status]);
 
   useEffect(() => {
-    if (!open || idPrefix !== "provider") return undefined;
+    if (!open || idPrefix !== "provider" || desktop()) return undefined;
     const controller = new AbortController();
     void researchRoomApi
       .codexHost()

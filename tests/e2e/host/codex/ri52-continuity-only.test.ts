@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
-import { openSestina, type CoreResult } from "../../../../packages/core/src/index.js";
+import { openSestina, type CoreResult } from "@sestina/core";
 import { CAPABILITY_POLICY, defaultCodexLaunchTargetLocator } from "../../../../integrations/mcp/src/index.js";
 import { ResearchRoomApi } from "../../../../apps/research-room/client/src/api/client.js";
 import {

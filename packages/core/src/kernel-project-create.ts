@@ -1,7 +1,14 @@
 import { mkdir, realpath, lstat } from "node:fs/promises";
 import { join } from "node:path";
-import { KernelFault, kernelRecord, kernelText } from "@sestina/research";
-import { openSestina } from "./sestina-core.js";
+import {
+  KernelFault,
+  kernelRecord,
+  kernelText,
+  createResearchProject,
+} from "@sestina/research";
+import { openDatabase } from "@sestina/storage";
+import { createResearchStore } from "@sestina/research-store";
+import { RandomIdFactory, SystemClock } from "./id-factory.js";
 import { migrateKernelProject } from "./kernel-migration.js";
 
 /** Bootstrap only. Initial research content still enters through a user-confirmed Review. */
@@ -16,19 +23,28 @@ export async function createKernelProject(input: unknown) {
   const directory = join(root, ".sestina");
   // Exclusive creation preserves every unknown, existing, or interrupted project.
   await mkdir(directory);
-  const opened = await openSestina({
-    databasePath: join(directory, "state.sqlite"),
+  const database = await openDatabase({
+    path: join(directory, "state.sqlite"),
   });
-  if (!opened.ok) throw new KernelFault("storage_unavailable");
   try {
-    const result = opened.value.initializeProject({
-      title: body.title,
-      rootPath: ".",
-      actor: { kind: "user", actorId: "local-research-owner" },
-    });
+    const clock = new SystemClock();
+    const project = createResearchProject(
+      {
+        title: body.title,
+        rootPath: ".",
+        source: {
+          actor: { kind: "user", actorId: "local-research-owner" },
+          authority: "user_recorded",
+          recordedAt: clock.now().toISOString(),
+        },
+      },
+      { clock, idFactory: new RandomIdFactory() },
+    );
+    if (!project.ok) throw new KernelFault("invalid_record");
+    const result = createResearchStore(database).projects.create(project.value);
     if (!result.ok) throw new KernelFault("storage_unavailable");
   } finally {
-    opened.value.close();
+    database.close();
   }
   // On failure, keep the created state and recovery journal for inspection.
   return migrateKernelProject({ projectRoot: root });

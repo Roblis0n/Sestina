@@ -316,6 +316,19 @@ try {
       nativeDialogs: "fixtures_not_native_acceptance",
     }),
   );
+  await execute(
+    "reproducibility",
+    [
+      join(root, "scripts/verify-desktop-core-reproducibility.mjs"),
+      resolve(values.manifest),
+    ],
+    (log) => {
+      const checked = lastJson(log);
+      if (!checked.passed || checked.sourceCommit !== sourceCommit)
+        throw Error("core_reproducibility_failed");
+      return { count: checked.checks.length, result: checked };
+    },
+  );
   for (const id of ["journeys", "performance"]) {
     const area = join(output, id);
     await execute(
@@ -419,6 +432,8 @@ try {
         if (!checked.passed) throw Error("cutover_failed");
         return { count: checked.checks.length, result: checked };
       },
+      true,
+      { SESTINA_TARGET_OUTPUT: join(output, "cutover") },
     );
   result.localPassed = Object.values(result.checks).every(
     (check) => check.status === "passed" && check.count > 0,

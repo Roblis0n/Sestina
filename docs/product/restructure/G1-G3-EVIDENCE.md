@@ -908,7 +908,7 @@ trust/offer resources, with Linux package provenance/signing appropriate to its
 format. The accepted Windows code needs no duplicate implementation. No remote
 push, tag, CI, service provisioning or publication was attempted to obtain these.
 
-### Consolidated stage index
+### Historical prerequisite-only stage index
 
 This index preserves the complete task-card scope while merging repeated audits,
 handoffs and full gates. None of the following G12/G13 rows is marked complete.
@@ -922,3 +922,58 @@ handoffs and full gates. None of the following G12/G13 rows is marked complete.
 | G12-11–G12-12 | Plans 10, 13 and 14; preceding unsigned-core/artifact provenance plus current byte check | Three-platform signed candidate acceptance and cutover verdict blocked. |
 | G13-01–G13-02 | Plans 11, 14 and 15; frozen legacy mappings and current release identity | No legacy-path removal or default/schema/release switch. |
 | G13-03–G13-04 | Plans 10, 13–16; final affected-artifact verification and delivery rules | No final package, final acceptance, public tag or release. |
+
+## Authorized local G12/G13 continuation, 2026-09-13
+
+This continuation follows the later user authorization recorded in
+`IMPLEMENTATION-DECISIONS.md`: missing external platform, signing and unavailable
+native observation do not stop independent local implementation. They still
+prevent a claim of complete formal platform acceptance or publication. G10/G11
+retain `current_partial`. The earlier prerequisite-only index is historical.
+
+### Implemented defects and proof scope
+
+| Change | Actual evidence and result |
+| --- | --- |
+| Confirmation lock releases after one-use authorization is validated, before waiting for Provider completion | `desktop-authority.test.ts` first reproduced cancellation/read rejection during an active request, then passed. Installed exact-send/cancellation and restart cases exercise the actual Kernel and SQLite. |
+| Disable Chromium dictionary activity before either desktop session creates a window | Prior Chromium network logs recorded a Google dictionary connection despite renderer spellcheck being disabled. The repaired installed journeys record Chromium TCP/UDP events and main-process sockets after bridge initialization. This is not an all-process OS packet trace. |
+| Large bilingual Brief remains canonical; display labels are bounded | `large-project-transaction.test.ts` reproduced `invalid_record` during effect preparation, then committed a user-confirmed result and verified the original Brief remained intact. |
+| Bounded immutable decoded-row cache and batched transition reads | `validated-kernel-reads.test.ts` verifies changed SQL bytes and mismatched columns still fail; privacy transaction and legacy Memory Forget regressions pass. Reads always fetch current SQL; Forget and close clear the cache. |
+| Opt-in transaction duration observation | Each measured installed commit must yield exactly one completed Kernel duration. No research identifiers or content are observed. No measurement subscriber, buffer, file or network logging is installed in the product. Full IPC plus confirmation durations are retained separately. |
+
+The candidate checks use `scripts/run-target-gates.mjs` (`pnpm verify:target`).
+Candidate, final and authorized publish modes share the same executed checks
+and source/artifact/platform bindings. Zero cases, skipped/todo cases, missing
+raw evidence, stale hashes and invalid identities cannot pass. Test-only or
+documentation-only descendants may verify an unchanged runtime, with runtime
+source and verification commits recorded separately; changed runtime/build
+inputs require a new artifact. The old Preview platform runner does not attest
+to these desktop installers.
+
+### Actual local candidate records
+
+| Runtime / record | Result and limits |
+| --- | --- |
+| `b1aa275a`, `.tmp/g12-g13/candidate/result.json` | Failed aggregate. Installed resources 34, desktop tests 23, journeys 13 and visual matrix six passed; public lint and large-Brief performance failed and were repaired. Five actual installed screenshots were inspected across English/Chinese, light/dark/high contrast, long errors and 200% text. This is not final-product visual acceptance. |
+| `3de75599`, `.tmp/g12-g13/candidate-final/result.json` | Failed aggregate. Public regressions 338 passed but new-test discovery stopped the foundation stage. Resources 34, desktop tests 23, journeys 14, six visual combinations and six lifecycle cases passed. Performance retained 20 fresh-profile and 20 existing-profile starts, 25 query/write samples and 100 navigation switches; search, next page, manifest and the original combined commit measurement failed thresholds. |
+| `c4d91033`, `.tmp/g12-g13/candidate-performance-lifecycle/lifecycle-result.json` | Six actual isolated Windows lifecycle cases passed: initial silent install, pre-upgrade backup, backup-failure blocking, upgrade, restart without update re-request, and preserved previous executable actually opened. Native uninstall is not covered. |
+| `c4d91033`, `.tmp/g12-g13/candidate-performance/result.json` | Completed local aggregate passed: 338 public unit + 387 foundation assertions, 34 installed resources, 23 desktop tests, 14 installed journeys, performance, six visual combinations and six lifecycle cases. Formal acceptance remains not established. Raw seeds and all timing samples are retained. |
+
+The `c4d91033` unsigned installer is
+`release/desktop/win32-x64/Sestina Candidate Setup 0.2.0-g10.c4d91033.exe`,
+135,369,732 bytes, SHA-256
+`8865cef0b4f3a979878f544dbab5bb090a90752d27f825aaaa20831d2bb2cebc`.
+Its source is `c4d910331ca8b4f8aad5c7f4081fbd457b58ef9a`, schema 25,
+Electron 44.3.0 and build Node 24.13.0. The local manifest inventories its
+committed lock, migration inputs and resources. It has no production signature
+or update trust claim. Earlier installers remain distinct retained artifacts.
+
+Installed journey tests use a synthetic loopback Provider, real process restarts,
+actual backup restore and frozen legacy corpus copies. They compare confirmed
+request bytes with received bytes, inspect persisted outcomes after failures,
+and exercise independent assessment, configuration changes, Memory sharing and
+Forget. Programmatic native-dialog answers are explicitly test fixtures; no
+native focus, continuous-motion, assistive-technology or uninstall observation
+is inferred from them. The previously blocked native helper/uninstaller is not
+retried or bypassed. The exact external-resource gaps remain in the single
+native observation record above.

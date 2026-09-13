@@ -46,6 +46,20 @@ Review、Appeal 或 Deliberation Room。证据不足时必须保持 unknown 或 
 后台同步、遥测、崩溃上传、自动内容日志或后台模型请求。只有在用户主动配置
 Provider、检查精确 Manifest 并确认该次请求后，绑定的内容才可能外发。
 
+## 当前本地桌面与已发布版本
+
+当前源码默认启动 schema 25 的 Electron Research Room。`pnpm start` 打开桌面，
+`pnpm build` 构建桌面，`pnpm package win32` 生成本地安装器。Today / Review、
+Project、Search 和 Settings 共用同一个 Kernel。旧 Room/Pilot 执行和 generic
+写入已退出正常公开接口及桌面包；旧历史仍可阅读、导出和明确转换为 Draft。
+CLI 的 `context` 与 `doctor` 为只读操作，不创建项目、不替用户作研究决定。
+
+这是尚未公开发布的本地候选。已发布的 v0.2.0/schema 20 及历史压缩包保持原样；
+本页旧能力示例和下方公开预览安装步骤仍描述该历史版本。当前桌面使用方法见
+[桌面说明](../../apps/desktop/README.md)，真实验证范围见
+[合并证据索引](../product/restructure/G1-G3-EVIDENCE.md)。其他平台实机、签名、
+生产更新信任和完整原生可访问性验收尚未完成。
+
 ## 安装 0.2.0 公开预览版
 
 0.2.0 是压缩包分发，不是原生安装器；需要 **Node.js 24.x** 和本地浏览器。
@@ -75,11 +89,10 @@ cd Sestina
 corepack enable
 pnpm install --frozen-lockfile
 pnpm verify:public
-pnpm --filter @sestina/research-room build
-node apps/research-room/dist/main.js
+pnpm start
 ```
 
-默认确定性流程无需语义 Provider，且会如实显示 `ledger_only`。请先阅读
+当前桌面的本地 Draft 与用户确认流程无需 Provider。请先阅读
 [隐私说明](../../PRIVACY.md)、[安全策略](../../SECURITY.md)、
 [产品定义](../product/CURRENT-PRODUCT-DEFINITION.md)和
 [文档索引](../README.md)。

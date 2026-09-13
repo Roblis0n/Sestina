@@ -1,4 +1,5 @@
-export { openSestina, SestinaCore } from "./sestina-core.js";
+export { openSestina, SestinaCore, legacyFixtureWritesEnabled } from "./legacy-public.js";
+export { openLegacyResearchReader, LegacyResearchReader } from "./legacy-reader.js";
 export { RandomIdFactory, SystemClock } from "./id-factory.js";
 export { ResearchDeliberationKernel, openResearchDeliberationKernel, KernelApplicationFault, serializeKernelProviderRequest, decodeProviderAssessment,
   type KernelApplicationOptions, type KernelProvider } from "./kernel-application.js";

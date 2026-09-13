@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
-import { openSestina, type CoreResult, type SestinaCore } from "../../packages/core/src/index.js";
+import { openSestina, type CoreResult, type SestinaCore } from "@sestina/core";
 
 const roots: string[] = [];
 const cores: SestinaCore[] = [];

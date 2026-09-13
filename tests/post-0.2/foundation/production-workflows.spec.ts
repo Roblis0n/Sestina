@@ -3,7 +3,7 @@ import { createResearchRoomServer } from "../../../apps/research-room/dist/serve
 import {
   migrateKernelProject,
   openSestina,
-} from "../../../packages/core/src/index.js";
+} from "@sestina/core";
 import { join } from "node:path";
 import { readFile, unlink, writeFile } from "node:fs/promises";
 import { productionUiProject } from "../ui-factory.js";

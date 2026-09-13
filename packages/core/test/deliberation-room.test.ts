@@ -14,7 +14,7 @@ import {
   type DeliberationParticipantProvider,
   type DeliberationParticipantProviderInput,
   type SestinaCore,
-} from "../src/index.js";
+} from "@sestina/core";
 
 const USER: ResearchActor = { kind: "user", actorId: "research-owner" };
 const roots: string[] = [];

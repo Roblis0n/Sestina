@@ -66,6 +66,22 @@ Read the [privacy contract](PRIVACY.md), [security policy](SECURITY.md), and
 [data-flow inventory](docs/security/DATA-FLOW.md) before using real research
 material.
 
+## Current local desktop and published 0.2.0
+
+The current source defaults to the schema-25 Electron Research Room. `pnpm start`
+opens the desktop app; `pnpm build` builds it and `pnpm package win32` creates a
+local installer. Today / Review, Project, Search and Settings share one Kernel.
+Old Room/Pilot execution and generic legacy writes have exited the normal public
+API and desktop build. Existing history remains readable, exportable and explicitly
+convertible to Draft through the Kernel. CLI `context` and `doctor` are read-only.
+
+This is a local, unpublished candidate. The published `v0.2.0` release and its
+schema-20 archives remain unchanged. The preview capability examples and release
+installation instructions on this page describe that historical release; use the
+[desktop instructions](apps/desktop/README.md) and [current evidence](docs/product/restructure/G1-G3-EVIDENCE.md)
+for the current source. Other-platform installation, signing, production update
+trust and complete native accessibility acceptance remain unestablished.
+
 ## Accepted product target after 0.2.0
 
 The complete post-0.2 restructure is now an accepted product target. It
@@ -119,12 +135,13 @@ cd Sestina
 corepack enable
 pnpm install --frozen-lockfile
 pnpm verify:public
-pnpm --filter @sestina/research-room build
-node apps/research-room/dist/main.js
+pnpm start
 ```
 
-The server binds to loopback only. The default deterministic path works without
-a semantic Provider and reports that limitation as `ledger_only`.
+The desktop opens a local project explicitly. A Provider is optional: a saved
+Draft can continue to a user-confirmed canonical decision entirely locally.
+The old HTTP server is a historical development adapter, outside the desktop
+package; its old research writing routes now reject calls.
 
 ## Repository map
 

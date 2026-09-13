@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import { legacyFixtureWritesEnabled } from "@sestina/core";
 import { existsSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import {
   createServer,
@@ -2165,7 +2166,7 @@ export class ResearchRoomHttpApplication {
         );
       const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
       if (
-        this.#kernelApi.active &&
+        (!legacyFixtureWritesEnabled() || this.#kernelApi.active) &&
         request.method === "GET" &&
         /^\/(?:project\/)?(?:appeals|correction-appeals|deliberation-rooms|external-app-pilots)\/new\/?$/u.test(
           url.pathname,
@@ -2208,6 +2209,10 @@ export class ResearchRoomHttpApplication {
 
       if (request.method === "POST" || request.method === "DELETE")
         this.authorize(request);
+      // Only the explicit, unshipped fixture condition retains old HTTP writes.
+      if (!legacyFixtureWritesEnabled() && request.method !== "GET" &&
+        !/^\/api\/(?:kernel\/(?:status|open|close|create|maintenance|repair-brief|reviews)|preferences\/language|(?:second-opinion-provider|provider)(?:\/(?:config|secret|test))?)$/.test(url.pathname))
+        throw new HttpProblem(410, "legacy_write_disabled", "This historical write entry is retired. Continue in Research Room using a Kernel Review.");
       if (request.method === "GET" && url.pathname === "/api/kernel/status") {
         json(response, 200, { ok: true, value: this.#kernelApi.status() });
         return;

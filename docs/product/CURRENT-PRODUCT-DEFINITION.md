@@ -20,6 +20,16 @@ desktop recovery and packaged read-only integration. Implementation does not
 close its remaining native/OS/signing acceptance. Current capability evidence
 and exact execution entry are recorded in [status](restructure/IMPLEMENTATION-STATUS.md).
 
+The authorized local G12/G13 continuation now makes the desktop the current
+source's default build/start/package entry. Its renderer uses only the typed
+desktop bridge and Kernel workspace; the old active server and Room/Pilot
+services are excluded from the installed graph. Normal legacy SDK, HTTP and CLI
+research writes reject direct callers. Historical decoding, export, explicit
+migration and conversion to Draft remain available. The frozen legacy fixture
+condition exists only for synthetic test construction and is excluded from the
+desktop artifact. Local implementation is distinct from formal platform/native
+acceptance and public release; the shipped v0.2.0 facts above remain unchanged.
+
 The accepted target makes one causal path authoritative: a Suggestion becomes
 a persistent Review, is bound to an exact state and outbound Manifest, may
 receive a non-authoritative Provider assessment, then receives an explicit

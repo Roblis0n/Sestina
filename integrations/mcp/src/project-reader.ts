@@ -1,5 +1,5 @@
 import {
-  openSestina,
+  openLegacyResearchReader as openSestina,
   readKernelReadonlyContext,
 } from "@sestina/core";
 import { createHash } from "node:crypto";

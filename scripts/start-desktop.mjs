@@ -1,0 +1,11 @@
+import { createRequire } from "node:module";
+import { execFileSync, spawn } from "node:child_process";
+import { join, resolve } from "node:path";
+const root = resolve(import.meta.dirname, "..");
+execFileSync(process.execPath, [join(root, "scripts/build-desktop.mjs")], { cwd: root, stdio: "inherit", windowsHide: true });
+const executable = createRequire(join(root, "apps/desktop/package.json"))("electron");
+const env = { ...process.env };
+delete env.ELECTRON_RUN_AS_NODE;
+const child = spawn(executable, [join(root, "apps/desktop")], { cwd: root, env, stdio: "inherit", windowsHide: true });
+child.once("error", error => { console.error(error.message); process.exitCode = 1; });
+child.once("exit", code => { process.exitCode = code ?? 1; });

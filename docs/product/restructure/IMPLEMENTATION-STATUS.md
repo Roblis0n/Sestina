@@ -113,8 +113,8 @@ code-fact question; it does not claim the target capability is implemented.
 | G9 — four-entry navigation and complete research flow | `completed_and_verified` | The opt-in schema-25 candidate integrates Today/Review, Project, Search and Settings with durable drafts, real results, recovery and verified built-interface visual/interaction journeys. |
 | G10 — Electron, security and release provenance | `current_partial` | Schema-25 desktop recovery, manual update lifecycle, verified earlier-settings/credential migration and packaged read-only MCP/Skills are implemented. The final Windows candidate passed installed tests, real upgrade/program recovery, uninstall/reinstall continuity and reproducible-core checks. Remaining native interaction and other-OS/signing acceptance are explicit below. |
 | G11 — terminology, copy and documentation | `current_partial` | Bilingual operation/failure copy, current capability/data-flow documentation and semantic anti-overclaim checks are implemented and verified. Historical terms and frozen sources remain intact. Gate completion still depends on the remaining G10 installation/native acceptance. |
-| G12 — final migration and production acceptance | `not_started` | Authorized after G10/G11 completion, but entry remains blocked by native acceptance, other-platform installations and production signing/update trust. The remaining-prerequisite checker is G10 verification preparation, not G12 acceptance. |
-| G13 — default cutover and final delivery | `not_started` | Authorized after a real G12 candidate pass. No default, legacy active path, release version, public tag or publication has changed. |
+| G12 — final migration and production acceptance | `current_partial` | Candidate c4d91033 passed the executed local aggregate: public 338 + foundation 387, desktop 23, installed journeys 14, performance, six visual combinations and lifecycle six cases. Formal native/platform/signing acceptance remains separate. |
+| G13 — default cutover and final delivery | `current_partial` | Authorized local default/build/package cutover and direct legacy writer rejection are implemented. Real development default-entry checks pass; the new final installed artifact must pass the common final entry before local delivery is complete. No public tag or publication has changed. |
 
 Completion evidence is the implementation tree at
 `e08c760e0adcf63c1ea54b22103b903b5e17ec83`, verified on 2026-09-06 by
@@ -170,7 +170,7 @@ The released preview remains v0.2.0/schema 20; the candidate is explicitly enabl
 schema 25. No Electron installation, default switch, push, tag or publication is
 claimed. Final record-only edits receive document/contract/status checks.
 
-### G10/G11 local desktop progress
+### Historical G10/G11 local desktop handoff
 
 The current internal Windows candidate runtime is
 `0c33aad574d4368996ab09e020459f4c218d87f4`, replacing the historical `5490837b`
@@ -190,11 +190,11 @@ These are separate from the passing silent lifecycle and renderer tests. macOS,
 Linux, signing/notarization and production update trust remain unavailable.
 See the single [capability/remaining/evidence mapping](G1-G3-OPERATIONS.md#current-desktop-entry-and-remaining-g10g11-work)
 and [latest verification](G1-G3-EVIDENCE.md#continued-g10g11-local-verification-2026-09-12).
-G10/G11 remain `current_partial`; the execution entry remains G10. G12/G13 and the
-public default are unchanged. Later evidence/test-harness edits do not change
-this installed runtime identity.
+At this handoff G10/G11 remained `current_partial` and the execution entry was G10.
+The subsequent authorized local G12 continuation below supersedes that execution
+entry, while preserving the handoff's artifact identity and formal limitations.
 
-### G12 entry check, 2026-09-13
+### Historical prerequisite-only G12 entry check, 2026-09-13
 
 The handoff at `f6b0c3addf9dfb76b0e431b2d7c457d01e8e8251` matches the supplied
 baseline. Existing local changes were preserved. The remaining-prerequisite
@@ -210,6 +210,26 @@ The previously denied uninstaller interaction was not retried or bypassed.
 The [combined continuation evidence](G1-G3-EVIDENCE.md#g12-entry-prerequisites-2026-09-13)
 records this limitation, the local checker results and the unchanged artifacts.
 
+### Authorized local G12 continuation, 2026-09-13
+
+Runtime commits `b1aa275a`, `3de75599` and `c4d91033` fix the confirmation lock
+that prevented cancellation during a Provider request, disable actual Chromium
+dictionary downloads, bound display labels without truncating the canonical
+Brief, and reduce repeated decoding of unchanged validated database rows. Every
+read still fetches current SQL bytes and checks columns and relations. Forget
+and project close clear the bounded decoding cache. Its contents cannot confer
+research authority.
+
+The common `verify:target` entry executes candidate/final/publish checks with
+source, installer and platform bindings. Installed tests use the real Kernel and
+SQLite, synthetic research and a local Provider. Native dialog test answers are
+reported separately from native interaction acceptance. The earlier candidate
+runs found actual failures and remain failed records; their passing subsets are
+scoped to their own artifacts. The `c4d91033` installer has passed its real isolated
+upgrade and preserved-program startup checks. Its aggregate local verification
+passed. This supplies the authorized local G13 safety/function entry; it does
+not close formal G10/G11, three-platform or production-release acceptance.
+
 ## 6. Claims that remain unavailable
 
 The following remain `not_established`:
@@ -224,5 +244,6 @@ The following remain `not_established`:
 The tables above describing the release are G0 baseline facts. The authorized
 G1–G3 execution begins at `a4889ee996064d95ee0a3fb470ee6ee12d3a91a3`;
 its current evidence is tracked in section 5 and in the execution record.
-The shipped default continues to use schema 20. No production interface or
-release has been switched to the opt-in schema-25 foundation.
+The published v0.2.0 default continues to use schema 20. The current local source
+now defaults to schema-25 desktop; no public release or real user project has
+been switched by this task.
