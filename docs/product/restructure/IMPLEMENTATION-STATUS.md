@@ -105,7 +105,8 @@ code-fact question; it does not claim the target capability is implemented.
 | G9 — four-entry navigation and complete research flow | `completed_and_verified` | The opt-in schema-25 candidate integrates Today/Review, Project, Search and Settings with durable drafts, real results, recovery and verified built-interface visual/interaction journeys. |
 | G10 — Electron, security and release provenance | `current_partial` | Schema-25 desktop recovery, manual update lifecycle, verified earlier-settings/credential migration and packaged read-only MCP/Skills are implemented. The final Windows candidate passed installed tests, real upgrade/program recovery, uninstall/reinstall continuity and reproducible-core checks. Remaining native interaction and other-OS/signing acceptance are explicit below. |
 | G11 — terminology, copy and documentation | `current_partial` | Bilingual operation/failure copy, current capability/data-flow documentation and semantic anti-overclaim checks are implemented and verified. Historical terms and frozen sources remain intact. Gate completion still depends on the remaining G10 installation/native acceptance. |
-| G12–G13 | `not_started` | Final migration/production acceptance, default cutover and public release remain downstream; the current candidate does not authorize these stages. |
+| G12 — final migration and production acceptance | `not_started` | Authorized after G10/G11 completion, but entry remains blocked by native acceptance, other-platform installations and production signing/update trust. The remaining-prerequisite checker is G10 verification preparation, not G12 acceptance. |
+| G13 — default cutover and final delivery | `not_started` | Authorized after a real G12 candidate pass. No default, legacy active path, release version, public tag or publication has changed. |
 
 Completion evidence is the implementation tree at
 `e08c760e0adcf63c1ea54b22103b903b5e17ec83`, verified on 2026-09-06 by
@@ -184,6 +185,22 @@ and [latest verification](G1-G3-EVIDENCE.md#continued-g10g11-local-verification-
 G10/G11 remain `current_partial`; the execution entry remains G10. G12/G13 and the
 public default are unchanged. Later evidence/test-harness edits do not change
 this installed runtime identity.
+
+### G12 entry check, 2026-09-13
+
+The handoff at `f6b0c3addf9dfb76b0e431b2d7c457d01e8e8251` matches the supplied
+baseline. Existing local changes were preserved. The remaining-prerequisite
+checker executes the installed Windows artifact verifier and validates bound
+observation records; missing or mismatched evidence fails closed. The existing
+installer hash and all 34 installed resources passed; the remaining evidence
+did not. No G12 production suite or G13 cutover was started.
+
+The supported native helper returned Sestina's title/accessibility tree with a
+different application's screenshot, including after the permitted refresh.
+No further clicks or keyboard input were attempted on that inconsistent state.
+The previously denied uninstaller interaction was not retried or bypassed.
+The [combined continuation evidence](G1-G3-EVIDENCE.md#g12-entry-prerequisites-2026-09-13)
+records this limitation, the local checker results and the unchanged artifacts.
 
 ## 6. Claims that remain unavailable
 

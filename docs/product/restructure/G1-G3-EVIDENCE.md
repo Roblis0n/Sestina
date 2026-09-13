@@ -808,3 +808,117 @@ verification, four targeted terminology/claim tests and diff whitespace check.
 The launcher now accepts the actual installed executable path through the existing
 SESTINA_TEST_INSTALLED_EXECUTABLE environment setting; the reinstall check above
 exercised that path.
+
+## G12 entry prerequisites, 2026-09-13
+
+**Result: G10/G11 remain `current_partial`; G12 and G13 remain `not_started`.**
+The user authorized G12 after its prerequisites and G13 after a real candidate
+pass. Plan 14's G12 entry still requires completed G1–G11. This continuation
+therefore performs G10 verification preparation and corrects stale records; it
+does not execute G12 production acceptance or G13 default/legacy changes.
+
+The one-time baseline check matched `codex/post-0.2-g10-g11` at
+`f6b0c3addf9dfb76b0e431b2d7c457d01e8e8251`. The installed runtime remains
+`0c33aad574d4368996ab09e020459f4c218d87f4`. Existing `.gitignore`, lockfile and
+untracked work were preserved. The local execution-state record now labels
+`5490837b` historical and points to the current runtime/handoff. Implemented
+backup, update, credential migration and companion resources are no longer
+listed as outstanding development. The current decision record's obsolete
+updater statement was corrected without altering frozen plans or historical
+evidence.
+
+### Executed checks and unchanged artifact
+
+`pnpm verify:desktop:readiness` is the narrow G10 prerequisite facility described
+in [the desktop instructions](../../../apps/desktop/README.md#remaining-prerequisite-check).
+It shares the existing actual installed-resource verifier, checks installer
+bytes and source/platform-bound observations, and never launches an installer
+or changes a gate. Its fixed remaining-case list covers native focus, continuous
+motion, platform-appropriate uninstall interaction, other-OS lifecycle and
+production trust. Linux signing follows the package format/provenance rule in
+plan 10; Windows signatures are not imposed on Linux packages.
+
+Four focused tests exercise complete synthetic binding fixtures and negative
+cases: absent observations/platforms/files, replaced installer/evidence bytes,
+wrong source/platform/installer identity, zero or missing cases, skipped/todo,
+not-run/failed results, missing raw evidence and duplicate observations. The
+initial test run failed before implementation; the implemented checker passed.
+These synthetic tests validate the checker only and supply no native acceptance.
+The public shared entry now includes them and syntax checks for both scripts.
+One actual defect in the new CLI was reproduced in
+`.tmp/g12-entry/stale-output-red.log`: malformed replacement inventory returned
+exit 1 but left a prior successful output in place. The CLI now writes an explicit
+failed result on that path. The affected four-test file and its typed lint passed
+after the repair (`targeted-final.log`, `targeted-lint.log`); unrelated production
+tests were not repeated. Scripts follow the repository's syntax-check policy.
+
+The actual local inventory has **no completed remaining observations**. It
+references only the existing Windows installer; macOS/Linux artifacts are absent.
+The executed installed check verified all **34 resources** and the installer
+digest matched. The combined prerequisite result was exit **1**, correctly
+reporting 14 incomplete observation groups and two absent platform installers.
+The proposed candidate/final/publish `verify:target` runner is still G12 work;
+this result is not a partial pass of that production matrix.
+
+| Local record/artifact | Actual scope/result |
+| --- | --- |
+| `.tmp/g12-entry/readiness-input.json` | Explicit `0c33aad5` source, exact Windows installer binding, no invented observations. |
+| `.tmp/g12-entry/readiness-result.json` and `readiness.log` | Actual installed Windows source/resources passed; initial prerequisite evidence incomplete, exit 1. |
+| `.tmp/g12-entry/readiness-current-result.json` and `readiness-current.log` | Final platform-appropriate requirement IDs, incomplete evidence, exit 1; unchanged installed-resource result reused from the preceding row. |
+| `.tmp/g12-entry/public.log` | One shared public verification run passed, exit 0: 334 regressions across 41 files, 384 foundation assertions across 59 files, and all existing shared gates. |
+| `release/desktop/win32-x64/Sestina Candidate Setup 0.2.0-g10.0c33aad5.exe` | Existing 135,367,605-byte unsigned internal installer; no new final/default package was built. |
+| `release/desktop/win32-x64/candidate-manifest.json` | Source/tree, toolchain, schema 25, committed lock, migrations, Logo and resource inventory; `signed: false`. |
+| `release/desktop/win32-x64/unsigned-core.tar.gz` | Existing independently reproduced core; its bytes were rehashed without rebuilding or replacing it. |
+
+Installer SHA-256:
+`a5465d621f54bd9d23aa30880867ff33e4e459f128331888410c0786cfd84ac7`.
+Unsigned-core SHA-256:
+`d76d8d792d30be58b19fae991fa8cbb10ad671d75069ac26a6051e89d3f3265c`.
+Manifest SHA-256:
+`3ddd39b8840d5ee99b95c9cf194819f581854d56c65b3a0575d9b297c8674f5d`.
+Raw local paths/results are not committed. The prior 331 public/384 foundation,
+23 desktop, actual Windows upgrade/reinstall, TLS and reproducible-core results
+remain scoped to the [preceding runtime evidence](#continued-g10g11-local-verification-2026-09-12).
+The preview platform gate was not rerun to fill missing desktop/platform evidence.
+The shared run included the initial three prerequisite tests. The later
+failure-output repair reran only the affected four-test file and its typed lint;
+the shared script syntax checks also read the repaired CLI. Production/runtime
+code did not change. The final evidence-only text received the document link and
+whitespace checks without repeating public or platform suites.
+
+### Native observation and exact blockers
+
+The actual installed executable was launched with the supported Computer Use
+API. The helper returned Sestina's title and Chinese start-page accessibility
+tree, including folder selection and backup entries, but its screenshot showed
+a different application inside the window frame. Activation then reported
+`user input was detected in this window; call get_window_state before continuing`.
+The requested fresh state still had inconsistent image/tree content. No click,
+typing, substitute UI automation or unreliable-coordinate operation followed.
+No screenshot of unrelated application content was saved as Sestina evidence.
+The previously policy-denied uninstaller was not retried. This attempt establishes
+a tool limitation, not a passed start page, native focus journey or motion check.
+
+The outstanding resources are: (1) a supported native observation/input path
+that returns consistent Sestina state, plus permitted actual observation of
+credential/confirmation and uninstall interactions; (2) accessible macOS arm64
+and Linux x64 systems with their real native credential/lifecycle facilities;
+(3) authorized Windows signing, macOS signing/notarization and production update
+trust/offer resources, with Linux package provenance/signing appropriate to its
+format. The accepted Windows code needs no duplicate implementation. No remote
+push, tag, CI, service provisioning or publication was attempted to obtain these.
+
+### Consolidated stage index
+
+This index preserves the complete task-card scope while merging repeated audits,
+handoffs and full gates. None of the following G12/G13 rows is marked complete.
+
+| Supplementary cards | Authoritative scope / existing evidence entry | Current disposition |
+| --- | --- | --- |
+| G12-01 | Plan 13 production acceptance and plan 14 dependencies; current prerequisite facility above | Formal nonempty target runner/index awaits G12 entry. |
+| G12-02–G12-04 | Plans 01–05 and 11; G1–G9 foundation, frozen legacy corpus and migration/recovery records above | Existing lower-layer evidence retained; final production verification not executed. |
+| G12-05–G12-07 | Plans 08, 10, 12 and 13; preceding installed IPC/TLS/privacy evidence | Full installed all-process network, exact outbound and security matrix not executed. |
+| G12-08–G12-10 | Plans 06, 10 and 13; preceding Windows journeys and inspected frames | Full twelve-journey, installed performance, native accessibility and continuous-motion acceptance not executed. |
+| G12-11–G12-12 | Plans 10, 13 and 14; preceding unsigned-core/artifact provenance plus current byte check | Three-platform signed candidate acceptance and cutover verdict blocked. |
+| G13-01–G13-02 | Plans 11, 14 and 15; frozen legacy mappings and current release identity | No legacy-path removal or default/schema/release switch. |
+| G13-03–G13-04 | Plans 10, 13–16; final affected-artifact verification and delivery rules | No final package, final acceptance, public tag or release. |

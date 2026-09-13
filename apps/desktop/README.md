@@ -3,7 +3,7 @@
 This Electron candidate uses the schema-25 Research Room and shared application
 service. It is not a public release. The published v0.2.0/schema-20 preview remains
 unchanged. G10/G11 acceptance is tracked in the
-[current evidence](../../docs/product/restructure/G1-G3-EVIDENCE.md#g10g11-internal-desktop-evidence).
+[current evidence](../../docs/product/restructure/G1-G3-EVIDENCE.md#g12-entry-prerequisites-2026-09-13).
 
 ## Use the candidate / 使用候选
 
@@ -118,3 +118,42 @@ update root is available for this task. Their actual acceptance remains open;
 local implementation and Windows evidence are recorded separately in the
 [implementation status](../../docs/product/restructure/IMPLEMENTATION-STATUS.md).
 No push, tag, publication or G12/G13 cutover is part of this candidate.
+
+## Remaining prerequisite check
+
+```text
+pnpm verify:desktop:readiness --inventory <local-inventory.json> --installed <installed-directory> --manifest <candidate-manifest.json> --output <local-result.json>
+```
+
+This is G10 verification preparation. It executes the existing Windows x64
+installed-resource verifier when both installed/manifest arguments are supplied,
+then reports outstanding G10/G11 observation bindings. The source is the
+inventory's explicit 40-character `sourceCommit`, never an inferred current HEAD.
+The current installed verifier supports the unsigned internal Windows candidate;
+it does not verify signed/macOS/Linux packages or establish a production signature.
+The separate `verify:platform` still checks Public Preview archives, and can
+replace release output while building. It is not target-desktop acceptance.
+
+Inventory format is `{schema: 1, sourceCommit, artifacts, observations}`.
+`artifacts` maps `win32-x64`, `darwin-arm64` and `linux-x64` to installer
+`{path, sha256}`. Each observation index entry is `{requirement, path, sha256}`.
+Requirement IDs and required case IDs are exported by
+[`remainingDesktopRequirements`](../../scripts/lib/desktop-readiness.mjs).
+An observation file contains `schema: 1`, `requirement`, `target`, `sourceCommit`,
+`installerSha256`, a nonempty `environment` description, `status: "passed"`,
+`skipped: 0`, `todo: 0`, `cases: [{id, status: "passed"}]` and a nonempty
+`evidence: [{path, sha256}]` list of actual raw records. All paths resolve from
+the inventory's directory. Keep local machine paths and raw records outside Git.
+
+Missing files, wrong hashes/source/target, duplicate observations, missing/zero
+cases, skipped/todo/not-run/failed cases and absent raw records return exit 1.
+Malformed replacement inventory writes a failed output instead of retaining an
+earlier successful result when the requested output remains writable.
+Hashes establish byte identity only. Reviewers must still inspect actual native
+observations, platform signature results and configuration provenance; synthetic
+fixtures, browser captures and dialog stubs cannot supply those results.
+Passing this narrow check would not complete G10/G11, G12 or G13 automatically.
+
+此入口只核对尚缺的前置验收资料。安装包和证据按源码、平台及校验值绑定，
+缺失或未执行就返回未通过。它不运行 G12 全量验收，不切换默认入口，不发布。
+原生交互仍须实际操作和观察；不能用静态截图或自动化对话框替身代替。

@@ -320,8 +320,23 @@ macOS arm64 and Linux x64 machines, public signing accounts, notarization and
 trusted production update roots were not supplied. They cannot be validated on
 this Windows host. Do not push or trigger remote work to obtain them. Native
 helper failures are a distinct local acceptance limitation and must not be
-reported as unavailable OS resources. G10/G11 remain partial, with entry at G10;
-there is no G12/G13 cutover authorization.
+reported as unavailable OS resources. G10/G11 remain partial, with entry at G10.
+The 2026-09-13 task authorizes G12 after those prerequisites pass and G13 after
+G12 passes; neither entry condition has been met. Public push/tag/CI/release is
+not authorized by that task.
+
+The local `execution/execution-state.json` continuation now points to the verified
+`0c33aad5` runtime and `f6b0c3ad` handoff. Update, backup/recovery, credential
+migration and companion packaging are implemented; they are not fresh development
+tasks. The older `5490837b` entry remains explicitly historical.
+
+`pnpm verify:desktop:readiness` checks only the outstanding G10/G11 evidence,
+optionally executing the existing installed Windows artifact verifier. Its
+[input and scope](../../../apps/desktop/README.md#remaining-prerequisite-check)
+and [current result](G1-G3-EVIDENCE.md#g12-entry-prerequisites-2026-09-13) form one
+continuation index. It does not run G12, change implementation status, or grant
+cutover authority. The proposed shared `verify:target` candidate/final/publish
+production runner remains G12 work; this prerequisite facility can be reused by it.
 
 ### Exact G12 entry after G10/G11 completion
 

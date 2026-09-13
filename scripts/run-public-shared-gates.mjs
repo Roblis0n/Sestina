@@ -90,6 +90,7 @@ run("public-preview, resilience, privacy, and authority tests", vitest, [
   "tests/repository/release-archive.test.ts",
   "tests/repository/release-artifact-contract.test.ts",
   "tests/repository/release-verifier-negative.test.ts",
+  "tests/repository/desktop-readiness.test.ts",
   "--maxWorkers=1",
   "--no-file-parallelism",
 ]);
@@ -132,6 +133,8 @@ for (const script of [
   "scripts/run-fresh-install.mjs",
   "scripts/run-public-platform-gates.mjs",
   "scripts/prepare-release-lifecycle-fixture.mjs",
+  "scripts/check-desktop-readiness.mjs",
+  "scripts/lib/desktop-readiness.mjs",
   "scripts/audit-public-history.mjs",
   "scripts/verify-public-repository.mjs",
 ]) {
