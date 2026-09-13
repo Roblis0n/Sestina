@@ -12,6 +12,7 @@ import {
   assertExecutedTests,
   canReuseTargetCheck,
   targetCheckAffected,
+  assertTargetTagIdentity,
 } from "./lib/target-verification.mjs";
 
 const root = resolve(import.meta.dirname, "..");
@@ -139,7 +140,6 @@ async function execute(id, args, verify, installed = true, extraEnv = {}) {
   const prior = previous.checks?.[id];
   let reviewedPrior = prior;
   if (
-    installed &&
     prior &&
     /^[a-f0-9]{40}$/.test(previous.verificationCommit ?? "") &&
     previous.artifactSource === sourceCommit
@@ -550,8 +550,12 @@ try {
       result.remaining.length
     )
       throw Error("publication_acceptance_incomplete");
-    if (git("rev-parse", `refs/tags/${values.tag}^{commit}`) !== sourceCommit)
-      throw Error("publication_tag_source_mismatch");
+    assertTargetTagIdentity(
+      values.tag,
+      manifest.version,
+      git("rev-parse", `refs/tags/${values.tag}^{commit}`),
+      sourceCommit,
+    );
     const release = JSON.parse(
       execFileSync(
         "gh",

@@ -30,11 +30,12 @@ export function targetCheckAffected(id, paths) {
   return paths.some((path) => {
     if (/^(?:docs\/|README\.md$)/.test(path)) return false;
     if (
-      /^(?:apps\/[^/]+\/test\/|packages\/[^/]+\/test\/|tests\/repository\/)/.test(
+      /^(?:apps\/[^/]+\/test\/|packages\/[^/]+\/test\/|tests\/repository\/).*\.test\.ts$/.test(
         path,
       )
     )
       return id === "public";
+    if (path === "tests/post-0.2/process-harness.ts") return id === "public";
     const installed = /^tests\/desktop\/installed-([\w-]+)\.ts$/.exec(path);
     if (installed) return id === installed[1];
     if (/^tests\/desktop\/.*\.test\.ts$/.test(path)) return id === "desktop";
@@ -55,6 +56,16 @@ export function targetCheckAffected(id, paths) {
     if (checker) return id === checker;
     return true;
   });
+}
+export function assertTargetTagIdentity(
+  tag,
+  version,
+  resolvedCommit,
+  sourceCommit,
+) {
+  if (tag !== `v${version}`) throw Error("publication_tag_version_mismatch");
+  if (!/^[a-f0-9]{40}$/.test(resolvedCommit) || resolvedCommit !== sourceCommit)
+    throw Error("publication_tag_source_mismatch");
 }
 import { join } from "node:path";
 export function desktopResources(directory, platform) {

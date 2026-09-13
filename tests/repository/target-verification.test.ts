@@ -1,10 +1,14 @@
 import { expect, it } from "vitest";
+import { execFileSync } from "node:child_process";
+import { mkdtemp, mkdir } from "node:fs/promises";
+import { resolve, join } from "node:path";
 import {
   assertExecutedTests,
   canReuseTargetCheck,
   desktopResources,
   assertDesktopBinary,
   targetCheckAffected,
+  assertTargetTagIdentity,
 } from "../../scripts/lib/target-verification.mjs";
 
 it("source-reviewed reuse keeps test-only repairs separate and invalidates changed runtime or check implementations", () => {
@@ -30,12 +34,62 @@ it("source-reviewed reuse keeps test-only repairs separate and invalidates chang
     "apps/desktop/src/main.ts",
     "scripts/build-desktop.mjs",
     "packages/core/src/kernel.ts",
+    "packages/core/test/fixture-entry.ts",
     "unrecognized-build-input.json",
   ])
     expect(targetCheckAffected("performance", [path])).toBe(true);
   expect(
     targetCheckAffected("artifact", ["scripts/verify-desktop-artifact.mjs"]),
   ).toBe(true);
+});
+
+it("publication tag identity accepts only the exact version and source in an isolated local Git repository", async () => {
+  const base = resolve(".tmp/tag-rule-fixtures");
+  await mkdir(base, { recursive: true });
+  const directory = await mkdtemp(join(base, "case-"));
+  const git = (...args: string[]) =>
+    execFileSync(
+      "git",
+      [
+        "-c",
+        "user.name=Synthetic verification",
+        "-c",
+        "user.email=fixture@example.invalid",
+        ...args,
+      ],
+      {
+        cwd: directory,
+        windowsHide: true,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    ).trim();
+  git("init");
+  git("commit", "--allow-empty", "-m", "synthetic first source");
+  const first = git("rev-parse", "HEAD");
+  git("tag", "-a", "v0.3.0-synthetic", "-m", "synthetic annotated tag");
+  const resolved = git("rev-parse", "refs/tags/v0.3.0-synthetic^{commit}");
+  expect(() =>
+    assertTargetTagIdentity(
+      "v0.3.0-synthetic",
+      "0.3.0-synthetic",
+      resolved,
+      first,
+    ),
+  ).not.toThrow();
+  git("commit", "--allow-empty", "-m", "synthetic next source");
+  expect(() =>
+    assertTargetTagIdentity(
+      "v0.3.0-synthetic",
+      "0.3.0-synthetic",
+      resolved,
+      git("rev-parse", "HEAD"),
+    ),
+  ).toThrow("publication_tag_source_mismatch");
+  expect(() =>
+    assertTargetTagIdentity("v0.2.0", "0.3.0-synthetic", resolved, first),
+  ).toThrow("publication_tag_version_mismatch");
+  expect(() => git("rev-parse", "refs/tags/missing^{commit}")).toThrow();
 });
 
 it("installed verification follows native resource layouts and rejects wrong platform binaries", () => {

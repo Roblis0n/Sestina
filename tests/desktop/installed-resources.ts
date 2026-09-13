@@ -87,7 +87,9 @@ try {
         filePaths: [projectPath],
       });
     }, projectPath);
-    await invoke("pickDirectory");
+    await page
+      .getByRole("button", { name: "Choose folder", exact: true })
+      .click();
   };
   const cdp = await page.context().newCDPSession(page);
   const sample = async () => {
@@ -147,12 +149,10 @@ try {
     (globalThis as any).__longTasks = [];
     const observer = new PerformanceObserver((list) =>
       (globalThis as any).__longTasks.push(
-        ...list
-          .getEntries()
-          .map((entry) => ({
-            startTime: entry.startTime,
-            duration: entry.duration,
-          })),
+        ...list.getEntries().map((entry) => ({
+          startTime: entry.startTime,
+          duration: entry.duration,
+        })),
       ),
     );
     observer.observe({ type: "longtask" });
