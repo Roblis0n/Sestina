@@ -977,3 +977,205 @@ native focus, continuous-motion, assistive-technology or uninstall observation
 is inferred from them. The previously blocked native helper/uninstaller is not
 retried or bypassed. The exact external-resource gaps remain in the single
 native observation record above.
+
+### G13 local default and final installed artifact
+
+Runtime source: `ef1c14f7f4f9c93daeab35153e4b0434c3cbd1c6`.
+The root start/build/package commands select the schema-25 desktop. Its root
+route and project switch use `DesktopApp` and the same Kernel workspace. The
+thin desktop client has no HTTP fallback. Installed input graphs and both the
+main and companion executable code exclude old active Room/Pilot/Appeal services
+and the legacy fixture entry. Normal public SDK, HTTP and CLI writes reject
+direct callers; the retained legacy reader and migrations do not confer new
+authority. CLI context/doctor read schema-25 state without mutation.
+
+The old built-loopback test first failed because it still expected the retired
+writer to create a project. It now checks 410 rejection, unchanged empty folders,
+and explicit Kernel creation. Synthetic historical construction uses a separate
+test package condition. The frozen corpus/recipes were not changed to pass it.
+
+| Final artifact | Bound identity |
+| --- | --- |
+| Windows x64 installer | `release/desktop/win32-x64/Sestina Candidate Setup 0.2.0-g10.ef1c14f7.exe`, 135,015,967 bytes |
+| Installer SHA-256 | `6c8c9a8b2c55d0d7f04c9569f14217fda10c5c9e08e6ebb1dc484e3d8ce6d9e9` |
+| Unsigned core SHA-256 | `237f4eb72bcc9ac1fee025cc975f3f19d51e7051f9c6aa07e318f6b36fa97a4e` |
+| Manifest and unsigned core | `release/desktop/win32-x64/candidate-manifest.json` and `unsigned-core.tar.gz`; preserved local copy in `.tmp/g12-g13/final-artifacts/` |
+| Actual installation | `.tmp/g12-g13/final-lifecycle/installed/Sestina Candidate.exe` |
+| Signature observation | `.tmp/g12-g13/final-artifacts/signature.json`: Windows Authenticode reports `NotSigned`, no signer. No production update trust is configured. |
+| Independent compilation | `.tmp/desktop-reproducibility/independent-Cc56qi/`: fresh compile/staging, identical unsigned archive and every manifest entry. Signed outer timestamp equivalence is not claimed. |
+
+The six real upgrade/lifecycle checks use the previous `c4d91033` installer and
+the final `ef1c14f7` installer: initial isolated silent install, pre-upgrade SQLite
+backup, backup failure blocking launch, actual upgrade, restart without update
+request, and actual opening of the preserved previous executable. Evidence is
+`.tmp/g12-g13/final-lifecycle/lifecycle-result.json`; synthetic trust is injected
+only into test service construction and is never installed as production trust.
+This does not establish current-package native uninstall wizard acceptance.
+
+Final installed research has 16 grouped cases in
+`.tmp/g12-g13/final/journeys/result.json`. It includes real HTTPS success and
+untrusted-certificate rejection in the installed Electron/Node process. The
+synthetic TLS key is encrypted with the actual OS backend outside the renderer;
+this setup is not evidence of native credential entry. Failed/cancelled/uncertain
+attempts retain their actual persisted status across restart without resend.
+Chromium logs contain no TCP/UDP connections; observed main-process sockets are
+limited to the explicitly used local synthetic Provider endpoints. Startup Node
+activity before bridge readiness and an all-process OS packet trace remain outside
+that observation scope.
+
+| Final installed p95 (milliseconds) | Measured | Plan 13 limit |
+| --- | ---: | ---: |
+| Fresh process/profile to rendered Today | 1718.694 | 4000 |
+| Fresh process/existing profile to rendered Today | 1720.661 | 2000 |
+| Today / Project | 190.871 / 176.972 | 750 |
+| Search first 50 / next page | 177.037 / 179.405 | 500 / 400 |
+| Draft / Manifest prepare | 75.288 / 312.574 | 1000 |
+| Entire Kernel canonical transaction | 481.488 | 500 |
+| Full IPC and user-confirmation fixture | 758.769 | Reported separately; no substituted transaction threshold |
+
+`.tmp/g12-g13/final/performance/` retains all 20 fresh-profile and 20 existing-profile
+process samples, 25 samples per query/write, 100 navigation switches and resource
+samples. The immutable seeded input contains at least 1,000 canonical objects,
+100 Reviews, 1,000 receipts/history entries, 500 links, 300 attention sources,
+50 Memory entries and a 100 KB bilingual Brief. No OS disk-cache eviction was
+performed; the measured machine is recorded, not represented as unavailable CI
+reference hardware.
+
+### Actual final visual inspection
+
+The final installed visual runner completed English/Chinese × light/dark/high
+contrast, 1100/1280/1440/1920 logical widths, 200% text, long content and errors,
+local saved results, recovery, keyboard/Escape/dirty-input and reduced-motion
+preference operations. Equivalent workspace structures share samples; six theme
+and locale combinations produce 43 frames. This is not a full Cartesian replay.
+
+The following actual final frames in `.tmp/g12-g13/final/visual/` were opened and
+visually inspected: `en-light-today-1100.png`, `en-light-saved-result-1100.png`,
+`en-high_contrast-review-200-percent-1100.png`,
+`zh-CN-dark-settings-import-error-1100.png`,
+`zh-CN-high_contrast-integration-1280.png`, `en-dark-about-1920.png`.
+Long strings wrap, action boundaries remain visible, the error preserves input,
+and saved canonical results remain accessible. The 200% frame is vertically
+scrolled: clipped viewport edges are not evidence of lost content; the keyboard
+and scroll journey reaches the actions. No defect requiring a UI change was found
+in these inspected frames. These observations do not establish continuous motion,
+screen-reader behavior or full native focus; those remain explicitly open.
+The Chinese light backup result (`zh-CN-light-backup-1100.png`) and the final
+root/project-switch entry (`cutover/default-entry.png`) were also inspected.
+`.tmp/g12-g13/final/visual-observation.json` binds these eight actual inspections
+to the source, installer and each file hash, without closing the native/motion
+requirement under a static-image claim.
+
+### Combined plan and execution-card mapping
+
+This is the single mapping for accepted plans 01–04 (Kernel/Authority), 05–09
+(context, navigation, projections and integration), 10–12 (lifecycle, migration,
+privacy/security), 13 (production verification) and 14 (cutover). Earlier sections
+retain G0–G11 and historical implementation evidence; they are not separate
+current pass reports. Paths below under `foundation/` mean
+`tests/post-0.2/foundation/`. Raw results are under `.tmp/g12-g13/final/`.
+
+| Cards | Actual implementation / evidence entry | Scope and remaining boundary |
+| --- | --- | --- |
+| G12-01 | `scripts/run-target-gates.mjs`, `tests/repository/target-verification.test.ts`, final `result.json` and per-check proofs | Executed candidate/final/publish implementation; empty/skipped/todo, changed source, platform, artifact and raw proof negatives. Reuse also checks the exact committed changed-input scope. Candidate does not require G13/publication. |
+| G12-02 | `foundation/kernel-effect-matrix.test.ts`, `revision-matrix.test.ts`, `context-boundary.test.ts`, `kernel-provider-boundaries.test.ts`, `desktop-authority.test.ts` | Six typed effects, user Authority, stale confirmation/revisions, exact manifest, no Provider, failed/invalid/uncertain attempts. Installed actual paths additionally appear in `journeys/result.json`. |
+| G12-03 | `foundation/atomic-boundary.test.ts`, `kernel-unit-of-work.test.ts`, `privacy-transaction.test.ts`, `process-crash.test.ts`, `process-race.test.ts`, `restore-crash.test.ts`, `kernel-application-crash.test.ts` | Real SQL rollback/commit and process termination/concurrency. The process builder's conditional-export repair changes test resolution only; the same 44 crash/race/recovery cases pass without skipped assertions. |
+| G12-04 | `foundation/migration.test.ts`, `migration-boundaries.test.ts`, `legacy-states.test.ts`, `legacy-volume.test.ts`, `readonly-project.test.ts`, `downgrade.test.ts`, `legacy-memory-forget.test.ts`, `desktop-recovery.test.ts` | Frozen schema 16–20 sources, WAL/corruption/future/partial/read-only/disk failure, forward recovery, history/Draft/export and Forget/copy identity. Fixtures and provenance stay frozen. Final installed history/backup/restore also execute in journeys. |
+| G12-05 | `tests/desktop/installed-journeys.ts`, final Chromium logs and persisted outcomes | Real local research, views, migration/export, Memory and backup/restore. No renderer TCP/UDP; main-process observation begins at bridge readiness. An all-process OS packet trace is not claimed. |
+| G12-06 | Final installed journeys plus `foundation/network-boundary.test.ts`, `kernel-transport.test.ts`, `provider-connection.test.ts` | Exact confirmed bytes; invalid structure/identity, oversize, timeout, disconnect, redirect, cancel, configuration drift, real TLS and untrusted certificate rejection; persisted restart/no-retry and local continuation. Synthetic Provider quality is not evaluated. |
+| G12-07 | Actual installed IPC tests, `foundation/strict-boundaries.test.ts`, `kernel-boundaries.test.ts`, privacy tests and artifact/native-resource verifier | Current identity/session/path/IPC/credentials/Forget/update boundaries. No generalized new repository security audit. Production signing/update roots and other OS backends still require real resources. |
+| G12-08 | `tests/desktop/installed-journeys.ts`, `installed-lifecycle.ts`, final journey and lifecycle results | Twelve user-journey families map to 16 research cases and six lifecycle cases. Native dialog answers are explicit fixtures; native focus and current-package uninstall/reinstall observation are not inferred. |
+| G12-09 | `tests/desktop/installed-performance.ts`, `installed-resources.ts` and their raw results | Full-size seed, all p95 samples, navigation/close-open/scroll, process/DOM/listener/handle samples and maintenance throughput. Actual host measurements do not stand in for unavailable CI reference hardware. |
+| G12-10 | `tests/desktop/installed-visual.ts`, six matrix records, 43 frames and eight actual inspected frames | Bilingual themes, high contrast, four widths, 200% text, long/error/recovery states and keyboard operations. Native focus, continuous motion and assistive technology remain open. |
+| G12-11 | Installed 36-file artifact inventory, independent core build, `final-artifacts/signature.json`, `SHA256SUMS`, isolated local Git tag test | Exact source/toolchain/resources/licenses, unsigned core reproducibility and tag/version/source rejection. Windows actual installer; no fabricated macOS/Linux or signed/notarized outer artifacts. |
+| G12-12 | Candidate `candidate-performance/result.json`, current final aggregate, status record and this index | Candidate local pass admits only the later user-authorized local G13. Formal three-platform production acceptance remains partial and does not authorize publication. |
+| G13-01 | `legacy-public.ts`, `legacy-reader.ts`, thin desktop client/build graphs, `foundation/legacy-cutover.test.ts`, `legacy-public-entry.test.ts`, actual cutover result | Direct SDK/CLI/HTTP legacy writer rejection, no legacy active service in installed main/companion, old deep links read-only, historical reading/migration preserved. |
+| G13-02 | `DesktopApp.tsx`, `desktop-main.tsx`, root scripts, direct Kernel bootstrap and `installed-cutover.ts` | Single local default; explicit create/open/migrate, protected unknown/future state, schema 25, separate program rollback/data restore. Internal version naming retained; v0.2.0 unchanged. |
+| G13-03 | Common `final` execution with installed ef1c14f7 identity | Changed defaults are actually rechecked. Test-only repairs retain original source-bound installed proofs only where committed dependency scope and raw hashes are unchanged. |
+| G13-04 | This artifact/index record, root EN/ZH README, desktop README, operations and status | Local reviewable delivery, installation/migration/upgrade/recovery/uninstall guidance. Formal platform/native/signing acceptance and public Release remain distinct; no remote action was authorized or performed. |
+
+### Final unified local acceptance
+
+The common `final` entry passed with `localPassed: true`,
+`formalAcceptance: not_established`, and `published: false` in
+`.tmp/g12-g13/final/result.json`. Runtime/source and installer are bound to
+`ef1c14f7f4f9c93daeab35153e4b0434c3cbd1c6`; the final verification source is
+`a23105d2c4fc4328b910f21f23017b62b429cded`. Subsequent documentation-only
+delivery edits do not change that application or installed evidence.
+
+| Executed check group | Passing result |
+| --- | --- |
+| Shared public and Kernel foundation | 340 unit + 393 foundation = 733; all public gates pass |
+| Final installed artifact inventory | 36 files, exact source/toolchain/resources/native binary identity |
+| Desktop bridge/runtime | 23 cases; native dialog answers explicitly fixtures |
+| Independent unsigned-core reproduction | 3 checks; independent compilation and all archive entries match |
+| Actual installed research journeys | 16 grouped cases with real Kernel and SQLite |
+| Actual installed performance | 3 grouped cases; all retained p95 series meet the measured local thresholds above |
+| Actual installed resources | 3 grouped cases; project cycles, scroll observations and maintenance throughput |
+| Actual installed visual/interaction matrix | 6 locale/theme combinations, 43 frames; 8 actually inspected frames recorded separately |
+| Actual installer/upgrade/program recovery | 6 cases; current-package native uninstall/reinstall remains open |
+| Final default and retired-path checks | 6 checks including packaged dependency graph and 5 actual installed UI checks |
+
+The original 393-case foundation report passed at
+`a22104d1540ad7d41bb0d4440ecbef9c138649db`, SHA-256
+`6a705013443a89742f402b26b911876585a6044968f441ab643330af8f1b3778`.
+The final shared runner validated its hash, nonzero passed count, zero skip/todo,
+and unchanged relevant committed source before reuse. The reuse record is
+`.tmp/g12-g13/final/foundation-reuse.json`; the public proof retains this original
+source rather than pretending the suite ran again. Installed checks likewise
+retain raw hashes and their artifact bindings. Earlier failed aggregate and
+resource results are preserved as failures; they are superseded by this result,
+not rewritten as passes. No Public Preview installation result substitutes for
+this desktop package.
+
+Resource evidence in `.tmp/g12-g13/final/resources/result.json` records 20 actual
+two-project close/open/switch cycles, 50 scroll inputs and paginated lists bounded
+to 50 items. Native directory/confirmation answers are fixtures. Main-process RSS
+was 223,940,608 then 240,898,048 bytes; heap was 25,060,404 then 33,267,992 bytes.
+Active handles remained 1, process listener counts were unchanged, DOM documents
+went 2 to 1, nodes 2,707 to 2,541 and event listeners 658 to 570. No long task over
+200 ms was recorded during the sampled scroll phase. These finite observations
+do not prove unlimited-duration absence of leaks.
+
+Backup processed 12,113,134 bytes in 1,313.292 ms (9,223,490 bytes/s); frozen
+legacy migration processed 1,404,928 bytes in 454.666 ms (3,090,022 bytes/s).
+The recorded 669,396,992-byte sum of process peak-working-set counters is an
+upper bound of per-process lifetime peaks, not an instantaneous simultaneous
+operation-only peak. Raw samples, the synthetic large seed and actual SQL
+results remain local and are not committed as research data.
+
+The installer checksum is listed above. `release/desktop/win32-x64/SHA256SUMS`
+also binds the manifest (`96fcc401a8817f7f2a0113418e444ab99cd640e81f649c77f372d6f50c4ce858`),
+blockmap (`f3ff4eafa88c6300b5cd2809143ffae3ee55055e734f37a31b09ea37784d66e8`)
+and unsigned core. The verified application was installed under
+`.tmp/g12-g13/final-lifecycle/installed/`; no pre-existing user installation or
+real user project was replaced by this isolated delivery.
+
+### Remaining formal acceptance and publication boundary
+
+G12/G13 local implementation and Windows delivery are complete. G10/G11 and
+G12/G13 formal status remain `current_partial`; the following missing evidence
+is not converted to a pass by the local aggregate:
+
+- Actual macOS arm64 and Linux x64 machines/installers are required for native
+  Keychain/Secret Service, installation, upgrade/recovery, uninstall/reinstall,
+  accessibility and platform lifecycle acceptance.
+- Authorized signing/notarization resources and production update endpoints,
+  trust roots and signed offers are required for real signed distribution and
+  production-trust upgrade validation. The current Windows package is unsigned;
+  synthetic update/TLS test material is not production trust.
+- A supported reliable native observation/input surface, or supplied actual
+  operator observations bound to this package, is required for complete Windows
+  picker/confirmation/credential keyboard and focus flows, the native uninstall
+  wizard/current-package reinstall, continuous motion and assistive technology.
+  The helper returned inconsistent application pixels/tree after refresh; input
+  stopped. The previous uninstaller policy denial was not retried or bypassed.
+- The recorded network evidence covers Chromium and main-process sockets after
+  bridge readiness. Whole-process OS traffic capture including Node startup is
+  still unproven. Performance uses the identified Windows host; the plan's CI
+  reference hardware has not been supplied. Neither scope is silently generalized.
+
+No remote push, public tag, remote CI, external signing service or Release was
+performed. Published `v0.2.0`/schema 20 and its historical artifacts/checksums are
+unchanged. Publication is not the sole outstanding action while these formal
+acceptance requirements remain missing.

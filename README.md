@@ -147,9 +147,10 @@ package; its old research writing routes now reject calls.
 
 | Path                  | Purpose                                                       |
 | --------------------- | ------------------------------------------------------------- |
-| `apps/research-room`  | Production loopback server and React Research Room            |
+| `apps/desktop`        | Default Electron application and native lifecycle             |
+| `apps/research-room`  | React Research Room and historical loopback adapter            |
 | `packages/research`   | Research objects and user-authority domain model              |
-| `packages/core`       | Application orchestration and Authority Gate                  |
+| `packages/core`       | Research Deliberation Kernel and historical readers           |
 | `packages/review`     | Deterministic and optional semantic review contracts          |
 | `packages/storage`    | SQLite persistence, migrations, backup, and restore           |
 | `integrations/mcp`    | Bounded read-only Model Context Protocol adapter              |

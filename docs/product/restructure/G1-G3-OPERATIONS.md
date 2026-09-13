@@ -375,3 +375,15 @@ read-only. Old SDK/HTTP/CLI active writes reject direct callers, and the desktop
 renderer has no HTTP fallback. Program rollback uses a preserved executable;
 data restore separately validates privacy/Forget identity and creates a backup.
 No reverse SQL, old writer reactivation, remote push/tag/CI or release is used.
+
+The final Windows local aggregate has passed for runtime `ef1c14f7` and
+verification commit `a23105d2`. The reviewable installer is
+`release/desktop/win32-x64/Sestina Candidate Setup 0.2.0-g10.ef1c14f7.exe`;
+`SHA256SUMS` in that directory covers the installer, blockmap, manifest and
+unsigned core. Authenticode reports `NotSigned`. The
+[single final evidence index](G1-G3-EVIDENCE.md#final-unified-local-acceptance)
+records the exact source, verified installation, counts and remaining formal
+acceptance. Follow the [desktop operations](../../../apps/desktop/README.md)
+for explicit installation, migration, update, program recovery, data restore and
+uninstall choices. The local execution-state handoff points to this final result;
+historical prerequisite-only entries above no longer describe current work.

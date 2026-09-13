@@ -25,10 +25,10 @@ pnpm verify:public
 ```
 
 Useful focused commands include `pnpm lint`, `pnpm typecheck`, `pnpm test`,
-`pnpm docs:check`, and `pnpm --filter @sestina/research-room build`.
+`pnpm docs:check`, and `pnpm build` for the current desktop.
 
-For the internal desktop candidate, use `pnpm desktop:build`, then
-`pnpm --filter @sestina/desktop start`. `pnpm test:desktop` launches Electron;
+For the local desktop candidate, `pnpm start` builds and opens the application;
+`pnpm package win32` creates its local installer. `pnpm test:desktop` launches Electron;
 `pnpm desktop:runtime` verifies its embedded SQLite/Core runtime. The separate
 `node scripts/verify-desktop-network.mjs` uses OpenSSL to generate a temporary
 synthetic TLS fixture (`SESTINA_TEST_OPENSSL` may select an installed executable).
@@ -36,6 +36,10 @@ It sends no real research content or requests to a research Provider.
 See [desktop instructions](apps/desktop/README.md). Desktop end users do not
 need these development tools. The existing platform command still verifies the
 public-preview archive; its result alone is not a desktop installation result.
+Use `pnpm verify:target --phase final` with the exact installed app, manifest and
+installer for current acceptance. The separately built loopback adapter is
+historical compatibility code; its legacy research writes are retired. Rebuild
+the published preview from its unchanged `v0.2.0` tag, not the current desktop tree.
 
 ## Change requirements
 

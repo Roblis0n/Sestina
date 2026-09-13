@@ -22,8 +22,9 @@ and subsequent G13 implementation/cutover after relevant G12 data-safety and
 functional checks pass. External platform, signing/update-trust and unavailable
 native observation remain formal acceptance/publication requirements, not a block
 on all local development. G10/G11 keep their truthful partial acceptance status.
-The preceding prerequisite-only continuation remains historical; current G12/G13
-implementation and local results are recorded separately as work proceeds.
+The preceding prerequisite-only continuation remains historical. G12/G13 local
+implementation and Windows delivery are complete; the final aggregate passed.
+Full platform/native/signing acceptance remains partial, as recorded below.
 
 | Classification        | Exact meaning                                                                                            |
 | --------------------- | -------------------------------------------------------------------------------------------------------- |
@@ -111,10 +112,10 @@ code-fact question; it does not claim the target capability is implemented.
 | G7 — correction, Memory, Host and historical paths | `completed_and_verified` | Linked correction and optional isolated assessment, Memory governance and resumable copy handling, draft-only Host/Skill intake and historical read/export/conversion passed application, privacy, recovery, visual and final public verification. |
 | G8 — derived projections and recovery consistency | `completed_and_verified` | All seven derived surfaces use one consistent input identity; workflow/privacy/time invalidation, restore/rebuild races, preserved outbox and seeded large-project reads passed. |
 | G9 — four-entry navigation and complete research flow | `completed_and_verified` | The opt-in schema-25 candidate integrates Today/Review, Project, Search and Settings with durable drafts, real results, recovery and verified built-interface visual/interaction journeys. |
-| G10 — Electron, security and release provenance | `current_partial` | Schema-25 desktop recovery, manual update lifecycle, verified earlier-settings/credential migration and packaged read-only MCP/Skills are implemented. The final Windows candidate passed installed tests, real upgrade/program recovery, uninstall/reinstall continuity and reproducible-core checks. Remaining native interaction and other-OS/signing acceptance are explicit below. |
+| G10 — Electron, security and release provenance | `current_partial` | Schema-25 desktop recovery, manual update lifecycle, verified earlier-settings/credential migration and packaged read-only MCP/Skills are implemented. The historical 0c33aad5 Windows candidate passed installed tests, upgrade/program recovery, silent uninstall/reinstall continuity and reproducible-core checks. Current-package results are recorded under G13; native interaction and other-OS/signing acceptance remain open. |
 | G11 — terminology, copy and documentation | `current_partial` | Bilingual operation/failure copy, current capability/data-flow documentation and semantic anti-overclaim checks are implemented and verified. Historical terms and frozen sources remain intact. Gate completion still depends on the remaining G10 installation/native acceptance. |
-| G12 — final migration and production acceptance | `current_partial` | Candidate c4d91033 passed the executed local aggregate: public 338 + foundation 387, desktop 23, installed journeys 14, performance, six visual combinations and lifecycle six cases. Formal native/platform/signing acceptance remains separate. |
-| G13 — default cutover and final delivery | `current_partial` | Authorized local default/build/package cutover and direct legacy writer rejection are implemented. Real development default-entry checks pass; the new final installed artifact must pass the common final entry before local delivery is complete. No public tag or publication has changed. |
+| G12 — final migration and production acceptance | `current_partial` | Local implementation and Windows candidate delivery are complete. Candidate c4d91033 passed the executed local aggregate: public 338 + foundation 387, desktop 23, installed journeys 14, performance, six visual combinations and lifecycle six cases. Affected checks also pass against the final G13 package below. Formal native/platform/signing acceptance remains separate. |
+| G13 — default cutover and final delivery | `current_partial` | Local implementation and Windows delivery are complete. Final runtime ef1c14f7 passed the common final entry at verification commit a23105d2: 733 public/foundation tests, 23 desktop cases, 16 installed research cases, performance/resources, visual matrix, lifecycle and actual default/legacy rejection. Formal platform/native/signing acceptance remains open. No public tag or publication has changed. |
 
 Completion evidence is the implementation tree at
 `e08c760e0adcf63c1ea54b22103b903b5e17ec83`, verified on 2026-09-06 by
@@ -230,6 +231,20 @@ upgrade and preserved-program startup checks. Its aggregate local verification
 passed. This supplies the authorized local G13 safety/function entry; it does
 not close formal G10/G11, three-platform or production-release acceptance.
 
+### Final local G12/G13 delivery, 2026-09-13
+
+The final installed runtime is `ef1c14f7f4f9c93daeab35153e4b0434c3cbd1c6`.
+Verification-only descendants culminate in
+`a23105d2c4fc4328b910f21f23017b62b429cded`; unchanged installed proofs retain
+their original runtime/artifact bindings. `.tmp/g12-g13/final/result.json`
+reports `localPassed: true`, `formalAcceptance: not_established`, and
+`published: false`. All ten required local check groups passed. The actual final
+Windows installer, unsigned-core reproducibility, source/toolchain identity,
+checksums, 43 visual frames and eight inspected frames are in the
+[merged final delivery record](G1-G3-EVIDENCE.md#final-unified-local-acceptance).
+G12 and G13 local implementation/delivery are complete; their formal status and
+G10/G11 remain `current_partial`. This does not migrate any real user project.
+
 ## 6. Claims that remain unavailable
 
 The following remain `not_established`:
@@ -239,7 +254,9 @@ The following remain `not_established`:
 - adoption, market value, or commercial viability;
 - production readiness of the target Electron application;
 - final production data cutover and migration of real user projects;
-- installation-state production UI acceptance for the target Electron interface (the G9 candidate browser interface is verified).
+- complete installation-state production UI acceptance across all target platforms;
+  final Windows renderer interactions and eight inspected installed frames are
+  verified, while native focus, continuous motion and assistive technology remain open.
 
 The tables above describing the release are G0 baseline facts. The authorized
 G1–G3 execution begins at `a4889ee996064d95ee0a3fb470ee6ee12d3a91a3`;

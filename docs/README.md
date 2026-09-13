@@ -8,12 +8,18 @@ development history.
 - [Product definition](product/CURRENT-PRODUCT-DEFINITION.md)
 - [Architecture overview](ARCHITECTURE.md)
 - [Accepted post-0.2 restructure authority](product/restructure/README.md)
-- [Research Room guide](../apps/research-room/README.md)
+- [Current local desktop instructions](../apps/desktop/README.md)
+- [Current implementation and consolidated verification](product/restructure/G1-G3-EVIDENCE.md#final-unified-local-acceptance)
+- [Published v0.2.0 Research Room guide](../apps/research-room/README.md)
 - [0.2.0 release guide](release/README.md)
 - [Privacy contract](../PRIVACY.md)
 - [Security policy](../SECURITY.md)
 
 ## Install and operate
+
+The current source defaults to the local schema-25 desktop candidate. The three
+platform release installation guides below describe published v0.2.0 archives;
+they do not establish acceptance of new desktop installers on those platforms.
 
 - [Windows x64](release/INSTALL-WINDOWS.md)
 - [macOS arm64](release/INSTALL-MACOS.md)
