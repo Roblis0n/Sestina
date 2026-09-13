@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { FixedClock, SequenceIdFactory } from "@sestina/research";
-import { openSestina, type CoreResult, type SestinaCore } from "@sestina/core";
+import { openSestina, type CoreResult, type SestinaCore } from "./fixture-entry.js";
 
 const USER = Object.freeze({ kind: "user" as const, actorId: "ri51-owner" });
 const roots: string[] = [];

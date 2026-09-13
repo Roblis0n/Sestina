@@ -40,10 +40,11 @@ export function targetCheckAffected(id, paths) {
     if (installed) return id === installed[1];
     if (/^tests\/desktop\/.*\.test\.ts$/.test(path)) return id === "desktop";
     if (/^tests\/post-0\.2\/(?:foundation|downstream)\//.test(path))
-      return id === "public";
+      return id === "public" || id === "foundation";
     if (
       [
         "scripts/run-target-gates.mjs",
+        "scripts/run-public-shared-gates.mjs",
         "scripts/lib/target-verification.mjs",
       ].includes(path)
     )

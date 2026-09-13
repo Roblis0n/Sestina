@@ -13,7 +13,7 @@ import {
   restoreProjectState,
   type CoreResult,
   type SestinaCore,
-} from "@sestina/core";
+} from "./fixture-entry.js";
 
 const roots: string[] = [];
 const cores: SestinaCore[] = [];

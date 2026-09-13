@@ -14,7 +14,7 @@ import {
   type DeliberationParticipantProvider,
   type DeliberationParticipantProviderInput,
   type SestinaCore,
-} from "@sestina/core";
+} from "./fixture-entry.js";
 
 const USER: ResearchActor = { kind: "user", actorId: "research-owner" };
 const roots: string[] = [];

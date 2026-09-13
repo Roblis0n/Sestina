@@ -1,6 +1,11 @@
-import { spawnSync } from "node:child_process";
+import { spawnSync, execFileSync } from "node:child_process";
 import { resolve } from "node:path";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
+import {
+  assertExecutedTests,
+  targetCheckAffected,
+} from "./lib/target-verification.mjs";
+import { fileSha256 } from "./lib/desktop-readiness.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const node = process.execPath;
@@ -9,6 +14,45 @@ const tsc = resolve(root, "node_modules/typescript/bin/tsc");
 const vitest = resolve(root, "node_modules/vitest/vitest.mjs");
 
 function runNode(label, args) {
+  if (
+    args[0] === vitest &&
+    args.includes("tests/post-0.2/vitest.foundation.config.ts") &&
+    process.env.SESTINA_FOUNDATION_REUSE &&
+    process.env.SESTINA_VERIFICATION_OUTPUT
+  ) {
+    const receipt = JSON.parse(
+      readFileSync(resolve(process.env.SESTINA_FOUNDATION_REUSE), "utf8"),
+    );
+    const reportPath = resolve(
+      process.env.SESTINA_VERIFICATION_OUTPUT,
+      "foundation.json",
+    );
+    if (
+      !/^[a-f0-9]{40}$/.test(receipt.sourceCommit) ||
+      fileSha256(reportPath) !== receipt.reportSha256
+    )
+      throw Error("foundation_reuse_proof_mismatch");
+    const git = (...args) =>
+      execFileSync("git", args, {
+        cwd: root,
+        windowsHide: true,
+        encoding: "utf8",
+      }).trim();
+    git("merge-base", "--is-ancestor", receipt.sourceCommit, "HEAD");
+    const changed = git("diff", receipt.sourceCommit, "HEAD", "--name-only")
+      .split("\n")
+      .filter(Boolean);
+    if (targetCheckAffected("foundation", changed))
+      throw Error("foundation_reuse_source_changed");
+    const count = assertExecutedTests(
+      JSON.parse(readFileSync(reportPath, "utf8")),
+    );
+    if (count !== receipt.count) throw Error("foundation_reuse_count_changed");
+    process.stdout.write(
+      `\n[public shared] ${label}: reused ${count} executed assertions from ${receipt.sourceCommit}; unchanged dependency scope and report ${receipt.reportSha256}\n`,
+    );
+    return;
+  }
   if (args[0] === vitest && process.env.SESTINA_VERIFICATION_OUTPUT) {
     const output = resolve(process.env.SESTINA_VERIFICATION_OUTPUT);
     mkdirSync(output, { recursive: true });

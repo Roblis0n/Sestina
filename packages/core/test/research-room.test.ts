@@ -9,7 +9,7 @@ import {
   type ResearchRoomAnalysisPayload,
   type ResearchRoomProvider,
   type SestinaCore,
-} from "@sestina/core";
+} from "./fixture-entry.js";
 import { createStableTextSpan, type ResearchRoomSemanticJudgeRequest, type ResearchRoomSemanticJudgeResponse } from "@sestina/review";
 import { parseResearchRoomReceipt, stableResearchHash } from "@sestina/research";
 

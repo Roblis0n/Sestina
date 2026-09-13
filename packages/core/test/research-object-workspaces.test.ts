@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
-import { coreErr, coreOk, openSestina, type CoreResult, type SestinaCore } from "@sestina/core";
+import { coreErr, coreOk, openSestina, type CoreResult, type SestinaCore } from "./fixture-entry.js";
 
 const USER = { kind: "user", actorId: "ui-02-owner" } as const;
 const roots: string[] = [];

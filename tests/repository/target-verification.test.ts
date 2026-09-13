@@ -41,6 +41,14 @@ it("source-reviewed reuse keeps test-only repairs separate and invalidates chang
   expect(
     targetCheckAffected("artifact", ["scripts/verify-desktop-artifact.mjs"]),
   ).toBe(true);
+  expect(
+    targetCheckAffected("foundation", [
+      "tests/post-0.2/foundation/workflow.test.ts",
+    ]),
+  ).toBe(true);
+  expect(
+    targetCheckAffected("foundation", ["packages/core/test/recovery.test.ts"]),
+  ).toBe(false);
 });
 
 it("publication tag identity accepts only the exact version and source in an isolated local Git repository", async () => {

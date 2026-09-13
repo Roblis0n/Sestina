@@ -274,6 +274,10 @@ try {
       "tests",
       "integrations",
       "package.json",
+      "pnpm-workspace.yaml",
+      "tsconfig.base.json",
+      "vitest.config.ts",
+      "eslint.config.mjs",
     )
   )
     throw Error("target_source_not_committed");
@@ -291,6 +295,50 @@ try {
     )
   )
     throw Error("target_untracked_source");
+  let foundationReuse = "";
+  const foundationPath = join(output, "foundation.json");
+  const foundationEvidenceSource =
+    previous.checks?.public?.proof?.foundationEvidenceSource ??
+    previous.verificationCommit;
+  if (
+    existsSync(foundationPath) &&
+    /^[a-f0-9]{40}$/.test(foundationEvidenceSource ?? "")
+  ) {
+    git(
+      "merge-base",
+      "--is-ancestor",
+      foundationEvidenceSource,
+      verificationCommit,
+    );
+    const changed = git(
+      "diff",
+      foundationEvidenceSource,
+      verificationCommit,
+      "--name-only",
+    )
+      .split("\n")
+      .filter(Boolean);
+    if (!targetCheckAffected("foundation", changed)) {
+      try {
+        const count = assertExecutedTests(await readJson(foundationPath));
+        foundationReuse = join(output, "foundation-reuse.json");
+        await writeFile(
+          foundationReuse,
+          JSON.stringify(
+            {
+              sourceCommit: foundationEvidenceSource,
+              reportSha256: fileSha256(foundationPath),
+              count,
+            },
+            null,
+            2,
+          ),
+        );
+      } catch {
+        foundationReuse = "";
+      }
+    }
+  }
   await execute(
     "public",
     [join(root, "scripts/run-public-shared-gates.mjs")],
@@ -307,11 +355,17 @@ try {
         count: unit + foundation,
         unit,
         foundation,
+        foundationEvidenceSource: foundationReuse
+          ? (await readJson(foundationReuse)).sourceCommit
+          : verificationCommit,
         scope: "shared-public-and-kernel-foundation-not-preview-installation",
       };
     },
     false,
-    { SESTINA_VERIFICATION_OUTPUT: output },
+    {
+      SESTINA_VERIFICATION_OUTPUT: output,
+      SESTINA_FOUNDATION_REUSE: foundationReuse,
+    },
   );
   await execute(
     "artifact",

@@ -8,7 +8,7 @@ import {
   type CoreResult,
   type ResearchRoomProvider,
   type SestinaCore,
-} from "@sestina/core";
+} from "./fixture-entry.js";
 import {
   createStableTextSpan,
   prepareCorrectionAppealSecondOpinionRequest,
