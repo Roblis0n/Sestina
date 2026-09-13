@@ -136,6 +136,8 @@
     "strict-boundaries",
     "workflow",
     "workspace-performance",
+    "large-project-transaction",
+    "validated-kernel-reads",
     "workspace-projections",
     "workspace-recovery",
     "desktop-authority",

@@ -9,6 +9,7 @@ import {
   KERNEL_TERMINAL_STATES,
 } from "@sestina/research";
 import type { StorageDatabase } from "@sestina/storage";
+import { clearKernelReadCache } from "./validated-json.js";
 
 /** A redacted body is readable only with a matching canonical privacy proof. */
 export function validateKernelBodyRedaction(
@@ -95,6 +96,7 @@ export function redactKernelMemoryCopies(
 ): void {
   if (!db.isKernelCanonicalWrite || !db.isTransaction)
     throw new KernelFault("authority_required");
+  clearKernelReadCache(db);
   const proofId = (table: string, id: string) =>
     `rapc_${kernelHash({ commandId, table, id }).slice(0, 26).toUpperCase()}`;
   const recordProof = (
@@ -265,8 +267,13 @@ export function redactKernelMemoryCopies(
   // Frozen legacy aggregates cannot receive a business transition. The narrow
   // erasure capability replaces only a linked body with a hash-bound tombstone;
   // its original triggers are restored before this transaction can commit.
-  const legacy: { table: string; column: string; id: string; raw: string; parent?: string }[] =
-    [];
+  const legacy: {
+    table: string;
+    column: string;
+    id: string;
+    raw: string;
+    parent?: string;
+  }[] = [];
   for (const [table, column] of [
     ["research_room_receipts", "receipt_id"],
     ["correction_appeals", "appeal_id"],
@@ -279,7 +286,13 @@ export function redactKernelMemoryCopies(
       `SELECT ${column} id,data${table.startsWith("closed_external_app_pilot_") ? ",pilot_id parent" : ""} FROM ${table} WHERE project_id=?`,
       projectId,
     ))
-      legacy.push({ table, column, id: row.id, raw: row.data, ...(row.parent ? { parent: row.parent } : {}) });
+      legacy.push({
+        table,
+        column,
+        id: row.id,
+        raw: row.data,
+        ...(row.parent ? { parent: row.parent } : {}),
+      });
   }
   const linked = new Set([itemId]);
   const selected = new Set<string>();
@@ -309,15 +322,29 @@ export function redactKernelMemoryCopies(
       originalRecordHash: kernelBytesHash(row.raw),
     };
     recordProof(row.table, row.id, row.raw, after);
-    const triggers = [`kernel_legacy_${row.table}_update`, ...(row.table === "closed_external_app_pilot_events" ? ["trg_closed_external_app_pilot_events_no_update"] : [])];
-    const definitions = triggers.map(name => {
-      const sql = db.get<{sql: string}>("SELECT sql FROM sqlite_schema WHERE type='trigger' AND name=?", name)?.sql;
+    const triggers = [
+      `kernel_legacy_${row.table}_update`,
+      ...(row.table === "closed_external_app_pilot_events"
+        ? ["trg_closed_external_app_pilot_events_no_update"]
+        : []),
+    ];
+    const definitions = triggers.map((name) => {
+      const sql = db.get<{ sql: string }>(
+        "SELECT sql FROM sqlite_schema WHERE type='trigger' AND name=?",
+        name,
+      )?.sql;
       if (!sql) throw new KernelFault("corrupt_state");
       return { name, sql };
     });
     db.withKernelPrivacyRedaction(() => {
-      for (const trigger of definitions) db.exec(`DROP TRIGGER ${trigger.name}`);
-      db.run(`UPDATE ${row.table} SET data=? WHERE project_id=? AND ${row.column}=?`, kernelCanonicalJson(after), projectId, row.id);
+      for (const trigger of definitions)
+        db.exec(`DROP TRIGGER ${trigger.name}`);
+      db.run(
+        `UPDATE ${row.table} SET data=? WHERE project_id=? AND ${row.column}=?`,
+        kernelCanonicalJson(after),
+        projectId,
+        row.id,
+      );
       inject?.();
       for (const trigger of definitions) db.exec(trigger.sql);
     });

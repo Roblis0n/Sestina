@@ -57,3 +57,4 @@ export {
   WORKSPACE_PROJECTION_POLICY,
   type KernelWorkspaceSnapshot,
 } from "./kernel/workspace-snapshot.js";
+export { clearKernelReadCache } from "./kernel/validated-json.js";

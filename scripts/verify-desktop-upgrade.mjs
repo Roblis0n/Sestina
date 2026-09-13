@@ -76,6 +76,11 @@ try {
   );
 } finally {
   const child = previous.process();
+  await previous
+    .evaluate(({ app }) => {
+      setTimeout(() => app.exit(0), 0);
+    })
+    .catch(() => undefined);
   await Promise.race([
     previous.close(),
     new Promise((done) => setTimeout(done, 5000)),

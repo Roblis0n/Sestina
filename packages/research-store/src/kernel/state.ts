@@ -35,6 +35,7 @@ import {
 } from "@sestina/research";
 import { withReadSnapshot, type StorageDatabase } from "@sestina/storage";
 import { validateKernelBriefMetadata } from "./brief-metadata.js";
+import { readValidatedKernelJson } from "./validated-json.js";
 
 function textField(value: unknown): string {
   if (typeof value !== "string") throw new KernelFault("corrupt_state");
@@ -179,9 +180,17 @@ export function readCanonicalState(
       `SELECT ${id} AS object_id,* FROM ${table} WHERE project_id=? ORDER BY ${id}`,
       projectId,
     )) {
-      const parsed = parser(decodeKernelJson(row.data));
-      if (!parsed.ok) throw new KernelFault("corrupt_state");
-      const data = parsed.value as Record<string, KernelJson>;
+      const data = readValidatedKernelJson(
+        db,
+        table,
+        row.object_id,
+        row.data,
+        () => {
+          const parsed = parser(decodeKernelJson(row.data));
+          if (!parsed.ok) throw new KernelFault("corrupt_state");
+          return parsed.value as Record<string, KernelJson>;
+        },
+      );
       if (row.version !== undefined && row.version !== data.version)
         throw new KernelFault("corrupt_state");
       if (
@@ -205,25 +214,34 @@ export function readCanonicalState(
     ["research_decision_transitions", "decision", "decision_id"],
     ["research_issue_transitions", "issue", "issue_id"],
   ] as const) {
+    const byObject = new Map<string, unknown[]>();
+    for (const row of db.all<{ object_id: string; data: string }>(
+      `SELECT ${column} AS object_id,data FROM ${table} WHERE project_id=? ORDER BY ${column},transition_index`,
+      projectId,
+    )) {
+      const entries = byObject.get(row.object_id) ?? [];
+      entries.push(decodeKernelJson(row.data));
+      byObject.set(row.object_id, entries);
+    }
     for (const obj of objects.filter((o) => o.kind === kind)) {
-      const transitions = db
-        .all<{ data: string }>(
-          `SELECT data FROM ${table} WHERE project_id=? AND ${column}=? ORDER BY transition_index`,
-          projectId,
-          obj.id,
-        )
-        .map((r) => decodeKernelJson(r.data));
+      const transitions = byObject.get(obj.id) ?? [];
       if (kernelHash(transitions) !== kernelHash(obj.data.transitions))
         throw new KernelFault("corrupt_state");
     }
   }
   const outcomes = db
-    .all<{ data: string }>(
-      "SELECT data FROM research_reviews WHERE project_id=? AND status IN ('committed','disposed') ORDER BY review_id",
+    .all<{ review_id: string; data: string }>(
+      "SELECT review_id,data FROM research_reviews WHERE project_id=? AND status IN ('committed','disposed') ORDER BY review_id",
       projectId,
     )
     .map((r) => {
-      const review = parseKernelReview(decodeKernelJson(r.data));
+      const review = readValidatedKernelJson(
+        db,
+        "research_reviews",
+        r.review_id,
+        r.data,
+        () => parseKernelReview(decodeKernelJson(r.data)),
+      );
       return {
         id: review.id,
         createdAt: review.updatedAt,
@@ -258,7 +276,19 @@ export function readCanonicalState(
             ? 1
             : 0,
   );
-  return freezeKernel({ projectId, objects, outcomes, metadata });
+  // Every value here was decoded from this read snapshot and is owned locally.
+  // Validate and deeply freeze it without serializing/cloning the entire project
+  // a second time. No caller-owned input or mutable repository handle is retained.
+  const state = { projectId, objects, outcomes, metadata };
+  kernelCanonicalJson(state);
+  const freezeOwned = (value: unknown): void => {
+    if (value && typeof value === "object") {
+      Object.values(value).forEach(freezeOwned);
+      Object.freeze(value);
+    }
+  };
+  freezeOwned(state);
+  return state;
 }
 
 export function readKernelHead(

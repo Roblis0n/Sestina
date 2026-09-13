@@ -2,7 +2,7 @@ import { _electron, expect } from "@playwright/test";
 import { strict as assert } from "node:assert";
 import { performance } from "node:perf_hooks";
 import { cpus } from "node:os";
-import { mkdir, cp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, cp, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { workspaceVolumeFixture } from "../post-0.2/workspace-volume-fixture.js";
 
@@ -18,8 +18,9 @@ await writeFile(
 );
 const f = await workspaceVolumeFixture();
 f.kernel.close();
+const runDirectory = await mkdtemp(join(output, "run-"));
 // Preserve the original seeded input before measured commands add any data.
-await cp(f.root, join(output, "large-project-base"), {
+await cp(f.root, join(runDirectory, "large-project-base"), {
   recursive: true,
   errorOnExist: true,
   force: false,
@@ -34,6 +35,7 @@ const samples: Record<string, number[]> = {
   draft: [],
   manifest: [],
   transaction: [],
+  commitWithConfirmation: [],
 };
 const resources: unknown[] = [];
 const cases: string[] = [];
@@ -69,6 +71,15 @@ const launch = async (profile: string) => {
   });
   page = await electron.firstWindow();
   await page.waitForFunction(() => Boolean(window.sestinaDesktop));
+  page.setDefaultTimeout(15000);
+  await electron.evaluate(() => {
+    const dc = (process as any).mainModule.require("node:diagnostics_channel");
+    (globalThis as any).__sestinaCanonicalDurations = [];
+    dc.channel("sestina.kernel.canonical-duration").subscribe(
+      (event: unknown) =>
+        (globalThis as any).__sestinaCanonicalDurations.push(event),
+    );
+  });
   assert.equal(await electron.evaluate(({ app }) => app.isPackaged), true);
   identity = await electron.evaluate(async ({ app }) =>
     JSON.parse(
@@ -100,7 +111,7 @@ const launch = async (profile: string) => {
 };
 try {
   for (let i = 0; i < 20; i++) {
-    const profile = join(output, `profile-${i}`);
+    const profile = join(runDirectory, `profile-${i}`);
     await mkdir(profile, { recursive: true });
     await writeFile(
       join(profile, "preferences.json"),
@@ -166,7 +177,7 @@ try {
         reason: "Synthetic timing sample",
       },
     });
-    await timed("transaction", () =>
+    await timed("commitWithConfirmation", () =>
       request("commit", {
         reviewId: review.id,
         expectedVersion: prepared.version,
@@ -174,6 +185,18 @@ try {
         authorityCommandId: prepared.effectDraft.authorityCommandId,
       }),
     );
+    const measured = await electron!.evaluate(() =>
+      (globalThis as any).__sestinaCanonicalDurations.splice(0),
+    );
+    assert.equal(
+      measured.length,
+      1,
+      "Each actual transaction requires one runtime measurement",
+    );
+    assert.equal(measured[0].completed, true);
+    samples.transaction!.push(measured[0].durationMs);
+    await writeFile(join(output, "samples.json"), JSON.stringify(samples));
+    console.log(JSON.stringify({ completedWriteSamples: i + 1 }));
   }
   cases.push("25-real-ipc-samples-per-query-and-write");
   for (let i = 0; i < 100; i++) {
@@ -214,7 +237,7 @@ try {
     identity,
     cases,
     seed: f.seed,
-    fixture: join(output, "large-project-base"),
+    fixture: join(runDirectory, "large-project-base"),
     platform: process.platform,
     arch: process.arch,
     cpu: cpus()[0]?.model,
@@ -225,6 +248,8 @@ try {
     resources,
     startupDefinition:
       "fresh process plus actual project opening to rendered Today; cold=fresh profile, warm=existing profile; OS cache not forcibly evicted",
+    transactionDefinition:
+      "entire Kernel commitEffect including integrity checks and SQLite commit; user confirmation and IPC measured separately as commitWithConfirmation; opt-in in-process duration only, without research identifiers or content",
     nativeDialogs: "test_answers_not_native_acceptance",
   };
   await writeFile(join(output, "result.json"), JSON.stringify(result, null, 2));

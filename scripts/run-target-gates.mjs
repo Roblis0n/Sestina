@@ -60,8 +60,9 @@ const git = (...args) =>
     windowsHide: true,
     encoding: "utf8",
   }).trim();
-const sourceCommit = git("rev-parse", "HEAD");
+const verificationCommit = git("rev-parse", "HEAD");
 const manifest = JSON.parse(await readFile(resolve(values.manifest), "utf8"));
+const sourceCommit = manifest.sourceCommit;
 const installerSha256 = fileSha256(resolve(values.installer));
 const artifact = `${fileSha256(resolve(values.manifest))}:${installerSha256}`;
 const executable =
@@ -79,6 +80,7 @@ const result = {
   schema: 1,
   phase: values.phase,
   sourceCommit,
+  verificationCommit,
   artifactSource: manifest.sourceCommit,
   installerSha256,
   manifest: relative(root, resolve(values.manifest)),
@@ -211,8 +213,22 @@ const lastJson = (text) =>
       .at(-1),
   );
 try {
-  if (manifest.sourceCommit !== sourceCommit)
-    throw Error("target_artifact_source_mismatch");
+  if (!/^[a-f0-9]{40}$/.test(sourceCommit))
+    throw Error("target_artifact_source_invalid");
+  git("merge-base", "--is-ancestor", sourceCommit, verificationCommit);
+  const changed = git("diff", sourceCommit, "HEAD", "--name-only")
+    .split("\n")
+    .filter(Boolean);
+  if (
+    changed.some(
+      (path) =>
+        /^(?:apps|packages|integrations)\//.test(path) ||
+        /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|tsconfig\.base\.json|docs\/release\/THIRD-PARTY-NOTICES\.md|scripts\/(?:build-desktop\.mjs|package-desktop\.mjs|lib\/desktop-))/.test(
+          path,
+        ),
+    )
+  )
+    throw Error("target_runtime_source_changed_since_artifact");
   if (manifest.platform !== process.platform || manifest.arch !== process.arch)
     throw Error("target_platform_mismatch");
   if (

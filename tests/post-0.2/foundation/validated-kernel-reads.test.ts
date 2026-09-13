@@ -1,0 +1,53 @@
+import { it, expect } from "vitest";
+import { withTransaction } from "@sestina/storage";
+import {
+  createKernelRepositories,
+  readCanonicalState,
+} from "@sestina/research-store";
+import { applicationFixture, session } from "../application-fixtures.js";
+
+it("warm decoded reads still reject changed bytes and mismatched SQL columns and remain immutable", async () => {
+  const f = await applicationFixture();
+  try {
+    const r = f.kernel.createReview("Persisted original", session);
+    const db = f.kernel.database,
+      repos = createKernelRepositories(db);
+    repos.reviews.getById(f.projectId, r.id);
+    const original = db.get<{ data: string }>(
+      "SELECT data FROM research_reviews WHERE review_id=?",
+      r.id,
+    )!.data;
+    const mutate = (sql: string, ...args: string[]) =>
+      withTransaction(db, () =>
+        db.withKernelWrite("migration", () => db.run(sql, ...args)),
+      );
+    mutate(
+      "UPDATE research_reviews SET data=? WHERE review_id=?",
+      JSON.stringify({
+        ...JSON.parse(original),
+        suggestion: "Changed without its binding hash",
+      }),
+      r.id,
+    );
+    expect(() => repos.reviews.getById(f.projectId, r.id)).toThrow();
+    mutate(
+      "UPDATE research_reviews SET data=?,version=99 WHERE review_id=?",
+      original,
+      r.id,
+    );
+    expect(() => repos.reviews.getById(f.projectId, r.id)).toThrow();
+    mutate("UPDATE research_reviews SET version=1 WHERE review_id=?", r.id);
+    expect(repos.reviews.getById(f.projectId, r.id)?.suggestion).toBe(
+      "Persisted original",
+    );
+    const state = readCanonicalState(db, f.projectId);
+    expect(() =>
+      Object.assign(state.objects[0]!.data, {
+        title: "Cannot mutate cached research",
+      }),
+    ).toThrow();
+    expect(readCanonicalState(db, f.projectId)).toEqual(state);
+  } finally {
+    await f.cleanup();
+  }
+});

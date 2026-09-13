@@ -25,6 +25,7 @@ import {
 } from "@sestina/research";
 import { withTransaction, type StorageDatabase } from "@sestina/storage";
 import { validateKernelBodyRedaction } from "./privacy.js";
+import { readValidatedKernelJson } from "./validated-json.js";
 import {
   decodeKernelJson,
   readKernelHead,
@@ -255,7 +256,13 @@ function decode<T extends Item>(
   row: Record<string, unknown>,
   projectId: string,
 ): T {
-  const value = descriptor.parse(decodeKernelJson(row.data));
+  const value = readValidatedKernelJson(
+    db,
+    descriptor.table,
+    String(row[descriptor.id]),
+    row.data,
+    () => descriptor.parse(decodeKernelJson(row.data)),
+  );
   validateKernelBodyRedaction(db, projectId, descriptor.table, value);
   if (
     value.projectId !== projectId ||

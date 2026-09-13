@@ -1,3 +1,6 @@
+import { channel } from "node:diagnostics_channel";
+import { performance } from "node:perf_hooks";
+import { clearKernelReadCache } from "@sestina/research-store";
 import {
   KernelFault,
   KERNEL_TERMINAL_STATES,
@@ -76,6 +79,8 @@ import {
   effectJson,
   requireKernelValue,
 } from "./kernel-effects.js";
+const canonicalDuration = channel("sestina.kernel.canonical-duration");
+
 export interface KernelProvider {
   readonly identity: NonNullable<KernelManifest["provider"]>;
   readonly maxOutputTokens: number;
@@ -1734,7 +1739,7 @@ export class ResearchDeliberationKernel {
             id: x.id,
             version: x.version,
           })),
-          affectedManifests: this.all(repos.manifests)
+          affectedManifests: (affected.length ? this.all(repos.manifests) : [])
             .filter(
               (m) =>
                 affected.some((x) => x.id === m.reviewId) &&
@@ -1762,6 +1767,36 @@ export class ResearchDeliberationKernel {
     );
   }
   commitEffect(
+    id: string,
+    expected: number,
+    previewHash: string,
+    commandId: string,
+    capability: unknown,
+  ): KernelReceipt {
+    const observed = canonicalDuration.hasSubscribers;
+    const started = observed ? performance.now() : 0;
+    let completed = false;
+    try {
+      const receipt = this.commitEffectChecked(
+        id,
+        expected,
+        previewHash,
+        commandId,
+        capability,
+      );
+      completed = true;
+      return receipt;
+    } finally {
+      // Opt-in in-process duration only: no project identity, content, files,
+      // network, retained measurement buffer or subscriber in the shipped app.
+      if (observed)
+        canonicalDuration.publish({
+          completed,
+          durationMs: performance.now() - started,
+        });
+    }
+  }
+  private commitEffectChecked(
     id: string,
     expected: number,
     previewHash: string,
@@ -2036,6 +2071,7 @@ export class ResearchDeliberationKernel {
       for (const controller of this.#active.values()) controller.abort();
       this.#active.clear();
       try {
+        clearKernelReadCache(this.database);
         this.database.close();
       } finally {
         this.releaseLease?.();
