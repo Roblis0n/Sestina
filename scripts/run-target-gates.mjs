@@ -11,6 +11,7 @@ import {
 import {
   assertExecutedTests,
   canReuseTargetCheck,
+  targetCheckAffected,
 } from "./lib/target-verification.mjs";
 
 const root = resolve(import.meta.dirname, "..");
@@ -136,6 +137,30 @@ async function execute(id, args, verify, installed = true, extraEnv = {}) {
     runtime: process.version,
   };
   const prior = previous.checks?.[id];
+  let reviewedPrior = prior;
+  if (
+    installed &&
+    prior &&
+    /^[a-f0-9]{40}$/.test(previous.verificationCommit ?? "") &&
+    previous.artifactSource === sourceCommit
+  ) {
+    git(
+      "merge-base",
+      "--is-ancestor",
+      previous.verificationCommit,
+      verificationCommit,
+    );
+    const changedInputs = git(
+      "diff",
+      previous.verificationCommit,
+      verificationCommit,
+      "--name-only",
+    )
+      .split("\n")
+      .filter(Boolean);
+    if (!targetCheckAffected(id, changedInputs))
+      reviewedPrior = { ...prior, binding: { ...prior.binding, sourceScope } };
+  }
   // Hash the result payload and log together; a stale/changed output cannot be reused.
   const proofPath = join(output, `${id}.proof.json`);
   const proofHash = () =>
@@ -151,10 +176,15 @@ async function execute(id, args, verify, installed = true, extraEnv = {}) {
         existsSync(join(root, file.path)) &&
         fileSha256(join(root, file.path)) === file.sha256,
     ) &&
-    canReuseTargetCheck(prior, binding, proofHash())
+    canReuseTargetCheck(reviewedPrior, binding, proofHash())
   ) {
     const proof = JSON.parse(await readFile(proofPath, "utf8"));
-    result.checks[id] = { ...prior, reused: true, proof };
+    result.checks[id] = {
+      ...reviewedPrior,
+      reused: true,
+      reusedFromVerificationCommit: previous.verificationCommit,
+      proof,
+    };
     await save();
     return;
   }
@@ -222,7 +252,8 @@ try {
   if (
     changed.some(
       (path) =>
-        /^(?:apps|packages|integrations)\//.test(path) ||
+        (/^(?:apps|packages|integrations)\//.test(path) &&
+          !/^(?:apps|packages)\/[^/]+\/test\//.test(path)) ||
         /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|tsconfig\.base\.json|docs\/release\/THIRD-PARTY-NOTICES\.md|scripts\/(?:build-desktop\.mjs|package-desktop\.mjs|lib\/desktop-))/.test(
           path,
         ),
@@ -329,7 +360,7 @@ try {
       return { count: checked.checks.length, result: checked };
     },
   );
-  for (const id of ["journeys", "performance"]) {
+  for (const id of ["journeys", "performance", "resources"]) {
     const area = join(output, id);
     await execute(
       id,
@@ -347,7 +378,10 @@ try {
           checked.packaged === false
         )
           throw Error("installed_result_invalid");
-        return { count: checked.cases.length, result: checked };
+        return {
+          count: (checked.cases ?? checked.checks).length,
+          result: checked,
+        };
       },
       true,
       { SESTINA_TARGET_OUTPUT: area },

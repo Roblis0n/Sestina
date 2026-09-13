@@ -4,7 +4,39 @@ import {
   canReuseTargetCheck,
   desktopResources,
   assertDesktopBinary,
+  targetCheckAffected,
 } from "../../scripts/lib/target-verification.mjs";
+
+it("source-reviewed reuse keeps test-only repairs separate and invalidates changed runtime or check implementations", () => {
+  expect(
+    targetCheckAffected("performance", [
+      "apps/research-room/test/production-entry.test.ts",
+    ]),
+  ).toBe(false);
+  expect(
+    targetCheckAffected("public", [
+      "apps/research-room/test/production-entry.test.ts",
+    ]),
+  ).toBe(true);
+  expect(
+    targetCheckAffected("performance", [
+      "tests/desktop/installed-resources.ts",
+    ]),
+  ).toBe(false);
+  expect(
+    targetCheckAffected("resources", ["tests/desktop/installed-resources.ts"]),
+  ).toBe(true);
+  for (const path of [
+    "apps/desktop/src/main.ts",
+    "scripts/build-desktop.mjs",
+    "packages/core/src/kernel.ts",
+    "unrecognized-build-input.json",
+  ])
+    expect(targetCheckAffected("performance", [path])).toBe(true);
+  expect(
+    targetCheckAffected("artifact", ["scripts/verify-desktop-artifact.mjs"]),
+  ).toBe(true);
+});
 
 it("installed verification follows native resource layouts and rejects wrong platform binaries", () => {
   expect(desktopResources("/app", "darwin").replaceAll("\\", "/")).toBe(

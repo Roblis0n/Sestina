@@ -24,6 +24,38 @@ export function canReuseTargetCheck(record, binding, evidenceSha256) {
     JSON.stringify(record.binding) === JSON.stringify(binding)
   );
 }
+// Unknown inputs invalidate evidence. These exclusions name validation-only
+// changes; artifact, runtime and shared fixture changes remain fail-closed.
+export function targetCheckAffected(id, paths) {
+  return paths.some((path) => {
+    if (/^(?:docs\/|README\.md$)/.test(path)) return false;
+    if (
+      /^(?:apps\/[^/]+\/test\/|packages\/[^/]+\/test\/|tests\/repository\/)/.test(
+        path,
+      )
+    )
+      return id === "public";
+    const installed = /^tests\/desktop\/installed-([\w-]+)\.ts$/.exec(path);
+    if (installed) return id === installed[1];
+    if (/^tests\/desktop\/.*\.test\.ts$/.test(path)) return id === "desktop";
+    if (/^tests\/post-0\.2\/(?:foundation|downstream)\//.test(path))
+      return id === "public";
+    if (
+      [
+        "scripts/run-target-gates.mjs",
+        "scripts/lib/target-verification.mjs",
+      ].includes(path)
+    )
+      return id === "public";
+    const checker = {
+      "scripts/verify-desktop-artifact.mjs": "artifact",
+      "scripts/verify-target-cutover.mjs": "cutover",
+      "scripts/verify-desktop-core-reproducibility.mjs": "reproducibility",
+    }[path];
+    if (checker) return id === checker;
+    return true;
+  });
+}
 import { join } from "node:path";
 export function desktopResources(directory, platform) {
   return join(

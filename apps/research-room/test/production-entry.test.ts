@@ -1,6 +1,6 @@
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { once } from "node:events";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, readdir } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -128,28 +128,32 @@ describe("Research Room production entry", () => {
       headers: mutationHeaders,
       body: JSON.stringify({ projectPath: projectRoot, initializeIfNeeded: true }),
     });
-    expect(opened.status).toBe(200);
+    expect(opened.status).toBe(410);
     await expect(opened.json()).resolves.toMatchObject({
-      ok: true,
-      value: { initialized: true, setupRequired: true, localOnly: true },
+      ok: false,
+      error: { code: "legacy_write_disabled" },
     });
+    expect(await readdir(projectRoot)).toEqual([]);
 
     const activated = await fetch(`${origin}/api/project/brief`, {
       method: "POST",
       headers: mutationHeaders,
       body: JSON.stringify({ projectQuestion: "Can the production App persist local research state?", currentTask: "Verify production state access." }),
     });
-    expect(activated.status).toBe(200);
+    expect(activated.status).toBe(410);
     await expect(activated.json()).resolves.toMatchObject({
-      ok: true,
-      value: { brief: { currentTask: "Verify production state access." } },
+      ok: false,
+      error: { code: "legacy_write_disabled" },
     });
-
-    const restored = await fetch(`${origin}/api/state`);
-    expect(restored.status).toBe(200);
-    await expect(restored.json()).resolves.toMatchObject({
+    expect(await readdir(projectRoot)).toEqual([]);
+    const created = await fetch(`${origin}/api/kernel/create`, {
+      method: "POST", headers: mutationHeaders,
+      body: JSON.stringify({ projectPath: projectRoot, title: "Explicit Kernel project", confirmed: true }),
+    });
+    expect(created.status).toBe(200);
+    await expect(created.json()).resolves.toMatchObject({
       ok: true,
-      value: { brief: { projectQuestion: "Can the production App persist local research state?" } },
+      value: { schema: 25, mode: "persistent_review", automaticSend: false },
     });
   }, 30_000);
 });
