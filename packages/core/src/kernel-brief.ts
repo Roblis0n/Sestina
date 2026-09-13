@@ -14,7 +14,11 @@ import {
   type KernelManifest,
   type ResearchBriefVersion,
 } from "@sestina/research";
-import { projectKernelContext, type KernelProjectionSelection, type KernelSnapshot } from "@sestina/research-store";
+import {
+  projectKernelContext,
+  type KernelProjectionSelection,
+  type KernelSnapshot,
+} from "@sestina/research-store";
 import { unwrapKernelDomain } from "./kernel-effects.js";
 
 function textValue(value: unknown): string {
@@ -22,15 +26,40 @@ function textValue(value: unknown): string {
   return value;
 }
 
-export function kernelObjectLabels(snapshot: KernelSnapshot): Record<string, string> {
-  const labels = Object.fromEntries(snapshot.state.objects.filter(o => ["artifact", "decision", "evidence", "issue"].includes(o.kind)).map(o => {
-    const candidate = o.data.statement ?? o.data.summary ?? o.data.title ?? o.data.relativePath;
-    return [o.id, typeof candidate === "string" ? candidate : o.kind];
-  }));
-  for(const object of snapshot.state.objects.filter(o=>o.kind==="brief")) {
-    const brief=unwrapKernelDomain(parseResearchBrief(object.data));
-    for(const version of brief.versions) labels[version.id]=`${version.projectQuestion || version.currentTask} · ${version.versionNumber}`;
-    labels[brief.id]=labels[brief.currentVersionId] ?? "";
+export function kernelObjectLabels(
+  snapshot: KernelSnapshot,
+): Record<string, string> {
+  // Names are navigational projections, never replacement research content.
+  // A full Brief can exceed a label's bound; keep the original object intact.
+  const label = (text: string) =>
+    text.length > 512
+      ? `${Array.from(text.slice(0, 514)).slice(0, 511).join("")}…`
+      : text;
+  const labels = Object.fromEntries(
+    snapshot.state.objects
+      .filter((o) =>
+        ["artifact", "decision", "evidence", "issue"].includes(o.kind),
+      )
+      .map((o) => {
+        const candidate =
+          o.data.statement ??
+          o.data.summary ??
+          o.data.title ??
+          o.data.relativePath;
+        return [
+          o.id,
+          label(typeof candidate === "string" ? candidate : o.kind),
+        ];
+      }),
+  );
+  for (const object of snapshot.state.objects.filter(
+    (o) => o.kind === "brief",
+  )) {
+    const brief = unwrapKernelDomain(parseResearchBrief(object.data));
+    for (const version of brief.versions)
+      labels[version.id] =
+        `${label(version.projectQuestion || version.currentTask)} · ${version.versionNumber}`;
+    labels[brief.id] = labels[brief.currentVersionId] ?? "";
   }
   return labels;
 }
@@ -77,7 +106,11 @@ export function projectBrief(snapshot: KernelSnapshot) {
     active,
     sections,
     objectLabels: kernelObjectLabels(snapshot),
-    objectVersions: snapshot.state.objects.filter(o => ["artifact", "decision", "issue", "evidence"].includes(o.kind)).map(o => ({kind:o.kind,id:o.id,version:o.version})),
+    objectVersions: snapshot.state.objects
+      .filter((o) =>
+        ["artifact", "decision", "issue", "evidence"].includes(o.kind),
+      )
+      .map((o) => ({ kind: o.kind, id: o.id, version: o.version })),
   };
 }
 
@@ -114,7 +147,8 @@ export function briefCoverage(
       "knownUnknowns",
     ],
   };
-  if (effect !== null && !Object.hasOwn(required, effect)) throw new KernelFault("invalid_record");
+  if (effect !== null && !Object.hasOwn(required, effect))
+    throw new KernelFault("invalid_record");
   if (
     targetKinds.some(
       (k) =>
@@ -123,7 +157,9 @@ export function briefCoverage(
   )
     throw new KernelFault("invalid_record");
   const needed = new Set([
-    ...(effect === null ? ["projectQuestion", "currentTask"] as const : required[effect]),
+    ...(effect === null
+      ? (["projectQuestion", "currentTask"] as const)
+      : required[effect]),
     ...(targetKinds.includes("artifact") ? ["targetArtifacts" as const] : []),
   ]);
   const { sections } = projectBrief(snapshot);
@@ -141,34 +177,91 @@ export function briefCoverage(
         : sections[section].status === "intentionally_empty"
           ? "user_explicitly_empty"
           : "provided_for_this_effect",
-    requiredForEffectKinds: needed.has(section) && effect !== null ? [effect] : [],
+    requiredForEffectKinds:
+      needed.has(section) && effect !== null ? [effect] : [],
     canSkip: true,
     authorityBlocked: false,
   }));
 }
 
-export type KernelReviewContextSelection = KernelProjectionSelection & { readonly coverageScope?: KernelCoverageScope };
+export type KernelReviewContextSelection = KernelProjectionSelection & {
+  readonly coverageScope?: KernelCoverageScope;
+};
 
 /** One snapshot supplies both the inspected Coverage and the serialized request. */
-export function projectReviewContext(snapshot: KernelSnapshot, suggestion: string, selection: KernelReviewContextSelection, independentSecondOpinion = false) {
-  kernelRecord(selection, ["evidenceIds", "issueIds", "memory", "coverageScope"]);
-  const coverageScope = parseKernelCoverageScope(selection.coverageScope ?? { effectKind: null, targetKinds: [] });
-  const objects = { evidenceIds: selection.evidenceIds, issueIds: selection.issueIds, memory: selection.memory };
+export function projectReviewContext(
+  snapshot: KernelSnapshot,
+  suggestion: string,
+  selection: KernelReviewContextSelection,
+  independentSecondOpinion = false,
+) {
+  kernelRecord(selection, [
+    "evidenceIds",
+    "issueIds",
+    "memory",
+    "coverageScope",
+  ]);
+  const coverageScope = parseKernelCoverageScope(
+    selection.coverageScope ?? { effectKind: null, targetKinds: [] },
+  );
+  const objects = {
+    evidenceIds: selection.evidenceIds,
+    issueIds: selection.issueIds,
+    memory: selection.memory,
+  };
   const base = projectKernelContext(snapshot, suggestion, objects);
-  const coverage = briefCoverage(snapshot, coverageScope.effectKind, suggestion, coverageScope.targetKinds);
+  const coverage = briefCoverage(
+    snapshot,
+    coverageScope.effectKind,
+    suggestion,
+    coverageScope.targetKinds,
+  );
   const limitations = [
-    ...base.limitations.filter(text => !/^Brief .+: not_provided\.$/.test(text) && text !== "Brief not provided."),
-    ...coverage.filter(row => row.status === "limited").map(row => `Brief ${row.section}: not_provided.`),
+    ...base.limitations.filter(
+      (text) =>
+        !/^Brief .+: not_provided\.$/.test(text) &&
+        text !== "Brief not provided.",
+    ),
+    ...coverage
+      .filter((row) => row.status === "limited")
+      .map((row) => `Brief ${row.section}: not_provided.`),
   ];
   const projection = {
     ...base.projection,
     policyVersion: "1.1.0",
     coverageScope,
-    assessmentPurpose: independentSecondOpinion ? "independent_second_opinion" : "review_suggestion",
+    assessmentPurpose: independentSecondOpinion
+      ? "independent_second_opinion"
+      : "review_suggestion",
     briefCoverage: coverage,
-    categories: base.projection.categories.filter(category => !independentSecondOpinion || category.kind !== "outcome_summaries").map(category => category.kind === "limitations" ? { kind: category.kind, items: limitations } : category),
+    categories: base.projection.categories
+      .filter(
+        (category) =>
+          !independentSecondOpinion || category.kind !== "outcome_summaries",
+      )
+      .map((category) =>
+        category.kind === "limitations"
+          ? { kind: category.kind, items: limitations }
+          : category,
+      ),
   };
-  return { ...base, projection, contextProjectionHash: kernelHash(projection), limitations, excludedFields: [...base.excludedFields, ...(independentSecondOpinion ? ["original_assessment_verdict", "original_assessment_rationale", "original_assessment_confidence", "outcome_summaries"] : [])] };
+  return {
+    ...base,
+    projection,
+    contextProjectionHash: kernelHash(projection),
+    limitations,
+    excludedFields: [
+      ...base.excludedFields,
+      ...(independentSecondOpinion
+        ? [
+            "original_assessment_verdict",
+            "original_assessment_rationale",
+            "original_assessment_confidence",
+            "outcome_summaries",
+          ]
+        : []),
+    ],
+  };
 }
 
 export function briefFieldDiff(
@@ -176,21 +269,45 @@ export function briefFieldDiff(
   current: ResearchBriefVersion,
   candidate: Record<string, unknown>,
 ) {
-  const paths = [...BRIEF_SECTIONS.filter(key => !["knownUnknowns", "acceptedDecisions", "evidenceThresholds"].includes(key)), ...["knownUnknowns", "acceptedDecisions", "evidenceThresholds", "objectReferences"].map(key => `progressive.${key}`), ...BRIEF_SECTIONS.map(key => `progressive.sections.${key}`)];
+  const paths = [
+    ...BRIEF_SECTIONS.filter(
+      (key) =>
+        !["knownUnknowns", "acceptedDecisions", "evidenceThresholds"].includes(
+          key,
+        ),
+    ),
+    ...[
+      "knownUnknowns",
+      "acceptedDecisions",
+      "evidenceThresholds",
+      "objectReferences",
+    ].map((key) => `progressive.${key}`),
+    ...BRIEF_SECTIONS.map((key) => `progressive.sections.${key}`),
+  ];
   const get = (value: unknown, path: string): unknown => {
     let result = value;
-    for(const part of path.split(".")) {
-      if (result === null || typeof result !== "object" || Array.isArray(result)) return undefined;
-      result = (result as Record<string,unknown>)[part];
+    for (const part of path.split(".")) {
+      if (
+        result === null ||
+        typeof result !== "object" ||
+        Array.isArray(result)
+      )
+        return undefined;
+      result = (result as Record<string, unknown>)[part];
     }
     return result;
   };
   return paths
-    .filter(path => get(candidate,path) !== undefined || kernelHash(get(base,path) ?? null) !== kernelHash(get(current,path) ?? null))
+    .filter(
+      (path) =>
+        get(candidate, path) !== undefined ||
+        kernelHash(get(base, path) ?? null) !==
+          kernelHash(get(current, path) ?? null),
+    )
     .map((field) => {
-      const b = get(base,field) ?? null,
-        c = get(current,field) ?? null,
-        proposed = get(candidate,field) ?? b;
+      const b = get(base, field) ?? null,
+        c = get(current, field) ?? null,
+        proposed = get(candidate, field) ?? b;
       return {
         field,
         base: b,
@@ -205,16 +322,26 @@ export function briefFieldDiff(
 }
 
 export function briefRelationships(snapshot: KernelSnapshot, input: unknown) {
-  const q = kernelRecord(input, ["kind", "search", "limit", "cursor", "purpose"]);
-  if (q.purpose !== undefined && q.purpose !== "reference" && q.purpose !== "transition") throw new KernelFault("invalid_record");
+  const q = kernelRecord(input, [
+    "kind",
+    "search",
+    "limit",
+    "cursor",
+    "purpose",
+  ]);
+  if (
+    q.purpose !== undefined &&
+    q.purpose !== "reference" &&
+    q.purpose !== "transition"
+  )
+    throw new KernelFault("invalid_record");
   if (!["decision", "evidence", "issue", "artifact"].includes(String(q.kind)))
     throw new KernelFault("invalid_record");
   if (typeof q.search !== "string" || q.search.length > 512)
     throw new KernelFault("invalid_record");
   const search = q.search.normalize("NFC").toLocaleLowerCase();
   kernelInteger(q.limit);
-  if (q.limit < 1 || q.limit > 50)
-    throw new KernelFault("invalid_record");
+  if (q.limit < 1 || q.limit > 50) throw new KernelFault("invalid_record");
   const binding = kernelHash({
     kind: q.kind,
     purpose: q.purpose ?? "reference",
@@ -226,7 +353,12 @@ export function briefRelationships(snapshot: KernelSnapshot, input: unknown) {
   if (q.cursor !== undefined) {
     kernelText(q.cursor, 256);
     const parts = q.cursor.split(":");
-    if (parts.length !== 2 || parts[0] !== binding || !parts[1] || !/^\d+$/.test(parts[1]))
+    if (
+      parts.length !== 2 ||
+      parts[0] !== binding ||
+      !parts[1] ||
+      !/^\d+$/.test(parts[1])
+    )
       throw new KernelFault("stale_revision");
     start = Number(parts[1]);
     if (!Number.isSafeInteger(start)) throw new KernelFault("invalid_record");
@@ -248,23 +380,22 @@ export function briefRelationships(snapshot: KernelSnapshot, input: unknown) {
       source: o.data.provenance ?? o.data.source ?? null,
       selectable:
         o.kind === "decision"
-          ? q.purpose === "transition" ? o.data.status !== "superseded" : o.data.status === "accepted" || o.data.status === "frozen"
+          ? q.purpose === "transition"
+            ? o.data.status !== "superseded"
+            : o.data.status === "accepted" || o.data.status === "frozen"
           : o.kind === "evidence"
             ? o.data.state === "current"
-            : o.kind === "artifact" ? o.data.tombstone === undefined : true,
+            : o.kind === "artifact"
+              ? o.data.tombstone === undefined
+              : true,
     }))
     .filter((o) =>
-      o.name
-        .normalize("NFC")
-        .toLocaleLowerCase()
-        .includes(search),
+      o.name.normalize("NFC").toLocaleLowerCase().includes(search),
     );
   return {
     items: matches.slice(start, start + q.limit),
     nextCursor:
-      start + q.limit < matches.length
-        ? `${binding}:${start + q.limit}`
-        : null,
+      start + q.limit < matches.length ? `${binding}:${start + q.limit}` : null,
     projectStateRevision: snapshot.head.revision,
   };
 }

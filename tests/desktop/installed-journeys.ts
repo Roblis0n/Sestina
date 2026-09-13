@@ -361,6 +361,70 @@ try {
     cases.push(`provider-${scenario}-exact-body-no-retry`);
   }
   mode = "valid";
+  await invoke("providerSave", {
+    second: true,
+    input: {
+      ...config,
+      providerId: "synthetic-independent",
+      model: "independent-model",
+    },
+  });
+  const assessed = async (draft: any) => {
+    const prepared = await command("prepare_manifest", {
+      reviewId: draft.id,
+      expectedVersion: draft.version,
+      selection: {},
+      useProvider: true,
+    });
+    let current = await command("confirm_manifest", {
+      reviewId: draft.id,
+      expectedVersion: prepared.review.version,
+      manifestIdentityHash: prepared.manifest.identityHash,
+      confirmed: true,
+    });
+    current = await command("prepare_attempt", {
+      reviewId: draft.id,
+      expectedVersion: current.version,
+    });
+    await command("start_attempt", {
+      reviewId: draft.id,
+      expectedVersion: current.version,
+      manifestIdentityHash: prepared.manifest.identityHash,
+    });
+    assert.equal(requests.at(-1), prepared.manifest.exactRequestBody);
+    return command("read", { reviewId: draft.id });
+  };
+  const original = await assessed(
+    await command("create", {
+      suggestion: "Inspect an observation before accepting it",
+    }),
+  );
+  const originalAttempt = original.attempts[0];
+  const correction = await command("append_correction", {
+    reviewId: original.review.id,
+    expectedVersion: original.review.version,
+    attemptId: originalAttempt.id,
+    originalAssessmentHash: originalAttempt.assessmentHash,
+    reason: "Preserve original while requesting independent inspection",
+  });
+  const independent = await assessed(correction.review);
+  assert.equal(JSON.parse(requests.at(-1)!).model, "independent-model");
+  await commit(
+    "Explicit result after independent inspection",
+    record,
+    independent.review,
+  );
+  await restart();
+  assert.deepEqual(
+    (await command("read", { reviewId: original.review.id })).attempts[0],
+    originalAttempt,
+  );
+  assert.equal(
+    (await command("correction_history", { reviewId: original.review.id }))[0]
+      .status,
+    "closed",
+  );
+  cases.push("correction-independent-inspection-original-preserved");
   let stale = await command("create", {
     suggestion: "Configuration reconfirmation",
   });

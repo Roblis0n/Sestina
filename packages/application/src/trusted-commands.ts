@@ -108,23 +108,19 @@ export class TrustedKernelCommands {
         kernelHash({ session, body, saved: await snapshot() }) !== bindingHash
       )
         throw new Error("confirmation_stale");
-      // The grant is consumed here, in this invocation, and never returned to IPC.
-      // Release the native-confirmation lock when its one-use grant is consumed.
-      // Provider I/O may remain pending; reads, cancellation and a new explicit
-      // user decision must remain available while the Kernel owns that attempt.
-      return this.api.execute(
-        {
-          ...body,
-          ...(["commit", "start_attempt", "privacy_cleanup"].includes(
-            body.action,
-          )
-            ? { confirmed: true }
-            : {}),
-        },
-        true,
-      );
     } finally {
       this.#pending = false;
     }
+    // Consume the grant in this invocation after releasing the dialog lock.
+    // Provider I/O remains owned by the Kernel; reads and cancellation stay usable.
+    return this.api.execute(
+      {
+        ...body,
+        ...(["commit", "start_attempt", "privacy_cleanup"].includes(body.action)
+          ? { confirmed: true }
+          : {}),
+      },
+      true,
+    );
   }
 }

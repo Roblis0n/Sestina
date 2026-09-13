@@ -12,12 +12,17 @@ const output = resolve(
   process.env.SESTINA_TARGET_OUTPUT ?? ".tmp/target/performance",
 );
 await mkdir(output, { recursive: true });
+await writeFile(
+  join(output, "result.json"),
+  JSON.stringify({ passed: false, status: "running" }),
+);
 const f = await workspaceVolumeFixture();
 f.kernel.close();
 // Preserve the original seeded input before measured commands add any data.
 await cp(f.root, join(output, "large-project-base"), {
   recursive: true,
   errorOnExist: true,
+  force: false,
 });
 const samples: Record<string, number[]> = {
   coldStartup: [],

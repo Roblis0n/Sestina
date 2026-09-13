@@ -88,3 +88,6 @@ await writeFile(
   JSON.stringify(verified, null, 2),
 );
 console.log(JSON.stringify(verified));
+// All durable results and process-close checks above have completed. Playwright
+// can retain its transport after the bounded old-program close on Windows.
+process.exit(0);

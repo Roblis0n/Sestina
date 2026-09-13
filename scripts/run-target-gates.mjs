@@ -144,6 +144,11 @@ async function execute(id, args, verify, installed = true, extraEnv = {}) {
   if (
     existsSync(log) &&
     existsSync(proofPath) &&
+    (prior?.proof?.images ?? []).every(
+      (file) =>
+        existsSync(join(root, file.path)) &&
+        fileSha256(join(root, file.path)) === file.sha256,
+    ) &&
     canReuseTargetCheck(prior, binding, proofHash())
   ) {
     const proof = JSON.parse(await readFile(proofPath, "utf8"));
@@ -429,6 +434,47 @@ try {
     reason:
       "Actual inspected frames, continuous motion, native focus and assistive-technology evidence are recorded in the merged human evidence index.",
   });
+  if (values["visual-observation"]) {
+    const observationPath = resolve(values["visual-observation"]);
+    const observed = await readJson(observationPath);
+    if (
+      observed.sourceCommit !== sourceCommit ||
+      observed.installerSha256 !== installerSha256 ||
+      observed.platform !== process.platform ||
+      observed.arch !== process.arch
+    )
+      throw Error("observation_artifact_mismatch");
+    const accepted = new Set();
+    for (const check of observed.checks ?? []) {
+      if (
+        check.status !== "passed" ||
+        !Number.isSafeInteger(check.count) ||
+        check.count < 1 ||
+        !check.files?.length
+      )
+        throw Error("observation_missing_execution");
+      for (const file of check.files)
+        if (
+          fileSha256(resolve(dirname(observationPath), file.path)) !==
+          file.sha256
+        )
+          throw Error("observation_evidence_changed");
+      accepted.add(check.id);
+    }
+    result.remaining = result.remaining.filter(
+      (check) => !accepted.has(check.id),
+    );
+    result.observation = {
+      path: relative(root, observationPath),
+      sha256: fileSha256(observationPath),
+    };
+  }
+  if (
+    result.localPassed &&
+    readiness.remainingPrerequisitesSatisfied &&
+    result.remaining.length === 0
+  )
+    result.formalAcceptance = "passed";
   // Code/local success never implies complete platform/native/signing acceptance.
   if (values.phase === "publish") {
     if (
