@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
+import { mkdirSync } from "node:fs";
 
 const root = resolve(import.meta.dirname, "..");
 const node = process.execPath;
@@ -8,6 +9,19 @@ const tsc = resolve(root, "node_modules/typescript/bin/tsc");
 const vitest = resolve(root, "node_modules/vitest/vitest.mjs");
 
 function runNode(label, args) {
+  if (args[0] === vitest && process.env.SESTINA_VERIFICATION_OUTPUT) {
+    const output = resolve(process.env.SESTINA_VERIFICATION_OUTPUT);
+    mkdirSync(output, { recursive: true });
+    const file = args.includes("--project")
+      ? "public-unit.json"
+      : "foundation.json";
+    args = [
+      ...args,
+      "--reporter=default",
+      "--reporter=json",
+      `--outputFile=${resolve(output, file)}`,
+    ];
+  }
   process.stdout.write(`\n[public shared] ${label}\n`);
   const result = spawnSync(node, args, {
     cwd: root,
@@ -91,6 +105,7 @@ run("public-preview, resilience, privacy, and authority tests", vitest, [
   "tests/repository/release-artifact-contract.test.ts",
   "tests/repository/release-verifier-negative.test.ts",
   "tests/repository/desktop-readiness.test.ts",
+  "tests/repository/target-verification.test.ts",
   "--maxWorkers=1",
   "--no-file-parallelism",
 ]);

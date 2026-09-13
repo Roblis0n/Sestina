@@ -3,6 +3,10 @@ import { readFile, readdir, lstat } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { join, resolve, normalize } from "node:path";
+import {
+  desktopResources,
+  assertDesktopBinary,
+} from "./lib/target-verification.mjs";
 const root = resolve(import.meta.dirname, "..");
 const desktopRequire = createRequire(join(root, "apps/desktop/package.json"));
 const builderRequire = createRequire(
@@ -19,7 +23,8 @@ const manifestPath = resolve(
   process.argv[3] ?? "release/desktop/win32-x64/candidate-manifest.json",
 );
 const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
-const archive = join(directory, "resources/app.asar");
+const resources = desktopResources(directory, manifest.platform);
+const archive = join(resources, "app.asar");
 const sha = (bytes) => createHash("sha256").update(bytes).digest("hex");
 const identity = JSON.parse(
   asar.extractFile(archive, "dist/identity.json").toString("utf8"),
@@ -73,15 +78,19 @@ if (
   identity.version
 )
   throw new Error("desktop_package_version_mismatch");
-if (identity.platform === "win32") {
-  const binary = await readFile(join(directory, "Sestina Candidate.exe"));
-  if (
-    binary.toString("ascii", 0, 2) !== "MZ" ||
-    binary.readUInt16LE(binary.readUInt32LE(0x3c) + 4) !== 0x8664 ||
-    identity.arch !== "x64"
-  )
-    throw new Error("desktop_binary_target_mismatch");
-}
+const binaryPath = join(
+  directory,
+  identity.platform === "win32"
+    ? "Sestina Candidate.exe"
+    : identity.platform === "darwin"
+      ? "Contents/MacOS/Sestina Candidate"
+      : "sestina-candidate",
+);
+assertDesktopBinary(
+  await readFile(binaryPath),
+  identity.platform,
+  identity.arch,
+);
 const expected = new Set(manifest.files.map((file) => "/" + file.path));
 if (expected.size !== manifest.files.length)
   throw Error("desktop_duplicate_content");
@@ -99,9 +108,9 @@ for (const file of manifest.files) {
   )
     throw new Error("desktop_unapproved_content");
   const bytes = companion.test(file.path)
-    ? await readFile(join(directory, "resources", file.path.slice(5)))
+    ? await readFile(join(resources, file.path.slice(5)))
     : native.test(file.path)
-      ? await readFile(join(directory, "resources/native", file.path.slice(5)))
+      ? await readFile(join(resources, "native", file.path.slice(5)))
       : asar.extractFile(archive, normalize(file.path));
   if (bytes.length !== file.size || sha(bytes) !== file.sha256)
     throw new Error(`desktop_content_mismatch:${file.path}`);
@@ -116,24 +125,18 @@ async function inspectResources(folder, prefix) {
       throw Error(`desktop_unlisted_content:${name}`);
   }
 }
+await inspectResources(join(resources, "companion"), "/dist/companion");
 await inspectResources(
-  join(directory, "resources/companion"),
-  "/dist/companion",
-);
-await inspectResources(
-  join(directory, "resources/native/node_modules"),
+  join(resources, "native/node_modules"),
   "/dist/node_modules",
 );
 const runtime = JSON.parse(
-  await readFile(
-    join(directory, "resources/companion/runtime-identity.json"),
-    "utf8",
-  ),
+  await readFile(join(resources, "companion/runtime-identity.json"), "utf8"),
 );
 const runtimeBytes = await readFile(
   join(
-    directory,
-    "resources/companion",
+    resources,
+    "companion",
     identity.platform === "win32" ? "node.exe" : "node",
   ),
 );
@@ -144,13 +147,8 @@ if (
   runtime.sha256 !== sha(runtimeBytes)
 )
   throw Error("desktop_companion_identity_mismatch");
-if (
-  identity.platform === "win32" &&
-  (runtimeBytes.toString("ascii", 0, 2) !== "MZ" ||
-    runtimeBytes.readUInt16LE(runtimeBytes.readUInt32LE(0x3c) + 4) !== 0x8664)
-)
-  throw Error("desktop_companion_target_mismatch");
-if (!(await lstat(join(directory, "resources/companion"))).isDirectory())
+assertDesktopBinary(runtimeBytes, identity.platform, identity.arch);
+if (!(await lstat(join(resources, "companion"))).isDirectory())
   throw Error("desktop_companion_missing");
 for (const name of asar
   .listPackage(archive)

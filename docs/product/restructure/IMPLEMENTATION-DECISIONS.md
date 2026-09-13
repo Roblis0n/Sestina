@@ -358,3 +358,16 @@ Windows installation screenshots are evidence of the installed renderer only.
 Synthetic picker/confirmation answers in automation are never native-dialog
 acceptance. OS-specific credential, focus, motion, migration and installer results
 remain individually recorded. No Windows result establishes macOS/Linux behavior.
+
+## Authorized local G12/G13 execution order, 2026-09-13
+
+The user explicitly authorizes G12 implementation, local verification and candidate
+packaging on the unpublished branch despite outstanding G10/G11 external-platform,
+signing and native-observation acceptance. G13 local cutover may follow after the
+relevant G12 implementation and executable core data-safety/function checks pass.
+Actual failures must be fixed. Missing native observation, macOS/Linux installation,
+signing/notarization and production update trust remain mandatory formal acceptance
+and publication requirements. Record implementation, local verification, complete
+platform acceptance and publication separately. This changes execution order only;
+it does not amend frozen plans, historical evidence, user Authority or privacy rules.
+No public push, CI, tag, signing-service provisioning or Release is authorized.

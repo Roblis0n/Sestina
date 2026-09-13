@@ -6,7 +6,9 @@ import { join, resolve } from "node:path";
 import { strict as assert } from "node:assert";
 import { _electron } from "@playwright/test";
 const root = resolve(import.meta.dirname, ".."),
-  area = join(root, ".tmp/g10-g11"),
+  area = resolve(
+    process.env.SESTINA_UPGRADE_AREA ?? join(root, ".tmp/g10-g11"),
+  ),
   entry = join(area, "installed-upgrade-probe.cjs");
 const executable = createRequire(join(root, "apps/desktop/package.json"))(
   "electron",
@@ -80,6 +82,9 @@ try {
   ]);
   if (child.exitCode === null) child.kill();
 }
-console.log(
-  JSON.stringify({ ...report, verifiedPreviousProgramActuallyOpened: true }),
+const verified = { ...report, verifiedPreviousProgramActuallyOpened: true };
+await writeFile(
+  join(area, "installed-upgrade-result.json"),
+  JSON.stringify(verified, null, 2),
 );
+console.log(JSON.stringify(verified));

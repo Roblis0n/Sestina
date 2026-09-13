@@ -20,7 +20,9 @@ import type { InstalledUpdateIdentity } from "../../apps/desktop/src/update-poli
 const workspace = resolve(
   process.argv.find((a) => a.startsWith("--workspace="))?.slice(12) ?? "",
 );
-const area = join(workspace, ".tmp/g10-g11"),
+const area = resolve(
+    process.env.SESTINA_UPGRADE_AREA ?? join(workspace, ".tmp/g10-g11"),
+  ),
   installed = join(area, "installed"),
   projectRoot = join(area, "install-project");
 const reportPath = join(area, "installed-upgrade-result.json");
@@ -34,15 +36,18 @@ void app.whenReady().then(async () => {
     current.sequence ??= 0;
     const next = JSON.parse(
       await readFile(
-        join(workspace, "release/desktop/win32-x64/candidate-manifest.json"),
+        process.env.SESTINA_UPGRADE_MANIFEST ??
+          join(workspace, "release/desktop/win32-x64/candidate-manifest.json"),
         "utf8",
       ),
     );
-    const installer = join(
-      workspace,
-      "release/desktop/win32-x64",
-      `Sestina Candidate Setup ${next.version}.exe`,
-    );
+    const installer =
+      process.env.SESTINA_UPGRADE_INSTALLER ??
+      join(
+        workspace,
+        "release/desktop/win32-x64",
+        `Sestina Candidate Setup ${next.version}.exe`,
+      );
     const bytes = await readFile(installer),
       sha256 = createHash("sha256").update(bytes).digest("hex");
     const offer = {

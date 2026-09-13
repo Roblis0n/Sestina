@@ -17,6 +17,14 @@
 
 ## 1. Evidence classes used by this record
 
+**Current execution order (2026-09-13):** the user now authorizes local G12 work
+and subsequent G13 implementation/cutover after relevant G12 data-safety and
+functional checks pass. External platform, signing/update-trust and unavailable
+native observation remain formal acceptance/publication requirements, not a block
+on all local development. G10/G11 keep their truthful partial acceptance status.
+The preceding prerequisite-only continuation remains historical; current G12/G13
+implementation and local results are recorded separately as work proceeds.
+
 | Classification        | Exact meaning                                                                                            |
 | --------------------- | -------------------------------------------------------------------------------------------------------- |
 | `current_implemented` | Behavior exists in the baseline production tree and is supported by cited code or tests.                 |

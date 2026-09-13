@@ -7,6 +7,7 @@ import {
   Menu,
   powerMonitor,
   shell,
+  session,
 } from "electron";
 import { readFile, realpath, lstat, mkdir, chmod } from "node:fs/promises";
 import { join, resolve, extname, dirname, basename, relative } from "node:path";
@@ -68,6 +69,15 @@ function record(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 async function start() {
+  // Disable the session dictionary service before any web contents are created.
+  // webPreferences.spellcheck alone does not prevent its background download.
+  for (const localSession of [
+    session.defaultSession,
+    session.fromPartition("sestina-candidate"),
+  ]) {
+    localSession.setSpellCheckerEnabled(false);
+    localSession.setSpellCheckerLanguages([]);
+  }
   const data = app.getPath("userData");
   await mkdir(data, { recursive: true });
   const preferences = new DesktopPreferenceStore(data);

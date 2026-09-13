@@ -55,6 +55,7 @@
     "verify:public": "node scripts/run-public-shared-gates.mjs",
     "verify:platform": "node scripts/run-public-platform-gates.mjs",
     "verify:desktop:readiness": "node scripts/check-desktop-readiness.mjs",
+    "verify:target": "node scripts/run-target-gates.mjs",
     "pilot:build": "pnpm --filter @sestina/pilot build",
     "pilot:kit:build": "pnpm --filter @sestina/pilot build && node scripts/build-pilot-kit.mjs",
     "pilot:kit:verify": "pnpm --filter @sestina/pilot build && node scripts/verify-pilot-kit.mjs pilot-dist/sestina-pilot-kit",
