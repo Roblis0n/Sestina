@@ -429,6 +429,7 @@ try {
       resolve(values.installed),
       resolve(values.manifest),
       sourceCommit,
+      resolve(values.installer),
     ],
     (log) => {
       const checked = lastJson(log);
@@ -437,7 +438,11 @@ try {
         checked.identity.sourceCommit !== sourceCommit
       )
         throw Error("installed_identity_invalid");
-      return { count: checked.verifiedFiles, identity: checked.identity };
+      return {
+        count: checked.verifiedFiles,
+        identity: checked.identity,
+        outerSignature: checked.outerSignature,
+      };
     },
   );
   await execute(

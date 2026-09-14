@@ -1,9 +1,26 @@
-# Sestina internal desktop candidate
+# Sestina desktop distribution
 
-This Electron candidate uses the schema-25 Research Room and shared application
-service. It is not a public release. The published v0.2.0/schema-20 preview remains
-unchanged. G10/G11 acceptance is tracked in the
-[current evidence](../../docs/product/restructure/G1-G3-EVIDENCE.md#g12-entry-prerequisites-2026-09-13).
+This Electron application uses the schema-25 Research Room and shared application
+service. Current local packages remain unpublished candidates. The published
+v0.2.0/schema-20 preview is unchanged. Actual current results and formal gaps are
+tracked in the [merged evidence](../../docs/product/restructure/G1-G3-EVIDENCE.md).
+
+The product is **Sestina**, with distribution appId `org.sestina.desktop` and
+executable `Sestina.exe` (Windows), `Sestina.app` (macOS), or `sestina` (Linux).
+Candidate and release profiles package the same application. The established
+internal `Sestina Candidate` userData and encryption-service name is retained so
+existing settings and encrypted credentials remain readable. This storage name
+does not select a second product or restore any legacy research writer.
+
+New default installation paths use Sestina; the older internal candidate is not
+silently uninstalled or its project directories scanned. Select the project
+explicitly. Keep a verified old program for recovery until the new installation
+has been checked. Uninstall removes application files, keeps projects/backups
+and settings, and handles credentials separately through Provider settings.
+
+当前安装身份为 Sestina。既有设置与加密服务的内部名称保持兼容；改名不删除旧
+配置、凭据或研究项目。请显式打开项目，旧候选程序不会被自动卸载。卸载程序
+保留项目、备份与设置；已保存的密钥在 Provider 设置中单独删除。
 
 ## Use the candidate / 使用候选
 
@@ -90,10 +107,10 @@ Resources load through sestina://app/ without an HTTP server. Main owns files,
 leases, secrets, native dialogs and installation. Preload exposes named methods;
 the renderer consumes typed projections and uses the shared Kernel service.
 
-Package committed source with `pnpm desktop:package win32`, `darwin` or `linux`.
+Package committed source with `pnpm desktop:package win32 --profile candidate --version 0.3.0`, using `darwin` or `linux` on the corresponding system.
 Targets remain Windows x64, macOS arm64 and Linux x64. Each invocation creates a
 fresh staging directory and produces a deterministic unsigned core, manifest and
-installer under release/desktop/platform-arch. The companion pins Node 24.13.0,
+installer under release/desktop/platform-arch/version. The companion pins Node 24.13.0,
 ships its full license and includes platform native credential modules.
 Cross-building requires an explicit target Node runtime (SESTINA_COMPANION_NODE)
 and native dependencies. Prefer a target-system build; Windows cannot verify
@@ -172,6 +189,12 @@ local installation results; layout checks do not establish other-platform
 installation or a production signature.
 The separate `verify:platform` still checks Public Preview archives, and can
 replace release output while building. It is not target-desktop acceptance.
+Current CI and release preparation therefore use the native desktop workflow and
+shared `verify:target`; see [explicit signing, update configuration and version
+preparation](../../docs/release/README.md#current-desktop-distribution-preparation).
+Release mode never discovers an arbitrary signing identity from the machine.
+Production signing/update resources are required explicitly and their absence is
+an error, not a fallback to a claimed signed package.
 
 Inventory format is `{schema: 1, sourceCommit, artifacts, observations}`.
 `artifacts` maps `win32-x64`, `darwin-arm64` and `linux-x64` to installer

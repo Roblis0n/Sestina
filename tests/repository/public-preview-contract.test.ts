@@ -54,24 +54,27 @@ describe("public preview repository contract", () => {
     }
   });
 
-  it("pins the exact public-preview platform matrix and deterministic release assembly", () => {
+  it("pins native desktop CI while retaining deterministic historical release assembly", () => {
+    expect(
+      readFileSync(resolve(root, ".github/workflows/ci.yml"), "utf8"),
+    ).toContain("uses: ./.github/workflows/release.yml");
     const workflow = readFileSync(
-      resolve(root, ".github/workflows/ci.yml"),
+      resolve(root, ".github/workflows/release.yml"),
       "utf8",
     );
     for (const expected of [
       "windows-2025",
-      "expected-os: win32",
-      "expected-arch: x64",
+      "target: win32-x64",
       "macos-15",
-      "expected-os: darwin",
-      "expected-arch: arm64",
+      "target: darwin-arm64",
       "ubuntu-24.04",
-      "expected-os: linux",
-      "pnpm verify:platform ${{ matrix.expected-os }} ${{ matrix.expected-arch }}",
+      "target: linux-x64",
+      "node scripts/run-desktop-workflow.mjs",
     ]) {
       expect(workflow).toContain(expected);
     }
+    expect(workflow).not.toContain("pnpm verify:platform");
+    expect(workflow.match(/run: pnpm verify:public/g)).toHaveLength(1);
     for (const path of [
       "scripts/assemble-public-release.mjs",
       "scripts/verify-public-release.mjs",

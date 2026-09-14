@@ -678,7 +678,7 @@ async function start() {
       version: app.getVersion(),
       runtime: process.versions.electron,
       schema: 25,
-      published: false,
+      published: current.channel === "stable" ? "not_checked" : false,
       update: "not_checked",
     }),
     checkUpdate: () => updater.check(),

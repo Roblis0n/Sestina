@@ -371,3 +371,25 @@ and publication requirements. Record implementation, local verification, complet
 platform acceptance and publication separately. This changes execution order only;
 it does not amend frozen plans, historical evidence, user Authority or privacy rules.
 No public push, CI, tag, signing-service provisioning or Release is authorized.
+
+## Desktop distribution continuation, 2026-09-14
+
+The user authorizes finishing the remaining Windows observations and the formal
+desktop distribution implementation in parallel with resource preparation. This
+continues the accepted release/lifecycle plans; it creates no new product gate.
+Missing platform/signing/native resources remain formal acceptance requirements.
+
+The desktop product name is Sestina and the stable distribution appId is
+`org.sestina.desktop`. Candidate and release configurations build the same app.
+The previous internal `org.sestina.candidate` installer remains a historical
+installation, not an automatically removed user program. The established
+`Sestina Candidate` Chromium/userData/secure-storage service name is intentionally
+retained for existing settings and encryption continuity; it is not the product
+name presented by the installer. Research projects remain independently owned.
+
+The proposed next public version is `0.3.0`, pending one explicit confirmation
+before a public tag. Local versions use the parameterized base and source suffix;
+release mode requires an exact approved existing tag, clean detached source,
+explicit target signing resources and installed production update roots.
+Candidate mode never consumes production trust or inherited signing accounts.
+This version proposal does not alter published `v0.2.0` or its frozen evidence.

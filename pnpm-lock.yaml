@@ -427,33 +427,6 @@ importers:
         specifier: ^3.0.0
         version: 3.2.7(@types/debug@4.1.13)(@types/node@24.13.3)(jiti@2.7.0)(lightningcss@1.33.0)(supports-color@7.2.0)
 
-  spikes/mcp-v2:
-    devDependencies:
-      '@modelcontextprotocol/client':
-        specifier: 2.0.0
-        version: 2.0.0
-      '@modelcontextprotocol/server':
-        specifier: 2.0.0
-        version: 2.0.0
-      '@sestina/core':
-        specifier: workspace:*
-        version: link:../../packages/core
-      esbuild:
-        specifier: 0.28.2
-        version: 0.28.2
-      smol-toml:
-        specifier: 1.8.0
-        version: 1.8.0
-      typescript:
-        specifier: ^5.8.0
-        version: 5.9.3
-      vitest:
-        specifier: ^3.0.0
-        version: 3.2.7(@types/node@24.13.3)(lightningcss@1.33.0)(supports-color@7.2.0)
-      zod:
-        specifier: 4.2.0
-        version: 4.2.0
-
 packages:
 
   '@electron-internal/extract-zip@1.0.5':

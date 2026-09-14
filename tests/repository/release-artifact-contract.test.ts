@@ -39,9 +39,10 @@ describe("Research Room public-preview release entrypoints", () => {
     expect(workflow).toContain("windows-2025");
     expect(workflow).toContain("macos-15");
     expect(workflow).toContain("ubuntu-24.04");
-    expect(workflow).toContain("expected-arch: arm64");
-    expect(workflow).toContain("pnpm verify:platform");
-    expect(workflow).toContain("sestina-public-preview-");
+    expect(workflow).toContain("target: darwin-arm64");
+    expect(workflow).toContain("node scripts/run-desktop-workflow.mjs");
+    expect(workflow).toContain("sestina-desktop-");
+    expect(workflow).not.toContain("pnpm verify:platform");
     expect(workflow).not.toContain("draft-private-release");
     expect(workflow).not.toMatch(/gh\s+release\s+create/u);
     expect(workflow).not.toMatch(/npm\s+publish/u);

@@ -187,11 +187,70 @@ if (
   manifest.logoSha256
 )
   throw new Error("desktop_logo_mismatch");
+let outerSignature = { status: "not_observed" };
+if (process.argv[5]) {
+  const installer = resolve(process.argv[5]);
+  const installerSha256 = sha(await readFile(installer));
+  if (
+    manifest.envelope &&
+    !manifest.envelope.files?.some((file) => file.sha256 === installerSha256)
+  )
+    throw Error("desktop_envelope_bytes_mismatch");
+  if (process.platform === "win32") {
+    const inspect = (file) =>
+      JSON.parse(
+        execFileSync(
+          "powershell.exe",
+          [
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "$s=Get-AuthenticodeSignature -LiteralPath $env:SESTINA_SIGNATURE_TARGET; @{status=[string]$s.Status; signer=$s.SignerCertificate.Thumbprint} | ConvertTo-Json -Compress",
+          ],
+          {
+            windowsHide: true,
+            encoding: "utf8",
+            env: { ...process.env, SESTINA_SIGNATURE_TARGET: file },
+          },
+        ),
+      );
+    const actual = inspect(installer),
+      binary = inspect(binaryPath);
+    if (
+      identity.channel === "stable" &&
+      (actual.status !== "Valid" ||
+        binary.status !== "Valid" ||
+        actual.signer !== manifest.envelope?.signer ||
+        binary.signer !== actual.signer)
+    )
+      throw Error("desktop_release_signature_invalid");
+    outerSignature = {
+      ...actual,
+      binaryStatus: binary.status,
+      installerSha256,
+    };
+  } else if (identity.channel === "stable" && process.platform === "darwin") {
+    for (const [tool, args] of [
+      ["codesign", ["--verify", "--deep", "--strict", directory]],
+      ["spctl", ["--assess", "--type", "execute", directory]],
+      ["xcrun", ["stapler", "validate", directory]],
+      ["hdiutil", ["verify", installer]],
+    ])
+      execFileSync(tool, args, { stdio: "pipe" });
+    outerSignature = { status: "signed_notarized_verified", installerSha256 };
+  } else
+    outerSignature = {
+      status: manifest.signingStatus ?? "not_configured",
+      installerSha256,
+    };
+} else if (identity.channel === "stable")
+  throw Error("desktop_release_installer_required");
 console.log(
   JSON.stringify({
     passed: true,
     installedDirectory: directory,
     identity,
     verifiedFiles: expected.size,
+    outerSignature,
   }),
 );

@@ -61,3 +61,81 @@ integrity, not research correctness, Provider quality, adoption, or market value
 ## Internal desktop packaging
 
 The commands above describe the published preview. The new internal Electron recipe is documented in [desktop operations](../../apps/desktop/README.md). It records a real source commit/tree, lock hash, bundled runtime, schema, Logo hash and file manifest. Its unsigned core is separate from platform signing. Candidate packages are not public v0.2.0 tag artifacts; no public push, tag, Release, signing account or notarization service is used by the local candidate recipe.
+
+## Current desktop distribution preparation
+
+The next desktop version is proposed as **0.3.0**, not published or tagged.
+Local builds now use the Sestina product name, `org.sestina.desktop` appId,
+`Sestina.exe` / `Sestina.app` / `sestina`, and version-scoped artifact directories.
+The current source already defaults to schema 25 and rejects retired research
+writers. No real user project or existing installation is automatically moved.
+
+Release notes for this prepared desktop increment: one persistent Kernel Review
+flow; explicit user-authorized canonical changes; local migration, history,
+Memory/Forget, backup and recovery; packaged Node, read-only MCP and Skills;
+manual update with pre-upgrade backup and preserved-program recovery. This round
+adds explicit release identities, signing/notarization configuration, production
+update-root inputs, and the native desktop build matrix. Actual platform,
+signature and accessibility completion is reported in the
+[merged evidence index](../product/restructure/G1-G3-EVIDENCE.md), not inferred
+from these capabilities.
+
+Candidate build (no production trust or signing credentials are consumed):
+
+```text
+pnpm desktop:package win32 --profile candidate --version 0.3.0
+```
+
+The same recipe accepts `darwin` or `linux` on the matching native machine.
+Output is `release/desktop/<platform>-<arch>/<version>/`; historical Preview
+outputs are never overwritten by this recipe. Each output has installer,
+`candidate-manifest.json`, `unsigned-core.tar.gz` and `SHA256SUMS`. The manifest
+filename is retained as the existing verification interface for both profiles.
+Its embedded `signed: false` describes the unsigned core; `envelope` and
+`signingStatus` separately report actual outer verification.
+
+After the version/tag and signing actions are explicitly authorized, release
+mode runs from that tag's clean detached checkout:
+
+```text
+pnpm desktop:package win32 --profile release --version 0.3.0 --tag v0.3.0 --release-config <private-local-json>
+```
+
+The local JSON supplies `update.source` (public HTTPS URL without embedded
+credentials/query/fragment), `update.roots` (named Ed25519 **public** PEM keys)
+and target-specific inputs below. No private key or production configuration is
+committed. Missing or mismatched resources stop release mode before packaging;
+it never silently produces an allegedly signed release.
+
+| Target | Explicit signing input and actual verification |
+| --- | --- |
+| Windows x64 | `signing.target=win32`, local `certificateFile`, `certificateSha256`, exact `publisherName`, signer `thumbprint`, `passwordEnv=SESTINA_SIGNING_PASSWORD`. Builder signs the installer/application; Authenticode must be Valid and match the selected signer. |
+| macOS arm64 | `signing.target=darwin`, `certificateFile`, `certificateSha256`, exact Developer ID `identity`, `teamId`, explicit notary `keychainProfile`, same password variable. App notarization runs after signing and before DMG assembly; codesign, spctl, stapler and hdiutil verification must pass. |
+| Linux x64 | `linuxPolicy=checksum-provenance-signed-update`. AppImage source and checksums are verified; no Windows/macOS code-signature claim is made. Production update metadata still requires an installed-root Ed25519 signature. |
+
+`scripts/sign-desktop-update.mjs` consumes an explicit verified release manifest,
+installer, `--private-key`, `--key-id` and `--output`. It checks that the private
+key matches an installed public root, binds target/version/schema/migration/core
+and installer bytes, then creates the exact signed offer and hash-addressed
+artifact layout. It does not upload. Test signing keys remain confined to test
+construction. This command is an authorized signing action, not an automatic
+candidate build step.
+
+CI and manually dispatched release preparation share `release.yml`: common
+public checks run once; Windows, Apple-silicon macOS and Linux jobs build native
+desktop artifacts and invoke `verify:target`. An additional OS runs its own
+SQLite/process foundation checks. The platform driver uses actual NSIS, DMG or
+AppImage bytes and records whether it installed or extracted them. It does not
+claim an observed native lifecycle when no bound lifecycle result was supplied.
+Missing lifecycle/observations keep acceptance incomplete; artifact upload retains
+the real result even when a job fails. The workflow contains no public Release
+or tag creation step.
+
+Signed dispatch uses explicitly configured protected environments
+`desktop-release-win32-x64`, `desktop-release-darwin-arm64`, and
+`desktop-release-linux-x64`. Inputs are `SESTINA_RELEASE_CONFIG_JSON`,
+`SESTINA_SIGNING_PASSWORD` and `SESTINA_SIGNING_CERTIFICATE_BASE64`; macOS also
+requires `SESTINA_NOTARY_KEY_BASE64`, `SESTINA_NOTARY_KEY_ID` and
+`SESTINA_NOTARY_ISSUER`. Keys/certificates are written only to private runner
+temporary files. Candidate CI receives none of these resources. Do not dispatch
+the remote workflow or configure external services without user authorization.

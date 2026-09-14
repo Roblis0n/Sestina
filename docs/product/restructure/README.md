@@ -2,7 +2,7 @@
 title: Accepted post-0.2 product restructure authority
 authority_status: accepted_current_target
 accepted_at: 2026-09-01
-implementation_status: g8_g9_completed
+implementation_status: local_g12_g13_completed_formal_acceptance_partial
 baseline_release: v0.2.0
 baseline_commit: caf893db7928bab91c4098eb04a7e4a8d4c62ffe
 decision_owner: user
@@ -153,10 +153,12 @@ four-entry candidate interface are verified, including real browser visual, moti
 and interaction acceptance. Agent Corrector's draft-only integration was completed
 in G7 and is connected to this Review flow. The exact G10 entry is in
 [operations and continuation](G1-G3-OPERATIONS.md#exact-g10-continuation).
-G10/G11 are current partial work: Electron assembly, restricted IPC and local
-candidate flows are implemented, with remaining acceptance tracked in the status
-record. G12/G13 remain downstream. The shipped preview default stays unchanged;
-final migration, default and release cutover retain their assigned gates. See
+G10/G11 retain partial formal acceptance. G12/G13 local implementation and Windows
+delivery are complete, including the default desktop and retired writer cutover.
+The 2026-09-14 continuation finishes remaining Windows observations and implements
+the formal desktop distribution chain under the user's local-work authorization.
+Platform/signing/native acceptance and publication remain separately tracked.
+The publicly shipped preview stays unchanged. See
 [implementation status](IMPLEMENTATION-STATUS.md) for exact commits and evidence.
 
 ## Current release versus accepted target
