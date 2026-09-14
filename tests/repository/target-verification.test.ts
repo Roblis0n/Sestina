@@ -16,6 +16,10 @@ it("source-reviewed reuse keeps test-only repairs separate and invalidates chang
     expect(targetCheckAffected(check, ["tests/post-0.2/discovery.json"])).toBe(true);
   for (const check of ["journeys", "performance", "artifact"])
     expect(targetCheckAffected(check, ["tests/post-0.2/discovery.json"])).toBe(false);
+  for (const check of ["foundation", "journeys", "performance", "artifact"])
+    expect(targetCheckAffected(check, ["scripts/lib/installed-resource-metrics.mjs"])).toBe(false);
+  for (const check of ["public", "resources"])
+    expect(targetCheckAffected(check, ["scripts/lib/installed-resource-metrics.mjs"])).toBe(true);
   expect(
     targetCheckAffected("performance", [
       "apps/research-room/test/production-entry.test.ts",

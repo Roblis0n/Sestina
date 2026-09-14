@@ -1289,3 +1289,23 @@ The event-decoding runtime is
 `6b5dd243641ea7af1a8ef766b8c6565bf0822660`. Its four focused boundary cases and
 research-store type check passed. Actual package/lifecycle/performance results
 for this source are recorded below only after execution.
+
+This runtime's first complete Windows aggregate passed locally: cold/warm
+startup p95 1964.562/1954.089 ms; canonical transaction 375.203 ms, all unchanged
+limits satisfied. Original samples and the untouched large seed are in
+`.tmp/distribution-event-final/performance/`. All 740 public assertions, installed
+journeys, resource/scroll/maintenance samples, visual scenarios, lifecycle,
+reinstall and independent core reconstruction passed. Formal acceptance remains
+`not_established` and publication remains false.
+
+The last native workflow closeout fixes a verification-only Windows dependency:
+installed resource sampling now selects Get-Process handles on Windows, procfs
+FD entries on Linux, and PID/FD-only lsof output on macOS. It never enumerates
+other applications or records open-file paths. Windows handles and POSIX FDs
+are identified separately; missing/cross-process/invalid observations fail.
+Memory units follow [Electron MemoryInfo](https://www.electronjs.org/docs/latest/api/structures/memory-info),
+and selected macOS output fields follow the [lsof manual](https://github.com/lsof-org/lsof/blob/master/Lsof.8).
+Two platform-branch/negative tests and five evidence-boundary cases pass locally;
+they do not establish actual macOS/Linux measurements. Only public/resource
+verification is invalidated; installed runtime, performance and visual bytes
+remain identical. The common final entry reuses their bound evidence.

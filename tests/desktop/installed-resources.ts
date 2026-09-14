@@ -10,7 +10,7 @@ import {
   stat,
 } from "node:fs/promises";
 import { resolve, join, dirname } from "node:path";
-import { execFileSync } from "node:child_process";
+import { readInstalledProcessResources } from "../../scripts/lib/installed-resource-metrics.mjs";
 
 const executablePath = process.env.SESTINA_TEST_INSTALLED_EXECUTABLE;
 if (!executablePath) throw Error("installed_executable_required");
@@ -103,19 +103,7 @@ try {
       ),
       activeHandles: (process as any)._getActiveHandles().length,
     }));
-    const ids = main.metrics.map((metric) => metric.pid);
-    const handles = JSON.parse(
-      execFileSync(
-        "powershell.exe",
-        [
-          "-NoProfile",
-          "-NonInteractive",
-          "-Command",
-          `Get-Process -Id ${ids.join(",")} -ErrorAction Stop | Select-Object Id,HandleCount,WorkingSet64,PeakWorkingSet64 | ConvertTo-Json -Compress`,
-        ],
-        { windowsHide: true, encoding: "utf8" },
-      ),
-    );
+    const handles = readInstalledProcessResources(main.metrics);
     return { main, handles, dom: await cdp.send("Memory.getDOMCounters") };
   };
   for (let i = 0; i < 20; i++) {
