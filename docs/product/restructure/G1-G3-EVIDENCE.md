@@ -1179,3 +1179,29 @@ No remote push, public tag, remote CI, external signing service or Release was
 performed. Published `v0.2.0`/schema 20 and its historical artifacts/checksums are
 unchanged. Publication is not the sole outstanding action while these formal
 acceptance requirements remain missing.
+
+### Desktop distribution continuation, 2026-09-14
+
+The authorized local distribution implementation now supplies a single Sestina
+product identity, explicit candidate/release profiles, version parameters,
+explicit signing inputs, installed production update trust and native desktop
+workflows. The public version proposal is 0.3.0; no public tag is created.
+Runtime `151ae077153edaa1f6915e0f88e31df408f925cf` includes the actual frozen-lock
+repair: the retired `spikes/mcp-v2` importer referenced a missing dependency and
+prevented a clean checkout from installing. The first distribution aggregate
+at `.tmp/distribution-final/result.json` remains failed for its own source;
+its two obsolete Preview-workflow expectations are repaired, not relabeled passes.
+
+The native helper was refreshed against the installed Sestina executable but
+again returned another application's pixels under Sestina's title. No native
+input was attempted on that state. Actual native picker, confirmation, credential,
+wizard, continuous motion and assistive-technology observations remain pending.
+
+For whole-startup network observation, the supported Windows Performance
+Recorder was configured before application startup with the documented
+[ProcessExeFilter](https://learn.microsoft.com/en-us/windows-hardware/test/wpt/eventprovider)
+for `Sestina.exe` and TCP/IP connection/close metadata, without packet capture.
+Starting this scope returned `0x80070005` (access denied); no trace was established.
+Packet Monitor's driver was likewise inaccessible. The local profile is
+`.tmp/sestina-startup.wprp`. Existing Chromium and post-bridge socket evidence
+retains its limited scope; no OS-wide or complete startup observation is claimed.
