@@ -1258,3 +1258,9 @@ validated during each SQL snapshot read, using weak keys for module-owned deeply
 frozen snapshots only. New SQL reads, event chains, columns, revisions and atomic
 commit checks still execute. A caller's shallow-frozen replacement is rehashed
 and rejected after mutation. The new runtime requires its own installed evidence.
+
+The snapshot-hash repair is committed as
+`2051eb3d819be981f5e725ef912828561acc2d41`. Its focused verification passed
+4 serialization/changed-SQL/forged-snapshot cases, 21 atomic/Authority/privacy
+transaction cases, the research-store type check and 5 target-evidence boundary
+cases. The existing discovery declaration now includes the serialization cases.
