@@ -138,6 +138,7 @@
     "workspace-performance",
     "large-project-transaction",
     "validated-kernel-reads",
+    "kernel-serialization",
     "desktop-cutover-client",
     "legacy-cutover",
     "legacy-public-entry",

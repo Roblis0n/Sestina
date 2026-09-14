@@ -3,6 +3,8 @@ import { withTransaction } from "@sestina/storage";
 import {
   createKernelRepositories,
   readCanonicalState,
+  readKernelSnapshot,
+  projectKernelContext,
 } from "@sestina/research-store";
 import { applicationFixture, session } from "../application-fixtures.js";
 
@@ -47,6 +49,14 @@ it("warm decoded reads still reject changed bytes and mismatched SQL columns and
       }),
     ).toThrow();
     expect(readCanonicalState(db, f.projectId)).toEqual(state);
+    const snapshot = readKernelSnapshot(db, f.projectId);
+    // A caller's shallow-frozen replacement is never an owned SQL snapshot.
+    const replacement = { ...snapshot.state, metadata: [...snapshot.state.metadata] };
+    const forged = { ...snapshot, state: Object.freeze(replacement) };
+    projectKernelContext(forged, "Synthetic intact context");
+    replacement.metadata.push({ changed: "Not authorized by the event head" });
+    expect(() => projectKernelContext(forged, "Synthetic altered context")).toThrow("corrupt_state");
+    projectKernelContext(snapshot, "Original immutable context remains valid");
   } finally {
     await f.cleanup();
   }

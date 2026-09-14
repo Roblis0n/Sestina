@@ -1244,3 +1244,17 @@ invalid key after the initial input check was reproduced as a failing test and
 is now rejected. This final correction preserves the original canonical byte
 format and the bounded, explicitly cleared cache; no acceptance threshold changed.
 The new installer is under `release/desktop/win32-x64/0.3.0-g10.79865fa3/`.
+
+That package's aggregate in `.tmp/distribution-current/result.json` remains
+failed: cold/warm startup p95 improved to 1882.789/1814.058 ms, but canonical
+transaction p95 was 515.012 ms against 500 ms. Its independent unsigned core
+rebuild matched exactly and actual upgrade/uninstall/reinstall passed. The
+public gate also correctly rejected the newly added serialization test missing
+from the existing discovery declaration; that declaration is now repaired.
+No failed result is repackaged as acceptance. Actual installed transaction CPU
+profiles in `.tmp/transaction-cpu/` located redundant serialization of the same
+immutable state. The next repair retains the hash of the canonical bytes already
+validated during each SQL snapshot read, using weak keys for module-owned deeply
+frozen snapshots only. New SQL reads, event chains, columns, revisions and atomic
+commit checks still execute. A caller's shallow-frozen replacement is rehashed
+and rejected after mutation. The new runtime requires its own installed evidence.

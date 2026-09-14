@@ -33,6 +33,7 @@ import { redactKernelMemoryCopies } from "./privacy.js";
 import {
   appendKernelEvent,
   changedKernelObjects,
+  hashCanonicalState,
   readCanonicalState,
   readKernelSnapshot,
   validateKernelChain,
@@ -409,7 +410,7 @@ export function createKernelUnitOfWork(
               );
             options.faultInjection?.("review_terminal");
             const after = readCanonicalState(db, command.projectId);
-            const canonicalHash = kernelHash(after);
+            const canonicalHash = hashCanonicalState(after);
             appendKernelEvent(db, {
               schemaVersion: "2.0.0",
               id: command.eventId,

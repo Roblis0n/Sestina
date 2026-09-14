@@ -36,6 +36,8 @@ export function targetCheckAffected(id, paths) {
     )
       return id === "public";
     if (path === "tests/post-0.2/process-harness.ts") return id === "public";
+    if (path === "tests/post-0.2/discovery.json")
+      return id === "public" || id === "foundation";
     const installed = /^tests\/desktop\/installed-([\w-]+)\.ts$/.exec(path);
     if (installed) return id === installed[1];
     if (/^tests\/desktop\/.*\.test\.ts$/.test(path)) return id === "desktop";

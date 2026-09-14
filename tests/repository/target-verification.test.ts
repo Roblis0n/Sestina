@@ -12,6 +12,10 @@ import {
 } from "../../scripts/lib/target-verification.mjs";
 
 it("source-reviewed reuse keeps test-only repairs separate and invalidates changed runtime or check implementations", () => {
+  for (const check of ["public", "foundation"])
+    expect(targetCheckAffected(check, ["tests/post-0.2/discovery.json"])).toBe(true);
+  for (const check of ["journeys", "performance", "artifact"])
+    expect(targetCheckAffected(check, ["tests/post-0.2/discovery.json"])).toBe(false);
   expect(
     targetCheckAffected("performance", [
       "apps/research-room/test/production-entry.test.ts",

@@ -2,6 +2,7 @@ import {
   KernelFault,
   freezeKernel,
   kernelCanonicalJson,
+  kernelBytesHash,
   kernelHash,
   kernelId,
   kernelInteger,
@@ -148,6 +149,13 @@ export interface KernelCanonicalState {
   readonly outcomes: readonly KernelJson[];
   readonly metadata: readonly KernelJson[];
 }
+// Only snapshots assembled, validated and deeply frozen by readCanonicalState
+// are admitted. SQL is still read and verified on every call. Weak keys retain
+// neither a project nor its content after the caller releases the snapshot.
+const canonicalStateHashes = new WeakMap<KernelCanonicalState, string>();
+export function hashCanonicalState(state: KernelCanonicalState): string {
+  return canonicalStateHashes.get(state) ?? kernelHash(state);
+}
 export interface KernelSnapshot {
   readonly head: KernelHead;
   readonly state: KernelCanonicalState;
@@ -280,7 +288,7 @@ export function readCanonicalState(
   // Validate and deeply freeze it without serializing/cloning the entire project
   // a second time. No caller-owned input or mutable repository handle is retained.
   const state = { projectId, objects, outcomes, metadata };
-  kernelCanonicalJson(state);
+  const encoded = kernelCanonicalJson(state);
   const freezeOwned = (value: unknown): void => {
     if (value && typeof value === "object") {
       Object.values(value).forEach(freezeOwned);
@@ -288,6 +296,7 @@ export function readCanonicalState(
     }
   };
   freezeOwned(state);
+  canonicalStateHashes.set(state, kernelBytesHash(encoded));
   return state;
 }
 
@@ -360,7 +369,7 @@ export function validateKernelChain(
     head.revision !== expected - 1 ||
     head.eventId !== eventId ||
     head.canonicalHash !== previous ||
-    kernelHash(state) !== head.canonicalHash
+    hashCanonicalState(state) !== head.canonicalHash
   )
     throw new KernelFault("corrupt_state");
   return head;
@@ -437,7 +446,7 @@ export function projectKernelContext(
   kernelRecord(selection, ["evidenceIds", "issueIds", "memory"]);
   if (
     snapshot.head.projectId !== snapshot.state.projectId ||
-    snapshot.head.canonicalHash !== kernelHash(snapshot.state)
+    snapshot.head.canonicalHash !== hashCanonicalState(snapshot.state)
   )
     throw new KernelFault("corrupt_state");
   for (const [kind, refs, prefix] of [
