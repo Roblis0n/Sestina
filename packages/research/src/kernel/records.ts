@@ -157,6 +157,9 @@ export function freezeKernel<T>(value: T): T {
   }
   freeze(cloned);
   if (cloned !== null && typeof cloned === "object") ownedFrozenRoots.add(cloned);
+  // A getter may change between validation and JSON cloning. The private clone
+  // must itself pass before it can escape with the trusted immutable marker.
+  kernelCanonicalJson(cloned);
   return cloned;
 }
 export function kernelRecord(

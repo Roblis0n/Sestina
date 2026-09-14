@@ -30,6 +30,12 @@ it("caller-frozen wrappers and changing getters cannot reuse stale canonical byt
   let reads = 0;
   const changing = freezeKernel({ get value() { return ++reads; } });
   expect(kernelCanonicalJson(changing)).toBe(JSON.stringify(changing));
+  let changedReads = 0;
+  expect(() => freezeKernel({
+    get value() {
+      return ++changedReads === 1 ? "safe" : { constructor: "invalid after cloning" };
+    },
+  })).toThrow("invalid_record");
 });
 
 it("previously serialized immutable children never bypass depth, size or cycle checks", () => {
