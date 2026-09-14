@@ -217,7 +217,7 @@ for (const language of ["en", "zh-CN"])
           name: en ? "MCP configuration (JSON)" : "MCP 配置（JSON）",
           exact: true,
         }),
-      ).toHaveValue(/node\.exe/);
+      ).toHaveValue(process.platform === "win32" ? /node\.exe/ : /\/node"/);
       await size(1280);
       await shot("integration-1280");
       await link(en ? "Today / Review" : "今日 / 审议").click();
