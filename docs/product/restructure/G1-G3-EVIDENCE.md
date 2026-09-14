@@ -1192,10 +1192,13 @@ prevented a clean checkout from installing. The first distribution aggregate
 at `.tmp/distribution-final/result.json` remains failed for its own source;
 its two obsolete Preview-workflow expectations are repaired, not relabeled passes.
 
-The native helper was refreshed against the installed Sestina executable but
+The native helper was refreshed against this round's installed `49f5b6b5`
+Sestina executable but
 again returned another application's pixels under Sestina's title. No native
 input was attempted on that state. Actual native picker, confirmation, credential,
 wizard, continuous motion and assistive-technology observations remain pending.
+The unchanged unreliable surface was not retried for `151ae077`; that
+package has separate actual renderer observations, not a claimed native pass.
 
 For whole-startup network observation, the supported Windows Performance
 Recorder was configured before application startup with the documented
@@ -1205,3 +1208,30 @@ Starting this scope returned `0x80070005` (access denied); no trace was establis
 Packet Monitor's driver was likewise inaccessible. The local profile is
 `.tmp/sestina-startup.wprp`. Existing Chromium and post-bridge socket evidence
 retains its limited scope; no OS-wide or complete startup observation is claimed.
+
+The `151ae077` installer actually passed isolated upgrade and current-package
+uninstall/reinstall, but its full local aggregate did not pass. Its first warm
+startup p95 was 2096.847 ms; a controlled repeat was 2493.449 ms and also measured
+canonical transaction p95 521.730 ms. Limits remained 2000/500 ms. Resource
+acceptance correctly stopped on the failed performance prerequisite. Full first
+failure samples are retained in `.tmp/distribution-delivery/attempts/initial/`;
+the repeated result and original large seeds remain in that delivery directory.
+Neither attempt is relabeled as passed.
+
+Focused actual installed startup/CPU diagnostics (`.tmp/startup-breakdown/`,
+`.tmp/startup-readiness/`, `.tmp/startup-storage/`, `.tmp/startup-cpu/`) located
+repeated canonical normalization/freezing during project opening. Previous/new
+program and storage-position comparisons did not establish an identity or disk
+regression; assertion polling did not explain the failure. These are diagnostic
+samples, not replacement p95 acceptance series.
+
+Runtime `c1707b19e576e9a67bc13449b75abc4f992dd1d4` removes duplicate work only for
+JSON-cloned, deeply frozen values owned by the Kernel's record module. Its weak
+normalization cache has conservative byte/entry bounds and clears with existing
+Forget/project-close read-cache clearing. It cannot supply database state or
+authority: current SQL bytes, columns, relations, depth and total encoded-size
+checks still run. Caller-frozen wrappers/getters never qualify. Canonical byte
+compatibility, mutable/getter inputs, nested limits and tampered SQL protections
+passed before rebuilding. The new actual package requires its own installed
+acceptance; earlier `151ae077` screenshots and performance are not reused as
+evidence for the changed runtime.
