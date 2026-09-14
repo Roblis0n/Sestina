@@ -1,6 +1,6 @@
 import { spawnSync, execFileSync } from "node:child_process";
 import { resolve } from "node:path";
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import {
   assertExecutedTests,
   targetCheckAffected,
@@ -213,3 +213,33 @@ for (const script of [
 process.stdout.write(
   "\n[public shared] all deterministic public gates passed\n",
 );
+if (process.env.SESTINA_VERIFICATION_OUTPUT) {
+  const directory = resolve(process.env.SESTINA_VERIFICATION_OUTPUT);
+  const reports = ["public-unit.json", "foundation.json"].map((path) => ({
+    path,
+    sha256: fileSha256(resolve(directory, path)),
+    count: assertExecutedTests(
+      JSON.parse(readFileSync(resolve(directory, path), "utf8")),
+    ),
+  }));
+  writeFileSync(
+    resolve(directory, "shared-public.json"),
+    JSON.stringify(
+      {
+        schema: 1,
+        passed: true,
+        sourceCommit: execFileSync("git", ["rev-parse", "HEAD"], {
+          cwd: root,
+          windowsHide: true,
+          encoding: "utf8",
+        }).trim(),
+        platform: process.platform,
+        arch: process.arch,
+        node: process.version,
+        reports,
+      },
+      null,
+      2,
+    ),
+  );
+}

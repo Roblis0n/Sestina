@@ -4,6 +4,7 @@ import { createWriteStream, readFileSync, existsSync } from "node:fs";
 import { mkdir, readFile, writeFile, readdir } from "node:fs/promises";
 import { resolve, join, dirname, relative } from "node:path";
 import { parseArgs } from "node:util";
+import { desktopExecutable } from "./lib/desktop-distribution.mjs";
 import {
   fileSha256,
   inspectDesktopReadiness,
@@ -26,6 +27,7 @@ const { values } = parseArgs({
     readiness: { type: "string" },
     "lifecycle-result": { type: "string" },
     "visual-observation": { type: "string" },
+    "shared-public": { type: "string" },
     tag: { type: "string" },
     repository: { type: "string" },
   },
@@ -67,12 +69,10 @@ const manifest = JSON.parse(await readFile(resolve(values.manifest), "utf8"));
 const sourceCommit = manifest.sourceCommit;
 const installerSha256 = fileSha256(resolve(values.installer));
 const artifact = `${fileSha256(resolve(values.manifest))}:${installerSha256}`;
-const executable =
-  manifest.platform === "win32"
-    ? join(resolve(values.installed), "Sestina Candidate.exe")
-    : manifest.platform === "darwin"
-      ? join(resolve(values.installed), "Contents/MacOS/Sestina Candidate")
-      : join(resolve(values.installed), "sestina-candidate");
+const executable = join(
+  resolve(values.installed),
+  desktopExecutable(manifest, manifest.platform),
+);
 const environment = {
   platform: process.platform,
   arch: process.arch,
@@ -339,34 +339,88 @@ try {
       }
     }
   }
-  await execute(
-    "public",
-    [join(root, "scripts/run-public-shared-gates.mjs")],
-    async (log) => {
-      if (!log.includes("all deterministic public gates passed"))
-        throw Error("public_gate_incomplete");
-      const unit = assertExecutedTests(
-        await readJson(join(output, "public-unit.json")),
+  if (values["shared-public"]) {
+    const path = resolve(values["shared-public"]);
+    const shared = await readJson(path);
+    if (
+      !shared.passed ||
+      shared.sourceCommit !== verificationCommit ||
+      shared.node !== process.version ||
+      shared.reports?.length !== 2
+    )
+      throw Error("shared_public_source_mismatch");
+    let count = 0;
+    if (
+      shared.reports
+        .map((item) => item.path)
+        .sort()
+        .join(",") !== "foundation.json,public-unit.json"
+    )
+      throw Error("shared_public_reports_missing");
+    for (const report of shared.reports) {
+      const reportPath = join(dirname(path), report.path);
+      if (fileSha256(reportPath) !== report.sha256)
+        throw Error("shared_public_report_changed");
+      const actual = assertExecutedTests(await readJson(reportPath));
+      if (actual !== report.count) throw Error("shared_public_count_mismatch");
+      count += actual;
+    }
+    result.checks.public = {
+      status: "passed",
+      count,
+      reused: true,
+      proof: shared,
+      evidenceSha256: fileSha256(path),
+    };
+    // The common public gate ran once. Native SQLite/process coverage still runs
+    // on each additional OS, using the existing foundation suite.
+    if (shared.platform !== process.platform || shared.arch !== process.arch) {
+      await execute(
+        "native-foundation",
+        [
+          join(root, "node_modules/vitest/vitest.mjs"),
+          "run",
+          "--config",
+          "tests/post-0.2/vitest.foundation.config.ts",
+          "--reporter=json",
+          `--outputFile=${join(output, "native-foundation.json")}`,
+        ],
+        async () => ({
+          count: assertExecutedTests(
+            await readJson(join(output, "native-foundation.json")),
+          ),
+        }),
       );
-      const foundation = assertExecutedTests(
-        await readJson(join(output, "foundation.json")),
-      );
-      return {
-        count: unit + foundation,
-        unit,
-        foundation,
-        foundationEvidenceSource: foundationReuse
-          ? (await readJson(foundationReuse)).sourceCommit
-          : verificationCommit,
-        scope: "shared-public-and-kernel-foundation-not-preview-installation",
-      };
-    },
-    false,
-    {
-      SESTINA_VERIFICATION_OUTPUT: output,
-      SESTINA_FOUNDATION_REUSE: foundationReuse,
-    },
-  );
+    }
+  } else
+    await execute(
+      "public",
+      [join(root, "scripts/run-public-shared-gates.mjs")],
+      async (log) => {
+        if (!log.includes("all deterministic public gates passed"))
+          throw Error("public_gate_incomplete");
+        const unit = assertExecutedTests(
+          await readJson(join(output, "public-unit.json")),
+        );
+        const foundation = assertExecutedTests(
+          await readJson(join(output, "foundation.json")),
+        );
+        return {
+          count: unit + foundation,
+          unit,
+          foundation,
+          foundationEvidenceSource: foundationReuse
+            ? (await readJson(foundationReuse)).sourceCommit
+            : verificationCommit,
+          scope: "shared-public-and-kernel-foundation-not-preview-installation",
+        };
+      },
+      false,
+      {
+        SESTINA_VERIFICATION_OUTPUT: output,
+        SESTINA_FOUNDATION_REUSE: foundationReuse,
+      },
+    );
   await execute(
     "artifact",
     [

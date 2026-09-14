@@ -3,6 +3,7 @@ import { readFile, readdir, lstat } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { join, resolve, normalize } from "node:path";
+import { desktopExecutable } from "./lib/desktop-distribution.mjs";
 import {
   desktopResources,
   assertDesktopBinary,
@@ -45,15 +46,43 @@ for (const key of [
   "packageManager",
   "buildCommand",
   "migrationSourceSha256",
+  "productName",
+  "appId",
+  "executableName",
+  "storageName",
+  "profile",
+  "baseVersion",
+  "publicTag",
 ])
   if (identity[key] !== manifest[key])
     throw new Error(`desktop_identity_mismatch:${key}`);
 if (
-  identity.channel !== "internal_candidate" ||
+  !["internal_candidate", "stable"].includes(identity.channel) ||
   identity.signed !== false ||
   !/^[a-f0-9]{40}$/.test(identity.sourceCommit)
 )
   throw new Error("candidate_identity_invalid");
+if (JSON.stringify(identity.update) !== JSON.stringify(manifest.update))
+  throw Error("desktop_update_identity_mismatch");
+if (
+  identity.profile &&
+  (identity.productName !== "Sestina" ||
+    identity.appId !== "org.sestina.desktop" ||
+    identity.storageName !== "Sestina Candidate")
+)
+  throw Error("desktop_product_identity_invalid");
+if (
+  identity.channel === "stable" &&
+  (identity.profile !== "release" ||
+    identity.publicTag !== `v${identity.version}` ||
+    !Object.keys(identity.update?.roots ?? {}).length)
+)
+  throw Error("desktop_release_identity_invalid");
+if (
+  identity.channel === "internal_candidate" &&
+  (identity.update?.source || Object.keys(identity.update?.roots ?? {}).length)
+)
+  throw Error("candidate_production_trust_refused");
 const git = (...args) =>
   execFileSync("git", args, { cwd: root, windowsHide: true });
 const expectedSource =
@@ -80,11 +109,7 @@ if (
   throw new Error("desktop_package_version_mismatch");
 const binaryPath = join(
   directory,
-  identity.platform === "win32"
-    ? "Sestina Candidate.exe"
-    : identity.platform === "darwin"
-      ? "Contents/MacOS/Sestina Candidate"
-      : "sestina-candidate",
+  desktopExecutable(identity, identity.platform),
 );
 assertDesktopBinary(
   await readFile(binaryPath),

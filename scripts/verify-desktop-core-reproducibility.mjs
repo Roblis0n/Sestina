@@ -22,6 +22,18 @@ execFileSync(
   [
     join(root, "scripts/package-desktop.mjs"),
     process.platform,
+    "--profile",
+    first.profile ?? "candidate",
+    "--version",
+    first.baseVersion ?? first.version.split("-")[0],
+    ...(first.profile === "release"
+      ? [
+          "--tag",
+          first.publicTag,
+          "--release-config",
+          process.env.SESTINA_RELEASE_CONFIG ?? "",
+        ]
+      : []),
     "--core-only",
     "--output",
     output,

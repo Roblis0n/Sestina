@@ -1,19 +1,30 @@
-name: Sestina Public Preview Artifact Matrix
-
+name: Sestina Desktop Distribution
 on:
+  workflow_call:
   workflow_dispatch:
-
+    inputs:
+      profile:
+        type: choice
+        options: [candidate, release]
+        default: candidate
+        description: Release requires an approved existing tag and protected signing resources
+      version:
+        type: string
+        default: "0.3.0"
+        description: Proposed base version; dispatch does not create a tag
+      tag:
+        type: string
+        description: Exact existing approved release tag (release profile only)
 permissions:
   contents: read
-
 jobs:
-  shared-deterministic-gates:
-    name: Shared public-preview gates
+  shared:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          ref: ${{ inputs.tag || github.sha }}
       - uses: pnpm/action-setup@v6
         with:
           version: 11.16.0
@@ -24,31 +35,33 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm verify:public
-
-  platform-public-preview:
-    name: Public preview · ${{ matrix.platform }}
-    needs: shared-deterministic-gates
+        env:
+          SESTINA_VERIFICATION_OUTPUT: .tmp/shared-public
+      - uses: actions/upload-artifact@v7
+        with:
+          name: desktop-shared-public
+          path: .tmp/shared-public/*.json
+          include-hidden-files: true
+          if-no-files-found: error
+  desktop:
+    needs: shared
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: windows-x64
+          - target: win32-x64
             runner: windows-2025
-            expected-os: win32
-            expected-arch: x64
-          - platform: macos-arm64
+          - target: darwin-arm64
             runner: macos-15
-            expected-os: darwin
-            expected-arch: arm64
-          - platform: ubuntu-x64
+          - target: linux-x64
             runner: ubuntu-24.04
-            expected-os: linux
-            expected-arch: x64
     runs-on: ${{ matrix.runner }}
+    environment: ${{ inputs.profile == 'release' && format('desktop-release-{0}', matrix.target) || 'desktop-candidate' }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          ref: ${{ inputs.tag || github.sha }}
       - uses: pnpm/action-setup@v6
         with:
           version: 11.16.0
@@ -58,10 +71,39 @@ jobs:
           node-version: "24.13.0"
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm verify:platform ${{ matrix.expected-os }} ${{ matrix.expected-arch }}
-      - uses: actions/upload-artifact@v7
+      - uses: actions/download-artifact@v8
         with:
-          name: sestina-public-preview-${{ matrix.platform }}-${{ github.sha }}
-          path: release/*
+          name: desktop-shared-public
+          path: .tmp/shared-public
+      - name: Native desktop build, installation and common acceptance
+        env:
+          DESKTOP_PROFILE: ${{ inputs.profile || 'candidate' }}
+          DESKTOP_VERSION: ${{ inputs.version || '0.3.0' }}
+          DESKTOP_TAG: ${{ inputs.tag }}
+          SESTINA_RELEASE_CONFIG_JSON: ${{ inputs.profile == 'release' && secrets.SESTINA_RELEASE_CONFIG_JSON || '' }}
+          SESTINA_SIGNING_PASSWORD: ${{ inputs.profile == 'release' && secrets.SESTINA_SIGNING_PASSWORD || '' }}
+          SESTINA_SIGNING_CERTIFICATE_BASE64: ${{ inputs.profile == 'release' && secrets.SESTINA_SIGNING_CERTIFICATE_BASE64 || '' }}
+          SESTINA_NOTARY_KEY_BASE64: ${{ inputs.profile == 'release' && secrets.SESTINA_NOTARY_KEY_BASE64 || '' }}
+          SESTINA_NOTARY_KEY_ID: ${{ inputs.profile == 'release' && secrets.SESTINA_NOTARY_KEY_ID || '' }}
+          SESTINA_NOTARY_ISSUER: ${{ inputs.profile == 'release' && secrets.SESTINA_NOTARY_ISSUER || '' }}
+        run: node scripts/run-desktop-workflow.mjs
+      - name: Preserve real outputs and incomplete acceptance
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sestina-desktop-${{ matrix.target }}-${{ github.sha }}
+          path: |
+            .tmp/desktop-platform/artifacts/*.exe
+            .tmp/desktop-platform/artifacts/*.dmg
+            .tmp/desktop-platform/artifacts/*.AppImage
+            .tmp/desktop-platform/artifacts/*.blockmap
+            .tmp/desktop-platform/artifacts/candidate-manifest.json
+            .tmp/desktop-platform/artifacts/unsigned-core.tar.gz
+            .tmp/desktop-platform/artifacts/SHA256SUMS
+            .tmp/desktop-platform/verification/*.json
+            .tmp/desktop-platform/installation.json
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 14
+# No automatic tags or publication. Missing native lifecycle or observations
+# remain incomplete acceptance, never a green release.

@@ -5,6 +5,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { strict as assert } from "node:assert";
 import { _electron } from "@playwright/test";
+import { desktopExecutable } from "./lib/desktop-distribution.mjs";
 const root = resolve(import.meta.dirname, ".."),
   area = resolve(
     process.env.SESTINA_UPGRADE_AREA ?? join(root, ".tmp/g10-g11"),
@@ -58,7 +59,10 @@ const report = JSON.parse(
 assert.equal(code, 0, JSON.stringify(report));
 assert.equal(report.passed, true);
 const previous = await _electron.launch({
-  executablePath: join(report.restoredProgram, "Sestina Candidate.exe"),
+  executablePath: join(
+    report.restoredProgram,
+    desktopExecutable(report.current, "win32"),
+  ),
   args: [`--user-data-dir=${join(area, "previous-program-profile")}`],
   env,
 });

@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { readFile, mkdir } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { desktopResources } from "./lib/target-verification.mjs";
+import { desktopExecutable } from "./lib/desktop-distribution.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 const directory = resolve(process.argv[2]);
@@ -62,11 +63,7 @@ const output = resolve(
 await mkdir(output, { recursive: true });
 const executable = join(
   directory,
-  manifest.platform === "win32"
-    ? "Sestina Candidate.exe"
-    : manifest.platform === "darwin"
-      ? "Contents/MacOS/Sestina Candidate"
-      : "sestina-candidate",
+  desktopExecutable(manifest, manifest.platform),
 );
 const env = {
   ...process.env,

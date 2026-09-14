@@ -1,70 +1,11 @@
-name: Sestina Public Preview CI
-
+name: Sestina Desktop CI
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
-
 permissions:
   contents: read
-
 jobs:
-  shared-deterministic-gates:
-    name: Shared public-preview gates
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 11.16.0
-          run_install: false
-      - uses: actions/setup-node@v7
-        with:
-          node-version: "24.13.0"
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm verify:public
-
-  platform-public-preview:
-    name: Public preview · ${{ matrix.platform }}
-    needs: shared-deterministic-gates
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: windows-x64
-            runner: windows-2025
-            expected-os: win32
-            expected-arch: x64
-          - platform: macos-arm64
-            runner: macos-15
-            expected-os: darwin
-            expected-arch: arm64
-          - platform: ubuntu-x64
-            runner: ubuntu-24.04
-            expected-os: linux
-            expected-arch: x64
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 11.16.0
-          run_install: false
-      - uses: actions/setup-node@v7
-        with:
-          node-version: "24.13.0"
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm verify:platform ${{ matrix.expected-os }} ${{ matrix.expected-arch }}
-      - uses: actions/upload-artifact@v7
-        with:
-          name: sestina-public-preview-${{ matrix.platform }}-${{ github.sha }}
-          path: release/*
-          if-no-files-found: error
-          retention-days: 14
+  desktop:
+    uses: ./.github/workflows/release.yml

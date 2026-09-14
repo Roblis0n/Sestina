@@ -9,11 +9,12 @@ import { migrateKernelProject } from "@sestina/core";
 // automate the blocked native uninstall wizard or substitute for its observation.
 const area = resolve(process.env.SESTINA_UPGRADE_AREA ?? "");
 const previous = process.env.SESTINA_PREVIOUS_INSTALLER;
+const previousInstalled = process.env.SESTINA_PREVIOUS_INSTALLED;
 const next = process.env.SESTINA_UPGRADE_INSTALLER;
 const manifestPath = process.env.SESTINA_UPGRADE_MANIFEST;
 if (
   process.platform !== "win32" ||
-  !previous ||
+  (!previous && !previousInstalled) ||
   !next ||
   !manifestPath ||
   !relative(resolve(".tmp"), area) ||
@@ -41,17 +42,30 @@ await cp(fixture.root, join(area, "install-project"), {
   force: false,
   errorOnExist: true,
 });
-await new Promise<void>((done, reject) => {
-  const child = spawn(resolve(previous), ["/S", `/D=${installed}`], {
-    windowsHide: true,
-    windowsVerbatimArguments: true,
-    stdio: "ignore",
+if (previousInstalled) {
+  const source = resolve(previousInstalled);
+  if (
+    !relative(resolve(".tmp"), source) ||
+    relative(resolve(".tmp"), source).startsWith("..")
+  )
+    throw Error("previous_install_must_be_isolated");
+  await cp(source, installed, {
+    recursive: true,
+    force: false,
+    errorOnExist: true,
   });
-  child.once("error", reject);
-  child.once("exit", (code) =>
-    code === 0 ? done() : reject(Error(`initial_install_exit_${code}`)),
-  );
-});
+} else
+  await new Promise<void>((done, reject) => {
+    const child = spawn(resolve(previous!), ["/S", `/D=${installed}`], {
+      windowsHide: true,
+      windowsVerbatimArguments: true,
+      stdio: "ignore",
+    });
+    child.once("error", reject);
+    child.once("exit", (code) =>
+      code === 0 ? done() : reject(Error(`initial_install_exit_${code}`)),
+    );
+  });
 execFileSync(
   process.execPath,
   [resolve("scripts/verify-desktop-upgrade.mjs")],
@@ -80,7 +94,9 @@ await writeFile(
         .digest("hex"),
       installed,
       cases: [
-        "actual-initial-silent-install",
+        previousInstalled
+          ? "verified-previous-isolated-install-copy"
+          : "actual-initial-silent-install",
         "pre-upgrade-sqlite-backup",
         "backup-failure-blocks-installer",
         "verified-candidate-silent-upgrade",

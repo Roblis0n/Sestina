@@ -10,6 +10,7 @@ import {
   session,
 } from "electron";
 import { readFile, realpath, lstat, mkdir, chmod } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import { join, resolve, extname, dirname, basename, relative } from "node:path";
 import { spawn } from "node:child_process";
 import {
@@ -24,10 +25,7 @@ import type { SaveOpenAICompatibleProviderInput } from "@sestina/application";
 import { createDesktopSecrets } from "./secure-storage.js";
 import { requestCredential } from "./credential-prompt.js";
 import { DesktopUpdater } from "./updater.js";
-import {
-  TRUSTED_UPDATE_ROOTS,
-  type InstalledUpdateIdentity,
-} from "./update-policy.js";
+import { type InstalledUpdateIdentity } from "./update-policy.js";
 import {
   preserveInstalledProgram,
   verifyPreservedProgram,
@@ -54,7 +52,15 @@ protocol.registerSchemesAsPrivileged([
 app.commandLine.appendSwitch("disable-background-networking");
 app.commandLine.appendSwitch("disable-component-update");
 app.commandLine.appendSwitch("disable-domain-reliability");
+// Keep the established Chromium/secure-storage service name across distribution
+// renaming. Product/window/installer identity comes from the installed manifest.
 app.setName("Sestina Candidate");
+const installedIdentity = app.isPackaged
+  ? (JSON.parse(
+      readFileSync(join(__dirname, "identity.json"), "utf8"),
+    ) as Record<string, unknown>)
+  : undefined;
+if (process.platform === "win32") app.setAppUserModelId("org.sestina.desktop");
 // Installation and projects remain separate. Chromium's supported user-data-dir
 // switch also permits isolated local installation acceptance without test authority.
 const override = app.commandLine.getSwitchValue("user-data-dir");
@@ -121,7 +127,10 @@ async function start() {
     secondOpinionProvider: () => loadProvider(1),
   });
   const window = new BrowserWindow({
-    title: "Sestina — Internal candidate",
+    title:
+      installedIdentity?.channel === "stable"
+        ? "Sestina"
+        : "Sestina — Internal candidate",
     icon: join(__dirname, "client/sestina-logo.png"),
     width: 1280,
     height: 900,
@@ -169,7 +178,7 @@ async function start() {
     .catch(() => undefined);
   const current: InstalledUpdateIdentity = {
     version: app.getVersion(),
-    channel: "internal_candidate",
+    channel: installed?.channel === "stable" ? "stable" : "internal_candidate",
     sequence: Number(installed?.sequence ?? 0),
     platform: process.platform,
     arch: process.arch,
@@ -204,7 +213,14 @@ async function start() {
   const updater = new DesktopUpdater({
     directory: join(data, "updates"),
     current,
-    roots: TRUSTED_UPDATE_ROOTS,
+    roots:
+      installed?.profile === "release" && current.channel === "stable"
+        ? (record(installed.update).roots as Record<string, string>)
+        : {},
+    source:
+      installed?.profile === "release" && current.channel === "stable"
+        ? String(record(installed.update).source)
+        : undefined,
     // An authorized source is a build-time setting. No renderer, environment,
     // project file or test flag can install a signing root or an update URL.
     beforeInstall: async () => {
@@ -650,7 +666,15 @@ async function start() {
       return getProvider(body.second ? 1 : 0).status();
     },
     about: () => ({
-      channel: "internal_candidate",
+      product: "Sestina",
+      mode: app.isPackaged
+        ? current.channel === "stable"
+          ? "desktop_production"
+          : "desktop_candidate"
+        : "desktop_development",
+      channel: current.channel,
+      sourceCommit: current.sourceCommit,
+      appId: installed?.appId ?? "org.sestina.desktop",
       version: app.getVersion(),
       runtime: process.versions.electron,
       schema: 25,

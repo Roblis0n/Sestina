@@ -15,6 +15,11 @@ export function DesktopAbout({
   const [state, setState] = useState<DesktopUpdateProjection>();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const release =
+    info !== null &&
+    typeof info === "object" &&
+    "channel" in info &&
+    info.channel === "stable";
   const live = useRef(true);
   useEffect(() => {
     live.current = true;
@@ -109,8 +114,12 @@ export function DesktopAbout({
     <section>
       <p>
         {en
-          ? "Internal desktop candidate. The published preview remains v0.2.0. This candidate has not been publicly released."
-          : "当前为内部桌面候选。已发布预览仍为 v0.2.0，此候选尚未公开发行。"}
+          ? release
+            ? "Sestina desktop distribution. Build identity is shown below; publication is verified separately."
+            : "Internal desktop candidate. The published preview remains v0.2.0. This candidate has not been publicly released."
+          : release
+            ? "Sestina 桌面发行构建。构建身份如下；公开发布状态单独核验。"
+            : "当前为内部桌面候选。已发布预览仍为 v0.2.0，此候选尚未公开发行。"}
       </p>
       <p>
         {en

@@ -12,11 +12,13 @@ import {
 import { join, resolve, relative } from "node:path";
 import { parseArgs } from "node:util";
 import { createDeterministicTarGzip } from "./lib/archive.mjs";
+import { desktopDistribution } from "./lib/desktop-distribution.mjs";
+import { verifyDesktopEnvelope } from "./lib/desktop-signing.mjs";
 
 const root = resolve(import.meta.dirname, "..");
 // This local recipe never consumes a signing account inherited from the shell.
 for (const key of Object.keys(process.env))
-  if (/^(?:WIN_)?CSC_/.test(key)) delete process.env[key];
+  if (/^(?:(?:WIN_)?CSC_|APPLE_|APPSTORE_)/.test(key)) delete process.env[key];
 process.env.CSC_IDENTITY_AUTO_DISCOVERY = "false";
 const { build, Platform, Arch } = createRequire(
   join(root, "apps/desktop/package.json"),
@@ -26,6 +28,10 @@ const { values, positionals } = parseArgs({
   options: {
     output: { type: "string" },
     "core-only": { type: "boolean", default: false },
+    profile: { type: "string", default: "candidate" },
+    version: { type: "string", default: "0.3.0" },
+    tag: { type: "string" },
+    "release-config": { type: "string" },
   },
 });
 if (positionals.length > 1) throw Error("unexpected_packaging_argument");
@@ -37,6 +43,41 @@ const git = (...args) =>
   execFileSync("git", args, { cwd: root, windowsHide: true }).toString().trim();
 const sourceCommit = git("rev-parse", "HEAD"),
   sourceTree = git("rev-parse", "HEAD^{tree}");
+const releaseConfig = values["release-config"]
+  ? JSON.parse(await readFile(resolve(values["release-config"]), "utf8"))
+  : undefined;
+const distribution = desktopDistribution({
+  sourceCommit,
+  target,
+  profile: values.profile,
+  version: values.version,
+  tag: values.tag,
+  tagCommit: values.tag
+    ? git("rev-parse", `refs/tags/${values.tag}^{commit}`)
+    : undefined,
+  config: releaseConfig,
+});
+if (values.profile === "release") {
+  if (process.platform !== target || process.arch !== architecture)
+    throw Error("release_requires_native_target");
+  if (git("status", "--porcelain", "--untracked-files=normal"))
+    throw Error("release_requires_clean_checkout");
+  if (git("rev-parse", "--abbrev-ref", "HEAD") !== "HEAD")
+    throw Error("release_requires_detached_tag");
+  if (!values["core-only"] && target !== "linux") {
+    const signing = releaseConfig.signing;
+    const certificate = await readFile(resolve(signing.certificateFile));
+    if (
+      createHash("sha256").update(certificate).digest("hex") !==
+      signing.certificateSha256
+    )
+      throw Error("release_certificate_hash_mismatch");
+    if (!process.env.SESTINA_SIGNING_PASSWORD)
+      throw Error("release_signing_password_missing");
+    process.env.CSC_LINK = resolve(signing.certificateFile);
+    process.env.CSC_KEY_PASSWORD = process.env.SESTINA_SIGNING_PASSWORD;
+  }
+}
 // Reference material and inherited local preferences are outside the build.
 const dirty = git(
   "diff",
@@ -80,10 +121,10 @@ if (
 )
   throw new Error("desktop_dependency_lock_changed");
 const sha = (value) => createHash("sha256").update(value).digest("hex");
-const version = `0.2.0-g10.${sourceCommit.slice(0, 8)}`;
+const version = distribution.version;
 const output = values.output
   ? resolve(values.output)
-  : join(root, "release", "desktop", `${target}-${architecture}`);
+  : join(root, "release", "desktop", `${target}-${architecture}`, version);
 if (!/^(?:\.tmp|release)[\\/]/.test(relative(root, output)))
   throw Error("desktop_output_outside_artifact_area");
 const staging = join(
@@ -116,8 +157,8 @@ const lockBytes = execFileSync(
   { cwd: root, windowsHide: true },
 );
 const identity = {
+  ...distribution,
   sequence: Number(git("show", "-s", "--format=%ct", sourceCommit)),
-  channel: "internal_candidate",
   version,
   sourceCommit,
   sourceTree,
@@ -126,7 +167,7 @@ const identity = {
   buildNode: process.versions.node,
   packageManager: JSON.parse(await readFile(join(root, "package.json"), "utf8"))
     .packageManager,
-  buildCommand: `pnpm desktop:package ${target}`,
+  buildCommand: `pnpm desktop:package ${target} --profile ${distribution.profile} --version ${distribution.baseVersion}${values.tag ? ` --tag ${values.tag} --release-config <explicit-local-config>` : ""}`,
   migrationSourceSha256: sha(
     execFileSync(
       "git",
@@ -152,9 +193,9 @@ await writeFile(
   join(app, "package.json"),
   JSON.stringify(
     {
-      name: "sestina-desktop-candidate",
+      name: "sestina-desktop",
       version,
-      description: "Internal Sestina desktop candidate",
+      description: "Sestina local research desktop",
       author: "Sestina contributors",
       license: "Apache-2.0",
       main: "dist/main.cjs",
@@ -219,7 +260,10 @@ await writeFile(
         size: entry.data.length,
         sha256: sha(entry.data),
       })),
-      signingStatus: "not_configured",
+      signingStatus:
+        distribution.profile === "release"
+          ? "pending_outer_verification"
+          : "not_configured",
     },
     null,
     2,
@@ -242,11 +286,13 @@ const targets =
     : target === "darwin"
       ? Platform.MAC.createTarget(["dmg"], Arch.arm64)
       : Platform.LINUX.createTarget(["AppImage"], Arch.x64);
-await build({
+const artifacts = await build({
   targets,
   config: {
-    appId: "org.sestina.candidate",
-    productName: "Sestina Candidate",
+    appId: distribution.appId,
+    productName: distribution.productName,
+    executableName: distribution.executableName,
+    artifactName: `Sestina-${version}-${target}-${architecture}.\${ext}`,
     electronVersion: "44.3.0",
     directories: { app, output },
     files: [
@@ -264,9 +310,36 @@ await build({
     asar: true,
     npmRebuild: false,
     publish: null,
+    forceCodeSigning: distribution.profile === "release" && target !== "linux",
+    afterSign:
+      distribution.profile === "release" && target === "darwin"
+        ? async ({ appOutDir }) => {
+            const builderRequire = createRequire(
+              createRequire(join(root, "apps/desktop/package.json")).resolve(
+                "electron-builder",
+              ),
+            );
+            const nativeRequire = createRequire(
+              builderRequire.resolve("app-builder-lib"),
+            );
+            const { notarize } = nativeRequire("@electron/notarize");
+            await notarize({
+              appPath: join(appOutDir, "Sestina.app"),
+              keychainProfile: releaseConfig.signing.keychainProfile,
+            });
+          }
+        : undefined,
     win: {
       target: "nsis",
-      signExecutable: false,
+      signExecutable: distribution.profile === "release",
+      ...(distribution.profile === "release" && target === "win32"
+        ? {
+            signtoolOptions: {
+              publisherName: releaseConfig.signing.publisherName,
+              signingHashAlgorithms: ["sha256"],
+            },
+          }
+        : {}),
       icon: join(root, "apps/research-room/client/public/sestina-logo.png"),
     },
     nsis: {
@@ -277,16 +350,49 @@ await build({
     },
     mac: {
       target: "dmg",
-      identity: null,
+      identity:
+        distribution.profile === "release" && target === "darwin"
+          ? releaseConfig.signing.identity
+          : null,
+      notarize: false,
+      hardenedRuntime: true,
       category: "public.app-category.productivity",
     },
     linux: {
       target: "AppImage",
       category: "Office",
-      executableName: "sestina-candidate",
+      executableName: distribution.executableName,
     },
   },
 });
+const envelope = await verifyDesktopEnvelope({
+  target,
+  output,
+  artifacts,
+  distribution,
+  signing: releaseConfig?.signing,
+});
+const manifestPath = join(output, "candidate-manifest.json");
+const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+manifest.signingStatus = envelope.status;
+manifest.envelope = envelope;
+await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + "\n");
+const checksumFiles = [
+  ...artifacts.filter((file) => /\.(?:exe|dmg|AppImage|blockmap)$/.test(file)),
+  manifestPath,
+  join(output, "unsigned-core.tar.gz"),
+];
+await writeFile(
+  join(output, "SHA256SUMS"),
+  (
+    await Promise.all(
+      checksumFiles.map(
+        async (file) =>
+          `${sha(await readFile(file))}  ${relative(output, file)}`,
+      ),
+    )
+  ).join("\n") + "\n",
+);
 // Builder's unresolved NSIS diagnostic template is build metadata, not a release manifest.
 await rename(
   join(output, "builder-debug.yml"),
