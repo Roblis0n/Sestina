@@ -91,6 +91,9 @@ console.log(
     sourceCommit: first.sourceCommit,
     sha256: secondHash,
     independentOutput: coreOutput,
-    signedOuterComparison: "not_applicable_unsigned_candidate",
+    signedOuterComparison:
+      first.profile === "release"
+        ? "verified_separately_not_compared_byte_for_byte"
+        : "not_applicable_unsigned_candidate",
   }),
 );
