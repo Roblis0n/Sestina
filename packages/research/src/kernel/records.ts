@@ -45,25 +45,56 @@ export type KernelJson =
   | string
   | readonly KernelJson[]
   | { readonly [key: string]: KernelJson };
+interface NormalizedKernelJson {
+  value: KernelJson;
+  height: number;
+  weight: number;
+}
+// Only JSON-cloned objects deeply frozen by this module qualify. A caller's
+// Object.freeze, getter or Proxy is not proof of immutable JSON ownership.
+const ownedFrozenJson = new WeakSet<object>();
+let normalizedJson = new WeakMap<object, NormalizedKernelJson>();
+let normalizedWeight = 0;
+let normalizedCount = 0;
+export function clearKernelSerializationCache(): void {
+  normalizedJson = new WeakMap();
+  normalizedWeight = 0;
+  normalizedCount = 0;
+}
 export function kernelCanonicalJson(value: unknown): string {
   const seen = new Set<object>();
-  function normalize(input: unknown, depth: number): KernelJson {
+  function normalize(input: unknown, depth: number): NormalizedKernelJson {
     if (depth > 64) throw new KernelFault("invalid_record");
-    if (input === null || typeof input === "boolean") return input;
-    if (typeof input === "string") return input.normalize("NFC");
+    if (input === null || typeof input === "boolean")
+      return { value: input, height: 0, weight: 16 };
+    if (typeof input === "string")
+      return { value: input.normalize("NFC"), height: 0, weight: input.length * 2 + 16 };
     if (
       typeof input === "number" &&
       Number.isFinite(input) &&
       (!Number.isInteger(input) || Number.isSafeInteger(input))
     )
-      return input;
+      return { value: input, height: 0, weight: 16 };
     if (typeof input !== "object" || seen.has(input))
       throw new KernelFault("invalid_record");
+    const cached = normalizedJson.get(input);
+    if (cached) {
+      if (depth + cached.height > 64) throw new KernelFault("invalid_record");
+      return cached;
+    }
     seen.add(input);
     let result: KernelJson;
+    let height = 0;
+    let weight = 64;
+    const child = (value: unknown): KernelJson => {
+      const normalized = normalize(value, depth + 1);
+      height = Math.max(height, normalized.height + 1);
+      weight += normalized.weight + 16;
+      return normalized.value;
+    };
     if (Array.isArray(input)) {
       if (input.length > 100_000) throw new KernelFault("invalid_record");
-      result = input.map((x) => normalize(x, depth + 1));
+      result = input.map(child);
     } else {
       if (
         Object.getPrototypeOf(input) !== Object.prototype &&
@@ -80,17 +111,25 @@ export function kernelCanonicalJson(value: unknown): string {
           key !== key.normalize("NFC")
         )
           throw new KernelFault("invalid_record");
-        out[key] = normalize(
-          (input as Record<string, unknown>)[key],
-          depth + 1,
-        );
+        weight += key.length * 2 + 16;
+        out[key] = child((input as Record<string, unknown>)[key]);
       }
       result = out;
     }
     seen.delete(input);
-    return result;
+    const normalized = { value: result, height, weight };
+    if (ownedFrozenJson.has(input) && weight <= 16 * 1024 * 1024) {
+      // Conservative accounting counts shared subtrees again. A full reset is
+      // bounded and needs no strong references to research objects or identities.
+      if (normalizedCount >= 4096 || normalizedWeight + weight > 16 * 1024 * 1024)
+        clearKernelSerializationCache();
+      normalizedJson.set(input, normalized);
+      normalizedWeight += weight;
+      normalizedCount++;
+    }
+    return normalized;
   }
-  const encoded = JSON.stringify(normalize(value, 0));
+  const encoded = JSON.stringify(normalize(value, 0).value);
   if (Buffer.byteLength(encoded) > 8_388_608)
     throw new KernelFault("invalid_record");
   return encoded;
@@ -104,12 +143,15 @@ export function kernelBytesHash(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
 export function freezeKernel<T>(value: T): T {
+  if (value !== null && typeof value === "object" && ownedFrozenJson.has(value))
+    return value;
   kernelCanonicalJson(value);
   const cloned = JSON.parse(JSON.stringify(value)) as T;
   function freeze(x: unknown) {
     if (typeof x === "object" && x !== null) {
       Object.values(x).forEach(freeze);
       Object.freeze(x);
+      ownedFrozenJson.add(x);
     }
   }
   freeze(cloned);

@@ -1,4 +1,4 @@
-import { freezeKernel } from "@sestina/research";
+import { clearKernelSerializationCache, freezeKernel } from "@sestina/research";
 import type { StorageDatabase } from "@sestina/storage";
 
 interface Entry { raw: string; value: unknown; bytes: number }
@@ -53,4 +53,5 @@ export function readValidatedKernelJson<T>(
 }
 export function clearKernelReadCache(db: StorageDatabase): void {
   caches.delete(db);
+  clearKernelSerializationCache();
 }
