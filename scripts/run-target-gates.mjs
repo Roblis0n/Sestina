@@ -26,6 +26,7 @@ const { values } = parseArgs({
     output: { type: "string" },
     readiness: { type: "string" },
     "lifecycle-result": { type: "string" },
+    "reinstall-result": { type: "string" },
     "visual-observation": { type: "string" },
     "shared-public": { type: "string" },
     tag: { type: "string" },
@@ -577,6 +578,31 @@ try {
       true,
       { SESTINA_TARGET_OUTPUT: join(output, "cutover") },
     );
+  if (values["reinstall-result"]) {
+    const path = resolve(values["reinstall-result"]),
+      reinstall = await readJson(path);
+    const required = [
+      "current-package-actual-silent-uninstall",
+      "project-brief-preserved-and-reopened",
+      "settings-and-encrypted-credential-preserved",
+      "actual-reinstall-same-package",
+    ];
+    if (
+      !reinstall.passed ||
+      reinstall.sourceCommit !== sourceCommit ||
+      reinstall.installerSha256 !== installerSha256 ||
+      reinstall.platform !== process.platform ||
+      reinstall.arch !== process.arch ||
+      !required.every((id) => reinstall.cases?.includes(id))
+    )
+      throw Error("reinstall_result_mismatch");
+    result.checks.reinstall = {
+      status: "passed",
+      count: required.length,
+      result: reinstall,
+      evidenceSha256: fileSha256(path),
+    };
+  }
   result.localPassed = Object.values(result.checks).every(
     (check) => check.status === "passed" && check.count > 0,
   );
@@ -600,7 +626,11 @@ try {
     (check) => check.status !== "passed",
   );
   for (const id of result.checks.lifecycle?.result?.notEstablished ?? [])
-    result.remaining.push({ id, status: "not_established" });
+    if (!(
+      id === "uninstall-reinstall-current-package" &&
+      result.checks.reinstall?.status === "passed"
+    ))
+      result.remaining.push({ id, status: "not_established" });
   result.remaining.push({
     id: "production-visual-accessibility",
     status: "not_established",

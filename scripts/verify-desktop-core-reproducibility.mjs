@@ -16,11 +16,37 @@ if (
 const base = join(root, ".tmp/desktop-reproducibility");
 await mkdir(base, { recursive: true });
 const output = await mkdtemp(join(base, "independent-"));
+let buildRoot = root;
+const head = execFileSync("git", ["rev-parse", "HEAD"], {
+  cwd: root,
+  windowsHide: true,
+  encoding: "utf8",
+}).trim();
+if (head !== first.sourceCommit) {
+  buildRoot = join(output, "source");
+  execFileSync(
+    "git",
+    ["worktree", "add", "--detach", buildRoot, first.sourceCommit],
+    { cwd: root, windowsHide: true, stdio: "inherit" },
+  );
+  execFileSync(
+    process.platform === "win32" ? "pnpm.cmd" : "pnpm",
+    ["install", "--frozen-lockfile", "--offline"],
+    {
+      cwd: buildRoot,
+      windowsHide: true,
+      stdio: "inherit",
+      shell: process.platform === "win32",
+    },
+  );
+}
+const coreOutput =
+  buildRoot === root ? output : join(buildRoot, ".tmp/reproduced-core");
 // A fresh compilation and staging tree; never copy the first core as a second result.
 execFileSync(
   process.execPath,
   [
-    join(root, "scripts/package-desktop.mjs"),
+    join(buildRoot, "scripts/package-desktop.mjs"),
     process.platform,
     "--profile",
     first.profile ?? "candidate",
@@ -36,14 +62,14 @@ execFileSync(
       : []),
     "--core-only",
     "--output",
-    output,
+    coreOutput,
   ],
-  { cwd: root, windowsHide: true, stdio: "inherit" },
+  { cwd: buildRoot, windowsHide: true, stdio: "inherit" },
 );
 const second = JSON.parse(
-  await readFile(join(output, "candidate-manifest.json"), "utf8"),
+  await readFile(join(coreOutput, "candidate-manifest.json"), "utf8"),
 );
-const secondHash = fileSha256(join(output, "unsigned-core.tar.gz"));
+const secondHash = fileSha256(join(coreOutput, "unsigned-core.tar.gz"));
 if (
   second.sourceCommit !== first.sourceCommit ||
   second.sourceTree !== first.sourceTree ||
@@ -64,7 +90,7 @@ console.log(
     ],
     sourceCommit: first.sourceCommit,
     sha256: secondHash,
-    independentOutput: output,
+    independentOutput: coreOutput,
     signedOuterComparison: "not_applicable_unsigned_candidate",
   }),
 );

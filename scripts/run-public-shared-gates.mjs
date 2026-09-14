@@ -150,6 +150,7 @@ run("public-preview, resilience, privacy, and authority tests", vitest, [
   "tests/repository/release-verifier-negative.test.ts",
   "tests/repository/desktop-readiness.test.ts",
   "tests/repository/target-verification.test.ts",
+  "tests/repository/desktop-distribution.test.ts",
   "--maxWorkers=1",
   "--no-file-parallelism",
 ]);
