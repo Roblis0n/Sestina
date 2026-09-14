@@ -1225,7 +1225,7 @@ program and storage-position comparisons did not establish an identity or disk
 regression; assertion polling did not explain the failure. These are diagnostic
 samples, not replacement p95 acceptance series.
 
-Runtime `c1707b19e576e9a67bc13449b75abc4f992dd1d4` removes duplicate work only for
+The first repair `c1707b19e576e9a67bc13449b75abc4f992dd1d4` removes duplicate work only for
 JSON-cloned, deeply frozen values owned by the Kernel's record module. Its weak
 normalization cache has conservative byte/entry bounds and clears with existing
 Forget/project-close read-cache clearing. It cannot supply database state or
@@ -1235,3 +1235,12 @@ compatibility, mutable/getter inputs, nested limits and tampered SQL protections
 passed before rebuilding. The new actual package requires its own installed
 acceptance; earlier `151ae077` screenshots and performance are not reused as
 evidence for the changed runtime.
+
+The repaired runtime is now `79865fa3e5014661058659b94e766dfedb8db602`.
+Normalization reuse is allocated to complete immutable record roots, preventing
+small nested nodes from evicting those records. The cloned value itself is
+validated before leaving `freezeKernel`; a changing getter that introduced an
+invalid key after the initial input check was reproduced as a failing test and
+is now rejected. This final correction preserves the original canonical byte
+format and the bounded, explicitly cleared cache; no acceptance threshold changed.
+The new installer is under `release/desktop/win32-x64/0.3.0-g10.79865fa3/`.
