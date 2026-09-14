@@ -1284,3 +1284,8 @@ Sequential same-host source diagnostics measured 470–523 ms before this change
 and 372–459 ms after; these six-sample diagnostics are not installed p95 evidence.
 An experimental alternate JSON encoder had no benefit and was discarded before
 commit; the native canonical JSON encoding and its golden bytes remain unchanged.
+
+The event-decoding runtime is
+`6b5dd243641ea7af1a8ef766b8c6565bf0822660`. Its four focused boundary cases and
+research-store type check passed. Actual package/lifecycle/performance results
+for this source are recorded below only after execution.
