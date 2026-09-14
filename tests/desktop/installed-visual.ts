@@ -202,6 +202,16 @@ for (const language of ["en", "zh-CN"])
           .filter({ hasText: en ? "trusted update source" : "可信更新源" }),
       ).toBeVisible();
       await shot("about-1920");
+      if ((en && theme === "light") || (!en && theme === "high_contrast")) {
+        await page.evaluate(() => {
+          document.documentElement.style.fontSize = "200%";
+        });
+        await size(1100);
+        await shot("about-200-percent-1100");
+        await page.evaluate(() => {
+          document.documentElement.style.fontSize = "";
+        });
+      }
       await button(en ? "Integrations" : "集成").click();
       await page
         .getByText(
