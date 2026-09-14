@@ -82,6 +82,14 @@ installation instructions on this page describe that historical release; use the
 for the current source. Other-platform installation, signing, production update
 trust and complete native accessibility acceptance remain unestablished.
 
+The current distribution recipe uses the Sestina product identity and preserves
+existing settings and credential storage. Version **0.3.0** is proposed for the
+next release; local candidates carry their source suffix. Explicit native
+signing, notarization and production-update inputs are documented in the
+[desktop distribution guide](docs/release/README.md#current-desktop-distribution-preparation).
+The same workflow prepares Windows x64, macOS arm64 and Linux x64 artifacts;
+workflow implementation does not establish that those platforms passed.
+
 ## Accepted product target after 0.2.0
 
 The complete post-0.2 restructure is now an accepted product target. It

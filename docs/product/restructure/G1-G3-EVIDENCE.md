@@ -1309,3 +1309,74 @@ Two platform-branch/negative tests and five evidence-boundary cases pass locally
 they do not establish actual macOS/Linux measurements. Only public/resource
 verification is invalidated; installed runtime, performance and visual bytes
 remain identical. The common final entry reuses their bound evidence.
+
+#### Final Windows distribution evidence
+
+The final common result is `.tmp/distribution-event-final/result.json`, with
+`localPassed: true`, `formalAcceptance: not_established`, `published: false`.
+Runtime source is `6b5dd243641ea7af1a8ef766b8c6565bf0822660`; verification source
+is `5361d771ff501cfa8271bc0e7ad346ef1d493d3a`. The latter changes only verification
+and evidence. No runtime byte or installer changed after the accepted series.
+
+| Bound check | Actual final result |
+| --- | --- |
+| Public contracts | 742 assertions: 346 public tests plus 396 unchanged foundation cases reused with the original report hash/source. No failed, pending or todo cases. |
+| Actual artifact / desktop contracts | 36 artifact checks and 23 desktop cases passed; actual Windows signature is NotSigned. |
+| Independent core | Three checks passed; fresh detached source, frozen offline install, independent compilation and every archive entry match. Core SHA-256: `02ded9b3394029c03df54be4007bdcc5b8f7092dd4b98608ded2e34cd60cc9cd`. |
+| Installed research / retired paths | 16 journey groups and six default-entry/retired-write checks passed. Real installed Electron, Kernel and SQLite; synthetic projects/Provider and explicitly scoped native-dialog answers. |
+| Performance | 20 fresh-profile starts, 20 existing-profile starts, 25 samples per query/write and 100 navigation switches; all original thresholds passed. Raw samples and untouched seed retained. |
+| Resources | 20 large-project open/close/switch cycles, 50 scroll inputs, actual backup and frozen-legacy migration measured. No scroll task exceeded 200 ms. |
+| Lifecycle | Six actual upgrade/recovery cases and four current-package uninstall/reinstall cases passed. Brief, settings and old encrypted-credential continuity retained. Silent lifecycle execution is not native wizard observation. |
+| Renderer visual | Six language/theme scenarios, 45 captured frames and 12 actually inspected frames; two additional scoped renderer keyboard/scroll observations are bound in `visual-observation.json`. |
+
+Performance p95 (ms): cold start 1964.562, warm start 1954.089, Today 194.918,
+Project 197.942, search 180.762, next page 187.399, Draft 62.371, manifest
+224.090, canonical transaction 375.203. Full confirmation plus IPC was separately
+707.489 ms; it is not substituted for the canonical transaction definition.
+Host: Windows x64, AMD Ryzen 9 8945HX. This is the measured host, not the missing
+reference hardware. Final resource samples recorded main-process RSS from
+217.36 to 302.58 MiB (last 290.22), one active main-process handle, and settled
+DOM counts of one document / 2541 nodes / 570 listeners. Raw trends, child-process
+OS metrics and lifetime peaks remain in `resources/result.json`; these samples
+do not claim an unbounded-duration leak proof.
+
+Actual image inspection covered English dark About at 1920, Chinese light
+Review at 1440, Chinese high-contrast integrations at 1280, and 1100-wide backup,
+settings-import error, saved result, high-contrast Review and About at 200% text.
+Four further About/update images cover English light and Chinese high contrast
+with 200% text, real renderer keyboard activation and scrolling. Together these
+sample all six language/theme combinations and four desktop widths, with shared
+components sampled by equivalence rather than a full Cartesian repetition.
+No visible clipping, horizontal overflow or unreachable inspected control was
+found. Screenshot sources and SHA-256 values, plus actual action identities, are
+in `.tmp/distribution-event-final/visual-observation.json`. Static/renderer
+observations do not close native focus, continuous motion or assistive technology.
+
+The delivered installer is
+`release/desktop/win32-x64/0.3.0-g10.6b5dd243/Sestina-0.3.0-g10.6b5dd243-win32-x64.exe`
+(135017148 bytes), SHA-256
+`005d762399d882d14df3224b4d1a533d213e838c363bb3ed32d98cae7c20692a`.
+The same directory contains `SHA256SUMS`, `candidate-manifest.json`, blockmap and
+unsigned core. Installation tested at `.tmp/distribution-event-lifecycle/installed/`.
+Actual Get-AuthenticodeSignature results for the installer and installed
+executable are both `NotSigned`; their hashes and executable version metadata
+are retained in `.tmp/distribution-event-final/signature-observation.json`.
+The [release guide](../../release/README.md#local-review-package-2026-09-14)
+provides the prepared release configuration, notes and operational links.
+
+The last common run reran only public/resource checks. Artifact, desktop,
+independent core, journeys, performance, visual and cutover proofs were reused
+with unchanged bindings; actual lifecycle/reinstall records were revalidated.
+The initial passing result is retained in `attempts/before-resource-port/`.
+Earlier failed candidate/performance attempts above remain unchanged.
+
+#### Remaining resources and formal acceptance
+
+| Outstanding item | Exact resource or observation needed |
+| --- | --- |
+| Windows native focus, dialogs, wizard, motion and assistive technology | A supported native surface whose pixels and window state agree, or reliable actual operator records tied to this installer. Current helper returned Codex pixels for a Sestina title after refresh; no coordinate guessing or blocked wizard workaround was used. |
+| Whole-startup application network | Permission and a supported process-scoped system recorder starting before the application/Node process. WPR returned `0x80070005`; the packet driver was inaccessible. Existing Chromium/post-bridge logs do not prove this scope. |
+| macOS arm64 / Linux x64 acceptance | Actual native machines/runners and install, credential, lifecycle, visual/accessibility and performance results for their own bytes. Native workflows are implemented but were not dispatched; no cross-platform result is fabricated. |
+| Production signing and update trust | Explicit authorized Windows signer/certificate, Apple Developer ID/notarization resources, production HTTPS update endpoint and Ed25519 public roots/private signing action, plus actual signed install/upgrade verification. The delivered candidate has empty production roots and is unsigned. |
+| Reference performance environment | The plan's reference hardware and its actual samples. Current Windows-host results are retained without relabeling the machine. |
+| Public delivery | Formal acceptance first; then the user's version/tag and publication authorization for `Roblis0n/Sestina`, proposed `0.3.0`, and newly verified signed platform packages from the approved tag. No remote push, CI dispatch, signing-service operation, public tag or Release occurred. Published v0.2.0/schema 20 remains intact. |

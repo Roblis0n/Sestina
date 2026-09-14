@@ -109,6 +109,6 @@ pnpm start
 
 ## 内部桌面候选
 
-当前源码包含 G10 Electron 候选，承接 schema25 的四入口研究界面。它尚未公开发行，不改变已发布的 v0.2.0 预览。开发运行与本地候选构建见[桌面入口](../../apps/desktop/README.md)，实际完成范围见[实施状态](../product/restructure/IMPLEMENTATION-STATUS.md)。三平台安装与生产签名验收尚未完成。
+当前源码以 schema 25 桌面为默认入口，旧活动写入已退出，产品安装身份统一为 Sestina，并保留既有设置和加密凭据的存储身份。下一公开版本建议为 **0.3.0**；本地候选附带源码后缀，尚未创建公开标签或发布。Windows x64、macOS arm64、Linux x64 的桌面工作流及显式签名、公证、生产更新配置已接入；工作流代码不能代替实机验收。开发运行、安装和恢复见[桌面入口](../../apps/desktop/README.md)，发行配置见[发行指南](../release/README.md#current-desktop-distribution-preparation)，实际结果与待补资源见[合并证据索引](../product/restructure/G1-G3-EVIDENCE.md#desktop-distribution-continuation-2026-09-14)。已发布的 v0.2.0 预览及历史资料保持不变。
 
 起始页提供备份与恢复、显式旧设置迁移；设置中可以调整应用外观、使用系统加密存储或明确选择仅本次会话保存密钥、获取当前安装的只读 MCP 与配套 Skills 配置，以及手动检查更新。当前没有配置可信更新源，检查会直接说明这一点，不会发送研究内容。

@@ -387,3 +387,27 @@ acceptance. Follow the [desktop operations](../../../apps/desktop/README.md)
 for explicit installation, migration, update, program recovery, data restore and
 uninstall choices. The local execution-state handoff points to this final result;
 historical prerequisite-only entries above no longer describe current work.
+
+### Current desktop distribution operations, 2026-09-14
+
+Use the [current desktop distribution recipe](../../release/README.md#current-desktop-distribution-preparation)
+for versioned Sestina candidate/release builds and explicitly selected signing
+resources. Version 0.3.0 remains a proposal. The runtime `6b5dd243` candidate is
+under `release/desktop/win32-x64/0.3.0-g10.6b5dd243/`; the earlier ef1c14f7 package
+above is retained as historical evidence and the tested previous program.
+The current source still uses schema 25 and the same user-authorized Kernel.
+
+The isolated current installation is
+`.tmp/distribution-event-lifecycle/installed/`. Actual uninstall/reinstall
+preserved its synthetic project, Brief, preferences and encrypted credential.
+That result does not establish native wizard keyboard/focus acceptance. Final
+results and image observations belong to `.tmp/distribution-event-final/` and the
+[single current index](G1-G3-EVIDENCE.md#desktop-distribution-continuation-2026-09-14).
+No user installation/project was replaced. Public push, tag, CI, signing-service
+operation and Release still require authorization and the missing formal acceptance.
+
+The final common result is `.tmp/distribution-event-final/result.json`:
+local passed, formal acceptance not established, unpublished. Its verification
+commit is `5361d771ff501cfa8271bc0e7ad346ef1d493d3a`. The current installer and
+its checksums, source/toolchain, inspected images and concentrated outstanding
+resources are linked from the current index; use that entry for the handoff.

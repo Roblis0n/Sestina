@@ -139,3 +139,47 @@ requires `SESTINA_NOTARY_KEY_BASE64`, `SESTINA_NOTARY_KEY_ID` and
 `SESTINA_NOTARY_ISSUER`. Keys/certificates are written only to private runner
 temporary files. Candidate CI receives none of these resources. Do not dispatch
 the remote workflow or configure external services without user authorization.
+
+### Local review package, 2026-09-14
+
+The actual Windows x64 candidate is
+`release/desktop/win32-x64/0.3.0-g10.6b5dd243/Sestina-0.3.0-g10.6b5dd243-win32-x64.exe`
+(135,017,148 bytes), from runtime commit
+`6b5dd243641ea7af1a8ef766b8c6565bf0822660`. Its SHA-256 is
+`005d762399d882d14df3224b4d1a533d213e838c363bb3ed32d98cae7c20692a`.
+The colocated manifest identifies Node 24.13.0, Electron 44.3.0, pnpm 11.16.0,
+source tree, lock hash, original Logo, schema 25 and bundled native resources.
+`SHA256SUMS` covers the installer, blockmap, manifest and unsigned core. Actual
+Windows Authenticode status is `NotSigned`; no production trust is installed.
+
+The current runtime also addresses the measured opening/transaction overhead
+through bounded reuse of normalized, deeply immutable Kernel records. SQL bytes,
+relationships, authority checks and canonical encoding remain validated; Forget
+and project close clear the cache. Earlier failed measurements remain in the
+merged index, separate from this runtime's acceptance.
+
+The final local aggregate passed at verification commit
+`5361d771ff501cfa8271bc0e7ad346ef1d493d3a`: 742 public assertions, actual installed
+journeys/lifecycle, independent core reproduction, performance and resource checks.
+The event chain still rereads every SQL row and checks every binding; only
+unchanged validated decoding and immutable snapshot hashes are reused.
+Cold/warm startup p95 is 1964.562/1954.089 ms and canonical transaction p95 is
+375.203 ms. Twelve actual installed frames were inspected. Formal acceptance
+remains unestablished; these local results are not three-platform publication.
+
+The installed Sestina executable's ProductName/FileDescription are Sestina.
+Its isolated upgrade and current-package uninstall/reinstall preserve synthetic
+project/Brief, preferences and encrypted-credential continuity. Use
+[desktop operations](../../apps/desktop/README.md) for explicit project opening,
+migration backup/confirmation, separate program rollback/data restoration, and
+uninstall with separate credential deletion. Native wizard observation is still
+pending. Final acceptance and actual image inspection are recorded only in the
+[merged index](../product/restructure/G1-G3-EVIDENCE.md#desktop-distribution-continuation-2026-09-14).
+
+No macOS or Linux installer, production signature, public tag or Release was
+generated in this Windows execution. The prepared target repository is
+`Roblis0n/Sestina`; a future authorized publication must use the finally accepted
+tag commit and that commit's newly verified signed platform packages and update
+offers. This unsigned source-suffixed candidate must not be renamed into a stable
+release. Version 0.3.0 requires the user's one-time publication decision once
+formal acceptance and signing resources are available.

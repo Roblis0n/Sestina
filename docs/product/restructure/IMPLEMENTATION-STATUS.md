@@ -245,6 +245,36 @@ checksums, 43 visual frames and eight inspected frames are in the
 G12 and G13 local implementation/delivery are complete; their formal status and
 G10/G11 remain `current_partial`. This does not migrate any real user project.
 
+### Desktop distribution continuation, 2026-09-14
+
+The subsequent execution request authorizes independent Windows closeout and
+formal distribution implementation while unavailable platform/signing/native
+resources remain explicit. One Sestina identity now serves candidate/release
+profiles; the retained internal storage name protects earlier settings and
+encrypted credentials. The proposed public version is 0.3.0, with no tag or
+publication yet. Explicit signing, notarization, production update inputs and
+the native Windows/macOS/Linux desktop workflow replace the Preview-only release
+preparation path. Published v0.2.0 and frozen history remain unchanged.
+
+The new final runtime is `6b5dd243641ea7af1a8ef766b8c6565bf0822660`.
+Its isolated Windows upgrade, program recovery, current-package uninstall and
+reinstall have executed successfully, including synthetic Brief/settings and
+encrypted-credential continuity. Native wizard/focus/assistive-technology and
+whole-startup system network observation remain unestablished: the native helper
+returned inconsistent pixels, and WPR startup returned access denied. The
+[current merged evidence](G1-G3-EVIDENCE.md#desktop-distribution-continuation-2026-09-14)
+supersedes older package pointers for this continuation. Formal G10–G13 status
+remains `current_partial`; release configuration code is not platform acceptance.
+
+The final local aggregate `.tmp/distribution-event-final/result.json` is now
+`localPassed: true`, `formalAcceptance: not_established`, `published: false`,
+verified at `5361d771ff501cfa8271bc0e7ad346ef1d493d3a`. It records 742 public
+assertions, actual installed lifecycle and research, matching independent core,
+passing complete performance/resource series, and 12 actually inspected frames.
+Warm start p95 is 1954.089 ms and canonical transaction p95 is 375.203 ms on the
+measured Windows host. The remaining formal resources are centralized in the
+current evidence index; no public version or real user project was migrated.
+
 ## 6. Claims that remain unavailable
 
 The following remain `not_established`:
@@ -255,7 +285,7 @@ The following remain `not_established`:
 - production readiness of the target Electron application;
 - final production data cutover and migration of real user projects;
 - complete installation-state production UI acceptance across all target platforms;
-  final Windows renderer interactions and eight inspected installed frames are
+  final Windows renderer interactions and twelve inspected installed frames are
   verified, while native focus, continuous motion and assistive technology remain open.
 
 The tables above describing the release are G0 baseline facts. The authorized
