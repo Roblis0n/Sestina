@@ -11,6 +11,12 @@ it("canonical bytes retain numeric-key order, Unicode normalization and shared-v
     `{"left":${expected},"right":${expected}}`,
   );
   expect(kernelHash(frozen)).toBe(kernelHash(value));
+  const sparse = new Array(3);
+  sparse[1] = { "10": "\"\n\\", "2": [1e15, 1e-8, -0, "e\u0301"] };
+  const encoded = '[null,{"2":[1000000000000000,1e-8,0,"é"],"10":"\\\"\\n\\\\"},null]';
+  const immutableArray = freezeKernel(sparse);
+  expect(kernelCanonicalJson(immutableArray)).toBe(encoded);
+  expect(kernelCanonicalJson({ nested: immutableArray })).toBe(`{"nested":${encoded}}`);
   clearKernelSerializationCache();
   expect(kernelCanonicalJson(frozen)).toBe(expected);
 });

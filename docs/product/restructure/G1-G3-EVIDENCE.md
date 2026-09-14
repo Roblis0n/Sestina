@@ -1264,3 +1264,23 @@ The snapshot-hash repair is committed as
 4 serialization/changed-SQL/forged-snapshot cases, 21 atomic/Authority/privacy
 transaction cases, the research-store type check and 5 target-evidence boundary
 cases. The existing discovery declaration now includes the serialization cases.
+
+The `2051eb3d` package's full aggregate is retained at
+`.tmp/distribution-final-delivery/result.json`: all 740 public cases, artifact,
+desktop, independent core, installed journeys, visual scenarios, lifecycle and
+cutover checks passed, but warm startup/transaction p95 were 2188.483/574.028 ms.
+Resource acceptance correctly stopped on that performance failure. Its four
+About/update frames were actually operated and viewed in English light and
+Chinese high contrast at 200% text; this does not make that aggregate pass.
+
+Further profiling isolated repeated parsing of the same large migration event.
+`validateKernelChain` now uses the existing bounded raw-SQL decoding cache for
+each event, while fetching every row and checking every column, sequence and
+hash on every invocation. Changed bytes invalidate the decoded entry; malformed
+bytes or column mismatches still fail. The negative read-boundary cases retain
+the real SQLite store and its immutable triggers, injecting bad returned rows
+only in that unit test. No event validity/Authority conclusion is cached.
+Sequential same-host source diagnostics measured 470–523 ms before this change
+and 372–459 ms after; these six-sample diagnostics are not installed p95 evidence.
+An experimental alternate JSON encoder had no benefit and was discarded before
+commit; the native canonical JSON encoding and its golden bytes remain unchanged.

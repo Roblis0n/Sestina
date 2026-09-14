@@ -349,7 +349,13 @@ export function validateKernelChain(
   let expected = 1;
   let eventId = "";
   for (const row of rows) {
-    const event = parseKernelEvent(decodeKernelJson(row.data));
+    const event = readValidatedKernelJson(
+      db,
+      "research_project_state_events",
+      row.event_id,
+      row.data,
+      () => parseKernelEvent(decodeKernelJson(row.data)),
+    );
     if (
       event.projectId !== projectId ||
       event.id !== row.event_id ||

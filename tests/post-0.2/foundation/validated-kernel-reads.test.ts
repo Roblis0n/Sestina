@@ -1,4 +1,4 @@
-import { it, expect } from "vitest";
+import { it, expect, vi } from "vitest";
 import { withTransaction } from "@sestina/storage";
 import {
   createKernelRepositories,
@@ -57,6 +57,25 @@ it("warm decoded reads still reject changed bytes and mismatched SQL columns and
     replacement.metadata.push({ changed: "Not authorized by the event head" });
     expect(() => projectKernelContext(forged, "Synthetic altered context")).toThrow("corrupt_state");
     projectKernelContext(snapshot, "Original immutable context remains valid");
+    // Immutable SQL triggers remain enabled. Inject bad read-boundary rows over
+    // the real SQLite response to verify warm decoding cannot hide either kind
+    // of corruption; this is not an installed lifecycle/observation substitute.
+    const all = db.all.bind(db);
+    let defect = "column";
+    const intercepted = vi.spyOn(db, "all").mockImplementation((sql, ...args) => {
+      const rows = all(sql, ...args);
+      return sql.includes("SELECT * FROM research_project_state_events")
+        ? rows.map((row, i) => i === 0
+          ? { ...row, ...(defect === "column" ? { transaction_id: "mismatched" } : { data: "{}" }) }
+          : row)
+        : rows;
+    });
+    try {
+      expect(() => readKernelSnapshot(db, f.projectId)).toThrow("corrupt_state");
+      defect = "body";
+      expect(() => readKernelSnapshot(db, f.projectId)).toThrow();
+    } finally { intercepted.mockRestore(); }
+    expect(readKernelSnapshot(db, f.projectId)).toEqual(snapshot);
   } finally {
     await f.cleanup();
   }
