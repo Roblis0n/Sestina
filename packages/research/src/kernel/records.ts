@@ -53,6 +53,7 @@ interface NormalizedKernelJson {
 // Only JSON-cloned objects deeply frozen by this module qualify. A caller's
 // Object.freeze, getter or Proxy is not proof of immutable JSON ownership.
 const ownedFrozenJson = new WeakSet<object>();
+const ownedFrozenRoots = new WeakSet<object>();
 let normalizedJson = new WeakMap<object, NormalizedKernelJson>();
 let normalizedWeight = 0;
 let normalizedCount = 0;
@@ -118,7 +119,7 @@ export function kernelCanonicalJson(value: unknown): string {
     }
     seen.delete(input);
     const normalized = { value: result, height, weight };
-    if (ownedFrozenJson.has(input) && weight <= 16 * 1024 * 1024) {
+    if (ownedFrozenRoots.has(input) && weight <= 16 * 1024 * 1024) {
       // Conservative accounting counts shared subtrees again. A full reset is
       // bounded and needs no strong references to research objects or identities.
       if (normalizedCount >= 4096 || normalizedWeight + weight > 16 * 1024 * 1024)
@@ -155,6 +156,7 @@ export function freezeKernel<T>(value: T): T {
     }
   }
   freeze(cloned);
+  if (cloned !== null && typeof cloned === "object") ownedFrozenRoots.add(cloned);
   return cloned;
 }
 export function kernelRecord(
