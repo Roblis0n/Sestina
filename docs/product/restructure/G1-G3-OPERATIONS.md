@@ -411,3 +411,22 @@ local passed, formal acceptance not established, unpublished. Its verification
 commit is `5361d771ff501cfa8271bc0e7ad346ef1d493d3a`. The current installer and
 its checksums, source/toolchain, inspected images and concentrated outstanding
 resources are linked from the current index; use that entry for the handoff.
+
+
+### Current closeout entry, 2026-09-16
+
+Use the [current executable desktop recipe](../../release/README.md#desktop-acceptance-and-publication-execution-2026-09-16)
+for the remaining G10–G13 native operations, protected signing inputs and complete
+publication verification. It supersedes older execution instructions that stop
+at a single platform result or one published installer digest. The historical
+Preview `verify:platform` gate does not establish desktop acceptance.
+
+The current runtime/Windows package remains `6b5dd243`; reuse its unaffected
+research, performance, lifecycle and reinstall evidence. Current verification
+and the single resource list are in the
+[merged closeout index](G1-G3-EVIDENCE.md#desktop-closeout-execution-2026-09-16).
+The supported native tool timed out on application approval before capture/input;
+no new native pass is claimed. The unchanged WPR denial was not retried. Native
+machines, reliable native operations, system recording permissions and production
+resources remain necessary. Remote dispatch/push, signing-service use and public
+tag/Release actions still require the user's authorization.

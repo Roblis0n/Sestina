@@ -275,6 +275,22 @@ Warm start p95 is 1954.089 ms and canonical transaction p95 is 375.203 ms on the
 measured Windows host. The remaining formal resources are centralized in the
 current evidence index; no public version or real user project was migrated.
 
+### Desktop closeout execution, 2026-09-16
+
+The existing G10–G13 execution now forwards native evidence through both platform
+layers, binds OS-specific lifecycle/reinstall operations and combines native
+results. Protected preparation connects production update signing; the existing
+publication entry assembles/verifies all platform installers, source/core/checksum
+records and signed offers, downloads remote bytes, and requires actual downloaded
+installation/reopen evidence. No research/runtime/UI behavior changed.
+
+Runtime `6b5dd243` and its accepted Windows bytes remain current. Native
+focus/motion/assistive technology, whole-startup network observation, actual
+macOS/Linux operations and production resources remain open. Formal G10–G13
+status stays `current_partial`; nothing was published. Consult the
+[single current evidence index](G1-G3-EVIDENCE.md#desktop-closeout-execution-2026-09-16)
+for implementation verification and the remaining resource list.
+
 ## 6. Claims that remain unavailable
 
 The following remain `not_established`:

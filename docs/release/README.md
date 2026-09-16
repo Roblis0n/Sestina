@@ -183,3 +183,78 @@ tag commit and that commit's newly verified signed platform packages and update
 offers. This unsigned source-suffixed candidate must not be renamed into a stable
 release. Version 0.3.0 requires the user's one-time publication decision once
 formal acceptance and signing resources are available.
+
+
+### Desktop acceptance and publication execution, 2026-09-16
+
+The desktop workflow carries `lifecycle-result`, `reinstall-result`,
+`visual-observation`, `readiness` and shared public results to the existing target
+entry. `--manifest` plus `--installer` selects existing exact bytes; `--installed`
+selects an existing installation for verification. Fresh Windows lifecycle runs
+use `--previous-installer`, `--previous-manifest` and `--run-reinstall`. The previous
+installer automation is Windows-specific. macOS/Linux use their actual native
+lifecycle and reinstall records via the result options, with OS-specific cases;
+Windows silent-uninstall evidence cannot substitute. Linux AppImage extraction
+and Xvfb are still limited checks, not desktop-session acceptance.
+
+For authorized CI, `evidence_run_id` selects existing artifacts in this repository
+named `desktop-inputs-<target>`. Each contains `desktop-input.json` with `schema: 1`,
+its exact `target`, optional relative paths named after the evidence options
+(also `manifest`, `installer`, `previous-manifest`, `previous-installer`), and
+optional boolean `run-reinstall`. Paths stay inside the bundle; no commands or
+secrets belong in it. Inventory/raw evidence uses relative paths and travels
+with the bundle. Signing changes installer hashes: observations must reference
+the exact signed package. The workflow retains early failures and combines native
+outputs; missing targets remain explicitly unestablished.
+
+Protected release preparation additionally requires
+`SESTINA_UPDATE_PRIVATE_KEY_BASE64` (base64-encoded Ed25519 PEM) and
+`SESTINA_UPDATE_KEY_ID`. They feed the existing update signer after verified
+packaging, producing `update/<target>.json` and
+`update/artifacts/<sha256>/Sestina.<extension>`. The key must match an installed
+public root. Private temporary files are removed on success or failure and never
+uploaded. Candidate jobs receive no signing resources. No step publishes.
+
+Combine native results and assemble a reviewable delivery directory:
+
+```text
+pnpm verify:target --phase final --platform-result <windows-result.json> --platform-result <macos-result.json> --platform-result <linux-result.json> --release-inventory <inventory.json> --release-directory <new-delivery-directory> --output .tmp/desktop-combined
+```
+
+The release inventory has `schema: 1` and `packages`, exactly three records with
+`target`, `manifest`, `installer` and `update` paths relative to the inventory.
+Original package directories include `candidate-manifest.json`, `SHA256SUMS`,
+`unsigned-core.tar.gz` and installer/blockmap bytes. Assembly accepts verified
+release-profile packages of one source/version/tree/lock/schema/migration/sequence,
+checks each signed update offer against its installer, preserves original bytes
+and target-specific source/checksum records, and adds `release-index.json` and
+complete `SHA256SUMS`. The directory must be new. It does not turn candidates into
+stable packages, sign, upload or create tags.
+
+After separately authorized publication, each native machine uses:
+
+```text
+node scripts/run-desktop-platform.mjs --published-directory <reviewed-delivery-directory> --published-repository Roblis0n/Sestina --output .tmp/published-native
+```
+
+GitHub CLI checks the public tag, downloads all attachments and compares actual
+contents to the reviewed bundle. The driver installs its downloaded target package,
+checks the installed archive/signature and runs the existing synthetic project
+journey including quit/reopen. It writes `published-installation.json` with raw
+download, installation, artifact and journey evidence. Transfer the whole result
+directory preserving relative paths. This checks the published-byte difference;
+public, performance and visual gates are not repeated. Linux extraction remains
+explicit and separate from its required formal native acceptance.
+
+Finally call the same `verify:target` entry with `--phase publish`, all three
+`--platform-result` inputs, `--release-directory`, `--repository Roblis0n/Sestina`,
+`--tag <approved-tag>` and three `--published-installation` records. Omit
+`--release-inventory` once assembly exists. It downloads again into a new evidence
+directory and refuses missing attachments, changed bytes/tag, mixed identities,
+invalid update offers or missing/changed native installation evidence. Only the
+combined result can establish formal acceptance and `published: true`.
+
+Current local artifacts and the single remaining-resource list are in the
+[merged closeout index](../product/restructure/G1-G3-EVIDENCE.md#desktop-closeout-execution-2026-09-16).
+User install, migration, upgrade, program recovery, data restore and uninstall
+instructions remain in [desktop operations](../../apps/desktop/README.md).

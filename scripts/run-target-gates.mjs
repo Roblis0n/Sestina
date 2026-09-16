@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { spawn, execFileSync } from "node:child_process";
 import { createWriteStream, readFileSync, existsSync } from "node:fs";
 import { mkdir, readFile, writeFile, readdir } from "node:fs/promises";
@@ -14,6 +14,14 @@ import {
   canReuseTargetCheck,
   targetCheckAffected,
   assertTargetTagIdentity,
+  assertLifecycleResult,
+  assertReinstallResult,
+  assertReadinessBinding,
+  aggregateTargetResults,
+  assembleTargetRelease,
+  inspectTargetRelease,
+  verifyPublishedTargetRelease,
+  assertPublishedInstallations,
 } from "./lib/target-verification.mjs";
 
 const root = resolve(import.meta.dirname, "..");
@@ -31,8 +39,153 @@ const { values } = parseArgs({
     "shared-public": { type: "string" },
     tag: { type: "string" },
     repository: { type: "string" },
+    "platform-result": { type: "string", multiple: true },
+    "release-inventory": { type: "string" },
+    "release-directory": { type: "string" },
+    "published-installation": { type: "string", multiple: true },
   },
 });
+if (values["platform-result"]?.length) {
+  const area = resolve(values.output ?? ".tmp/target/combined");
+  await mkdir(area, { recursive: true });
+  const combinedPath = join(area, "result.json");
+  await writeFile(
+    combinedPath,
+    JSON.stringify({
+      schema: 1,
+      localPassed: false,
+      formalAcceptance: "not_established",
+      published: false,
+      status: "validating_inputs",
+    }),
+  );
+  try {
+    if (!["final", "publish"].includes(values.phase))
+      throw Error("combined_results_require_final_or_publish_phase");
+    const records = await Promise.all(
+      values["platform-result"].map(async (path) => {
+        const actual = resolve(path);
+        return {
+          path: actual,
+          sha256: fileSha256(actual),
+          result: JSON.parse(await readFile(actual, "utf8")),
+        };
+      }),
+    );
+    const combined = aggregateTargetResults(
+      records.map((record) => record.result),
+    );
+    combined.inputs = records.map(({ path, sha256 }) => ({ path, sha256 }));
+    combined.phase = values.phase;
+    await writeFile(combinedPath, JSON.stringify(combined, null, 2) + "\n");
+    if (values["release-inventory"]) {
+      if (!values["release-directory"])
+        throw Error("release_output_directory_required");
+      const inventoryPath = resolve(values["release-inventory"]);
+      const inventory = JSON.parse(await readFile(inventoryPath, "utf8"));
+      if (inventory.schema !== 1 || !Array.isArray(inventory.packages))
+        throw Error("release_inventory_invalid");
+      combined.release = await assembleTargetRelease(
+        inventory.packages.map((item) => ({
+          ...item,
+          manifest: resolve(dirname(inventoryPath), item.manifest),
+          installer: resolve(dirname(inventoryPath), item.installer),
+          update: resolve(dirname(inventoryPath), item.update),
+        })),
+        resolve(values["release-directory"]),
+      );
+      if (combined.release.sourceCommit !== combined.sourceCommit)
+        throw Error("release_acceptance_source_mismatch");
+      await writeFile(combinedPath, JSON.stringify(combined, null, 2) + "\n");
+    }
+    if (values.phase === "publish") {
+      if (
+        combined.formalAcceptance !== "passed" ||
+        !values.repository ||
+        !values.tag ||
+        !values["release-directory"]
+      )
+        throw Error("publication_acceptance_incomplete");
+      const identity = {
+        sourceCommit: combined.sourceCommit,
+        publicTag: values.tag,
+        version: values.tag.replace(/^v/, ""),
+      };
+      const index = await inspectTargetRelease(
+        resolve(values["release-directory"]),
+        identity,
+      );
+      assertTargetTagIdentity(
+        values.tag,
+        index.version,
+        execFileSync("git", ["rev-parse", `refs/tags/${values.tag}^{commit}`], {
+          encoding: "utf8",
+          windowsHide: true,
+        }).trim(),
+        combined.sourceCommit,
+      );
+      for (const [target, result] of Object.entries(combined.platforms)) {
+        if (
+          index.assets.find(
+            (item) => item.target === target && item.role === "installer",
+          )?.sha256 !== result.installerSha256
+        )
+          throw Error("publication_accepted_package_mismatch");
+      }
+      combined.publication = await verifyPublishedTargetRelease({
+        directory: resolve(values["release-directory"]),
+        repository: values.repository,
+        identity,
+        output: join(area, `published-download-${randomUUID()}`),
+      });
+      await writeFile(
+        join(combined.publication.directory, "download-receipt.json"),
+        JSON.stringify(combined.publication, null, 2),
+      );
+      await writeFile(combinedPath, JSON.stringify(combined, null, 2) + "\n");
+      const installations = await Promise.all(
+        (values["published-installation"] ?? []).map(async (path) => ({
+          path: resolve(path),
+          result: JSON.parse(await readFile(resolve(path), "utf8")),
+        })),
+      );
+      await assertPublishedInstallations(
+        installations,
+        index,
+        values.repository,
+      );
+      combined.published = true;
+      await writeFile(combinedPath, JSON.stringify(combined, null, 2) + "\n");
+    }
+    console.log(
+      JSON.stringify({
+        localPassed: combined.localPassed,
+        formalAcceptance: combined.formalAcceptance,
+        result: combinedPath,
+      }),
+    );
+    process.exit(
+      combined.localPassed && (values.phase !== "publish" || combined.published)
+        ? 0
+        : 1,
+    );
+  } catch (error) {
+    const prior = JSON.parse(await readFile(combinedPath, "utf8"));
+    await writeFile(
+      combinedPath,
+      JSON.stringify(
+        { ...prior, published: false, error: String(error) },
+        null,
+        2,
+      ),
+    );
+    process.exit(1);
+  }
+}
+if (values.phase === "publish")
+  throw Error(
+    "publication_requires_three_platform_results_and_release_directory",
+  );
 if (
   !["candidate", "final", "publish"].includes(values.phase) ||
   !values.manifest ||
@@ -86,10 +239,16 @@ const result = {
   verificationCommit,
   artifactSource: manifest.sourceCommit,
   installerSha256,
+  version: manifest.version,
+  schemaVersion: manifest.schema,
+  migrationSourceSha256: manifest.migrationSourceSha256,
+  installed: resolve(values.installed),
+  manifestSha256: fileSha256(resolve(values.manifest)),
   manifest: relative(root, resolve(values.manifest)),
   environment,
   localPassed: false,
   formalAcceptance: "not_established",
+  platformAcceptance: "not_established",
   published: false,
   checks: {},
   remaining: [],
@@ -255,7 +414,7 @@ try {
       (path) =>
         (/^(?:apps|packages|integrations)\//.test(path) &&
           !/^(?:apps|packages)\/[^/]+\/test\//.test(path)) ||
-        /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|tsconfig\.base\.json|docs\/release\/THIRD-PARTY-NOTICES\.md|scripts\/(?:build-desktop\.mjs|package-desktop\.mjs|lib\/desktop-))/.test(
+        /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|tsconfig\.base\.json|docs\/release\/THIRD-PARTY-NOTICES\.md|scripts\/(?:build-desktop\.mjs|package-desktop\.mjs|lib\/desktop-(?:distribution|signing)\.mjs))/.test(
           path,
         ),
     )
@@ -547,14 +706,12 @@ try {
   if (values["lifecycle-result"]) {
     const path = resolve(values["lifecycle-result"]),
       lifecycle = await readJson(path);
-    if (
-      lifecycle.passed !== true ||
-      lifecycle.sourceCommit !== sourceCommit ||
-      lifecycle.installerSha256 !== installerSha256 ||
-      lifecycle.platform !== process.platform ||
-      !lifecycle.cases?.length
-    )
-      throw Error("lifecycle_result_mismatch");
+    assertLifecycleResult(lifecycle, {
+      sourceCommit,
+      installerSha256,
+      platform: process.platform,
+      arch: process.arch,
+    });
     result.checks.lifecycle = {
       status: "passed",
       count: lifecycle.cases.length,
@@ -586,37 +743,30 @@ try {
   if (values["reinstall-result"]) {
     const path = resolve(values["reinstall-result"]),
       reinstall = await readJson(path);
-    const required = [
-      "current-package-actual-silent-uninstall",
-      "project-brief-preserved-and-reopened",
-      "settings-and-encrypted-credential-preserved",
-      "actual-reinstall-same-package",
-    ];
-    if (
-      !reinstall.passed ||
-      reinstall.sourceCommit !== sourceCommit ||
-      reinstall.installerSha256 !== installerSha256 ||
-      reinstall.platform !== process.platform ||
-      reinstall.arch !== process.arch ||
-      !required.every((id) => reinstall.cases?.includes(id))
-    )
-      throw Error("reinstall_result_mismatch");
+    const count = assertReinstallResult(reinstall, {
+      sourceCommit,
+      installerSha256,
+      platform: process.platform,
+      arch: process.arch,
+    });
     result.checks.reinstall = {
       status: "passed",
-      count: required.length,
+      count,
       result: reinstall,
       evidenceSha256: fileSha256(path),
     };
-  }
+  } else
+    result.checks.reinstall = {
+      status: "not_run",
+      count: 0,
+      reason: "actual_platform_uninstall_reinstall_result_required",
+    };
   result.localPassed = Object.values(result.checks).every(
     (check) => check.status === "passed" && check.count > 0,
   );
-  const readiness = values.readiness
-    ? inspectDesktopReadiness(
-        await readJson(resolve(values.readiness)),
-        dirname(resolve(values.readiness)),
-      )
-    : inspectDesktopReadiness({
+  const inventory = values.readiness
+    ? await readJson(resolve(values.readiness))
+    : {
         schema: 1,
         sourceCommit,
         artifacts: {
@@ -626,15 +776,40 @@ try {
           },
         },
         observations: [],
-      });
+      };
+  assertReadinessBinding(inventory, {
+    sourceCommit,
+    installerSha256,
+    platform: process.platform,
+    arch: process.arch,
+  });
+  const readiness = inspectDesktopReadiness(
+    inventory,
+    values.readiness ? dirname(resolve(values.readiness)) : root,
+  );
+  result.readiness = readiness;
   result.remaining = readiness.checks.filter(
     (check) => check.status !== "passed",
   );
+  for (const reason of readiness.errors)
+    result.remaining.push({
+      id: "readiness-inventory",
+      status: "failed",
+      reason,
+    });
   for (const id of result.checks.lifecycle?.result?.notEstablished ?? [])
-    if (!(
-      id === "uninstall-reinstall-current-package" &&
-      result.checks.reinstall?.status === "passed"
-    ))
+    if (
+      !(
+        id === "uninstall-reinstall-current-package" &&
+        result.checks.reinstall?.status === "passed"
+      ) &&
+      !readiness.checks.some(
+        (check) =>
+          check.status === "passed" &&
+          check.id ===
+            `${process.platform}-${process.arch}.${{ "native-uninstall-wizard": "native-uninstall", "production-update-trust": "production-trust", "platform-signature": "production-trust" }[id]}`,
+      )
+    )
       result.remaining.push({ id, status: "not_established" });
   result.remaining.push({
     id: "production-visual-accessibility",
@@ -667,6 +842,24 @@ try {
           file.sha256
         )
           throw Error("observation_evidence_changed");
+      // A visual receipt cannot waive signing, lifecycle or another OS's work.
+      if (
+        ![
+          "production-visual-accessibility",
+          "renderer-image-inspection",
+          "renderer-keyboard-scroll",
+          "inspected-final-static-frames",
+          "scoped-renderer-keyboard-and-scroll",
+        ].includes(check.id)
+      )
+        throw Error("visual_observation_scope_invalid");
+      if (
+        check.id === "production-visual-accessibility" &&
+        (!check.cases?.includes("assistive-technology-research-flow") ||
+          !check.cases?.includes("continuous-transition-observed") ||
+          !check.cases?.includes("reduced-motion-observed"))
+      )
+        throw Error("visual_accessibility_cases_incomplete");
       accepted.add(check.id);
     }
     result.remaining = result.remaining.filter(
@@ -677,64 +870,25 @@ try {
       sha256: fileSha256(observationPath),
     };
   }
+  const target = `${process.platform}-${process.arch}`;
+  const localRemaining = result.remaining.filter(
+    (check) =>
+      !["win32-x64", "darwin-arm64", "linux-x64"].some(
+        (other) => other !== target && check.id.startsWith(`${other}.`),
+      ),
+  );
   if (
     result.localPassed &&
-    readiness.remainingPrerequisitesSatisfied &&
-    result.remaining.length === 0
+    readiness.errors.length === 0 &&
+    localRemaining.length === 0
   )
-    result.formalAcceptance = "passed";
-  // Code/local success never implies complete platform/native/signing acceptance.
-  if (values.phase === "publish") {
-    if (
-      !values.tag ||
-      !values.repository ||
-      !result.localPassed ||
-      !readiness.remainingPrerequisitesSatisfied ||
-      result.remaining.length
-    )
-      throw Error("publication_acceptance_incomplete");
-    assertTargetTagIdentity(
-      values.tag,
-      manifest.version,
-      git("rev-parse", `refs/tags/${values.tag}^{commit}`),
-      sourceCommit,
-    );
-    const release = JSON.parse(
-      execFileSync(
-        "gh",
-        [
-          "release",
-          "view",
-          values.tag,
-          "--repo",
-          values.repository,
-          "--json",
-          "tagName,isDraft,assets",
-        ],
-        { cwd: root, windowsHide: true, encoding: "utf8" },
-      ),
-    );
-    if (release.isDraft || release.tagName !== values.tag)
-      throw Error("publication_release_not_public");
-    const attachment = release.assets.find(
-      (item) => item.name === resolve(values.installer).split(/[\\/]/).at(-1),
-    );
-    if (!attachment || attachment.digest !== `sha256:${installerSha256}`)
-      throw Error("publication_attachment_mismatch");
-    const ref = JSON.parse(
-      execFileSync(
-        "gh",
-        ["api", `repos/${values.repository}/commits/${values.tag}`],
-        { cwd: root, windowsHide: true, encoding: "utf8" },
-      ),
-    );
-    if (ref.sha !== sourceCommit)
-      throw Error("publication_remote_tag_mismatch");
-    result.published = true;
-  }
+    result.platformAcceptance = "passed";
+  // Only the merged native platform result can establish formal acceptance.
 } catch (error) {
   result.error = String(error);
   result.localPassed = false;
+  result.platformAcceptance = "not_established";
+  result.formalAcceptance = "not_established";
 }
 await save();
 console.log(

@@ -1370,11 +1370,44 @@ with unchanged bindings; actual lifecycle/reinstall records were revalidated.
 The initial passing result is retained in `attempts/before-resource-port/`.
 Earlier failed candidate/performance attempts above remain unchanged.
 
+### Desktop closeout execution, 2026-09-16
+
+This execution continues `bf99e2d43bed9cd42ed7fec6de4d846002cada3d` on
+`codex/post-0.2-g10-g11`. Failing contract tests preceded implementation in
+`2f76760` and `786130a`. Runtime `6b5dd243641ea7af1a8ef766b8c6565bf0822660`,
+the Windows installer/hash above and its isolated installation are unchanged.
+No new runtime package, macOS/Linux artifact, production signed offer, public tag
+or Release was produced.
+
+The platform workflow now forwards native evidence, binds current/previous bytes
+and installation scope, preserves early failures, runs existing Windows
+lifecycle/reinstall when requested, and combines distinct native targets.
+macOS/Linux require their own actual lifecycle/reinstall records. Readiness also
+requires whole-startup process-scoped network and actual assistive-technology
+observations. Production update signing feeds the same release path. Complete
+release assembly and remote verification cover source/core/checksum records,
+installers and signed offers, plus actual downloaded installation/reopen evidence.
+Synthetic records and keys are contract tests only, never acceptance evidence.
+The [release recipe](../../release/README.md#desktop-acceptance-and-publication-execution-2026-09-16)
+contains executable inputs and transfer instructions.
+
+The actual Sestina executable was launched with a new isolated observation
+profile. The supported helper listed a Sestina Research Room window, but its
+capture returned `Computer Use app approval timed out`. No reliable image,
+keyboard/dialog/wizard operation, continuous motion or screen-reader observation
+was obtained. Earlier inspected frames retain only their original scope. The
+unchanged WPR permission denial was not retried.
+
+Integrated verification is recorded here after execution. The original local
+result and affected public proofs are retained under
+`.tmp/distribution-event-final/attempts/before-closeout/`; unchanged installed
+proofs retain their source/artifact bindings.
+
 #### Remaining resources and formal acceptance
 
 | Outstanding item | Exact resource or observation needed |
 | --- | --- |
-| Windows native focus, dialogs, wizard, motion and assistive technology | A supported native surface whose pixels and window state agree, or reliable actual operator records tied to this installer. Current helper returned Codex pixels for a Sestina title after refresh; no coordinate guessing or blocked wizard workaround was used. |
+| Windows native focus, dialogs, wizard, motion and assistive technology | A supported native surface whose pixels and window state agree, or reliable actual operator records tied to this installer. Earlier pixels mismatched; the 2026-09-16 attempt stopped at application approval timeout before capture/input. No coordinate guessing or blocked wizard workaround was used. |
 | Whole-startup application network | Permission and a supported process-scoped system recorder starting before the application/Node process. WPR returned `0x80070005`; the packet driver was inaccessible. Existing Chromium/post-bridge logs do not prove this scope. |
 | macOS arm64 / Linux x64 acceptance | Actual native machines/runners and install, credential, lifecycle, visual/accessibility and performance results for their own bytes. Native workflows are implemented but were not dispatched; no cross-platform result is fabricated. |
 | Production signing and update trust | Explicit authorized Windows signer/certificate, Apple Developer ID/notarization resources, production HTTPS update endpoint and Ed25519 public roots/private signing action, plus actual signed install/upgrade verification. The delivered candidate has empty production roots and is unsigned. |

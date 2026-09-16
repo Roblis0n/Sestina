@@ -1,6 +1,19 @@
 name: Sestina Desktop Distribution
 on:
   workflow_call:
+    inputs:
+      profile:
+        type: string
+        default: candidate
+      version:
+        type: string
+        default: "0.3.0"
+      tag:
+        type: string
+        default: ""
+      evidence_run_id:
+        type: string
+        default: ""
   workflow_dispatch:
     inputs:
       profile:
@@ -15,8 +28,12 @@ on:
       tag:
         type: string
         description: Exact existing approved release tag (release profile only)
+      evidence_run_id:
+        type: string
+        description: Authorized run in this repository containing desktop-inputs-TARGET bundles (optional)
 permissions:
   contents: read
+  actions: read
 jobs:
   shared:
     runs-on: ubuntu-24.04
@@ -75,17 +92,30 @@ jobs:
         with:
           name: desktop-shared-public
           path: .tmp/shared-public
+      - name: Receive authorized native execution inputs
+        if: inputs.evidence_run_id != ''
+        uses: actions/download-artifact@v8
+        with:
+          name: desktop-inputs-${{ matrix.target }}
+          run-id: ${{ inputs.evidence_run_id }}
+          github-token: ${{ github.token }}
+          path: .tmp/desktop-inputs
       - name: Native desktop build, installation and common acceptance
+        # Downloaded records are still checked against actual package bytes,
+        # source, target and raw evidence by the common entry.
         env:
           DESKTOP_PROFILE: ${{ inputs.profile || 'candidate' }}
           DESKTOP_VERSION: ${{ inputs.version || '0.3.0' }}
           DESKTOP_TAG: ${{ inputs.tag }}
+          DESKTOP_INPUT: ${{ inputs.evidence_run_id && '.tmp/desktop-inputs/desktop-input.json' || '' }}
           SESTINA_RELEASE_CONFIG_JSON: ${{ inputs.profile == 'release' && secrets.SESTINA_RELEASE_CONFIG_JSON || '' }}
           SESTINA_SIGNING_PASSWORD: ${{ inputs.profile == 'release' && secrets.SESTINA_SIGNING_PASSWORD || '' }}
           SESTINA_SIGNING_CERTIFICATE_BASE64: ${{ inputs.profile == 'release' && secrets.SESTINA_SIGNING_CERTIFICATE_BASE64 || '' }}
           SESTINA_NOTARY_KEY_BASE64: ${{ inputs.profile == 'release' && secrets.SESTINA_NOTARY_KEY_BASE64 || '' }}
           SESTINA_NOTARY_KEY_ID: ${{ inputs.profile == 'release' && secrets.SESTINA_NOTARY_KEY_ID || '' }}
           SESTINA_NOTARY_ISSUER: ${{ inputs.profile == 'release' && secrets.SESTINA_NOTARY_ISSUER || '' }}
+          SESTINA_UPDATE_PRIVATE_KEY_BASE64: ${{ inputs.profile == 'release' && secrets.SESTINA_UPDATE_PRIVATE_KEY_BASE64 || '' }}
+          SESTINA_UPDATE_KEY_ID: ${{ inputs.profile == 'release' && secrets.SESTINA_UPDATE_KEY_ID || '' }}
         run: node scripts/run-desktop-workflow.mjs
       - name: Preserve real outputs and incomplete acceptance
         if: always()
@@ -100,10 +130,39 @@ jobs:
             .tmp/desktop-platform/artifacts/candidate-manifest.json
             .tmp/desktop-platform/artifacts/unsigned-core.tar.gz
             .tmp/desktop-platform/artifacts/SHA256SUMS
-            .tmp/desktop-platform/verification/*.json
+            .tmp/desktop-platform/verification/**
             .tmp/desktop-platform/installation.json
+            .tmp/desktop-platform/lifecycle-result.json
+            .tmp/desktop-platform/installed-upgrade-result.json
+            .tmp/desktop-platform/reinstall-result.json
+            .tmp/desktop-platform/platform-failure.json
+            .tmp/desktop-platform/update/**
           include-hidden-files: true
           if-no-files-found: error
           retention-days: 14
+  combine:
+    needs: [shared, desktop]
+    if: always() && needs.shared.result == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.sha }}
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24.13.0"
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: sestina-desktop-*
+          path: .tmp/desktop-results
+      - name: Combine native results without upgrading missing evidence
+        run: node scripts/run-desktop-workflow.mjs --aggregate .tmp/desktop-results
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: desktop-combined-acceptance
+          path: .tmp/desktop-combined/result.json
+          include-hidden-files: true
+          if-no-files-found: error
 # No automatic tags or publication. Missing native lifecycle or observations
 # remain incomplete acceptance, never a green release.

@@ -219,3 +219,20 @@ Passing this narrow check would not complete G10/G11, G12 or G13 automatically.
 此入口只核对尚缺的前置验收资料。安装包和证据按源码、平台及校验值绑定，
 缺失或未执行就返回未通过。它不运行 G12 全量验收，不切换默认入口，不发布。
 原生交互仍须实际操作和观察；不能用静态截图或自动化对话框替身代替。
+
+
+### Continued native acceptance and delivery
+
+The [current execution recipe](../../docs/release/README.md#desktop-acceptance-and-publication-execution-2026-09-16)
+connects native evidence, Windows previous-package execution, combined acceptance,
+production update signing and installation from actual published downloads.
+Existing user installation/recovery/credential choices above remain unchanged.
+
+Future affected UI/release work must use Product Design on the actual built and
+installed Research Room: English/Chinese; light/dark/high contrast; 1100×760,
+1280×800, 1440×900 and 1920×1080; 100%/200% text; long content and relevant
+empty/loading/error/cancel/conflict/success/recovery states; keyboard, focus,
+Escape, scrolling and actual assistive technology. Observe continuous/reduced
+motion and interrupted/reversed transitions in the running app. Reuse equivalent
+unchanged states. Screenshots, DOM assertions and dialog fixtures cannot replace
+actual visual inspection or native interaction.

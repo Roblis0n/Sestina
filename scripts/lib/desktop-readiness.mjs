@@ -31,10 +31,36 @@ export const remainingDesktopRequirements = [
       id: `${target}.native-uninstall`,
       target,
       cases: [
-        target === "win32-x64" ? "wizard-observed" : "platform-uninstall-observed",
+        target === "win32-x64"
+          ? "wizard-observed"
+          : "platform-uninstall-observed",
         "keyboard-focus",
         "retained-project-reopens",
         "settings-and-credentials-independent",
+      ],
+    },
+    {
+      id: `${target}.whole-startup-network`,
+      target,
+      cases: [
+        "recorder-started-before-application",
+        "main-and-child-process-attribution",
+        "first-and-repeat-start",
+        "local-project-research-search-memory",
+        "migration-backup-restore-export",
+        "explicit-provider-cancel-failure-restart",
+        "explicit-update-check-download",
+        "system-certificate-traffic-separated",
+      ],
+    },
+    {
+      id: `${target}.assistive-technology`,
+      target,
+      cases: [
+        "actual-screen-reader",
+        "research-flow-keyboard-read-order",
+        "dialog-name-focus-return",
+        "200-percent-text",
       ],
     },
     {
@@ -59,6 +85,11 @@ export const remainingDesktopRequirements = [
       "upgrade-and-pre-upgrade-backup",
       "preserved-program-recovery",
       "uninstall-reinstall",
+      "start-quit-reopen-single-instance-project-lease",
+      "credential-backend-unavailable",
+      "migration-data-recovery",
+      "changed-installation-chinese-and-space-paths",
+      "bundled-node-read-only-mcp-skills",
     ],
   })),
 ];
