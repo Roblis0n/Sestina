@@ -258,3 +258,11 @@ Current local artifacts and the single remaining-resource list are in the
 [merged closeout index](../product/restructure/G1-G3-EVIDENCE.md#desktop-closeout-execution-2026-09-16).
 User install, migration, upgrade, program recovery, data restore and uninstall
 instructions remain in [desktop operations](../../apps/desktop/README.md).
+
+The 2026-09-16 integrated local verification passed at
+`d5b6a65b646b56a5f644a8cc865995d8af4d4aab`; the unchanged runtime artifact remains
+`6b5dd243`. The proposed public version is still 0.3.0, repository
+`Roblis0n/Sestina`. No production offer can be supplied before authorized roots,
+endpoint and signer are selected and the corresponding release bytes are built.
+A future public tag must identify the finally accepted release-source commit;
+this verification-only descendant does not relabel the existing candidate.

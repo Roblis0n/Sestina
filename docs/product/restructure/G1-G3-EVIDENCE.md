@@ -1398,7 +1398,26 @@ keyboard/dialog/wizard operation, continuous motion or screen-reader observation
 was obtained. Earlier inspected frames retain only their original scope. The
 unchanged WPR permission denial was not retried.
 
-Integrated verification is recorded here after execution. The original local
+The integrated gate passed at verification commit
+`d5b6a65b646b56a5f644a8cc865995d8af4d4aab`. The one combined index is
+`.tmp/desktop-combined/result.json`; its Windows input is
+`.tmp/distribution-event-final/result.json`. Both report `localPassed: true`,
+`formalAcceptance: not_established`, `published: false`. The common public gate
+passed 755 assertions: 359 executed unit assertions and 396 valid unchanged
+foundation assertions reused from their bound proof. Installed artifact (36),
+desktop (23), independent core (3), journeys (16), performance (3), resources (3),
+visual generation (6) and cutover (6) proofs were reused unchanged. Existing real
+lifecycle (6) and reinstall (4) records were revalidated, not re-executed. Prior
+actual frame inspection remains scoped; generated visuals are not new human
+acceptance. The two new contract suites contribute 13 assertions, including real
+CLI refusal paths, actual-byte substitution detection and published-install proof
+binding; all their fixtures are synthetic.
+
+The first integrated attempt exposed an overbroad source-change classifier:
+`apps/desktop/README.md` invalidated unchanged runtime evidence. A failing test
+preceded the focused correction; runtime and packaging input changes still
+invalidate the affected evidence. That attempt is retained as
+`attempts/before-closeout/documentation-misclassification.json`. The original local
 result and affected public proofs are retained under
 `.tmp/distribution-event-final/attempts/before-closeout/`; unchanged installed
 proofs retain their source/artifact bindings.

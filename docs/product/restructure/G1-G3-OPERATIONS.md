@@ -407,8 +407,8 @@ No user installation/project was replaced. Public push, tag, CI, signing-service
 operation and Release still require authorization and the missing formal acceptance.
 
 The final common result is `.tmp/distribution-event-final/result.json`:
-local passed, formal acceptance not established, unpublished. Its verification
-commit is `5361d771ff501cfa8271bc0e7ad346ef1d493d3a`. The current installer and
+local passed, formal acceptance not established, unpublished. Its latest verification
+commit is `d5b6a65b646b56a5f644a8cc865995d8af4d4aab`. The current installer and
 its checksums, source/toolchain, inspected images and concentrated outstanding
 resources are linked from the current index; use that entry for the handoff.
 
@@ -430,3 +430,9 @@ no new native pass is claimed. The unchanged WPR denial was not retried. Native
 machines, reliable native operations, system recording permissions and production
 resources remain necessary. Remote dispatch/push, signing-service use and public
 tag/Release actions still require the user's authorization.
+
+The final combined index is `.tmp/desktop-combined/result.json`, including the
+verified Windows input at `.tmp/distribution-event-final/result.json` and explicit
+missing macOS/Linux execution. Local checks passed; three-platform formal
+acceptance and publication remain unestablished. The source/verification distinction
+and unchanged-proof reuse are recorded in the current merged evidence section.

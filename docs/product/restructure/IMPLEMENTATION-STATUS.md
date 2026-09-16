@@ -266,7 +266,7 @@ returned inconsistent pixels, and WPR startup returned access denied. The
 supersedes older package pointers for this continuation. Formal G10–G13 status
 remains `current_partial`; release configuration code is not platform acceptance.
 
-The final local aggregate `.tmp/distribution-event-final/result.json` is now
+At the 2026-09-14 handoff, `.tmp/distribution-event-final/result.json` was
 `localPassed: true`, `formalAcceptance: not_established`, `published: false`,
 verified at `5361d771ff501cfa8271bc0e7ad346ef1d493d3a`. It records 742 public
 assertions, actual installed lifecycle and research, matching independent core,
@@ -289,7 +289,10 @@ focus/motion/assistive technology, whole-startup network observation, actual
 macOS/Linux operations and production resources remain open. Formal G10–G13
 status stays `current_partial`; nothing was published. Consult the
 [single current evidence index](G1-G3-EVIDENCE.md#desktop-closeout-execution-2026-09-16)
-for implementation verification and the remaining resource list.
+for implementation verification and the remaining resource list. The integrated
+check at `d5b6a65b646b56a5f644a8cc865995d8af4d4aab` passed locally, and
+`.tmp/desktop-combined/result.json` explicitly records missing native targets;
+formal acceptance is not established and publication is false.
 
 ## 6. Claims that remain unavailable
 
