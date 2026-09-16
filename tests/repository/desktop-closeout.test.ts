@@ -14,6 +14,7 @@ import {
   assertReinstallResult,
   assertReadinessBinding,
   aggregateTargetResults,
+  targetRuntimeChanged,
 } from "../../scripts/lib/target-verification.mjs";
 
 // Synthetic contracts only; these records never supply platform acceptance.
@@ -23,6 +24,16 @@ const binding = {
   platform: "linux",
   arch: "x64",
 };
+it("desktop operating documentation does not invalidate identical installed runtime bytes", () => {
+  expect(
+    targetRuntimeChanged([
+      "apps/desktop/README.md",
+      "scripts/run-desktop-platform.mjs",
+    ]),
+  ).toBe(false);
+  expect(targetRuntimeChanged(["apps/desktop/src/main.ts"])).toBe(true);
+  expect(targetRuntimeChanged(["scripts/package-desktop.mjs"])).toBe(true);
+});
 it("passes every supplied observation through both desktop entry layers", () => {
   const input = Object.fromEntries(
     [

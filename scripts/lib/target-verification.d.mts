@@ -80,3 +80,5 @@ export function assertPublishedInstallations(
   index: ReleaseIndex,
   repository: string,
 ): Promise<void>;
+
+export function targetRuntimeChanged(paths: string[]): boolean;

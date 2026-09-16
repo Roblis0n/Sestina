@@ -28,7 +28,11 @@ export function canReuseTargetCheck(record, binding, evidenceSha256) {
 // changes; artifact, runtime and shared fixture changes remain fail-closed.
 export function targetCheckAffected(id, paths) {
   return paths.some((path) => {
-    if (/^(?:docs\/|README\.md$)/.test(path)) return false;
+    if (
+      /^(?:docs\/|README\.md$)/.test(path) ||
+      path === "apps/desktop/README.md"
+    )
+      return false;
     if (
       /^(?:apps\/[^/]+\/test\/|packages\/[^/]+\/test\/|tests\/repository\/).*\.test\.ts$/.test(
         path,
@@ -808,4 +812,16 @@ export function assertDesktopBinary(bytes, platform, arch) {
       bytes.readUInt32LE(4) === 0x100000c;
   }
   if (!valid) throw Error("desktop_binary_target_mismatch");
+}
+
+export function targetRuntimeChanged(paths) {
+  return paths.some(
+    (path) =>
+      path !== "apps/desktop/README.md" &&
+      ((/^(?:apps|packages|integrations)\//.test(path) &&
+        !/^(?:apps|packages)\/[^/]+\/test\//.test(path)) ||
+        /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|tsconfig\.base\.json|docs\/release\/THIRD-PARTY-NOTICES\.md|scripts\/(?:build-desktop\.mjs|package-desktop\.mjs|lib\/desktop-(?:distribution|signing)\.mjs))/.test(
+          path,
+        )),
+  );
 }

@@ -13,6 +13,7 @@ import {
   assertExecutedTests,
   canReuseTargetCheck,
   targetCheckAffected,
+  targetRuntimeChanged,
   assertTargetTagIdentity,
   assertLifecycleResult,
   assertReinstallResult,
@@ -409,16 +410,7 @@ try {
   const changed = git("diff", sourceCommit, "HEAD", "--name-only")
     .split("\n")
     .filter(Boolean);
-  if (
-    changed.some(
-      (path) =>
-        (/^(?:apps|packages|integrations)\//.test(path) &&
-          !/^(?:apps|packages)\/[^/]+\/test\//.test(path)) ||
-        /^(?:package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|tsconfig\.base\.json|docs\/release\/THIRD-PARTY-NOTICES\.md|scripts\/(?:build-desktop\.mjs|package-desktop\.mjs|lib\/desktop-(?:distribution|signing)\.mjs))/.test(
-          path,
-        ),
-    )
-  )
+  if (targetRuntimeChanged(changed))
     throw Error("target_runtime_source_changed_since_artifact");
   if (manifest.platform !== process.platform || manifest.arch !== process.arch)
     throw Error("target_platform_mismatch");
