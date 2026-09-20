@@ -306,6 +306,28 @@ performed. Existing local results remain passed; formal acceptance remains
 unestablished and publication false. Actual machine configuration and the single
 updated resource list are in the [merged execution record](G1-G3-EVIDENCE.md#native-execution-continuation-2026-09-20).
 
+### Windows public preview publication, 2026-09-20
+
+The user explicitly authorized immediate publication of the existing Windows
+package, with unavailable platform acceptance deferred and no additional test
+campaign. This supersedes the earlier no-publication restriction for this
+Windows-only preview; it does not establish complete three-platform acceptance.
+
+[Windows Desktop Preview v0.3.0-g10.6b5dd243](https://github.com/Roblis0n/Sestina/releases/tag/v0.3.0-g10.6b5dd243)
+was published as a GitHub prerelease on 2026-09-20. Its tag resolves to the exact
+installer source `6b5dd243641ea7af1a8ef766b8c6565bf0822660`. The existing installer,
+blockmap, manifest, unsigned core and checksums were uploaded unchanged; all five
+GitHub asset digests and sizes match the local files. The installer SHA-256 remains
+`005d762399d882d14df3224b4d1a533d213e838c363bb3ed32d98cae7c20692a`.
+
+Existing Windows checks were reused; no application rebuild or test suite was
+run for publication. This is an unsigned Windows x64 preview without production
+update trust. macOS/Linux delivery and the previously recorded native observations
+remain unverified. G10-G13 formal acceptance remains partial; the older aggregate
+`published: false` records are historical and are not the current publication
+status of this separately authorized preview. The publication receipt is retained
+locally at `.tmp/windows-public-preview-20260920/published-release.json`.
+
 ## 6. Claims that remain unavailable
 
 The following remain `not_established`:
@@ -322,6 +344,6 @@ The following remain `not_established`:
 The tables above describing the release are G0 baseline facts. The authorized
 G1–G3 execution begins at `a4889ee996064d95ee0a3fb470ee6ee12d3a91a3`;
 its current evidence is tracked in section 5 and in the execution record.
-The published v0.2.0 default continues to use schema 20. The current local source
-now defaults to schema-25 desktop; no public release or real user project has
-been switched by this task.
+The retained v0.2.0 preview uses schema 20. The separately published Windows-only
+v0.3.0-g10.6b5dd243 desktop preview uses schema 25, matching the current local
+desktop default. No real user project was migrated by this publication.
