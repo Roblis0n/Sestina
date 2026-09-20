@@ -33,7 +33,7 @@
     "@sestina/core": "workspace:*",
     "esbuild": "0.28.2",
     "typescript": "^5.8.0",
-    "vitest": "^3.0.0",
+    "vitest": "^4.1.11",
     "zod": "4.2.0"
   }
 }
