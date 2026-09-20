@@ -1,5 +1,15 @@
 # Sestina Research Room 0.2.0 public preview
 
+**Current Windows desktop download:** [v0.3.0-g10.6b5dd243](https://github.com/Roblis0n/Sestina/releases/tag/v0.3.0-g10.6b5dd243),
+published on 2026-09-20 as an unsigned Windows x64 prerelease. It includes the
+runtime and uses schema 25; macOS/Linux desktop delivery and production update
+trust are not established. See [desktop installation and recovery](../../apps/desktop/README.md)
+and the [publication record](../product/restructure/IMPLEMENTATION-STATUS.md).
+
+**当前 Windows 桌面预览版已发布。** 普通用户可在上述 Release 下载 `.exe` 安装包，
+无需另装 Node。本页下方保留 v0.2.0 历史安装说明及完整三平台正式发行流程；
+其中早期“尚未发布”的记录已由这次 Windows 预览版发布状态接续。
+
 Sestina is a local, interactive research app. Research Room is the main
 interface; the Research Deliberation Kernel is the authority for project state,
 decisions, issues, evidence, corrections, manifests, and recovery. The user is

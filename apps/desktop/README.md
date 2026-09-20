@@ -1,9 +1,12 @@
 # Sestina desktop distribution
 
 This Electron application uses the schema-25 Research Room and shared application
-service. Current local packages remain unpublished candidates. The published
-v0.2.0/schema-20 preview is unchanged. Actual current results and formal gaps are
-tracked in the [merged evidence](../../docs/product/restructure/G1-G3-EVIDENCE.md).
+service. The [Windows x64 preview v0.3.0-g10.6b5dd243](https://github.com/Roblis0n/Sestina/releases/tag/v0.3.0-g10.6b5dd243)
+is publicly available as an unsigned prerelease without production update trust.
+Other-platform delivery remains deferred; the v0.2.0/schema-20 preview remains
+available. Publication is recorded in the [implementation status](../../docs/product/restructure/IMPLEMENTATION-STATUS.md);
+actual current results and formal gaps are tracked in the
+[merged evidence](../../docs/product/restructure/G1-G3-EVIDENCE.md).
 
 The product is **Sestina**, with distribution appId `org.sestina.desktop` and
 executable `Sestina.exe` (Windows), `Sestina.app` (macOS), or `sestina` (Linux).
@@ -170,8 +173,9 @@ No macOS/Linux machine, signing/notarization account or authorized production
 update root is available for this task. Their actual acceptance remains open;
 local implementation and Windows evidence are recorded separately in the
 [implementation status](../../docs/product/restructure/IMPLEMENTATION-STATUS.md).
-No push, public tag or publication is authorized. The later local G12/G13
-continuation is recorded in the implementation status and combined evidence.
+The later local G12/G13 continuation and separately authorized Windows-only
+preview publication are recorded in the implementation status. This preview does
+not establish the complete signed three-platform release described below.
 
 ## Remaining prerequisite check
 

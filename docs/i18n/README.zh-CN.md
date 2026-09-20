@@ -48,15 +48,22 @@ Provider、检查精确 Manifest 并确认该次请求后，绑定的内容才�
 
 ## 当前本地桌面与已发布版本
 
+**[Windows 桌面预览版 v0.3.0-g10.6b5dd243 已发布](https://github.com/Roblis0n/Sestina/releases/tag/v0.3.0-g10.6b5dd243)。**
+[直接下载 Windows x64 安装包](https://github.com/Roblis0n/Sestina/releases/download/v0.3.0-g10.6b5dd243/Sestina-0.3.0-g10.6b5dd243-win32-x64.exe)，
+运行安装即可使用，无需另外安装 Node 或使用终端启动。安装包未签名，未配置
+生产更新源；本次暂不提供 macOS/Linux 桌面安装包。
+
 当前源码默认启动 schema 25 的 Electron Research Room。`pnpm start` 打开桌面，
 `pnpm build` 构建桌面，`pnpm package win32` 生成本地安装器。Today / Review、
 Project、Search 和 Settings 共用同一个 Kernel。旧 Room/Pilot 执行和 generic
 写入已退出正常公开接口及桌面包；旧历史仍可阅读、导出和明确转换为 Draft。
 CLI 的 `context` 与 `doctor` 为只读操作，不创建项目、不替用户作研究决定。
 
-这是尚未公开发布的本地候选。已发布的 v0.2.0/schema 20 及历史压缩包保持原样；
-本页旧能力示例和下方公开预览安装步骤仍描述该历史版本。当前桌面使用方法见
-[桌面说明](../../apps/desktop/README.md)，真实验证范围见
+已发布的 Windows 安装包使用 schema 25，对应准确源码 `6b5dd243`；main 上后续
+验证和文档提交不会改变已发布的安装包。v0.2.0/schema 20 历史压缩包继续保留，
+本页旧能力示例和下方压缩包安装步骤仍描述该历史版本。当前桌面使用方法见
+[桌面说明](../../apps/desktop/README.md)，发布状态见
+[实施状态](../product/restructure/IMPLEMENTATION-STATUS.md)，真实验证范围见
 [合并证据索引](../product/restructure/G1-G3-EVIDENCE.md)。其他平台实机、签名、
 生产更新信任和完整原生可访问性验收尚未完成。
 
@@ -107,8 +114,8 @@ pnpm start
 [TRADEMARKS.md](../../TRADEMARKS.md)。参与贡献前请阅读
 [CONTRIBUTING.md](../../CONTRIBUTING.md)，并且只使用合成数据。
 
-## 内部桌面候选
+## 桌面开发与发行
 
-当前源码以 schema 25 桌面为默认入口，旧活动写入已退出，产品安装身份统一为 Sestina，并保留既有设置和加密凭据的存储身份。下一公开版本建议为 **0.3.0**；本地候选附带源码后缀，尚未创建公开标签或发布。Windows x64、macOS arm64、Linux x64 的桌面工作流及显式签名、公证、生产更新配置已接入；工作流代码不能代替实机验收。开发运行、安装和恢复见[桌面入口](../../apps/desktop/README.md)，发行配置见[发行指南](../release/README.md#current-desktop-distribution-preparation)，实际结果与待补资源见[合并证据索引](../product/restructure/G1-G3-EVIDENCE.md#desktop-distribution-continuation-2026-09-14)。已发布的 v0.2.0 预览及历史资料保持不变。
+当前源码以 schema 25 桌面为默认入口，旧活动写入已退出，产品安装身份统一为 Sestina，并保留既有设置和加密凭据的存储身份。已公开的 **0.3.0 Windows 预览版**保留源码后缀；完整三平台正式发行仍未完成。Windows x64、macOS arm64、Linux x64 的桌面工作流及显式签名、公证、生产更新配置已接入；工作流代码不能代替实机验收。开发运行、安装和恢复见[桌面入口](../../apps/desktop/README.md)，发行配置见[发行指南](../release/README.md#current-desktop-distribution-preparation)，实际结果与待补资源见[合并证据索引](../product/restructure/G1-G3-EVIDENCE.md#desktop-distribution-continuation-2026-09-14)。已发布的 v0.2.0 预览及历史资料保持不变。
 
 起始页提供备份与恢复、显式旧设置迁移；设置中可以调整应用外观、使用系统加密存储或明确选择仅本次会话保存密钥、获取当前安装的只读 MCP 与配套 Skills 配置，以及手动检查更新。当前没有配置可信更新源，检查会直接说明这一点，不会发送研究内容。

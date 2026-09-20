@@ -51,6 +51,7 @@ desktop.ini
 .vscode/
 
 # Test scratch
+test-results/
 .tmp/
 tmp/
 temp/

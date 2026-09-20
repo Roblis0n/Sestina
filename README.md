@@ -66,7 +66,13 @@ Read the [privacy contract](PRIVACY.md), [security policy](SECURITY.md), and
 [data-flow inventory](docs/security/DATA-FLOW.md) before using real research
 material.
 
-## Current local desktop and published 0.2.0
+## Windows desktop preview and current source
+
+The [Windows Desktop Preview `v0.3.0-g10.6b5dd243`](https://github.com/Roblis0n/Sestina/releases/tag/v0.3.0-g10.6b5dd243)
+is available now. [Download the Windows x64 installer](https://github.com/Roblis0n/Sestina/releases/download/v0.3.0-g10.6b5dd243/Sestina-0.3.0-g10.6b5dd243-win32-x64.exe)
+and run it; the app includes Node and requires no terminal to start. The installer
+is unsigned and has no configured production update source. macOS/Linux desktop
+downloads and complete native acceptance are deferred for this preview.
 
 The current source defaults to the schema-25 Electron Research Room. `pnpm start`
 opens the desktop app; `pnpm build` builds it and `pnpm package win32` creates a
@@ -75,16 +81,17 @@ Old Room/Pilot execution and generic legacy writes have exited the normal public
 API and desktop build. Existing history remains readable, exportable and explicitly
 convertible to Draft through the Kernel. CLI `context` and `doctor` are read-only.
 
-This is a local, unpublished candidate. The published `v0.2.0` release and its
-schema-20 archives remain unchanged. The preview capability examples and release
-installation instructions on this page describe that historical release; use the
-[desktop instructions](apps/desktop/README.md) and [current evidence](docs/product/restructure/G1-G3-EVIDENCE.md)
-for the current source. Other-platform installation, signing, production update
-trust and complete native accessibility acceptance remain unestablished.
+The published Windows package uses schema 25 and exact source `6b5dd243`; later
+verification and documentation commits on `main` do not change those released
+bytes. The `v0.2.0` schema-20 archives remain available. The older capability
+examples and archive installation instructions below describe that historical
+release; use the [desktop instructions](apps/desktop/README.md),
+[publication status](docs/product/restructure/IMPLEMENTATION-STATUS.md) and
+[current evidence](docs/product/restructure/G1-G3-EVIDENCE.md) for the desktop.
 
 The current distribution recipe uses the Sestina product identity and preserves
-existing settings and credential storage. Version **0.3.0** is proposed for the
-next release; local candidates carry their source suffix. Explicit native
+existing settings and credential storage. The **0.3.0** Windows preview retains
+its source suffix; full three-platform formal release remains separate. Explicit native
 signing, notarization and production-update inputs are documented in the
 [desktop distribution guide](docs/release/README.md#current-desktop-distribution-preparation).
 The same workflow prepares Windows x64, macOS arm64 and Linux x64 artifacts;
@@ -102,7 +109,7 @@ research server preview.
 This is design authority, not a shipped-feature claim. Read the
 [acceptance and authority record](docs/product/restructure/README.md) and its
 exact 18-file plan set before post-0.2 implementation work. The existing
-installation and limitation statements below remain the current release truth.
+installation and limitation statements below remain accurate for `v0.2.0`.
 
 ## Install the 0.2.0 public preview
 
