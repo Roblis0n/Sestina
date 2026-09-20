@@ -294,6 +294,18 @@ check at `d5b6a65b646b56a5f644a8cc865995d8af4d4aab` passed locally, and
 `.tmp/desktop-combined/result.json` explicitly records missing native targets;
 formal acceptance is not established and publication is false.
 
+### Native execution continuation, 2026-09-20
+
+The unchanged Windows package was launched and its actual project-open screen
+and native folder picker were viewed. The newer native tool subsequently returned
+pixels inconsistent with its Sestina window identity; input stopped before a
+native keyboard/focus verdict could be established. No product defect was proven,
+so no new runtime, installer or public gate was produced. Production inputs and
+native macOS/Linux execution remain unavailable; no CI/signing/publication was
+performed. Existing local results remain passed; formal acceptance remains
+unestablished and publication false. Actual machine configuration and the single
+updated resource list are in the [merged execution record](G1-G3-EVIDENCE.md#native-execution-continuation-2026-09-20).
+
 ## 6. Claims that remain unavailable
 
 The following remain `not_established`:

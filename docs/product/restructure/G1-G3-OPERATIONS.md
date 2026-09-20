@@ -436,3 +436,14 @@ verified Windows input at `.tmp/distribution-event-final/result.json` and explic
 missing macOS/Linux execution. Local checks passed; three-platform formal
 acceptance and publication remain unestablished. The source/verification distinction
 and unchanged-proof reuse are recorded in the current merged evidence section.
+
+
+The [2026-09-20 native attempt](G1-G3-EVIDENCE.md#native-execution-continuation-2026-09-20)
+advanced past application access and captured the real project screen/folder
+picker. Its later screenshot/window mismatch now describes the active native
+blocker; do not repeat the earlier authorization-timeout diagnosis. Use a reliable
+native surface or actual operator evidence for the remaining keyboard, wizard,
+motion and assistive-technology cases. Existing 2026-09-16 execution commands
+remain current; no additional acceptance framework is needed. The measured Windows
+host and sampling conditions are now recorded; no unnamed reference hardware is
+an extra waiting condition.

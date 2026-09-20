@@ -1422,13 +1422,65 @@ result and affected public proofs are retained under
 `.tmp/distribution-event-final/attempts/before-closeout/`; unchanged installed
 proofs retain their source/artifact bindings.
 
+### Native execution continuation, 2026-09-20
+
+The checkout remains on the handed-off `5129a0e` source; no product code,
+build input or installer changed. The installer SHA-256 was rechecked and is
+still `005d762399d882d14df3224b4d1a533d213e838c363bb3ed32d98cae7c20692a`.
+The unchanged Windows checks remain valid. This continuation does not rerun
+public gates, lifecycle, performance or packaging without an affected input.
+
+Computer Use 26.915.31945 successfully captured the actual installed Chinese
+dark project-open screen after restoring its minimized window, and opened the
+real Windows folder selector. Escape was issued once; cancellation and focus
+return were not established. A subsequent capture showed Codex pixels while
+the returned window identity and accessibility tree described Sestina's folder
+dialog. Input stopped immediately. This is an inconsistent observation surface,
+not a proven Sestina keyboard defect. Only the matching initial static frame is
+retained at `.tmp/distribution-closeout/native-20260920/01-project-open.png`;
+its hash and the scoped attempt are appended to the existing
+`.tmp/distribution-event-final/visual-observation.json`. The previous receipt and
+Windows result remain in `attempts/before-native-20260920/`. No dialog, wizard,
+continuous/reduced-motion or actual screen-reader pass was manufactured. The
+isolated observation process was closed; real research data was not opened.
+
+Resource checks found a non-elevated Windows session; the known WPR denial was
+not retried. GitHub CLI read-only access confirmed `Roblis0n/Sestina` is public
+and the current account has ADMIN repository permission, but returned no configured
+repository environments or repository secret names. Local explicitly named release,
+signing, notary and update inputs are unset. Repository access is not authorization
+to dispatch CI, choose a signer or publish. No authorized macOS host or Linux desktop
+session was supplied. The local WSL query explicitly reports that the Linux
+subsystem is not installed. No remote job or signing service was started.
+
+The existing target entry revalidated the updated observation receipt and reused
+all unaffected public, artifact, desktop, reproducibility, research, performance,
+resource, visual-generation and cutover checks. Lifecycle/reinstall records were
+rebound without rerunning those operations. `.tmp/desktop-combined/result.json`
+still reports `localPassed: true`, `formalAcceptance: not_established`, and
+`published: false`, with explicit missing macOS/Linux execution. No public gate,
+build, performance series or historical audit was rerun. The verification source
+is the unchanged `5129a0e`; the subsequent commit contains only this documentation.
+
+The existing performance proof already identifies Windows x64 and AMD Ryzen 9
+8945HX, seed 920000, 20 cold and 20 warm start samples, and 25 samples for each
+remaining operation. Cold means a fresh profile/process and warm an existing
+profile; OS caches were not forcibly evicted. Startup includes project opening
+until Today renders, and the transaction measure includes Kernel integrity checks
+and SQLite commit with confirmation/IPC measured separately. Those actual samples
+and thresholds are retained unchanged. The 2026-09-20 host snapshot is HP OMEN
+Gaming Laptop 16-ap0xxx, 33,342,459,904 bytes of physical RAM, Windows 11 Home
+Chinese x64 build 26100. This snapshot supplements the machine description; it is
+not a new benchmark or a retroactive claim about unrecorded earlier OS conditions.
+No unspecified additional reference machine is a blocking prerequisite. Future
+native platform runs record their own configuration and samples separately.
+
 #### Remaining resources and formal acceptance
 
 | Outstanding item | Exact resource or observation needed |
 | --- | --- |
-| Windows native focus, dialogs, wizard, motion and assistive technology | A supported native surface whose pixels and window state agree, or reliable actual operator records tied to this installer. Earlier pixels mismatched; the 2026-09-16 attempt stopped at application approval timeout before capture/input. No coordinate guessing or blocked wizard workaround was used. |
+| Windows native focus, dialogs, wizard, motion and assistive technology | A supported native surface whose pixels and window state agree, or reliable actual operator records tied to this installer. On 2026-09-20 the initial application and folder-dialog captures succeeded, but a later capture returned Codex pixels for Sestina. Inputs stopped; cancel/focus, wizard, motion and assistive technology remain unverified. No coordinate guessing or blocked wizard workaround was used. |
 | Whole-startup application network | Permission and a supported process-scoped system recorder starting before the application/Node process. WPR returned `0x80070005`; the packet driver was inaccessible. Existing Chromium/post-bridge logs do not prove this scope. |
 | macOS arm64 / Linux x64 acceptance | Actual native machines/runners and install, credential, lifecycle, visual/accessibility and performance results for their own bytes. Native workflows are implemented but were not dispatched; no cross-platform result is fabricated. |
 | Production signing and update trust | Explicit authorized Windows signer/certificate, Apple Developer ID/notarization resources, production HTTPS update endpoint and Ed25519 public roots/private signing action, plus actual signed install/upgrade verification. The delivered candidate has empty production roots and is unsigned. |
-| Reference performance environment | The plan's reference hardware and its actual samples. Current Windows-host results are retained without relabeling the machine. |
 | Public delivery | Formal acceptance first; then the user's version/tag and publication authorization for `Roblis0n/Sestina`, proposed `0.3.0`, and newly verified signed platform packages from the approved tag. No remote push, CI dispatch, signing-service operation, public tag or Release occurred. Published v0.2.0/schema 20 remains intact. |
