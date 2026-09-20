@@ -6,6 +6,7 @@ on:
     branches: [main]
 permissions:
   contents: read
+  actions: read
 jobs:
   desktop:
     uses: ./.github/workflows/release.yml
